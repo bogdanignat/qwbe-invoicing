@@ -88,6 +88,24 @@ const addressValues = (address: Address): ReadonlyArray<string | null> => [
   address.postalCode ?? null,
 ]
 
+const paymentFrom = (value: Row) => {
+  const externalReference = optionalText(value, "external_reference")
+  const note = optionalText(value, "note")
+  return {
+    id: text(value, "id"),
+    invoiceId: text(value, "invoice_id"),
+    organizationId: text(value, "organization_id"),
+    amount: text(value, "amount"),
+    currency: text(value, "currency"),
+    paymentDate: text(value, "payment_date"),
+    method: text(value, "method"),
+    ...(externalReference === undefined ? {} : { externalReference }),
+    ...(note === undefined ? {} : { note }),
+    actorId: text(value, "actor_id"),
+    createdAt: text(value, "created_at"),
+  }
+}
+
 const lineFrom = (value: Row): DraftLine => ({
   id: text(value, "id"),
   description: text(value, "description"),
@@ -246,6 +264,18 @@ const transactionAdapter = (database: DatabaseSync): InvoicingTransaction => ({
       totalIncludingTax: text(value, "total_including_tax"),
     }
   }),
+  savePayment: (payment) => write("save payment", () => {
+    const result = database.prepare(`INSERT INTO invoice_payments
+      (id, invoice_id, organization_id, amount, currency, payment_date, method, external_reference, note, actor_id, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(payment.id, payment.invoiceId, payment.organizationId, payment.amount, payment.currency,
+        payment.paymentDate, payment.method, payment.externalReference ?? null, payment.note ?? null,
+        payment.actorId, payment.createdAt)
+    if (result.changes === 0) throw new DomainConflict({ code: "payment_not_saved", message: "Payment could not be saved" })
+  }),
+  listPayments: (organizationId, invoiceId) => read("list payments", () =>
+    database.prepare("SELECT * FROM invoice_payments WHERE organization_id = ? AND invoice_id = ? ORDER BY payment_date, created_at, id")
+      .all(organizationId, invoiceId).map((value) => paymentFrom(value as Row))),
 })
 
 export const createSqliteStore = (dataDirectory: string): TransactionalStore<InvoicingTransaction> => ({

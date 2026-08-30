@@ -26,6 +26,7 @@ interface MemoryState {
   drafts: Map<string, DraftInvoice>
   issued: Map<string, IssuedInvoice>
   sequences: Map<string, number>
+  payments: Map<string, Parameters<InvoicingTransaction["savePayment"]>[0]>
 }
 
 const cloneState = (state: MemoryState): MemoryState => structuredClone(state)
@@ -54,6 +55,12 @@ const memoryStore = (state: MemoryState): TransactionalStore<InvoicingTransactio
       findIssuedInvoice: (organizationId, id) => Effect.succeed(
         working.issued.get(id)?.organizationId === organizationId ? working.issued.get(id) : undefined,
       ),
+      savePayment: (payment) => Effect.sync(() => { working.payments.set(payment.id, payment) }),
+      listPayments: (organizationId, invoiceId) => Effect.succeed(
+        [...working.payments.values()].filter((payment) =>
+          payment.organizationId === organizationId && payment.invoiceId === invoiceId)
+          .sort((a, b) => a.paymentDate.localeCompare(b.paymentDate) || a.createdAt.localeCompare(b.createdAt)),
+      ),
     }
     return Effect.tap(use(transaction), () => Effect.sync(() => {
       state.issuers = working.issuers
@@ -61,6 +68,7 @@ const memoryStore = (state: MemoryState): TransactionalStore<InvoicingTransactio
       state.drafts = working.drafts
       state.issued = working.issued
       state.sequences = working.sequences
+      state.payments = working.payments
     }))
   }),
 })
@@ -74,6 +82,7 @@ const identity = {
     "invoicing:customer.manage",
     "invoicing:invoice.draft",
     "invoicing:invoice.issue",
+    "invoicing:payment.record",
     "invoicing:settings.manage",
   ],
 }
@@ -101,6 +110,7 @@ const emptyState = (): MemoryState => ({
   drafts: new Map(),
   issued: new Map(),
   sequences: new Map(),
+  payments: new Map(),
 })
 
 void test("issues deterministic immutable invoice snapshots through the public service", async () => {

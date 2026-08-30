@@ -15,10 +15,11 @@ void test("migration apply is idempotent", () => {
     assert.deepEqual(planMigrations(directory).pending, [
       "000-foundation",
       "001-invoice-core",
+      "002-invoice-payments",
       "documents/000-foundation",
       "documents/001-artifacts",
     ])
-    assert.equal(applyMigrations(directory).changed, 4)
+    assert.equal(applyMigrations(directory).changed, 5)
     assert.equal(applyMigrations(directory).changed, 0)
     assert.equal(databaseReady(directory), true)
   } finally {

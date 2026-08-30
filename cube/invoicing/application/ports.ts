@@ -2,6 +2,7 @@ import type { Effect } from "effect"
 
 import type { DomainConflict, PersistenceFailure } from "../contracts/failures.ts"
 import type { Customer, DraftInvoice, IssuedInvoice, IssuerProfile } from "../domain/invoice.ts"
+import type { Payment } from "../domain/payments.ts"
 
 export type TransactionFailure = DomainConflict | PersistenceFailure
 
@@ -28,4 +29,9 @@ export interface InvoicingTransaction {
     organizationId: string,
     id: string,
   ) => Effect.Effect<IssuedInvoice | undefined, PersistenceFailure>
+  readonly savePayment: (payment: Payment) => Effect.Effect<void, TransactionFailure>
+  readonly listPayments: (
+    organizationId: string,
+    invoiceId: string,
+  ) => Effect.Effect<ReadonlyArray<Payment>, PersistenceFailure>
 }

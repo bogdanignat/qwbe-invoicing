@@ -28,9 +28,10 @@ this initial single-organization host adapter.
 Authenticated invoice-core routes are available under `/api`: `PUT /api/issuer`,
 `POST /api/customers`, `POST /api/drafts`, `POST /api/drafts/{id}/lines`,
 `POST /api/drafts/{id}/issue`, `GET /api/invoices/{id}`,
-`POST /api/invoices/{id}/pdf` (idempotent render), and
-`GET /api/invoices/{id}/pdf`
-(download with SHA-256 ETag). For local calls, pass
+`POST /api/invoices/{id}/pdf` (idempotent render),
+`GET /api/invoices/{id}/pdf` (download with SHA-256 ETag),
+`POST /api/invoices/{id}/payments` (record payment), and
+`GET /api/invoices/{id}/payments` (list payments with derived status `unpaid`/`partially_paid`/`paid`/`overpaid`/`overdue`, `paidAmount` and `remainingAmount`). Issued invoices remain immutable; payments are separate records and never mutate the fiscal snapshot. For local calls, pass
 `Authorization: Bearer $(cat .local/api-token)` and JSON request bodies. The bearer
 adapter is the API-first standalone transport; the cube receives only the verified
 identity and organization context.

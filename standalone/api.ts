@@ -149,6 +149,21 @@ const lineInput = (draftId: string, value: unknown): AddDraftLineInput => {
   }
 }
 
+const paymentInput = (invoiceId: string, value: unknown) => {
+  const input = object(value)
+  const externalReference = optionalText(input.externalReference, "externalReference")
+  const note = optionalText(input.note, "note")
+  return {
+    invoiceId,
+    amount: text(input.amount, "amount"),
+    currency: text(input.currency, "currency"),
+    paymentDate: text(input.paymentDate, "paymentDate"),
+    method: text(input.method, "method"),
+    ...(externalReference === undefined ? {} : { externalReference }),
+    ...(note === undefined ? {} : { note }),
+  }
+}
+
 type ApiFailure = InvoicingFailure | DocumentsFailure
 
 const failureResponse = (failure: ApiFailure): ApiResponse => {
@@ -196,8 +211,11 @@ export const handleApiRequest = async (request: ApiRequest, runtime: ApiRuntime)
       const issue = /^\/api\/drafts\/([^/]+)\/issue$/.exec(request.url)
       const invoice = /^\/api\/invoices\/([^/]+)$/.exec(request.url)
       const pdf = /^\/api\/invoices\/([^/]+)\/pdf$/.exec(request.url)
+      const payments = /^\/api\/invoices\/([^/]+)\/payments$/.exec(request.url)
       if (request.method === "POST" && line?.[1] !== undefined) operation = service.addDraftLine(lineInput(line[1], request.body))
       else if (request.method === "POST" && issue?.[1] !== undefined) operation = service.issueInvoice({ draftId: issue[1] })
+      else if (request.method === "GET" && payments?.[1] !== undefined) operation = service.listPayments(payments[1])
+      else if (request.method === "POST" && payments?.[1] !== undefined) operation = service.recordPayment(paymentInput(payments[1], request.body))
       else if (request.method === "GET" && invoice?.[1] !== undefined) operation = service.getIssuedInvoice(invoice[1])
       else if (request.method === "POST" && pdf?.[1] !== undefined) operation = documents.renderInvoice(pdf[1])
       else if (request.method === "GET" && pdf?.[1] !== undefined) {
@@ -224,6 +242,7 @@ export const handleApiRequest = async (request: ApiRequest, runtime: ApiRuntime)
           || issue !== null
           || invoice !== null
           || pdf !== null
+          || payments !== null
         return knownRoute
           ? { status: 405, body: { error: "method_not_allowed" } }
           : { status: 404, body: { error: "not_found" } }

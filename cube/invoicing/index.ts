@@ -28,6 +28,7 @@ export const cube = {
       "issued_invoices",
       "issued_lines",
       "issued_tax_breakdown",
+      "invoice_payments",
     ],
     requiresAuth: true,
     permissions: declaredPermissions.map((name) => ({ name, roles: ["admin"] })),
@@ -60,3 +61,12 @@ export type {
   TaxBreakdown,
   TaxConfiguration,
 } from "./domain/invoice.ts"
+export type {
+  Payment,
+  PaymentStatus,
+  RecordPaymentInput,
+} from "./domain/payments.ts"
+export type {
+  InvoicePaymentSummary,
+  RecordPaymentResult,
+} from "./application/payments.ts"

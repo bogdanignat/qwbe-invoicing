@@ -11,6 +11,7 @@ import { invoicingPermissions } from "../contracts/permissions.ts"
 import { calculateTotals } from "../domain/calculation.ts"
 import type { IssuedInvoice } from "../domain/invoice.ts"
 import { copyParty, createDraftingOperations, missing, type DraftingOperations } from "./drafting.ts"
+import { createPaymentOperations, type PaymentOperations } from "./payments.ts"
 import type { InvoicingTransaction } from "./ports.ts"
 
 export interface InvoicingDependencies {
@@ -21,7 +22,7 @@ export interface InvoicingDependencies {
   readonly cubeIdentity: string
 }
 
-export interface InvoicingService extends DraftingOperations {
+export interface InvoicingService extends DraftingOperations, PaymentOperations {
   readonly issueInvoice: (input: { readonly draftId: string }) => Effect.Effect<IssuedInvoice, InvoicingFailure>
   readonly getIssuedInvoice: (id: string) => Effect.Effect<IssuedInvoice, InvoicingFailure>
 }
@@ -34,6 +35,7 @@ export const createInvoicingService = (dependencies: InvoicingDependencies): Inv
         ? Effect.succeed(context)
         : Effect.fail(new PermissionDenied({ permission })))
   const drafting = createDraftingOperations(dependencies, permissions, authorized)
+  const payments = createPaymentOperations(dependencies)
 
   const issueInvoice = (input: { readonly draftId: string }) => Effect.gen(function*() {
     const context = yield* authorized(permissions.issueInvoices)
@@ -84,7 +86,7 @@ export const createInvoicingService = (dependencies: InvoicingDependencies): Inv
     }))
   })
 
-  return { ...drafting, issueInvoice, getIssuedInvoice }
+  return { ...drafting, ...payments, issueInvoice, getIssuedInvoice }
 }
 
 export type { DraftInvoice, IssuedInvoice } from "../domain/invoice.ts"
