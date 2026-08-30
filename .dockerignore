@@ -1,0 +1,14 @@
+.git
+.gitignore
+node_modules
+coverage
+dist
+build
+data
+.env
+.env.*
+!.env.example
+FOUNDATION.md
+PRODUCT.md
+probes
+*.log

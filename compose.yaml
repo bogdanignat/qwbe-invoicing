@@ -1,0 +1,61 @@
+name: qwbe-invoicing
+
+services:
+  migrate:
+    image: qwbe-invoicing:${IMAGE_TAG:-local}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["node", "bin/qwbe-invoicing.ts", "migrate", "--apply", "--json"]
+    environment:
+      NODE_ENV: development
+      DATA_DIR: /data
+    volumes:
+      - invoicing-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    restart: "no"
+
+  app:
+    image: qwbe-invoicing:${IMAGE_TAG:-local}
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      NODE_ENV: development
+      HOST: 0.0.0.0
+      PORT: 3000
+      DATA_DIR: /data
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    volumes:
+      - invoicing-data:/data
+    expose:
+      - "3000"
+    networks:
+      - default
+      - warden
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: warden
+      traefik.http.routers.qwbe-invoicing.rule: Host(`${APP_DOMAIN:-invoice.test}`)
+      traefik.http.routers.qwbe-invoicing.entrypoints: https
+      traefik.http.routers.qwbe-invoicing.tls: "true"
+      traefik.http.services.qwbe-invoicing.loadbalancer.server.port: "3000"
+    restart: unless-stopped
+    stop_grace_period: 15s
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp
+
+networks:
+  warden:
+    external: true
+    name: warden
+
+volumes:
+  invoicing-data:
+    name: qwbe-invoicing-data
