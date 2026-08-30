@@ -65,6 +65,7 @@ export interface TaxBreakdown {
   readonly taxAmount: string
 }
 
+export type EFacturaStatus = "not_sent" | "pending" | "sent" | "accepted" | "rejected"
 export interface IssuedInvoice {
   readonly id: string
   readonly draftId: string
@@ -82,6 +83,7 @@ export interface IssuedInvoice {
   readonly totalExcludingTax: string
   readonly taxTotal: string
   readonly totalIncludingTax: string
+  readonly eFacturaStatus: EFacturaStatus
 }
 
 export interface ConfigureIssuerInput {

@@ -76,6 +76,26 @@ const memoryStore = (state: MemoryState): TransactionalStore<InvoicingTransactio
         [...working.corrections.values()].filter((c) => c.organizationId === organizationId && c.originalInvoiceId === originalInvoiceId)
           .sort((a, b) => a.issuedAt.localeCompare(b.issuedAt)),
       ),
+      getMaxInvoiceNumber: (organizationId, fiscalYear, series) => Effect.succeed(
+        Math.max(0, ...[...working.issued.values()].filter((i) => i.organizationId === organizationId && Number(i.issueDate.slice(0, 4)) === fiscalYear && i.series === series).map((i) => i.number)) || undefined as number | undefined,
+      ),
+      revertDraftToDraft: (organizationId, draftId) => Effect.sync(() => {
+        const d = working.drafts.get(draftId)
+        if (d === undefined || d.organizationId !== organizationId || d.status !== "issued") throw new DomainConflict({ code: "draft_not_issued", message: "Draft not issued" })
+        working.drafts.set(draftId, { ...d, status: "draft" })
+      }),
+      deleteIssuedInvoice: (organizationId, id) => Effect.sync(() => {
+        const inv = working.issued.get(id)
+        if (inv === undefined || inv.organizationId !== organizationId) throw new DomainConflict({ code: "invoice_not_found", message: "Invoice not found" })
+        working.issued.delete(id)
+        // delete lines/breakdown are inside issued object, no separate tables in memory
+        const key = `${organizationId}:${String(Number(inv.issueDate.slice(0, 4)))}:${inv.series}`
+        const current = working.sequences.get(key)
+        if (current !== undefined && current === inv.number) {
+          if (current <= 1) working.sequences.delete(key)
+          else working.sequences.set(key, current - 1)
+        }
+      }),
     }
     return Effect.tap(use(transaction), () => Effect.sync(() => {
       state.issuers = working.issuers

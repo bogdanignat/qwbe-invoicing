@@ -26,6 +26,7 @@ export interface InvoicingDependencies {
 export interface InvoicingService extends DraftingOperations, PaymentOperations, CorrectionOperations {
   readonly issueInvoice: (input: { readonly draftId: string }) => Effect.Effect<IssuedInvoice, InvoicingFailure>
   readonly getIssuedInvoice: (id: string) => Effect.Effect<IssuedInvoice, InvoicingFailure>
+  readonly deleteIssuedInvoice: (id: string) => Effect.Effect<void, InvoicingFailure>
 }
 
 export const createInvoicingService = (dependencies: InvoicingDependencies): InvoicingService => {
@@ -72,6 +73,7 @@ export const createInvoicingService = (dependencies: InvoicingDependencies): Inv
         customer: copyParty(customer),
         lines: structuredClone(draft.lines),
         ...calculateTotals(draft.lines),
+        eFacturaStatus: "not_sent",
       }
       yield* transaction.saveIssuedInvoice(invoice)
       yield* transaction.saveDraft({ ...draft, status: "issued" })
@@ -88,7 +90,35 @@ export const createInvoicingService = (dependencies: InvoicingDependencies): Inv
     }))
   })
 
-  return { ...drafting, ...payments, ...corrections, issueInvoice, getIssuedInvoice }
+  const deleteIssuedInvoice = (id: string) => Effect.gen(function*() {
+    const context = yield* authorized(permissions.voidInvoices)
+    return yield* dependencies.store.transaction((transaction) => Effect.gen(function*() {
+      const invoice = yield* transaction.findIssuedInvoice(context.organization.id, id)
+      if (invoice === undefined) return yield* Effect.fail(missing("invoice", id))
+      if (invoice.eFacturaStatus !== "not_sent") {
+        return yield* Effect.fail(new DomainConflict({ code: "invoice_already_sent_to_anaf", message: "Cannot delete invoice already sent to ANAF/e-Factura" }))
+      }
+      const payments = yield* transaction.listPayments(context.organization.id, id)
+      if (payments.length > 0) {
+        return yield* Effect.fail(new DomainConflict({ code: "invoice_has_payments", message: "Cannot delete invoice with recorded payments" }))
+      }
+      const corrections = yield* transaction.listCorrections(context.organization.id, id)
+      if (corrections.length > 0) {
+        return yield* Effect.fail(new DomainConflict({ code: "invoice_has_corrections", message: "Cannot delete invoice with corrections" }))
+      }
+      const maxNumber = yield* transaction.getMaxInvoiceNumber(context.organization.id, Number(invoice.issueDate.slice(0, 4)), invoice.series)
+      if (maxNumber === undefined || maxNumber !== invoice.number) {
+        return yield* Effect.fail(new DomainConflict({ code: "only_last_invoice_can_be_deleted", message: "Only the last issued invoice in the series can be deleted" }))
+      }
+      yield* transaction.deleteIssuedInvoice(context.organization.id, id)
+      const draft = yield* transaction.findDraft(context.organization.id, invoice.draftId)
+      if (draft !== undefined && draft.status === "issued") {
+        yield* transaction.revertDraftToDraft(context.organization.id, draft.id)
+      }
+    }))
+  })
+
+  return { ...drafting, ...payments, ...corrections, issueInvoice, getIssuedInvoice, deleteIssuedInvoice }
 }
 
 export type { DraftInvoice, IssuedInvoice } from "../domain/invoice.ts"

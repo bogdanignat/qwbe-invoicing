@@ -1,8 +1,8 @@
 {
   "cubeRoots": ["cube"],
   "caps": {
-    "maxCharsPerFile": 9000,
-    "maxCharsPerUnit": 60000,
+    "maxCharsPerFile": 11000,
+    "maxCharsPerUnit": 65000,
     "maxFilesPerUnit": 20
   }
 }

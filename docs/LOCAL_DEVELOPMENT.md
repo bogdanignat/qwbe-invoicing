@@ -35,7 +35,8 @@ Every cube use-case is an `Effect` and has a 1:1 authenticated HTTP endpoint. Au
 - `GET /api/invoices/:id` — immutable issued snapshot (Effect)
 - `POST /api/invoices/:id/pdf` (idempotent render) / `GET /api/invoices/:id/pdf` (download with SHA-256 ETag)
 - `POST /api/invoices/:id/payments` (record payment) / `GET /api/invoices/:id/payments` (list payments with derived status `unpaid`/`partially_paid`/`paid`/`overpaid`/`overdue`, `paidAmount`/`remainingAmount`)
-- `POST /api/invoices/:id/corrections` (storno fiscal — creează document nou imuabil cu referință la factura originală, motiv obligatoriu, totals negative) / `GET /api/invoices/:id/corrections` (listă storno-uri per factură) / `GET /api/corrections/:id` (citire storno) — după emitere nu se mai editează factura, doar storno
+- `POST /api/invoices/:id/corrections` (storno fiscal — creează document nou imuabil cu referință la factura originală, motiv obligatoriu, totals negative) / `GET /api/invoices/:id/corrections` / `GET /api/corrections/:id` — după emitere nu se mai editează factura, doar storno
+- `DELETE /api/invoices/:id` — șterge **doar ultima** factură emisă pe serie (numărul se eliberează, `invoice_sequences` decrementat, draftul revine la `draft`), doar dacă `e_factura_status='not_sent'` (blocaj ANAF), fără plăți și fără corecții; altfel `409 only_last_invoice_can_be_deleted` / `invoice_already_sent_to_anaf` / `invoice_has_payments|corrections`
 
 Issued invoices remain immutable; payments are separate `Effect` records and never mutate the fiscal snapshot. For local calls, pass
 `Authorization: Bearer $(cat .local/api-token)` and JSON request bodies. The bearer

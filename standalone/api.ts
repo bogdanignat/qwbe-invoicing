@@ -236,6 +236,7 @@ export const handleApiRequest = async (request: ApiRequest, runtime: ApiRuntime)
       else if (request.method === "GET" && invoiceCorrections?.[1] !== undefined) operation = service.listCorrections(invoiceCorrections[1])
       else if (request.method === "GET" && correctionGet?.[1] !== undefined) operation = service.getCorrection(correctionGet[1])
       else if (request.method === "GET" && invoice?.[1] !== undefined) operation = service.getIssuedInvoice(invoice[1])
+      else if (request.method === "DELETE" && invoice?.[1] !== undefined) operation = Effect.map(service.deleteIssuedInvoice(invoice[1]), () => ({ deleted: true } as const))
       else if (request.method === "POST" && pdf?.[1] !== undefined) operation = documents.renderInvoice(pdf[1])
       else if (request.method === "GET" && pdf?.[1] !== undefined) {
         const result = await Effect.runPromise(Effect.either(documents.downloadInvoice(pdf[1])))

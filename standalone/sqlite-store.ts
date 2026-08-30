@@ -228,13 +228,13 @@ const transactionAdapter = (database: DatabaseSync): InvoicingTransaction => ({
        issued_at, currency, issuer_legal_name, issuer_tax_identifier, issuer_country_code, issuer_city,
        issuer_street, issuer_county, issuer_postal_code, customer_legal_name, customer_tax_identifier,
        customer_country_code, customer_city, customer_street, customer_county, customer_postal_code,
-       total_excluding_tax, tax_total, total_including_tax)
-      VALUES (?, ?, ?, ?, 'invoice', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+       total_excluding_tax, tax_total, total_including_tax, e_factura_status)
+      VALUES (?, ?, ?, ?, 'invoice', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .run(invoice.id, invoice.draftId, invoice.organizationId, Number(invoice.issueDate.slice(0, 4)),
         invoice.series, invoice.number, invoice.issueDate, invoice.dueDate, invoice.issuedAt, invoice.currency,
         invoice.issuer.legalName, invoice.issuer.taxIdentifier, ...addressValues(invoice.issuer.address),
         invoice.customer.legalName, invoice.customer.taxIdentifier, ...addressValues(invoice.customer.address),
-        invoice.totalExcludingTax, invoice.taxTotal, invoice.totalIncludingTax)
+        invoice.totalExcludingTax, invoice.taxTotal, invoice.totalIncludingTax, (invoice as unknown as { eFacturaStatus?: string }).eFacturaStatus ?? "not_sent")
     saveLines(database, "issued_lines", invoice.id, invoice.lines)
     const statement = database.prepare(`INSERT INTO issued_tax_breakdown
       (invoice_id, line_position, tax_code, category, rate, taxable_amount, tax_amount) VALUES (?, ?, ?, ?, ?, ?, ?)`)
@@ -262,6 +262,7 @@ const transactionAdapter = (database: DatabaseSync): InvoicingTransaction => ({
       lines: loadLines(database, "issued_lines", id), taxBreakdown,
       totalExcludingTax: text(value, "total_excluding_tax"), taxTotal: text(value, "tax_total"),
       totalIncludingTax: text(value, "total_including_tax"),
+      eFacturaStatus: (optionalText(value, "e_factura_status") ?? "not_sent") as "not_sent" | "pending" | "sent" | "accepted" | "rejected",
     }
   }),
   savePayment: (payment) => write("save payment", () => {
@@ -335,6 +336,35 @@ const transactionAdapter = (database: DatabaseSync): InvoicingTransaction => ({
         totalExcludingTax: text(value, "total_excluding_tax"), taxTotal: text(value, "tax_total"), totalIncludingTax: text(value, "total_including_tax"),
       }
     })
+  }),
+  getMaxInvoiceNumber: (organizationId, fiscalYear, series) => read("get max invoice number", () => {
+    const value = row(database.prepare("SELECT MAX(number) as max_number FROM issued_invoices WHERE organization_id = ? AND fiscal_year = ? AND document_type = 'invoice' AND series = ?").get(organizationId, fiscalYear, series))
+    const max = value?.max_number
+    return typeof max === "number" ? max : undefined
+  }),
+  revertDraftToDraft: (organizationId, draftId) => write("revert draft", () => {
+    const result = database.prepare("UPDATE invoice_drafts SET status = 'draft' WHERE organization_id = ? AND id = ? AND status = 'issued'").run(organizationId, draftId)
+    if (result.changes === 0) throw new DomainConflict({ code: "draft_not_issued", message: "Draft is not issued" })
+  }),
+  deleteIssuedInvoice: (organizationId, id) => write("delete issued invoice", () => {
+    const inv = row(database.prepare("SELECT * FROM issued_invoices WHERE organization_id = ? AND id = ?").get(organizationId, id))
+    if (inv === undefined) throw new DomainConflict({ code: "invoice_not_found", message: "Invoice not found" })
+    const fiscalYear = integer(inv, "fiscal_year")
+    const series = text(inv, "series")
+    const number = integer(inv, "number")
+    database.prepare("DELETE FROM issued_tax_breakdown WHERE invoice_id = ?").run(id)
+    database.prepare("DELETE FROM issued_lines WHERE invoice_id = ?").run(id)
+    database.prepare("DELETE FROM invoice_payments WHERE invoice_id = ? AND organization_id = ?").run(id, organizationId)
+    const del = database.prepare("DELETE FROM issued_invoices WHERE organization_id = ? AND id = ?").run(organizationId, id)
+    if (del.changes === 0) throw new DomainConflict({ code: "invoice_not_deleted", message: "Invoice could not be deleted" })
+    const seq = row(database.prepare("SELECT last_number FROM invoice_sequences WHERE organization_id = ? AND fiscal_year = ? AND document_type = 'invoice' AND series = ?").get(organizationId, fiscalYear, series))
+    if (seq !== undefined && integer(seq, "last_number") === number) {
+      database.prepare("UPDATE invoice_sequences SET last_number = last_number - 1 WHERE organization_id = ? AND fiscal_year = ? AND document_type = 'invoice' AND series = ?").run(organizationId, fiscalYear, series)
+      const updated = row(database.prepare("SELECT last_number FROM invoice_sequences WHERE organization_id = ? AND fiscal_year = ? AND document_type = 'invoice' AND series = ?").get(organizationId, fiscalYear, series))
+      if (updated !== undefined && integer(updated, "last_number") === 0) {
+        database.prepare("DELETE FROM invoice_sequences WHERE organization_id = ? AND fiscal_year = ? AND document_type = 'invoice' AND series = ?").run(organizationId, fiscalYear, series)
+      }
+    }
   }),
 })
 
