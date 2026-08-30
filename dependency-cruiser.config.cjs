@@ -18,7 +18,10 @@ module.exports = {
       from: { path: "^standalone/" },
       to: {
         path: "^cube/[^/]+/",
-        pathNot: ["^cube/[^/]+/(index[.]ts|contracts/)"]
+        pathNot: [
+          "^cube/[^/]+/(index[.]ts|contracts/)",
+          "^cube/[^/]+/[^/]+/(index[.]ts|contracts/)",
+        ]
       },
     },
     {

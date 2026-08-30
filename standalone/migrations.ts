@@ -2,8 +2,13 @@ import { existsSync, mkdirSync } from "node:fs"
 import { join } from "node:path"
 import { DatabaseSync } from "node:sqlite"
 
-const foundationMigration = "000-foundation"
-const databaseName = "invoicing.sqlite"
+import { invoicingMigrations, type InvoicingMigration } from "../cube/invoicing/index.ts"
+import { documentsMigrations } from "../cube/invoicing/documents/index.ts"
+
+const foundationMigration: InvoicingMigration = { name: "000-foundation", statements: [] }
+const invoicingPlan = { label: "", file: "invoicing.sqlite", migrations: [foundationMigration, ...invoicingMigrations] }
+const documentsPlan = { label: "documents/", file: "documents.sqlite", migrations: [foundationMigration, ...documentsMigrations] }
+const plans = [invoicingPlan, documentsPlan] as const
 
 export interface MigrationReport {
   readonly scanned: number
@@ -13,7 +18,10 @@ export interface MigrationReport {
   readonly pending: ReadonlyArray<string>
 }
 
-const databasePath = (dataDirectory: string) => join(dataDirectory, databaseName)
+export const databasePath = (dataDirectory: string) => join(dataDirectory, invoicingPlan.file)
+export const documentsDatabasePath = (dataDirectory: string) => join(dataDirectory, documentsPlan.file)
+
+const pathFor = (dataDirectory: string, plan: typeof plans[number]) => join(dataDirectory, plan.file)
 
 const appliedMigrations = (database: DatabaseSync): ReadonlySet<string> => {
   const table = database.prepare(
@@ -24,45 +32,47 @@ const appliedMigrations = (database: DatabaseSync): ReadonlySet<string> => {
   return new Set(rows.flatMap((row) => typeof row.name === "string" ? [row.name] : []))
 }
 
-export const planMigrations = (dataDirectory: string): MigrationReport => {
-  const path = databasePath(dataDirectory)
-  if (!existsSync(path)) {
-    return { scanned: 1, changed: 0, skipped: 0, failed: 0, pending: [foundationMigration] }
-  }
+const pendingFor = (database: DatabaseSync, plan: typeof plans[number]) => {
+  const applied = appliedMigrations(database)
+  return plan.migrations.filter((migration) => !applied.has(migration.name))
+}
 
+const pendingPlan = (dataDirectory: string, plan: typeof plans[number]): ReadonlyArray<string> => {
+  const path = pathFor(dataDirectory, plan)
+  if (!existsSync(path)) return plan.migrations.map(({ name }) => `${plan.label}${name}`)
   const database = new DatabaseSync(path, { readOnly: true })
   try {
-    const pending = appliedMigrations(database).has(foundationMigration) ? [] : [foundationMigration]
-    return { scanned: 1, changed: 0, skipped: 1 - pending.length, failed: 0, pending }
+    return pendingFor(database, plan).map(({ name }) => `${plan.label}${name}`)
   } finally {
     database.close()
   }
 }
 
-export const applyMigrations = (dataDirectory: string): MigrationReport => {
-  mkdirSync(dataDirectory, { recursive: true })
-  const database = new DatabaseSync(databasePath(dataDirectory))
+export const planMigrations = (dataDirectory: string): MigrationReport => {
+  const pending = plans.flatMap((plan) => pendingPlan(dataDirectory, plan))
+  const scanned = plans.reduce((total, plan) => total + plan.migrations.length, 0)
+  return { scanned, changed: 0, skipped: scanned - pending.length, failed: 0, pending }
+}
+
+const applyPlan = (dataDirectory: string, plan: typeof plans[number]): number => {
+  const database = new DatabaseSync(pathFor(dataDirectory, plan))
   let transactionOpen = false
   try {
+    database.exec("PRAGMA foreign_keys = ON")
     database.exec("BEGIN IMMEDIATE")
     transactionOpen = true
     database.exec(
-      "CREATE TABLE IF NOT EXISTS schema_migrations (name TEXT PRIMARY KEY, applied_at TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS schema_migrations (name TEXT PRIMARY KEY, applied_at TEXT NOT NULL) STRICT",
     )
-    const alreadyApplied = appliedMigrations(database).has(foundationMigration)
-    if (!alreadyApplied) {
+    const pending = pendingFor(database, plan)
+    for (const migration of pending) {
+      for (const statement of migration.statements) database.exec(statement)
       database.prepare("INSERT INTO schema_migrations (name, applied_at) VALUES (?, ?)")
-        .run(foundationMigration, new Date().toISOString())
+        .run(migration.name, new Date().toISOString())
     }
     database.exec("COMMIT")
     transactionOpen = false
-    return {
-      scanned: 1,
-      changed: alreadyApplied ? 0 : 1,
-      skipped: alreadyApplied ? 1 : 0,
-      failed: 0,
-      pending: [],
-    }
+    return pending.length
   } catch (error) {
     if (transactionOpen) database.exec("ROLLBACK")
     throw error
@@ -71,19 +81,26 @@ export const applyMigrations = (dataDirectory: string): MigrationReport => {
   }
 }
 
-export const databaseReady = (dataDirectory: string): boolean => {
-  const path = databasePath(dataDirectory)
-  if (!existsSync(path)) return false
+export const applyMigrations = (dataDirectory: string): MigrationReport => {
+  mkdirSync(dataDirectory, { recursive: true })
+  const changed = plans.reduce((total, plan) => total + applyPlan(dataDirectory, plan), 0)
+  const scanned = plans.reduce((total, plan) => total + plan.migrations.length, 0)
+  return { scanned, changed, skipped: scanned - changed, failed: 0, pending: [] }
+}
 
+const planReady = (dataDirectory: string, plan: typeof plans[number]): boolean => {
+  const path = pathFor(dataDirectory, plan)
+  if (!existsSync(path)) return false
   const database = new DatabaseSync(path)
   let transactionOpen = false
   try {
+    database.exec("PRAGMA foreign_keys = ON")
     database.exec("BEGIN IMMEDIATE")
     transactionOpen = true
-    const ready = appliedMigrations(database).has(foundationMigration)
+    const ready = pendingFor(database, plan).length === 0
     if (ready) {
       database.prepare("UPDATE schema_migrations SET applied_at = applied_at WHERE name = ?")
-        .run(foundationMigration)
+        .run(plan.migrations.at(-1)?.name ?? foundationMigration.name)
     }
     database.exec("ROLLBACK")
     transactionOpen = false
@@ -95,3 +112,6 @@ export const databaseReady = (dataDirectory: string): boolean => {
     database.close()
   }
 }
+
+export const databaseReady = (dataDirectory: string): boolean =>
+  plans.every((plan) => planReady(dataDirectory, plan))

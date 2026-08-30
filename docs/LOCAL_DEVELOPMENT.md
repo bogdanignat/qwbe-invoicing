@@ -9,15 +9,31 @@ the external `warden` Docker network; it does not publish an application port.
 ```bash
 pnpm local:setup             # dry-run
 pnpm local:setup --apply     # starts Warden services and signs invoice.test once
+mkdir -p .local && chmod 700 .local
+openssl rand -hex 32 > .local/api-token && chmod 600 .local/api-token
 docker compose build
 docker compose up -d
 docker compose ps
 curl --fail --cacert ~/.warden/ssl/rootca/certs/ca.cert.pem https://invoice.test/health/ready
 ```
 
-`migrate` runs once before `app` and initializes `/data/invoicing.sqlite`. Repeated
-`docker compose up -d` is safe: the migration is idempotent and does not consume
-invoice numbers or create business records.
+`migrate` runs once before `app` and initializes `/data/invoicing.sqlite` plus the
+child documents cube database `/data/documents.sqlite`. Repeated `docker compose up -d`
+is safe: both migration plans are idempotent and do not consume invoice numbers
+or create business records. The API reads its standalone bearer
+credential from the Compose secret; the secret is never stored in the image or
+printed by the application. `ORGANIZATION_ID` selects the trusted organization for
+this initial single-organization host adapter.
+
+Authenticated invoice-core routes are available under `/api`: `PUT /api/issuer`,
+`POST /api/customers`, `POST /api/drafts`, `POST /api/drafts/{id}/lines`,
+`POST /api/drafts/{id}/issue`, `GET /api/invoices/{id}`,
+`POST /api/invoices/{id}/pdf` (idempotent render), and
+`GET /api/invoices/{id}/pdf`
+(download with SHA-256 ETag). For local calls, pass
+`Authorization: Bearer $(cat .local/api-token)` and JSON request bodies. The bearer
+adapter is the API-first standalone transport; the cube receives only the verified
+identity and organization context.
 
 Stop containers without deleting data:
 
@@ -56,8 +72,15 @@ Warden Traefik.
 ```bash
 docker compose run --rm app node bin/qwbe-invoicing.ts migrate --json
 docker compose exec app node bin/qwbe-invoicing.ts doctor --json
+docker compose exec app node bin/qwbe-invoicing.ts artifacts --limit 50 --json
+docker compose exec app node bin/qwbe-invoicing.ts artifacts --limit 50 --apply --json
 docker compose logs --tail=100 app migrate
 ```
 
-The first migration command is dry-run unless `--apply` is supplied. In non-development
-environments, applying also requires `--confirm-production`.
+Migration and artifact reconciliation commands are dry-run unless `--apply` is
+supplied. Artifact apply is bounded by `--limit`, commits successful PDFs one by one,
+and can be rerun safely after partial failure. In non-development environments,
+applying either operation also requires `--confirm-production`. PDFs are stored by
+SHA-256 below `/data/artifacts`; reads verify key, digest, and byte length. The bundled
+DejaVu Sans font supports Romanian glyphs and its distribution license is stored next
+to the font in `standalone/assets/fonts/`.

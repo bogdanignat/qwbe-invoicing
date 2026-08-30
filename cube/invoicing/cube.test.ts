@@ -9,6 +9,17 @@ void test("exports a minimal authenticated QWBE cube definition", () => {
   assert.equal(cube.manifest.name, "invoicing")
   assert.equal(cube.manifest.requiresAuth, true)
   assert.equal(cube.manifest.permissions.length, 7)
+  assert.deepEqual(cube.manifest.tables, [
+    "issuers",
+    "issuer_tax_configurations",
+    "customers",
+    "invoice_drafts",
+    "draft_lines",
+    "invoice_sequences",
+    "issued_invoices",
+    "issued_lines",
+    "issued_tax_breakdown",
+  ])
 
   const parts = cube.create()
   assert.equal(HttpApiGroup.isHttpApiGroup(parts.group), true)

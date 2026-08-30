@@ -12,8 +12,13 @@ import { applyMigrations, databaseReady, planMigrations } from "./migrations.ts"
 void test("migration apply is idempotent", () => {
   const directory = mkdtempSync(join(tmpdir(), "qwbe-migrations-"))
   try {
-    assert.deepEqual(planMigrations(directory).pending, ["000-foundation"])
-    assert.equal(applyMigrations(directory).changed, 1)
+    assert.deepEqual(planMigrations(directory).pending, [
+      "000-foundation",
+      "001-invoice-core",
+      "documents/000-foundation",
+      "documents/001-artifacts",
+    ])
+    assert.equal(applyMigrations(directory).changed, 4)
     assert.equal(applyMigrations(directory).changed, 0)
     assert.equal(databaseReady(directory), true)
   } finally {
@@ -43,6 +48,17 @@ void test("migrate remains dry-run unless apply is explicit", () => {
     confirmProduction: false,
     json: true,
   })
+})
+
+void test("artifact reconciliation is bounded and dry-run unless apply is explicit", () => {
+  assert.deepEqual(parseCommand(["artifacts", "--limit", "25", "--json"]), {
+    name: "artifacts",
+    apply: false,
+    confirmProduction: false,
+    json: true,
+    limit: 25,
+  })
+  assert.throws(() => parseCommand(["artifacts", "--limit", "101"]))
 })
 
 void test("CLI distinguishes invalid input, guard refusal, and execution failure", () => {

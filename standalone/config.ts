@@ -3,6 +3,8 @@ export interface RuntimeConfig {
   readonly port: number
   readonly dataDirectory: string
   readonly nodeEnvironment: string
+  readonly authTokenFile: string | undefined
+  readonly organizationId: string | undefined
 }
 
 const positivePort = (value: string | undefined): number => {
@@ -18,4 +20,6 @@ export const runtimeConfig = (environment: NodeJS.ProcessEnv = process.env): Run
   port: positivePort(environment.PORT),
   dataDirectory: environment.DATA_DIR ?? "/data",
   nodeEnvironment: environment.NODE_ENV ?? "development",
+  authTokenFile: environment.AUTH_TOKEN_FILE,
+  organizationId: environment.ORGANIZATION_ID,
 })
