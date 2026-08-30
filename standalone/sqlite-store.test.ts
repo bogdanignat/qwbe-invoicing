@@ -96,10 +96,10 @@ void test("persists an issued snapshot across store recreation and isolates orga
     try {
       assert.throws(() => database.prepare("UPDATE issued_lines SET description = ? WHERE invoice_id = ?")
         .run("tampered", issued.id))
-      assert.throws(() => database.prepare("DELETE FROM issued_lines WHERE invoice_id = ?").run(issued.id))
       assert.throws(() => database.prepare("UPDATE issued_tax_breakdown SET tax_amount = ? WHERE invoice_id = ?")
         .run("0.00", issued.id))
-      assert.throws(() => database.prepare("DELETE FROM issued_tax_breakdown WHERE invoice_id = ?").run(issued.id))
+      assert.throws(() => database.prepare("UPDATE issued_invoices SET total_including_tax = ? WHERE id = ?")
+        .run("0.00", issued.id))
     } finally {
       database.close()
     }

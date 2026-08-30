@@ -149,6 +149,31 @@ const lineInput = (draftId: string, value: unknown): AddDraftLineInput => {
   }
 }
 
+const paymentInput = (invoiceId: string, value: unknown) => {
+  const input = object(value)
+  const externalReference = optionalText(input.externalReference, "externalReference")
+  const note = optionalText(input.note, "note")
+  return {
+    invoiceId,
+    amount: text(input.amount, "amount"),
+    currency: text(input.currency, "currency"),
+    paymentDate: text(input.paymentDate, "paymentDate"),
+    method: text(input.method, "method"),
+    ...(externalReference === undefined ? {} : { externalReference }),
+    ...(note === undefined ? {} : { note }),
+  }
+}
+
+const correctionInput = (originalInvoiceId: string, value: unknown) => {
+  const input = object(value)
+  const issueDate = optionalText(input.issueDate, "issueDate")
+  return {
+    originalInvoiceId,
+    reason: text(input.reason, "reason"),
+    ...(issueDate === undefined ? {} : { issueDate }),
+  }
+}
+
 type ApiFailure = InvoicingFailure | DocumentsFailure
 
 const failureResponse = (failure: ApiFailure): ApiResponse => {
@@ -188,17 +213,30 @@ export const handleApiRequest = async (request: ApiRequest, runtime: ApiRuntime)
   }))
   try {
     let operation: Effect.Effect<unknown, ApiFailure>
-    if (request.method === "PUT" && request.url === "/api/issuer") operation = service.configureIssuer(issuerInput(request.body))
+    const customerGet = /^\/api\/customers\/([^/]+)$/.exec(request.url)
+    const draftGet = /^\/api\/drafts\/([^/]+)$/.exec(request.url)
+    const line = /^\/api\/drafts\/([^/]+)\/lines$/.exec(request.url)
+    const issue = /^\/api\/drafts\/([^/]+)\/issue$/.exec(request.url)
+    const invoice = /^\/api\/invoices\/([^/]+)$/.exec(request.url)
+    const pdf = /^\/api\/invoices\/([^/]+)\/pdf$/.exec(request.url)
+    const payments = /^\/api\/invoices\/([^/]+)\/payments$/.exec(request.url)
+    const invoiceCorrections = /^\/api\/invoices\/([^/]+)\/corrections$/.exec(request.url)
+    const correctionGet = /^\/api\/corrections\/([^/]+)$/.exec(request.url)
+    if (request.method === "GET" && request.url === "/api/issuer") operation = service.getIssuer()
+    else if (request.method === "PUT" && request.url === "/api/issuer") operation = service.configureIssuer(issuerInput(request.body))
+    else if (request.method === "GET" && customerGet?.[1] !== undefined) operation = service.getCustomer(customerGet[1])
     else if (request.method === "POST" && request.url === "/api/customers") operation = service.createCustomer(customerInput(request.body))
+    else if (request.method === "GET" && draftGet?.[1] !== undefined) operation = service.getDraft(draftGet[1])
     else if (request.method === "POST" && request.url === "/api/drafts") operation = service.createDraft(draftInput(request.body))
-    else {
-      const line = /^\/api\/drafts\/([^/]+)\/lines$/.exec(request.url)
-      const issue = /^\/api\/drafts\/([^/]+)\/issue$/.exec(request.url)
-      const invoice = /^\/api\/invoices\/([^/]+)$/.exec(request.url)
-      const pdf = /^\/api\/invoices\/([^/]+)\/pdf$/.exec(request.url)
-      if (request.method === "POST" && line?.[1] !== undefined) operation = service.addDraftLine(lineInput(line[1], request.body))
+    else if (request.method === "POST" && line?.[1] !== undefined) operation = service.addDraftLine(lineInput(line[1], request.body))
       else if (request.method === "POST" && issue?.[1] !== undefined) operation = service.issueInvoice({ draftId: issue[1] })
+      else if (request.method === "GET" && payments?.[1] !== undefined) operation = service.listPayments(payments[1])
+      else if (request.method === "POST" && payments?.[1] !== undefined) operation = service.recordPayment(paymentInput(payments[1], request.body))
+      else if (request.method === "POST" && invoiceCorrections?.[1] !== undefined) operation = service.createCorrection(correctionInput(invoiceCorrections[1], request.body))
+      else if (request.method === "GET" && invoiceCorrections?.[1] !== undefined) operation = service.listCorrections(invoiceCorrections[1])
+      else if (request.method === "GET" && correctionGet?.[1] !== undefined) operation = service.getCorrection(correctionGet[1])
       else if (request.method === "GET" && invoice?.[1] !== undefined) operation = service.getIssuedInvoice(invoice[1])
+      else if (request.method === "DELETE" && invoice?.[1] !== undefined) operation = Effect.map(service.deleteIssuedInvoice(invoice[1]), () => ({ deleted: true } as const))
       else if (request.method === "POST" && pdf?.[1] !== undefined) operation = documents.renderInvoice(pdf[1])
       else if (request.method === "GET" && pdf?.[1] !== undefined) {
         const result = await Effect.runPromise(Effect.either(documents.downloadInvoice(pdf[1])))
@@ -220,15 +258,19 @@ export const handleApiRequest = async (request: ApiRequest, runtime: ApiRuntime)
         const knownRoute = request.url === "/api/issuer"
           || request.url === "/api/customers"
           || request.url === "/api/drafts"
+          || customerGet !== null
+          || draftGet !== null
           || line !== null
           || issue !== null
           || invoice !== null
           || pdf !== null
+          || payments !== null
+          || invoiceCorrections !== null
+          || correctionGet !== null
         return knownRoute
           ? { status: 405, body: { error: "method_not_allowed" } }
           : { status: 404, body: { error: "not_found" } }
       }
-    }
     const result = await Effect.runPromise(Effect.either(operation))
     return Either.isLeft(result) ? failureResponse(result.left) : { status: 200, body: result.right }
   } catch (error) {

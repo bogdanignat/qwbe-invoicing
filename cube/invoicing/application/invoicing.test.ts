@@ -26,6 +26,8 @@ interface MemoryState {
   drafts: Map<string, DraftInvoice>
   issued: Map<string, IssuedInvoice>
   sequences: Map<string, number>
+  payments: Map<string, Parameters<InvoicingTransaction["savePayment"]>[0]>
+  corrections: Map<string, Parameters<InvoicingTransaction["saveCorrection"]>[0]>
 }
 
 const cloneState = (state: MemoryState): MemoryState => structuredClone(state)
@@ -54,6 +56,46 @@ const memoryStore = (state: MemoryState): TransactionalStore<InvoicingTransactio
       findIssuedInvoice: (organizationId, id) => Effect.succeed(
         working.issued.get(id)?.organizationId === organizationId ? working.issued.get(id) : undefined,
       ),
+      savePayment: (payment) => Effect.sync(() => { working.payments.set(payment.id, payment) }),
+      listPayments: (organizationId, invoiceId) => Effect.succeed(
+        [...working.payments.values()].filter((payment) =>
+          payment.organizationId === organizationId && payment.invoiceId === invoiceId)
+          .sort((a, b) => a.paymentDate.localeCompare(b.paymentDate) || a.createdAt.localeCompare(b.createdAt)),
+      ),
+      allocateCorrectionNumber: (organizationId, fiscalYear, series) => Effect.sync(() => {
+        const key = `${organizationId}:${String(fiscalYear)}:correction:${series}`
+        const next = (working.sequences.get(key) ?? 0) + 1
+        working.sequences.set(key, next)
+        return next
+      }),
+      saveCorrection: (correction) => Effect.sync(() => { working.corrections.set(correction.id, correction) }),
+      findCorrection: (organizationId, id) => Effect.succeed(
+        working.corrections.get(id)?.organizationId === organizationId ? working.corrections.get(id) : undefined,
+      ),
+      listCorrections: (organizationId, originalInvoiceId) => Effect.succeed(
+        [...working.corrections.values()].filter((c) => c.organizationId === organizationId && c.originalInvoiceId === originalInvoiceId)
+          .sort((a, b) => a.issuedAt.localeCompare(b.issuedAt)),
+      ),
+      getMaxInvoiceNumber: (organizationId, fiscalYear, series) => Effect.succeed(
+        Math.max(0, ...[...working.issued.values()].filter((i) => i.organizationId === organizationId && Number(i.issueDate.slice(0, 4)) === fiscalYear && i.series === series).map((i) => i.number)) || undefined as number | undefined,
+      ),
+      revertDraftToDraft: (organizationId, draftId) => Effect.sync(() => {
+        const d = working.drafts.get(draftId)
+        if (d === undefined || d.organizationId !== organizationId || d.status !== "issued") throw new DomainConflict({ code: "draft_not_issued", message: "Draft not issued" })
+        working.drafts.set(draftId, { ...d, status: "draft" })
+      }),
+      deleteIssuedInvoice: (organizationId, id) => Effect.sync(() => {
+        const inv = working.issued.get(id)
+        if (inv === undefined || inv.organizationId !== organizationId) throw new DomainConflict({ code: "invoice_not_found", message: "Invoice not found" })
+        working.issued.delete(id)
+        // delete lines/breakdown are inside issued object, no separate tables in memory
+        const key = `${organizationId}:${String(Number(inv.issueDate.slice(0, 4)))}:${inv.series}`
+        const current = working.sequences.get(key)
+        if (current !== undefined && current === inv.number) {
+          if (current <= 1) working.sequences.delete(key)
+          else working.sequences.set(key, current - 1)
+        }
+      }),
     }
     return Effect.tap(use(transaction), () => Effect.sync(() => {
       state.issuers = working.issuers
@@ -61,6 +103,8 @@ const memoryStore = (state: MemoryState): TransactionalStore<InvoicingTransactio
       state.drafts = working.drafts
       state.issued = working.issued
       state.sequences = working.sequences
+      state.payments = working.payments
+      state.corrections = working.corrections
     }))
   }),
 })
@@ -74,6 +118,8 @@ const identity = {
     "invoicing:customer.manage",
     "invoicing:invoice.draft",
     "invoicing:invoice.issue",
+    "invoicing:invoice.void",
+    "invoicing:payment.record",
     "invoicing:settings.manage",
   ],
 }
@@ -101,6 +147,8 @@ const emptyState = (): MemoryState => ({
   drafts: new Map(),
   issued: new Map(),
   sequences: new Map(),
+  payments: new Map(),
+  corrections: new Map(),
 })
 
 void test("issues deterministic immutable invoice snapshots through the public service", async () => {

@@ -392,11 +392,11 @@ stable.
 
 ### Phase 0 — repository and contracts
 
-- pin Node, pnpm, TypeScript, Effect, and platform dependencies;
+- pin Node, pnpm, TypeScript, **Effect 3.x** (`effect`, `@effect/platform`, `@effect/platform-node`) and platform dependencies — Effect is the application runtime;
 - create strict TypeScript, test, lint, size, and boundary gates;
-- define organization, identity, store, clock, ID, and rendering ports;
-- define observable domain failures;
-- create package allowlist and standalone composition root;
+- define organization, identity, store, clock, ID, and rendering ports as `Effect` capabilities;
+- define observable domain failures as typed `Effect` failures;
+- create package allowlist and standalone composition root (every use-case gets an `Effect`-based HTTP endpoint);
 - add Docker build and Compose development baseline.
 
 ### Phase 1 — invoice core
@@ -405,13 +405,13 @@ stable.
 - issuer/customer snapshots;
 - invoice draft aggregate and deterministic totals;
 - numbering sequence;
-- atomic issuance use case;
+- atomic issuance use case as `Effect`;
 - SQLite schema and migrations;
-- authenticated HTTP API for the first vertical slice.
+- authenticated `Effect`-based HTTP API for the first vertical slice (every operation has `GET`/`POST`/`PUT` endpoint).
 
 ### Phase 2 — usable standalone product
 
-- non-React UI contract and implementation;
+- non-React UI contract and implementation (driven by the `Effect` HTTP API);
 - PDF rendering and preserved artifacts;
 - payment recording and status calculation;
 - correction documents;

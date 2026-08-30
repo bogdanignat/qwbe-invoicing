@@ -88,6 +88,24 @@ const addressValues = (address: Address): ReadonlyArray<string | null> => [
   address.postalCode ?? null,
 ]
 
+const paymentFrom = (value: Row) => {
+  const externalReference = optionalText(value, "external_reference")
+  const note = optionalText(value, "note")
+  return {
+    id: text(value, "id"),
+    invoiceId: text(value, "invoice_id"),
+    organizationId: text(value, "organization_id"),
+    amount: text(value, "amount"),
+    currency: text(value, "currency"),
+    paymentDate: text(value, "payment_date"),
+    method: text(value, "method"),
+    ...(externalReference === undefined ? {} : { externalReference }),
+    ...(note === undefined ? {} : { note }),
+    actorId: text(value, "actor_id"),
+    createdAt: text(value, "created_at"),
+  }
+}
+
 const lineFrom = (value: Row): DraftLine => ({
   id: text(value, "id"),
   description: text(value, "description"),
@@ -210,13 +228,13 @@ const transactionAdapter = (database: DatabaseSync): InvoicingTransaction => ({
        issued_at, currency, issuer_legal_name, issuer_tax_identifier, issuer_country_code, issuer_city,
        issuer_street, issuer_county, issuer_postal_code, customer_legal_name, customer_tax_identifier,
        customer_country_code, customer_city, customer_street, customer_county, customer_postal_code,
-       total_excluding_tax, tax_total, total_including_tax)
-      VALUES (?, ?, ?, ?, 'invoice', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+       total_excluding_tax, tax_total, total_including_tax, e_factura_status)
+      VALUES (?, ?, ?, ?, 'invoice', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .run(invoice.id, invoice.draftId, invoice.organizationId, Number(invoice.issueDate.slice(0, 4)),
         invoice.series, invoice.number, invoice.issueDate, invoice.dueDate, invoice.issuedAt, invoice.currency,
         invoice.issuer.legalName, invoice.issuer.taxIdentifier, ...addressValues(invoice.issuer.address),
         invoice.customer.legalName, invoice.customer.taxIdentifier, ...addressValues(invoice.customer.address),
-        invoice.totalExcludingTax, invoice.taxTotal, invoice.totalIncludingTax)
+        invoice.totalExcludingTax, invoice.taxTotal, invoice.totalIncludingTax, (invoice as unknown as { eFacturaStatus?: string }).eFacturaStatus ?? "not_sent")
     saveLines(database, "issued_lines", invoice.id, invoice.lines)
     const statement = database.prepare(`INSERT INTO issued_tax_breakdown
       (invoice_id, line_position, tax_code, category, rate, taxable_amount, tax_amount) VALUES (?, ?, ?, ?, ?, ?, ?)`)
@@ -244,6 +262,108 @@ const transactionAdapter = (database: DatabaseSync): InvoicingTransaction => ({
       lines: loadLines(database, "issued_lines", id), taxBreakdown,
       totalExcludingTax: text(value, "total_excluding_tax"), taxTotal: text(value, "tax_total"),
       totalIncludingTax: text(value, "total_including_tax"),
+      eFacturaStatus: (optionalText(value, "e_factura_status") ?? "not_sent") as "not_sent" | "pending" | "sent" | "accepted" | "rejected",
+    }
+  }),
+  savePayment: (payment) => write("save payment", () => {
+    const result = database.prepare(`INSERT INTO invoice_payments
+      (id, invoice_id, organization_id, amount, currency, payment_date, method, external_reference, note, actor_id, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(payment.id, payment.invoiceId, payment.organizationId, payment.amount, payment.currency,
+        payment.paymentDate, payment.method, payment.externalReference ?? null, payment.note ?? null,
+        payment.actorId, payment.createdAt)
+    if (result.changes === 0) throw new DomainConflict({ code: "payment_not_saved", message: "Payment could not be saved" })
+  }),
+  listPayments: (organizationId, invoiceId) => read("list payments", () =>
+    database.prepare("SELECT * FROM invoice_payments WHERE organization_id = ? AND invoice_id = ? ORDER BY payment_date, created_at, id")
+      .all(organizationId, invoiceId).map((value) => paymentFrom(value as Row))),
+  allocateCorrectionNumber: (organizationId, fiscalYear, series) => write("allocate correction number", () => {
+    const value = row(database.prepare(`INSERT INTO invoice_sequences
+      (organization_id, fiscal_year, document_type, series, last_number) VALUES (?, ?, 'correction', ?, 1)
+      ON CONFLICT (organization_id, fiscal_year, document_type, series)
+      DO UPDATE SET last_number=last_number+1 RETURNING last_number`).get(organizationId, fiscalYear, series))
+    if (value === undefined) throw new Error("missing allocated number")
+    return integer(value, "last_number")
+  }),
+  saveCorrection: (correction) => write("save correction", () => {
+    database.prepare(`INSERT INTO correction_documents
+      (id, organization_id, original_invoice_id, fiscal_year, document_type, series, number, issue_date, issued_at, reason, currency,
+       issuer_legal_name, issuer_tax_identifier, issuer_country_code, issuer_city, issuer_street, issuer_county, issuer_postal_code,
+       customer_legal_name, customer_tax_identifier, customer_country_code, customer_city, customer_street, customer_county, customer_postal_code,
+       total_excluding_tax, tax_total, total_including_tax)
+      VALUES (?, ?, ?, ?, 'correction', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(correction.id, correction.organizationId, correction.originalInvoiceId, correction.fiscalYear,
+        correction.series, correction.number, correction.issueDate, correction.issuedAt, correction.reason, correction.currency,
+        correction.issuer.legalName, correction.issuer.taxIdentifier, ...addressValues(correction.issuer.address),
+        correction.customer.legalName, correction.customer.taxIdentifier, ...addressValues(correction.customer.address),
+        correction.totalExcludingTax, correction.taxTotal, correction.totalIncludingTax)
+    const lineStmt = database.prepare(`INSERT INTO correction_lines
+      (id, correction_id, line_position, description, quantity, unit_price, tax_code, tax_category, tax_rate, total_excluding_tax, tax_amount, total_including_tax)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    correction.lines.forEach((line, pos) => lineStmt.run(line.id, correction.id, pos, line.description, line.quantity, line.unitPrice, line.taxCode, line.taxCategory, line.taxRate, line.totalExcludingTax, line.taxAmount, line.totalIncludingTax))
+    const taxStmt = database.prepare(`INSERT INTO correction_tax_breakdown
+      (correction_id, line_position, tax_code, category, rate, taxable_amount, tax_amount) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+    correction.taxBreakdown.forEach((tax, pos) => taxStmt.run(correction.id, pos, tax.taxCode, tax.category, tax.rate, tax.taxableAmount, tax.taxAmount))
+  }),
+  findCorrection: (organizationId, id) => read("find correction", () => {
+    const value = row(database.prepare("SELECT * FROM correction_documents WHERE organization_id = ? AND id = ?").get(organizationId, id))
+    if (value === undefined) return undefined
+    const lines: ReadonlyArray<DraftLine> = database.prepare("SELECT * FROM correction_lines WHERE correction_id = ? ORDER BY line_position").all(id).map((v) => lineFrom(v as Row))
+    const taxBreakdown: ReadonlyArray<TaxBreakdown> = database.prepare("SELECT * FROM correction_tax_breakdown WHERE correction_id = ? ORDER BY line_position").all(id).map((item) => {
+      const tax = item as Row
+      return { taxCode: text(tax, "tax_code"), category: "standard", rate: text(tax, "rate"), taxableAmount: text(tax, "taxable_amount"), taxAmount: text(tax, "tax_amount") }
+    })
+    return {
+      id, organizationId, originalInvoiceId: text(value, "original_invoice_id"), fiscalYear: integer(value, "fiscal_year"), series: text(value, "series"), number: integer(value, "number"),
+      issueDate: text(value, "issue_date"), issuedAt: text(value, "issued_at"), reason: text(value, "reason"), currency: text(value, "currency"),
+      issuer: partyFrom(value, "issuer_"), customer: partyFrom(value, "customer_"), lines, taxBreakdown,
+      totalExcludingTax: text(value, "total_excluding_tax"), taxTotal: text(value, "tax_total"), totalIncludingTax: text(value, "total_including_tax"),
+    }
+  }),
+  listCorrections: (organizationId, originalInvoiceId) => read("list corrections", () => {
+    const rows = database.prepare("SELECT * FROM correction_documents WHERE organization_id = ? AND original_invoice_id = ? ORDER BY issued_at, number, id").all(organizationId, originalInvoiceId) as ReadonlyArray<Row>
+    return rows.map((value) => {
+      const id = text(value, "id")
+      const lines: ReadonlyArray<DraftLine> = database.prepare("SELECT * FROM correction_lines WHERE correction_id = ? ORDER BY line_position").all(id).map((v) => lineFrom(v as Row))
+      const taxBreakdown: ReadonlyArray<TaxBreakdown> = database.prepare("SELECT * FROM correction_tax_breakdown WHERE correction_id = ? ORDER BY line_position").all(id).map((item) => {
+        const tax = item as Row
+        return { taxCode: text(tax, "tax_code"), category: "standard", rate: text(tax, "rate"), taxableAmount: text(tax, "taxable_amount"), taxAmount: text(tax, "tax_amount") }
+      })
+      return {
+        id, organizationId, originalInvoiceId: text(value, "original_invoice_id"), fiscalYear: integer(value, "fiscal_year"), series: text(value, "series"), number: integer(value, "number"),
+        issueDate: text(value, "issue_date"), issuedAt: text(value, "issued_at"), reason: text(value, "reason"), currency: text(value, "currency"),
+        issuer: partyFrom(value, "issuer_"), customer: partyFrom(value, "customer_"), lines, taxBreakdown,
+        totalExcludingTax: text(value, "total_excluding_tax"), taxTotal: text(value, "tax_total"), totalIncludingTax: text(value, "total_including_tax"),
+      }
+    })
+  }),
+  getMaxInvoiceNumber: (organizationId, fiscalYear, series) => read("get max invoice number", () => {
+    const value = row(database.prepare("SELECT MAX(number) as max_number FROM issued_invoices WHERE organization_id = ? AND fiscal_year = ? AND document_type = 'invoice' AND series = ?").get(organizationId, fiscalYear, series))
+    const max = value?.max_number
+    return typeof max === "number" ? max : undefined
+  }),
+  revertDraftToDraft: (organizationId, draftId) => write("revert draft", () => {
+    const result = database.prepare("UPDATE invoice_drafts SET status = 'draft' WHERE organization_id = ? AND id = ? AND status = 'issued'").run(organizationId, draftId)
+    if (result.changes === 0) throw new DomainConflict({ code: "draft_not_issued", message: "Draft is not issued" })
+  }),
+  deleteIssuedInvoice: (organizationId, id) => write("delete issued invoice", () => {
+    const inv = row(database.prepare("SELECT * FROM issued_invoices WHERE organization_id = ? AND id = ?").get(organizationId, id))
+    if (inv === undefined) throw new DomainConflict({ code: "invoice_not_found", message: "Invoice not found" })
+    const fiscalYear = integer(inv, "fiscal_year")
+    const series = text(inv, "series")
+    const number = integer(inv, "number")
+    database.prepare("DELETE FROM issued_tax_breakdown WHERE invoice_id = ?").run(id)
+    database.prepare("DELETE FROM issued_lines WHERE invoice_id = ?").run(id)
+    database.prepare("DELETE FROM invoice_payments WHERE invoice_id = ? AND organization_id = ?").run(id, organizationId)
+    const del = database.prepare("DELETE FROM issued_invoices WHERE organization_id = ? AND id = ?").run(organizationId, id)
+    if (del.changes === 0) throw new DomainConflict({ code: "invoice_not_deleted", message: "Invoice could not be deleted" })
+    const seq = row(database.prepare("SELECT last_number FROM invoice_sequences WHERE organization_id = ? AND fiscal_year = ? AND document_type = 'invoice' AND series = ?").get(organizationId, fiscalYear, series))
+    if (seq !== undefined && integer(seq, "last_number") === number) {
+      database.prepare("UPDATE invoice_sequences SET last_number = last_number - 1 WHERE organization_id = ? AND fiscal_year = ? AND document_type = 'invoice' AND series = ?").run(organizationId, fiscalYear, series)
+      const updated = row(database.prepare("SELECT last_number FROM invoice_sequences WHERE organization_id = ? AND fiscal_year = ? AND document_type = 'invoice' AND series = ?").get(organizationId, fiscalYear, series))
+      if (updated !== undefined && integer(updated, "last_number") === 0) {
+        database.prepare("DELETE FROM invoice_sequences WHERE organization_id = ? AND fiscal_year = ? AND document_type = 'invoice' AND series = ?").run(organizationId, fiscalYear, series)
+      }
     }
   }),
 })
