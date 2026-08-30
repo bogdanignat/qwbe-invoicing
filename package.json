@@ -1,0 +1,37 @@
+{
+  "name": "qwbe-invoicing",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "type": "module",
+  "packageManager": "pnpm@11.22.0",
+  "engines": {
+    "node": "24.19.0"
+  },
+  "scripts": {
+    "app": "node bin/qwbe-invoicing.ts",
+    "local:setup": "node scripts/local-warden.mjs",
+    "test": "node --test \"cube/**/*.test.ts\" \"standalone/**/*.test.ts\" \"probes/**/*.test.mjs\"",
+    "typecheck": "tsc -p tsconfig.json",
+    "lint": "eslint .",
+    "gate:runtime": "node probes/runtime-version.mjs",
+    "gate:package": "node probes/package-gate.mjs",
+    "gate:test": "node probes/test-gate.mjs",
+    "gate:size": "node probes/size-gate.mjs",
+    "gate:boundaries": "node probes/boundary-gate.mjs",
+    "verify": "pnpm gate:runtime && pnpm lint && pnpm typecheck && pnpm test && pnpm gate:package && pnpm gate:test && pnpm gate:size && pnpm gate:boundaries"
+  },
+  "dependencies": {
+    "@effect/platform": "0.96.1",
+    "@effect/platform-node": "0.107.0",
+    "effect": "3.21.2"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "24.10.13",
+    "dependency-cruiser": "18.0.0",
+    "eslint": "10.0.1",
+    "typescript": "6.0.3",
+    "typescript-eslint": "8.65.0"
+  }
+}

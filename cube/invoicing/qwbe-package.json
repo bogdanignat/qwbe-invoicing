@@ -1,0 +1,5 @@
+{
+  "name": "invoicing",
+  "kind": "cube",
+  "summary": "Romanian invoicing with immutable issued-document snapshots"
+}
