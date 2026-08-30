@@ -24,8 +24,18 @@ export const route = (method: string | undefined, url: string | undefined, ready
   return { status: 404, body: { status: "not_found" } }
 }
 
-const send = (response: ServerResponse, status: number, body: unknown) => {
-  response.writeHead(status, { "content-type": "application/json; charset=utf-8" })
+const send = (
+  response: ServerResponse,
+  status: number,
+  body: unknown,
+  headers: Readonly<Record<string, string>> = {},
+) => {
+  if (body instanceof Uint8Array) {
+    response.writeHead(status, headers)
+    response.end(body)
+    return
+  }
+  response.writeHead(status, { "content-type": "application/json; charset=utf-8", ...headers })
   response.end(`${JSON.stringify(body)}\n`)
 }
 
@@ -65,7 +75,7 @@ export const startServer = (
             authorization: request.headers.authorization,
             body: await readBody(request),
           }, { authenticate, dataDirectory: config.dataDirectory })
-          send(response, result.status, result.body)
+          send(response, result.status, result.body, result.headers)
         } catch (error) {
           const status = error instanceof Error && error.message === "request_body_too_large" ? 413 : 400
           send(response, status, { error: status === 413 ? "request_body_too_large" : "invalid_json" })

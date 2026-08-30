@@ -96,6 +96,24 @@ void test("requires host authentication and serves the complete invoice-core rou
       body: undefined,
     }, runtime)
     assert.deepEqual(fetched.body, issued.body)
+    const rendered = await handleApiRequest({
+      method: "POST",
+      url: `/api/invoices/${invoiceId}/pdf`,
+      authorization,
+      body: {},
+    }, runtime)
+    assert.equal(rendered.status, 200)
+    const pdf = await handleApiRequest({
+      method: "GET",
+      url: `/api/invoices/${invoiceId}/pdf`,
+      authorization,
+      body: undefined,
+    }, runtime)
+    assert.equal(pdf.status, 200)
+    assert.equal(pdf.body instanceof Uint8Array, true)
+    assert.equal(pdf.headers?.["content-type"], "application/pdf")
+    assert.equal(pdf.headers["x-content-type-options"], "nosniff")
+    assert.equal(Buffer.from((pdf.body as Uint8Array).subarray(0, 5)).toString("ascii"), "%PDF-")
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }

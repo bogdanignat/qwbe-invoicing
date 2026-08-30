@@ -1,6 +1,11 @@
 #!/usr/bin/env node
 import { accessSync, constants } from "node:fs"
 
+import { Effect } from "effect"
+
+import { documentsPermissions } from "../cube/invoicing/documents/index.ts"
+import { reconcileArtifacts } from "../standalone/artifact-reconciliation.ts"
+import { createStandaloneArtifactService } from "../standalone/artifact-runtime.ts"
 import { CliInputError, helpText, parseCommand, type Command } from "../standalone/cli.ts"
 import { runtimeConfig } from "../standalone/config.ts"
 import { startServer } from "../standalone/http.ts"
@@ -63,6 +68,26 @@ if (command !== undefined) {
       } else {
         const report = command.apply ? applyMigrations(config.dataDirectory) : planMigrations(config.dataDirectory)
         print(report, command.json)
+      }
+    }
+    if (command.name === "artifacts") {
+      if (config.organizationId === undefined || config.organizationId.trim().length === 0) {
+        console.error("artifacts requires ORGANIZATION_ID")
+        process.exitCode = 2
+      } else if (command.apply && config.nodeEnvironment !== "development" && !command.confirmProduction) {
+        console.error("artifacts --apply outside development requires --confirm-production")
+        process.exitCode = 2
+      } else {
+        const service = createStandaloneArtifactService(config.dataDirectory, Effect.succeed({
+          identity: {
+            id: "standalone-operator",
+            permissions: [documentsPermissions.read, documentsPermissions.render],
+          },
+          organization: { id: config.organizationId },
+        }))
+        const report = await reconcileArtifacts(service, command.limit, command.apply)
+        print(report, command.json)
+        if (report.failed > 0) process.exitCode = 1
       }
     }
   } catch (error) {

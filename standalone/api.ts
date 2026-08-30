@@ -17,6 +17,15 @@ import {
   type CreateDraftInput,
   type InvoicingFailure,
 } from "../cube/invoicing/index.ts"
+import {
+  ArtifactConflict,
+  DocumentNotFound,
+  DocumentPersistenceFailure,
+  DocumentRenderingFailure,
+  DocumentsPermissionDenied,
+  type DocumentsFailure,
+} from "../cube/invoicing/documents/index.ts"
+import { createStandaloneArtifactService } from "./artifact-runtime.ts"
 import type { RequestAuthenticator } from "./auth.ts"
 import { createSqliteStore } from "./sqlite-store.ts"
 
@@ -30,6 +39,7 @@ export interface ApiRequest {
 export interface ApiResponse {
   readonly status: number
   readonly body: unknown
+  readonly headers?: Readonly<Record<string, string>>
 }
 
 export interface ApiRuntime {
@@ -139,7 +149,9 @@ const lineInput = (draftId: string, value: unknown): AddDraftLineInput => {
   }
 }
 
-const failureResponse = (failure: InvoicingFailure): ApiResponse => {
+type ApiFailure = InvoicingFailure | DocumentsFailure
+
+const failureResponse = (failure: ApiFailure): ApiResponse => {
   if (failure instanceof AuthenticationRequired) return { status: 401, body: { error: failure._tag } }
   if (failure instanceof OrganizationContextMissing) return { status: 503, body: { error: failure._tag } }
   if (failure instanceof PermissionDenied) return { status: 403, body: { error: failure._tag } }
@@ -147,21 +159,35 @@ const failureResponse = (failure: InvoicingFailure): ApiResponse => {
   if (failure instanceof ResourceNotFound) return { status: 404, body: { error: failure._tag } }
   if (failure instanceof DomainConflict) return { status: 409, body: { error: failure._tag, code: failure.code } }
   if (failure instanceof PersistenceFailure) return { status: 500, body: { error: failure._tag } }
-  return { status: 500, body: { error: failure._tag } }
+  if (failure instanceof DocumentsPermissionDenied) return { status: 403, body: { error: failure._tag } }
+  if (failure instanceof DocumentNotFound) return { status: 404, body: { error: failure._tag } }
+  if (failure instanceof ArtifactConflict) return { status: 409, body: { error: failure._tag } }
+  if (failure instanceof DocumentPersistenceFailure || failure instanceof DocumentRenderingFailure) {
+    return { status: 500, body: { error: failure._tag } }
+  }
+  return { status: 500, body: { error: "internal_failure" } }
 }
 
 export const handleApiRequest = async (request: ApiRequest, runtime: ApiRuntime): Promise<ApiResponse> => {
   const authenticated = await Effect.runPromise(Effect.either(runtime.authenticate(request.authorization).current))
   if (Either.isLeft(authenticated)) return failureResponse(authenticated.left)
+  const authenticatedContext = authenticated.right
   const service = createInvoicingService({
-    context: { current: Effect.succeed(authenticated.right) },
+    context: { current: Effect.succeed(authenticatedContext) },
     clock: { now: Effect.sync(() => new Date()) },
     ids: { next: Effect.sync(randomUUID) },
     store: createSqliteStore(runtime.dataDirectory),
     cubeIdentity: "invoicing",
   })
+  const documents = createStandaloneArtifactService(runtime.dataDirectory, Effect.succeed({
+    identity: {
+      id: authenticatedContext.identity.id,
+      permissions: authenticatedContext.identity.permissions,
+    },
+    organization: authenticatedContext.organization,
+  }))
   try {
-    let operation: Effect.Effect<unknown, InvoicingFailure>
+    let operation: Effect.Effect<unknown, ApiFailure>
     if (request.method === "PUT" && request.url === "/api/issuer") operation = service.configureIssuer(issuerInput(request.body))
     else if (request.method === "POST" && request.url === "/api/customers") operation = service.createCustomer(customerInput(request.body))
     else if (request.method === "POST" && request.url === "/api/drafts") operation = service.createDraft(draftInput(request.body))
@@ -169,9 +195,27 @@ export const handleApiRequest = async (request: ApiRequest, runtime: ApiRuntime)
       const line = /^\/api\/drafts\/([^/]+)\/lines$/.exec(request.url)
       const issue = /^\/api\/drafts\/([^/]+)\/issue$/.exec(request.url)
       const invoice = /^\/api\/invoices\/([^/]+)$/.exec(request.url)
+      const pdf = /^\/api\/invoices\/([^/]+)\/pdf$/.exec(request.url)
       if (request.method === "POST" && line?.[1] !== undefined) operation = service.addDraftLine(lineInput(line[1], request.body))
       else if (request.method === "POST" && issue?.[1] !== undefined) operation = service.issueInvoice({ draftId: issue[1] })
       else if (request.method === "GET" && invoice?.[1] !== undefined) operation = service.getIssuedInvoice(invoice[1])
+      else if (request.method === "POST" && pdf?.[1] !== undefined) operation = documents.renderInvoice(pdf[1])
+      else if (request.method === "GET" && pdf?.[1] !== undefined) {
+        const result = await Effect.runPromise(Effect.either(documents.downloadInvoice(pdf[1])))
+        if (Either.isLeft(result)) return failureResponse(result.left)
+        const filenameId = pdf[1].replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 100) || "invoice"
+        return {
+          status: 200,
+          body: result.right.bytes,
+          headers: {
+            "content-type": "application/pdf",
+            "content-disposition": `attachment; filename="invoice-${filenameId}.pdf"`,
+            "content-length": String(result.right.bytes.length),
+            "x-content-type-options": "nosniff",
+            etag: `"sha256-${result.right.artifact.sha256}"`,
+          },
+        }
+      }
       else {
         const knownRoute = request.url === "/api/issuer"
           || request.url === "/api/customers"
@@ -179,6 +223,7 @@ export const handleApiRequest = async (request: ApiRequest, runtime: ApiRuntime)
           || line !== null
           || issue !== null
           || invoice !== null
+          || pdf !== null
         return knownRoute
           ? { status: 405, body: { error: "method_not_allowed" } }
           : { status: 404, body: { error: "not_found" } }
