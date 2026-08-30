@@ -18,7 +18,17 @@ const declaredPermissions: ReadonlyArray<string> = [
 export const cube = {
   manifest: {
     name: identity,
-    tables: [],
+    tables: [
+      "issuers",
+      "issuer_tax_configurations",
+      "customers",
+      "invoice_drafts",
+      "draft_lines",
+      "invoice_sequences",
+      "issued_invoices",
+      "issued_lines",
+      "issued_tax_breakdown",
+    ],
     requiresAuth: true,
     permissions: declaredPermissions.map((name) => ({ name, roles: ["admin"] })),
   },
@@ -29,3 +39,24 @@ export const cube = {
 }
 
 export * from "./contracts/index.ts"
+export { createInvoicingService } from "./application/invoicing.ts"
+export type {
+  InvoicingDependencies,
+  InvoicingService,
+  InvoicingTransaction,
+  DraftInvoice,
+  IssuedInvoice,
+} from "./application/invoicing.ts"
+export type {
+  Address,
+  AddDraftLineInput,
+  ConfigureIssuerInput,
+  CreateCustomerInput,
+  CreateDraftInput,
+  Customer,
+  DraftLine,
+  IssuerProfile,
+  PartySnapshot,
+  TaxBreakdown,
+  TaxConfiguration,
+} from "./domain/invoice.ts"

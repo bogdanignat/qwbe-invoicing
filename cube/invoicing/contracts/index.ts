@@ -23,3 +23,5 @@ export {
 export type { InvoicingFailure } from "./failures.ts"
 export { invoicingPermissions } from "./permissions.ts"
 export type { InvoicingPermissions } from "./permissions.ts"
+export { invoicingMigrations } from "./migrations.ts"
+export type { InvoicingMigration } from "./migrations.ts"

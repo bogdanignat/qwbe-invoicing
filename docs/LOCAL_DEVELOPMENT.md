@@ -9,6 +9,8 @@ the external `warden` Docker network; it does not publish an application port.
 ```bash
 pnpm local:setup             # dry-run
 pnpm local:setup --apply     # starts Warden services and signs invoice.test once
+mkdir -p .local && chmod 700 .local
+openssl rand -hex 32 > .local/api-token && chmod 600 .local/api-token
 docker compose build
 docker compose up -d
 docker compose ps
@@ -17,7 +19,17 @@ curl --fail --cacert ~/.warden/ssl/rootca/certs/ca.cert.pem https://invoice.test
 
 `migrate` runs once before `app` and initializes `/data/invoicing.sqlite`. Repeated
 `docker compose up -d` is safe: the migration is idempotent and does not consume
-invoice numbers or create business records.
+invoice numbers or create business records. The API reads its standalone bearer
+credential from the Compose secret; the secret is never stored in the image or
+printed by the application. `ORGANIZATION_ID` selects the trusted organization for
+this initial single-organization host adapter.
+
+Authenticated invoice-core routes are available under `/api`: `PUT /api/issuer`,
+`POST /api/customers`, `POST /api/drafts`, `POST /api/drafts/{id}/lines`,
+`POST /api/drafts/{id}/issue`, and `GET /api/invoices/{id}`. For local calls, pass
+`Authorization: Bearer $(cat .local/api-token)` and JSON request bodies. The bearer
+adapter is the API-first standalone transport; the cube receives only the verified
+identity and organization context.
 
 Stop containers without deleting data:
 

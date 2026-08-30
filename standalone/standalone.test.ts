@@ -12,8 +12,8 @@ import { applyMigrations, databaseReady, planMigrations } from "./migrations.ts"
 void test("migration apply is idempotent", () => {
   const directory = mkdtempSync(join(tmpdir(), "qwbe-migrations-"))
   try {
-    assert.deepEqual(planMigrations(directory).pending, ["000-foundation"])
-    assert.equal(applyMigrations(directory).changed, 1)
+    assert.deepEqual(planMigrations(directory).pending, ["000-foundation", "001-invoice-core"])
+    assert.equal(applyMigrations(directory).changed, 2)
     assert.equal(applyMigrations(directory).changed, 0)
     assert.equal(databaseReady(directory), true)
   } finally {

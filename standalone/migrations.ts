@@ -2,8 +2,11 @@ import { existsSync, mkdirSync } from "node:fs"
 import { join } from "node:path"
 import { DatabaseSync } from "node:sqlite"
 
-const foundationMigration = "000-foundation"
+import { invoicingMigrations, type InvoicingMigration } from "../cube/invoicing/index.ts"
+
 const databaseName = "invoicing.sqlite"
+const foundationMigration: InvoicingMigration = { name: "000-foundation", statements: [] }
+const migrations: ReadonlyArray<InvoicingMigration> = [foundationMigration, ...invoicingMigrations]
 
 export interface MigrationReport {
   readonly scanned: number
@@ -13,7 +16,7 @@ export interface MigrationReport {
   readonly pending: ReadonlyArray<string>
 }
 
-const databasePath = (dataDirectory: string) => join(dataDirectory, databaseName)
+export const databasePath = (dataDirectory: string) => join(dataDirectory, databaseName)
 
 const appliedMigrations = (database: DatabaseSync): ReadonlySet<string> => {
   const table = database.prepare(
@@ -24,16 +27,26 @@ const appliedMigrations = (database: DatabaseSync): ReadonlySet<string> => {
   return new Set(rows.flatMap((row) => typeof row.name === "string" ? [row.name] : []))
 }
 
+const pendingMigrations = (database: DatabaseSync): ReadonlyArray<InvoicingMigration> => {
+  const applied = appliedMigrations(database)
+  return migrations.filter((migration) => !applied.has(migration.name))
+}
+
 export const planMigrations = (dataDirectory: string): MigrationReport => {
   const path = databasePath(dataDirectory)
   if (!existsSync(path)) {
-    return { scanned: 1, changed: 0, skipped: 0, failed: 0, pending: [foundationMigration] }
+    return { scanned: migrations.length, changed: 0, skipped: 0, failed: 0, pending: migrations.map(({ name }) => name) }
   }
-
   const database = new DatabaseSync(path, { readOnly: true })
   try {
-    const pending = appliedMigrations(database).has(foundationMigration) ? [] : [foundationMigration]
-    return { scanned: 1, changed: 0, skipped: 1 - pending.length, failed: 0, pending }
+    const pending = pendingMigrations(database)
+    return {
+      scanned: migrations.length,
+      changed: 0,
+      skipped: migrations.length - pending.length,
+      failed: 0,
+      pending: pending.map(({ name }) => name),
+    }
   } finally {
     database.close()
   }
@@ -44,22 +57,24 @@ export const applyMigrations = (dataDirectory: string): MigrationReport => {
   const database = new DatabaseSync(databasePath(dataDirectory))
   let transactionOpen = false
   try {
+    database.exec("PRAGMA foreign_keys = ON")
     database.exec("BEGIN IMMEDIATE")
     transactionOpen = true
     database.exec(
-      "CREATE TABLE IF NOT EXISTS schema_migrations (name TEXT PRIMARY KEY, applied_at TEXT NOT NULL)",
+      "CREATE TABLE IF NOT EXISTS schema_migrations (name TEXT PRIMARY KEY, applied_at TEXT NOT NULL) STRICT",
     )
-    const alreadyApplied = appliedMigrations(database).has(foundationMigration)
-    if (!alreadyApplied) {
+    const pending = pendingMigrations(database)
+    for (const migration of pending) {
+      for (const statement of migration.statements) database.exec(statement)
       database.prepare("INSERT INTO schema_migrations (name, applied_at) VALUES (?, ?)")
-        .run(foundationMigration, new Date().toISOString())
+        .run(migration.name, new Date().toISOString())
     }
     database.exec("COMMIT")
     transactionOpen = false
     return {
-      scanned: 1,
-      changed: alreadyApplied ? 0 : 1,
-      skipped: alreadyApplied ? 1 : 0,
+      scanned: migrations.length,
+      changed: pending.length,
+      skipped: migrations.length - pending.length,
       failed: 0,
       pending: [],
     }
@@ -74,16 +89,16 @@ export const applyMigrations = (dataDirectory: string): MigrationReport => {
 export const databaseReady = (dataDirectory: string): boolean => {
   const path = databasePath(dataDirectory)
   if (!existsSync(path)) return false
-
   const database = new DatabaseSync(path)
   let transactionOpen = false
   try {
+    database.exec("PRAGMA foreign_keys = ON")
     database.exec("BEGIN IMMEDIATE")
     transactionOpen = true
-    const ready = appliedMigrations(database).has(foundationMigration)
+    const ready = pendingMigrations(database).length === 0
     if (ready) {
       database.prepare("UPDATE schema_migrations SET applied_at = applied_at WHERE name = ?")
-        .run(foundationMigration)
+        .run(migrations.at(-1)?.name ?? foundationMigration.name)
     }
     database.exec("ROLLBACK")
     transactionOpen = false

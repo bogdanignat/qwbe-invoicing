@@ -27,6 +27,10 @@ services:
       HOST: 0.0.0.0
       PORT: 3000
       DATA_DIR: /data
+      ORGANIZATION_ID: ${ORGANIZATION_ID:-local-organization}
+      AUTH_TOKEN_FILE: /run/secrets/api_token
+    secrets:
+      - api_token
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -50,6 +54,10 @@ services:
     read_only: true
     tmpfs:
       - /tmp
+
+secrets:
+  api_token:
+    file: ${AUTH_TOKEN_PATH:-./.local/api-token}
 
 networks:
   warden:
