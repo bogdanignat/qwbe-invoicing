@@ -2,6 +2,7 @@ import type { Effect } from "effect"
 
 import type { DomainConflict, PersistenceFailure } from "../contracts/failures.ts"
 import type { Customer, DraftInvoice, IssuedInvoice, IssuerProfile } from "../domain/invoice.ts"
+import type { CorrectionDocument } from "../domain/corrections.ts"
 import type { Payment } from "../domain/payments.ts"
 
 export type TransactionFailure = DomainConflict | PersistenceFailure
@@ -34,4 +35,18 @@ export interface InvoicingTransaction {
     organizationId: string,
     invoiceId: string,
   ) => Effect.Effect<ReadonlyArray<Payment>, PersistenceFailure>
+  readonly allocateCorrectionNumber: (
+    organizationId: string,
+    fiscalYear: number,
+    series: string,
+  ) => Effect.Effect<number, TransactionFailure>
+  readonly saveCorrection: (correction: CorrectionDocument) => Effect.Effect<void, TransactionFailure>
+  readonly findCorrection: (
+    organizationId: string,
+    id: string,
+  ) => Effect.Effect<CorrectionDocument | undefined, PersistenceFailure>
+  readonly listCorrections: (
+    organizationId: string,
+    originalInvoiceId: string,
+  ) => Effect.Effect<ReadonlyArray<CorrectionDocument>, PersistenceFailure>
 }

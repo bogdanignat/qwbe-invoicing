@@ -29,4 +29,19 @@ export const invoicingMigrations: ReadonlyArray<InvoicingMigration> = [{
     "CREATE INDEX invoice_payments_invoice ON invoice_payments(invoice_id)",
     "CREATE INDEX invoice_payments_organization ON invoice_payments(organization_id)",
   ],
+}, {
+  name: "003-invoice-corrections",
+  statements: [
+    "CREATE TABLE correction_documents(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,original_invoice_id TEXT NOT NULL,fiscal_year INTEGER NOT NULL,document_type TEXT NOT NULL CHECK(document_type='correction'),series TEXT NOT NULL,number INTEGER NOT NULL CHECK(number>0),issue_date TEXT NOT NULL,issued_at TEXT NOT NULL,reason TEXT NOT NULL,currency TEXT NOT NULL,issuer_legal_name TEXT NOT NULL,issuer_tax_identifier TEXT NOT NULL,issuer_country_code TEXT NOT NULL,issuer_city TEXT NOT NULL,issuer_street TEXT NOT NULL,issuer_county TEXT,issuer_postal_code TEXT,customer_legal_name TEXT NOT NULL,customer_tax_identifier TEXT NOT NULL,customer_country_code TEXT NOT NULL,customer_city TEXT NOT NULL,customer_street TEXT NOT NULL,customer_county TEXT,customer_postal_code TEXT,total_excluding_tax TEXT NOT NULL,tax_total TEXT NOT NULL,total_including_tax TEXT NOT NULL,UNIQUE(organization_id,fiscal_year,document_type,series,number),FOREIGN KEY(original_invoice_id)REFERENCES issued_invoices(id))STRICT",
+    "CREATE TABLE correction_lines(id TEXT NOT NULL,correction_id TEXT NOT NULL,line_position INTEGER NOT NULL,description TEXT NOT NULL,quantity TEXT NOT NULL,unit_price TEXT NOT NULL,tax_code TEXT NOT NULL,tax_category TEXT NOT NULL,tax_rate TEXT NOT NULL,total_excluding_tax TEXT NOT NULL,tax_amount TEXT NOT NULL,total_including_tax TEXT NOT NULL,PRIMARY KEY(correction_id,id),UNIQUE(correction_id,line_position),FOREIGN KEY(correction_id)REFERENCES correction_documents(id))STRICT",
+    "CREATE TABLE correction_tax_breakdown(correction_id TEXT NOT NULL,line_position INTEGER NOT NULL,tax_code TEXT NOT NULL,category TEXT NOT NULL,rate TEXT NOT NULL,taxable_amount TEXT NOT NULL,tax_amount TEXT NOT NULL,PRIMARY KEY(correction_id,line_position),FOREIGN KEY(correction_id)REFERENCES correction_documents(id))STRICT",
+    "CREATE TRIGGER correction_documents_no_update BEFORE UPDATE ON correction_documents BEGIN SELECT RAISE(ABORT,'correction documents are immutable');END",
+    "CREATE TRIGGER correction_documents_no_delete BEFORE DELETE ON correction_documents BEGIN SELECT RAISE(ABORT,'correction documents are immutable');END",
+    "CREATE TRIGGER correction_lines_no_update BEFORE UPDATE ON correction_lines BEGIN SELECT RAISE(ABORT,'correction lines are immutable');END",
+    "CREATE TRIGGER correction_lines_no_delete BEFORE DELETE ON correction_lines BEGIN SELECT RAISE(ABORT,'correction lines are immutable');END",
+    "CREATE TRIGGER correction_tax_breakdown_no_update BEFORE UPDATE ON correction_tax_breakdown BEGIN SELECT RAISE(ABORT,'correction tax breakdown is immutable');END",
+    "CREATE TRIGGER correction_tax_breakdown_no_delete BEFORE DELETE ON correction_tax_breakdown BEGIN SELECT RAISE(ABORT,'correction tax breakdown is immutable');END",
+    "CREATE INDEX correction_documents_original ON correction_documents(original_invoice_id)",
+    "CREATE INDEX correction_documents_organization ON correction_documents(organization_id)",
+  ],
 }]

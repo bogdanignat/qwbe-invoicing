@@ -31,10 +31,11 @@ Every cube use-case is an `Effect` and has a 1:1 authenticated HTTP endpoint. Au
 
 - `GET /api/issuer` / `PUT /api/issuer` — read / configure issuer (Effect)
 - `POST /api/customers` / `GET /api/customers/:id` — create / read customer (Effect)
-- `POST /api/drafts` / `GET /api/drafts/:id` / `POST /api/drafts/:id/lines` / `POST /api/drafts/:id/issue` — draft lifecycle (Effect)
+- `POST /api/drafts` / `GET /api/drafts/:id` / `POST /api/drafts/:id/lines` / `POST /api/drafts/:id/issue` — draft lifecycle (Effect, draft editabil până la `issue`)
 - `GET /api/invoices/:id` — immutable issued snapshot (Effect)
 - `POST /api/invoices/:id/pdf` (idempotent render) / `GET /api/invoices/:id/pdf` (download with SHA-256 ETag)
 - `POST /api/invoices/:id/payments` (record payment) / `GET /api/invoices/:id/payments` (list payments with derived status `unpaid`/`partially_paid`/`paid`/`overpaid`/`overdue`, `paidAmount`/`remainingAmount`)
+- `POST /api/invoices/:id/corrections` (storno fiscal — creează document nou imuabil cu referință la factura originală, motiv obligatoriu, totals negative) / `GET /api/invoices/:id/corrections` (listă storno-uri per factură) / `GET /api/corrections/:id` (citire storno) — după emitere nu se mai editează factura, doar storno
 
 Issued invoices remain immutable; payments are separate `Effect` records and never mutate the fiscal snapshot. For local calls, pass
 `Authorization: Bearer $(cat .local/api-token)` and JSON request bodies. The bearer

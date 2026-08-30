@@ -27,6 +27,7 @@ interface MemoryState {
   issued: Map<string, IssuedInvoice>
   sequences: Map<string, number>
   payments: Map<string, Parameters<InvoicingTransaction["savePayment"]>[0]>
+  corrections: Map<string, Parameters<InvoicingTransaction["saveCorrection"]>[0]>
 }
 
 const cloneState = (state: MemoryState): MemoryState => structuredClone(state)
@@ -61,6 +62,20 @@ const memoryStore = (state: MemoryState): TransactionalStore<InvoicingTransactio
           payment.organizationId === organizationId && payment.invoiceId === invoiceId)
           .sort((a, b) => a.paymentDate.localeCompare(b.paymentDate) || a.createdAt.localeCompare(b.createdAt)),
       ),
+      allocateCorrectionNumber: (organizationId, fiscalYear, series) => Effect.sync(() => {
+        const key = `${organizationId}:${String(fiscalYear)}:correction:${series}`
+        const next = (working.sequences.get(key) ?? 0) + 1
+        working.sequences.set(key, next)
+        return next
+      }),
+      saveCorrection: (correction) => Effect.sync(() => { working.corrections.set(correction.id, correction) }),
+      findCorrection: (organizationId, id) => Effect.succeed(
+        working.corrections.get(id)?.organizationId === organizationId ? working.corrections.get(id) : undefined,
+      ),
+      listCorrections: (organizationId, originalInvoiceId) => Effect.succeed(
+        [...working.corrections.values()].filter((c) => c.organizationId === organizationId && c.originalInvoiceId === originalInvoiceId)
+          .sort((a, b) => a.issuedAt.localeCompare(b.issuedAt)),
+      ),
     }
     return Effect.tap(use(transaction), () => Effect.sync(() => {
       state.issuers = working.issuers
@@ -69,6 +84,7 @@ const memoryStore = (state: MemoryState): TransactionalStore<InvoicingTransactio
       state.issued = working.issued
       state.sequences = working.sequences
       state.payments = working.payments
+      state.corrections = working.corrections
     }))
   }),
 })
@@ -82,6 +98,7 @@ const identity = {
     "invoicing:customer.manage",
     "invoicing:invoice.draft",
     "invoicing:invoice.issue",
+    "invoicing:invoice.void",
     "invoicing:payment.record",
     "invoicing:settings.manage",
   ],
@@ -111,6 +128,7 @@ const emptyState = (): MemoryState => ({
   issued: new Map(),
   sequences: new Map(),
   payments: new Map(),
+  corrections: new Map(),
 })
 
 void test("issues deterministic immutable invoice snapshots through the public service", async () => {

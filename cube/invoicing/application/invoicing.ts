@@ -10,6 +10,7 @@ import type { Clock, IdGenerator, RequestContext, RequestContextProvider, Transa
 import { invoicingPermissions } from "../contracts/permissions.ts"
 import { calculateTotals } from "../domain/calculation.ts"
 import type { IssuedInvoice } from "../domain/invoice.ts"
+import { createCorrectionOperations, type CorrectionOperations } from "./corrections.ts"
 import { copyParty, createDraftingOperations, missing, type DraftingOperations } from "./drafting.ts"
 import { createPaymentOperations, type PaymentOperations } from "./payments.ts"
 import type { InvoicingTransaction } from "./ports.ts"
@@ -22,7 +23,7 @@ export interface InvoicingDependencies {
   readonly cubeIdentity: string
 }
 
-export interface InvoicingService extends DraftingOperations, PaymentOperations {
+export interface InvoicingService extends DraftingOperations, PaymentOperations, CorrectionOperations {
   readonly issueInvoice: (input: { readonly draftId: string }) => Effect.Effect<IssuedInvoice, InvoicingFailure>
   readonly getIssuedInvoice: (id: string) => Effect.Effect<IssuedInvoice, InvoicingFailure>
 }
@@ -36,6 +37,7 @@ export const createInvoicingService = (dependencies: InvoicingDependencies): Inv
         : Effect.fail(new PermissionDenied({ permission })))
   const drafting = createDraftingOperations(dependencies, permissions, authorized)
   const payments = createPaymentOperations(dependencies)
+  const corrections = createCorrectionOperations(dependencies)
 
   const issueInvoice = (input: { readonly draftId: string }) => Effect.gen(function*() {
     const context = yield* authorized(permissions.issueInvoices)
@@ -86,7 +88,7 @@ export const createInvoicingService = (dependencies: InvoicingDependencies): Inv
     }))
   })
 
-  return { ...drafting, ...payments, issueInvoice, getIssuedInvoice }
+  return { ...drafting, ...payments, ...corrections, issueInvoice, getIssuedInvoice }
 }
 
 export type { DraftInvoice, IssuedInvoice } from "../domain/invoice.ts"

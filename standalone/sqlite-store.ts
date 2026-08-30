@@ -276,6 +276,66 @@ const transactionAdapter = (database: DatabaseSync): InvoicingTransaction => ({
   listPayments: (organizationId, invoiceId) => read("list payments", () =>
     database.prepare("SELECT * FROM invoice_payments WHERE organization_id = ? AND invoice_id = ? ORDER BY payment_date, created_at, id")
       .all(organizationId, invoiceId).map((value) => paymentFrom(value as Row))),
+  allocateCorrectionNumber: (organizationId, fiscalYear, series) => write("allocate correction number", () => {
+    const value = row(database.prepare(`INSERT INTO invoice_sequences
+      (organization_id, fiscal_year, document_type, series, last_number) VALUES (?, ?, 'correction', ?, 1)
+      ON CONFLICT (organization_id, fiscal_year, document_type, series)
+      DO UPDATE SET last_number=last_number+1 RETURNING last_number`).get(organizationId, fiscalYear, series))
+    if (value === undefined) throw new Error("missing allocated number")
+    return integer(value, "last_number")
+  }),
+  saveCorrection: (correction) => write("save correction", () => {
+    database.prepare(`INSERT INTO correction_documents
+      (id, organization_id, original_invoice_id, fiscal_year, document_type, series, number, issue_date, issued_at, reason, currency,
+       issuer_legal_name, issuer_tax_identifier, issuer_country_code, issuer_city, issuer_street, issuer_county, issuer_postal_code,
+       customer_legal_name, customer_tax_identifier, customer_country_code, customer_city, customer_street, customer_county, customer_postal_code,
+       total_excluding_tax, tax_total, total_including_tax)
+      VALUES (?, ?, ?, ?, 'correction', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(correction.id, correction.organizationId, correction.originalInvoiceId, correction.fiscalYear,
+        correction.series, correction.number, correction.issueDate, correction.issuedAt, correction.reason, correction.currency,
+        correction.issuer.legalName, correction.issuer.taxIdentifier, ...addressValues(correction.issuer.address),
+        correction.customer.legalName, correction.customer.taxIdentifier, ...addressValues(correction.customer.address),
+        correction.totalExcludingTax, correction.taxTotal, correction.totalIncludingTax)
+    const lineStmt = database.prepare(`INSERT INTO correction_lines
+      (id, correction_id, line_position, description, quantity, unit_price, tax_code, tax_category, tax_rate, total_excluding_tax, tax_amount, total_including_tax)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    correction.lines.forEach((line, pos) => lineStmt.run(line.id, correction.id, pos, line.description, line.quantity, line.unitPrice, line.taxCode, line.taxCategory, line.taxRate, line.totalExcludingTax, line.taxAmount, line.totalIncludingTax))
+    const taxStmt = database.prepare(`INSERT INTO correction_tax_breakdown
+      (correction_id, line_position, tax_code, category, rate, taxable_amount, tax_amount) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+    correction.taxBreakdown.forEach((tax, pos) => taxStmt.run(correction.id, pos, tax.taxCode, tax.category, tax.rate, tax.taxableAmount, tax.taxAmount))
+  }),
+  findCorrection: (organizationId, id) => read("find correction", () => {
+    const value = row(database.prepare("SELECT * FROM correction_documents WHERE organization_id = ? AND id = ?").get(organizationId, id))
+    if (value === undefined) return undefined
+    const lines: ReadonlyArray<DraftLine> = database.prepare("SELECT * FROM correction_lines WHERE correction_id = ? ORDER BY line_position").all(id).map((v) => lineFrom(v as Row))
+    const taxBreakdown: ReadonlyArray<TaxBreakdown> = database.prepare("SELECT * FROM correction_tax_breakdown WHERE correction_id = ? ORDER BY line_position").all(id).map((item) => {
+      const tax = item as Row
+      return { taxCode: text(tax, "tax_code"), category: "standard", rate: text(tax, "rate"), taxableAmount: text(tax, "taxable_amount"), taxAmount: text(tax, "tax_amount") }
+    })
+    return {
+      id, organizationId, originalInvoiceId: text(value, "original_invoice_id"), fiscalYear: integer(value, "fiscal_year"), series: text(value, "series"), number: integer(value, "number"),
+      issueDate: text(value, "issue_date"), issuedAt: text(value, "issued_at"), reason: text(value, "reason"), currency: text(value, "currency"),
+      issuer: partyFrom(value, "issuer_"), customer: partyFrom(value, "customer_"), lines, taxBreakdown,
+      totalExcludingTax: text(value, "total_excluding_tax"), taxTotal: text(value, "tax_total"), totalIncludingTax: text(value, "total_including_tax"),
+    }
+  }),
+  listCorrections: (organizationId, originalInvoiceId) => read("list corrections", () => {
+    const rows = database.prepare("SELECT * FROM correction_documents WHERE organization_id = ? AND original_invoice_id = ? ORDER BY issued_at, number, id").all(organizationId, originalInvoiceId) as ReadonlyArray<Row>
+    return rows.map((value) => {
+      const id = text(value, "id")
+      const lines: ReadonlyArray<DraftLine> = database.prepare("SELECT * FROM correction_lines WHERE correction_id = ? ORDER BY line_position").all(id).map((v) => lineFrom(v as Row))
+      const taxBreakdown: ReadonlyArray<TaxBreakdown> = database.prepare("SELECT * FROM correction_tax_breakdown WHERE correction_id = ? ORDER BY line_position").all(id).map((item) => {
+        const tax = item as Row
+        return { taxCode: text(tax, "tax_code"), category: "standard", rate: text(tax, "rate"), taxableAmount: text(tax, "taxable_amount"), taxAmount: text(tax, "tax_amount") }
+      })
+      return {
+        id, organizationId, originalInvoiceId: text(value, "original_invoice_id"), fiscalYear: integer(value, "fiscal_year"), series: text(value, "series"), number: integer(value, "number"),
+        issueDate: text(value, "issue_date"), issuedAt: text(value, "issued_at"), reason: text(value, "reason"), currency: text(value, "currency"),
+        issuer: partyFrom(value, "issuer_"), customer: partyFrom(value, "customer_"), lines, taxBreakdown,
+        totalExcludingTax: text(value, "total_excluding_tax"), taxTotal: text(value, "tax_total"), totalIncludingTax: text(value, "total_including_tax"),
+      }
+    })
+  }),
 })
 
 export const createSqliteStore = (dataDirectory: string): TransactionalStore<InvoicingTransaction> => ({

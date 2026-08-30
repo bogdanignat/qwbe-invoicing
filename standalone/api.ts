@@ -164,6 +164,16 @@ const paymentInput = (invoiceId: string, value: unknown) => {
   }
 }
 
+const correctionInput = (originalInvoiceId: string, value: unknown) => {
+  const input = object(value)
+  const issueDate = optionalText(input.issueDate, "issueDate")
+  return {
+    originalInvoiceId,
+    reason: text(input.reason, "reason"),
+    ...(issueDate === undefined ? {} : { issueDate }),
+  }
+}
+
 type ApiFailure = InvoicingFailure | DocumentsFailure
 
 const failureResponse = (failure: ApiFailure): ApiResponse => {
@@ -210,6 +220,8 @@ export const handleApiRequest = async (request: ApiRequest, runtime: ApiRuntime)
     const invoice = /^\/api\/invoices\/([^/]+)$/.exec(request.url)
     const pdf = /^\/api\/invoices\/([^/]+)\/pdf$/.exec(request.url)
     const payments = /^\/api\/invoices\/([^/]+)\/payments$/.exec(request.url)
+    const invoiceCorrections = /^\/api\/invoices\/([^/]+)\/corrections$/.exec(request.url)
+    const correctionGet = /^\/api\/corrections\/([^/]+)$/.exec(request.url)
     if (request.method === "GET" && request.url === "/api/issuer") operation = service.getIssuer()
     else if (request.method === "PUT" && request.url === "/api/issuer") operation = service.configureIssuer(issuerInput(request.body))
     else if (request.method === "GET" && customerGet?.[1] !== undefined) operation = service.getCustomer(customerGet[1])
@@ -220,6 +232,9 @@ export const handleApiRequest = async (request: ApiRequest, runtime: ApiRuntime)
       else if (request.method === "POST" && issue?.[1] !== undefined) operation = service.issueInvoice({ draftId: issue[1] })
       else if (request.method === "GET" && payments?.[1] !== undefined) operation = service.listPayments(payments[1])
       else if (request.method === "POST" && payments?.[1] !== undefined) operation = service.recordPayment(paymentInput(payments[1], request.body))
+      else if (request.method === "POST" && invoiceCorrections?.[1] !== undefined) operation = service.createCorrection(correctionInput(invoiceCorrections[1], request.body))
+      else if (request.method === "GET" && invoiceCorrections?.[1] !== undefined) operation = service.listCorrections(invoiceCorrections[1])
+      else if (request.method === "GET" && correctionGet?.[1] !== undefined) operation = service.getCorrection(correctionGet[1])
       else if (request.method === "GET" && invoice?.[1] !== undefined) operation = service.getIssuedInvoice(invoice[1])
       else if (request.method === "POST" && pdf?.[1] !== undefined) operation = documents.renderInvoice(pdf[1])
       else if (request.method === "GET" && pdf?.[1] !== undefined) {
@@ -249,6 +264,8 @@ export const handleApiRequest = async (request: ApiRequest, runtime: ApiRuntime)
           || invoice !== null
           || pdf !== null
           || payments !== null
+          || invoiceCorrections !== null
+          || correctionGet !== null
         return knownRoute
           ? { status: 405, body: { error: "method_not_allowed" } }
           : { status: 404, body: { error: "not_found" } }

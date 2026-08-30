@@ -20,6 +20,9 @@ void test("exports a minimal authenticated QWBE cube definition", () => {
     "issued_lines",
     "issued_tax_breakdown",
     "invoice_payments",
+    "correction_documents",
+    "correction_lines",
+    "correction_tax_breakdown",
   ])
 
   const parts = cube.create()
