@@ -203,16 +203,20 @@ export const handleApiRequest = async (request: ApiRequest, runtime: ApiRuntime)
   }))
   try {
     let operation: Effect.Effect<unknown, ApiFailure>
-    if (request.method === "PUT" && request.url === "/api/issuer") operation = service.configureIssuer(issuerInput(request.body))
+    const customerGet = /^\/api\/customers\/([^/]+)$/.exec(request.url)
+    const draftGet = /^\/api\/drafts\/([^/]+)$/.exec(request.url)
+    const line = /^\/api\/drafts\/([^/]+)\/lines$/.exec(request.url)
+    const issue = /^\/api\/drafts\/([^/]+)\/issue$/.exec(request.url)
+    const invoice = /^\/api\/invoices\/([^/]+)$/.exec(request.url)
+    const pdf = /^\/api\/invoices\/([^/]+)\/pdf$/.exec(request.url)
+    const payments = /^\/api\/invoices\/([^/]+)\/payments$/.exec(request.url)
+    if (request.method === "GET" && request.url === "/api/issuer") operation = service.getIssuer()
+    else if (request.method === "PUT" && request.url === "/api/issuer") operation = service.configureIssuer(issuerInput(request.body))
+    else if (request.method === "GET" && customerGet?.[1] !== undefined) operation = service.getCustomer(customerGet[1])
     else if (request.method === "POST" && request.url === "/api/customers") operation = service.createCustomer(customerInput(request.body))
+    else if (request.method === "GET" && draftGet?.[1] !== undefined) operation = service.getDraft(draftGet[1])
     else if (request.method === "POST" && request.url === "/api/drafts") operation = service.createDraft(draftInput(request.body))
-    else {
-      const line = /^\/api\/drafts\/([^/]+)\/lines$/.exec(request.url)
-      const issue = /^\/api\/drafts\/([^/]+)\/issue$/.exec(request.url)
-      const invoice = /^\/api\/invoices\/([^/]+)$/.exec(request.url)
-      const pdf = /^\/api\/invoices\/([^/]+)\/pdf$/.exec(request.url)
-      const payments = /^\/api\/invoices\/([^/]+)\/payments$/.exec(request.url)
-      if (request.method === "POST" && line?.[1] !== undefined) operation = service.addDraftLine(lineInput(line[1], request.body))
+    else if (request.method === "POST" && line?.[1] !== undefined) operation = service.addDraftLine(lineInput(line[1], request.body))
       else if (request.method === "POST" && issue?.[1] !== undefined) operation = service.issueInvoice({ draftId: issue[1] })
       else if (request.method === "GET" && payments?.[1] !== undefined) operation = service.listPayments(payments[1])
       else if (request.method === "POST" && payments?.[1] !== undefined) operation = service.recordPayment(paymentInput(payments[1], request.body))
@@ -238,6 +242,8 @@ export const handleApiRequest = async (request: ApiRequest, runtime: ApiRuntime)
         const knownRoute = request.url === "/api/issuer"
           || request.url === "/api/customers"
           || request.url === "/api/drafts"
+          || customerGet !== null
+          || draftGet !== null
           || line !== null
           || issue !== null
           || invoice !== null
@@ -247,7 +253,6 @@ export const handleApiRequest = async (request: ApiRequest, runtime: ApiRuntime)
           ? { status: 405, body: { error: "method_not_allowed" } }
           : { status: 404, body: { error: "not_found" } }
       }
-    }
     const result = await Effect.runPromise(Effect.either(operation))
     return Either.isLeft(result) ? failureResponse(result.left) : { status: 200, body: result.right }
   } catch (error) {

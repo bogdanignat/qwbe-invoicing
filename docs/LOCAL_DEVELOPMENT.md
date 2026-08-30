@@ -4,6 +4,8 @@ The local hostname is `invoice.test`. Warden owns ports 80/443, local `.test` DN
 and the development certificate authority. The application Compose project joins
 the external `warden` Docker network; it does not publish an application port.
 
+> Runtime: every request is an `Effect`. The standalone host authenticates (`Bearer` → `RequestContext`), injects `Clock`/`IdGenerator`/`TransactionalStore`, and runs the cube service `Effect` via `Effect.runPromise(Effect.either(...))`. Failures are typed (`ValidationFailure` → 400, `PermissionDenied` → 403, `ResourceNotFound` → 404, `DomainConflict` → 409).
+
 ## First setup on microq
 
 ```bash
@@ -25,13 +27,16 @@ credential from the Compose secret; the secret is never stored in the image or
 printed by the application. `ORGANIZATION_ID` selects the trusted organization for
 this initial single-organization host adapter.
 
-Authenticated invoice-core routes are available under `/api`: `PUT /api/issuer`,
-`POST /api/customers`, `POST /api/drafts`, `POST /api/drafts/{id}/lines`,
-`POST /api/drafts/{id}/issue`, `GET /api/invoices/{id}`,
-`POST /api/invoices/{id}/pdf` (idempotent render),
-`GET /api/invoices/{id}/pdf` (download with SHA-256 ETag),
-`POST /api/invoices/{id}/payments` (record payment), and
-`GET /api/invoices/{id}/payments` (list payments with derived status `unpaid`/`partially_paid`/`paid`/`overpaid`/`overdue`, `paidAmount` and `remainingAmount`). Issued invoices remain immutable; payments are separate records and never mutate the fiscal snapshot. For local calls, pass
+Every cube use-case is an `Effect` and has a 1:1 authenticated HTTP endpoint. Authenticated routes under `/api`:
+
+- `GET /api/issuer` / `PUT /api/issuer` — read / configure issuer (Effect)
+- `POST /api/customers` / `GET /api/customers/:id` — create / read customer (Effect)
+- `POST /api/drafts` / `GET /api/drafts/:id` / `POST /api/drafts/:id/lines` / `POST /api/drafts/:id/issue` — draft lifecycle (Effect)
+- `GET /api/invoices/:id` — immutable issued snapshot (Effect)
+- `POST /api/invoices/:id/pdf` (idempotent render) / `GET /api/invoices/:id/pdf` (download with SHA-256 ETag)
+- `POST /api/invoices/:id/payments` (record payment) / `GET /api/invoices/:id/payments` (list payments with derived status `unpaid`/`partially_paid`/`paid`/`overpaid`/`overdue`, `paidAmount`/`remainingAmount`)
+
+Issued invoices remain immutable; payments are separate `Effect` records and never mutate the fiscal snapshot. For local calls, pass
 `Authorization: Bearer $(cat .local/api-token)` and JSON request bodies. The bearer
 adapter is the API-first standalone transport; the cube receives only the verified
 identity and organization context.

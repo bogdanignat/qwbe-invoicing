@@ -3,8 +3,8 @@
 Status: architecture baseline before implementation  
 Source snapshot: QWBE mother repository at `987e11b`  
 Package manager: pnpm  
-Runtime: Node.js + TypeScript + Effect  
-UI: no React; API-first until a UI contract is selected
+Runtime: Node.js + TypeScript + **Effect 3.x as primary runtime** (`effect`, `@effect/platform`, `@effect/platform-node`) — all cube application logic, host capabilities (Clock, Store, IdGenerator, Auth), and HTTP handling are modelled as `Effect`
+UI: no React; API-first until a UI contract is selected — every cube use-case has a corresponding authenticated HTTP API endpoint
 
 ## 1. Purpose
 
@@ -353,15 +353,19 @@ Source: QWBE `probes/testgate.mjs`, `probes/sizecaps.mjs`, and package scripts.
 
 ## 12. TypeScript and Effect baseline
 
+Effect is the mandatory application runtime — every cube operation, transaction, and HTTP handler is an `Effect` with typed failures (`ValidationFailure`, `DomainConflict`, `PermissionDenied`, `PersistenceFailure`).
+
 Initial compatibility target from the mother repository:
 
 - Node.js `>=22.18.0`;
 - ESM (`"type": "module"`);
 - TypeScript source executed with Node type stripping where appropriate;
-- `effect` `^3.21.0`;
-- `@effect/platform` `^0.96.0`;
-- `@effect/platform-node` `^0.107.0`;
+- `effect` `^3.21.0` — core runtime (required);
+- `@effect/platform` `^0.96.0` — HTTP API surface (required);
+- `@effect/platform-node` `^0.107.0` — Node adapter (required);
 - imports include `.ts` where Node executes source directly.
+
+Rule: do not introduce an alternative async/runtime abstraction. New code must use `Effect.gen`/`Effect.flatMap` and the injected `Clock`/`Store`/`Context` capabilities. Every cube use-case exposed via `InvoicingService` has a 1:1 authenticated HTTP endpoint in `standalone/api.ts`.
 
 Compiler policy:
 
