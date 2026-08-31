@@ -18,12 +18,12 @@ const invoice: RenderableInvoice = {
   currency: "RON",
   issuer: {
     legalName: "Știință și Tehnică SRL",
-    taxIdentifier: "RO12345678",
+    taxIdentifier: "RO12345674",
     address: { countryCode: "RO", city: "Botoșani", street: "Strada Independenței 1" },
   },
   customer: {
     legalName: "Țesături România SRL",
-    taxIdentifier: "RO87654321",
+    taxIdentifier: "RO87654329",
     address: { countryCode: "RO", city: "Iași", street: "Șoseaua Națională 2" },
   },
   lines: [{

@@ -18,7 +18,7 @@ export interface DraftingOperations {
   readonly addDraftLine: (i: AddDraftLineInput) => Effect.Effect<DraftInvoice, InvoicingFailure>
 }
 const checked = <V>(op: () => V): Effect.Effect<V, ValidationFailure> => Effect.try({ try: op, catch: (e) => e instanceof ValidationFailure ? e : new ValidationFailure({ issues: ["invalid invoicing input"] }) })
-export const copyParty = (p: PartySnapshot): PartySnapshot => ({ legalName: p.legalName, taxIdentifier: p.taxIdentifier, address: { ...p.address } })
+export const copyParty = (p: PartySnapshot): PartySnapshot => ({ legalName: p.legalName, taxIdentifier: p.taxIdentifier.trim().toUpperCase(), address: { ...p.address } })
 export const missing = (r: string, id: string) => new ResourceNotFound({ resource: r, id })
 export const createDraftingOperations = (d: { readonly ids: IdGenerator; readonly clock: Clock; readonly store: TransactionalStore<InvoicingTransaction> }, perms: InvoicingPermissions, auth: (p: string) => Effect.Effect<RequestContext, InvoicingFailure>): DraftingOperations => {
   const configureIssuer = (input: ConfigureIssuerInput) => Effect.gen(function*() {
@@ -78,7 +78,12 @@ export const createDraftingOperations = (d: { readonly ids: IdGenerator; readonl
   const createDraft = (input: CreateDraftInput) => Effect.gen(function*() {
     const ctx = yield* auth(perms.draftInvoices)
     const id = yield* d.ids.next
-    yield* checked(() => { validateDate(input.issueDate, "issueDate") })
+    yield* checked(() => {
+      validateDate(input.issueDate, "issueDate")
+      if (input.currency !== undefined && input.currency !== "RON") {
+        throw new ValidationFailure({ issues: ["currency must be RON"] })
+      }
+    })
     return yield* d.store.transaction((tx) => Effect.gen(function*() {
       const iss = yield* tx.findIssuer(ctx.organization.id)
       if (iss === undefined) return yield* Effect.fail(missing("issuer", ctx.organization.id))

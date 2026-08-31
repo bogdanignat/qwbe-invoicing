@@ -89,7 +89,7 @@ const space = (layout: Layout, height: number) => {
 const partyLines = (label: string, party: RenderableInvoice["issuer"]): ReadonlyArray<string> => [
   label,
   party.legalName,
-  `CUI: ${party.taxIdentifier}`,
+  ...(party.taxIdentifier === "" ? [] : [`CUI: ${party.taxIdentifier}`]),
   `${party.address.street}, ${party.address.city}`,
   [party.address.county, party.address.postalCode, party.address.countryCode].filter(Boolean).join(", "),
 ]

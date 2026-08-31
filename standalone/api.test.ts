@@ -28,7 +28,7 @@ void test("requires host authentication and serves the complete invoice-core rou
     }
     const issuerBody = {
       legalName: "Exemplu SRL",
-      taxIdentifier: "RO12345678",
+      taxIdentifier: " ro12345674 ",
       address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" },
       defaultCurrency: "RON",
       defaultPaymentTermDays: 15,
@@ -51,18 +51,20 @@ void test("requires host authentication and serves the complete invoice-core rou
     const authorization = `Bearer ${token}`
     const issuer = await handleApiRequest({ method: "PUT", url: "/api/issuer", authorization, body: issuerBody }, runtime)
     assert.equal(issuer.status, 200)
+    assert.equal((issuer.body as { taxIdentifier: string }).taxIdentifier, "RO12345674")
     const customer = await handleApiRequest({
       method: "POST",
       url: "/api/customers",
       authorization,
       body: {
-        legalName: "Client SRL",
-        taxIdentifier: "RO87654321",
+        legalName: "Ion Popescu",
+        taxIdentifier: " ",
         address: { countryCode: "RO", city: "Iași", street: "Strada Mică 2" },
       },
     }, runtime)
     assert.equal(customer.status, 200)
     assert.equal(typeof customer.body, "object")
+    assert.equal((customer.body as { taxIdentifier: string }).taxIdentifier, "")
     const customerId = (customer.body as { id: string }).id
 
     const draft = await handleApiRequest({

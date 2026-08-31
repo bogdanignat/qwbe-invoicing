@@ -21,6 +21,11 @@ organization-scoped so that support for multiple legal entities does not require
 domain rewrite. The exact first-release organization limit must be confirmed before
 the standalone account and organization adapters are implemented.
 
+The first-release jurisdiction and currency are intentionally fixed to Romania (`RO`)
+and Romanian leu (`RON`). Foreign issuers, foreign billing addresses, and invoices in
+other document currencies are deferred; the broader currency fields in the domain
+model are extension seams, not first-release UI capabilities.
+
 ## 2. Legal and product boundary
 
 The application can create, issue, render, preserve, correct, and track payment of

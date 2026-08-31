@@ -78,6 +78,10 @@ form { display: grid; gap: 1.1rem; }
 .form-grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .span-two { grid-column: 1 / -1; }
 label { display: grid; gap: .42rem; color: #39443d; font-size: .76rem; font-weight: 750; }
+.checkbox-label { display: flex; align-items: center; align-self: end; min-height: 2.65rem; }
+.checkbox-label input { width: auto; min-height: auto; }
+.static-field { display: grid; gap: .42rem; color: #39443d; font-size: .76rem; font-weight: 750; }
+.fixed-value { display: flex; align-items: center; min-height: 2.65rem; padding: .65rem .75rem; border: 1px solid #dfe5e1; border-radius: .55rem; color: var(--ink); background: #f6f8f6; }
 input, select, textarea { width: 100%; min-height: 2.65rem; padding: .65rem .75rem; border: 1px solid #cfd7d1; border-radius: .55rem; color: var(--ink); background: white; }
 textarea { resize: vertical; line-height: 1.45; }
 input:hover, select:hover, textarea:hover { border-color: #98aa9e; }
@@ -138,6 +142,7 @@ dd { margin: 0; font-weight: 750; }
 .empty-note { padding: 1rem; border: 1px dashed #d4ddd6; border-radius: .65rem; color: var(--muted); text-align: center; }
 .status-note { margin: 1rem 0 0; padding: .8rem; border-radius: .65rem; color: #365242; background: #edf6ef; font-size: .78rem; }
 .status-note.warning { color: #755719; background: #fff4d6; }
+[hidden] { display: none !important; }
 .record-list { display: grid; gap: .65rem; margin: 1rem 0; padding: 0; list-style: none; }
 .record-list li { padding: .8rem; border: 1px solid var(--line); border-radius: .65rem; }
 .record-list li > div { display: flex; justify-content: space-between; gap: 1rem; }

@@ -108,7 +108,7 @@ const issuerInput = (value: unknown): ConfigureIssuerInput => {
   const input = object(value)
   return {
     legalName: text(input.legalName, "legalName"),
-    taxIdentifier: text(input.taxIdentifier, "taxIdentifier"),
+    taxIdentifier: text(input.taxIdentifier, "taxIdentifier").trim().toUpperCase(),
     address: address(input.address),
     defaultCurrency: text(input.defaultCurrency, "defaultCurrency"),
     defaultPaymentTermDays: integer(input.defaultPaymentTermDays, "defaultPaymentTermDays"),
@@ -121,7 +121,7 @@ const customerInput = (value: unknown): CreateCustomerInput => {
   const input = object(value)
   return {
     legalName: text(input.legalName, "legalName"),
-    taxIdentifier: text(input.taxIdentifier, "taxIdentifier"),
+    taxIdentifier: text(input.taxIdentifier, "taxIdentifier").trim().toUpperCase(),
     address: address(input.address),
   }
 }

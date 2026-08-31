@@ -35,7 +35,7 @@ const issueFixture = async (directory: string): Promise<string> => {
   })
   await Effect.runPromise(service.configureIssuer({
     legalName: "Știință și Tehnică SRL",
-    taxIdentifier: "RO12345678",
+    taxIdentifier: "RO12345674",
     address: { countryCode: "RO", city: "Botoșani", street: "Strada Independenței 1" },
     defaultCurrency: "RON",
     defaultPaymentTermDays: 15,
@@ -44,7 +44,7 @@ const issueFixture = async (directory: string): Promise<string> => {
   }))
   const customer = await Effect.runPromise(service.createCustomer({
     legalName: "Țesături România SRL",
-    taxIdentifier: "RO87654321",
+    taxIdentifier: "RO87654329",
     address: { countryCode: "RO", city: "Iași", street: "Șoseaua Națională 2" },
   }))
   const draft = await Effect.runPromise(service.createDraft({ customerId: customer.id, issueDate: "2026-09-01" }))
