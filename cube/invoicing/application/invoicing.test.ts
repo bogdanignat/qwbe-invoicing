@@ -187,7 +187,7 @@ void test("issues deterministic immutable invoice snapshots through the public s
 
   await Effect.runPromise(service.configureIssuer({
     legalName: "Exemplu SRL",
-    taxIdentifier: "RO12345678",
+    taxIdentifier: "RO12345674",
     address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" },
     defaultCurrency: "RON",
     defaultPaymentTermDays: 15,
@@ -196,7 +196,7 @@ void test("issues deterministic immutable invoice snapshots through the public s
   }))
   const customer = await Effect.runPromise(service.createCustomer({
     legalName: "Client SRL",
-    taxIdentifier: "RO87654321",
+    taxIdentifier: "RO87654329",
     address: { countryCode: "RO", city: "Iași", street: "Strada Mică 2" },
   }))
   const invalidDueDate = await Effect.runPromise(Effect.flip(service.createDraft({
@@ -205,6 +205,12 @@ void test("issues deterministic immutable invoice snapshots through the public s
     dueDate: "2026-08-31",
   })))
   assert.equal(invalidDueDate instanceof ValidationFailure, true)
+  const invalidCurrency = await Effect.runPromise(Effect.flip(service.createDraft({
+    customerId: customer.id,
+    issueDate: "2026-09-01",
+    currency: "EUR",
+  })))
+  assert.equal(invalidCurrency instanceof ValidationFailure && invalidCurrency.issues.includes("currency must be RON"), true)
   const draft = await Effect.runPromise(service.createDraft({
     customerId: customer.id,
     issueDate: "2026-09-01",
@@ -229,7 +235,7 @@ void test("issues deterministic immutable invoice snapshots through the public s
 
   await Effect.runPromise(service.configureIssuer({
     legalName: "Exemplu Renamed SRL",
-    taxIdentifier: "RO12345678",
+    taxIdentifier: "RO12345674",
     address: { countryCode: "RO", city: "Botoșani", street: "Altă stradă 3" },
     defaultCurrency: "RON",
     defaultPaymentTermDays: 30,
@@ -271,7 +277,7 @@ void test("keeps numbering and issued data unchanged when issuance rolls back", 
 
   await Effect.runPromise(service.configureIssuer({
     legalName: "Exemplu SRL",
-    taxIdentifier: "RO12345678",
+    taxIdentifier: "RO12345674",
     address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" },
     defaultCurrency: "RON",
     defaultPaymentTermDays: 15,
@@ -280,7 +286,7 @@ void test("keeps numbering and issued data unchanged when issuance rolls back", 
   }))
   const customer = await Effect.runPromise(service.createCustomer({
     legalName: "Client SRL",
-    taxIdentifier: "RO87654321",
+    taxIdentifier: "RO87654329",
     address: { countryCode: "RO", city: "Iași", street: "Strada Mică 2" },
   }))
   const draft = await Effect.runPromise(service.createDraft({ customerId: customer.id, issueDate: "2026-09-01" }))
@@ -315,7 +321,7 @@ void test("refuses missing permissions and cross-organization reads", async () =
 
   const failure = await Effect.runPromise(Effect.flip(denied.configureIssuer({
     legalName: "Exemplu SRL",
-    taxIdentifier: "RO12345678",
+    taxIdentifier: "RO12345674",
     address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" },
     defaultCurrency: "RON",
     defaultPaymentTermDays: 15,

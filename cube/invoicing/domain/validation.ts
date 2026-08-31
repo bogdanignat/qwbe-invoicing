@@ -5,14 +5,29 @@ const required = (value: string, field: string, issues: Array<string>) => {
   if (value.trim().length === 0) issues.push(`${field} is required`)
 }
 
+const isValidRomanianCui = (value: string): boolean => {
+  const match = /^(?:RO)?([1-9]\d{1,9})$/.exec(value)
+  if (match === null) return false
+  const cui = match[1] as string
+  const body = cui.slice(0, -1)
+  const key = "753217532"
+  const offset = key.length - body.length
+  let sum = 0
+  for (let index = 0; index < body.length; index += 1) {
+    sum += Number(body[index]) * Number(key[offset + index])
+  }
+  const remainder = (sum * 10) % 11
+  return Number(cui.at(-1)) === (remainder === 10 ? 0 : remainder)
+}
+
 export const validateParty = (party: PartySnapshot): void => {
   const issues: Array<string> = []
   required(party.legalName, "legalName", issues)
-  required(party.taxIdentifier, "taxIdentifier", issues)
   required(party.address.countryCode, "address.countryCode", issues)
   required(party.address.city, "address.city", issues)
   required(party.address.street, "address.street", issues)
-  if (party.address.countryCode.trim().length !== 2) issues.push("address.countryCode must have two letters")
+  if (party.taxIdentifier.trim() !== "" && !isValidRomanianCui(party.taxIdentifier)) issues.push("taxIdentifier must be a valid Romanian CUI")
+  if (party.address.countryCode !== "RO") issues.push("address.countryCode must be RO")
   if (issues.length > 0) throw new ValidationFailure({ issues })
 }
 
@@ -45,31 +60,28 @@ const dateIssues = (configuration: TaxConfiguration): ReadonlyArray<string> => {
 const validateTaxConfigurations = (configurations: ReadonlyArray<TaxConfiguration>): void => {
   const issues: Array<string> = []
   if (configurations.length === 0) issues.push("taxConfigurations must contain at least one effective tax code")
-  const grouped = new Map<string, Array<TaxConfiguration>>()
   for (const configuration of configurations) {
     if (!/^[A-Z0-9][A-Z0-9_-]{0,31}$/.test(configuration.code)) issues.push("tax configuration code is invalid")
     if (!/^(?:\d|[1-9]\d|100)(?:\.\d{1,2})?$/.test(configuration.rate)) {
       issues.push(`tax configuration ${configuration.code} rate must be between 0 and 100 with at most two decimals`)
     }
     issues.push(...dateIssues(configuration))
-    grouped.set(configuration.code, [...(grouped.get(configuration.code) ?? []), configuration])
   }
-  for (const [code, values] of grouped) {
-    const ordered = [...values].sort((left, right) => left.effectiveFrom.localeCompare(right.effectiveFrom))
-    ordered.forEach((value, index) => {
-      const previous = ordered[index - 1]
-      if (previous !== undefined && (previous.effectiveTo === undefined || value.effectiveFrom <= previous.effectiveTo)) {
-        issues.push(`tax configuration ${code} has overlapping effective ranges`)
-      }
-    })
-  }
+  const ordered = [...configurations].sort((left, right) => left.effectiveFrom.localeCompare(right.effectiveFrom))
+  ordered.forEach((value, index) => {
+    const previous = ordered[index - 1]
+    if (previous !== undefined && (previous.effectiveTo === undefined || value.effectiveFrom <= previous.effectiveTo)) {
+      issues.push("tax configurations have overlapping effective ranges")
+    }
+  })
   if (issues.length > 0) throw new ValidationFailure({ issues })
 }
 
 export const validateIssuer = (issuer: IssuerProfile): void => {
   validateParty(issuer)
   const issues: Array<string> = []
-  if (!/^[A-Z]{3}$/.test(issuer.defaultCurrency)) issues.push("defaultCurrency must be an ISO 4217 code")
+  if (!isValidRomanianCui(issuer.taxIdentifier)) issues.push("taxIdentifier must be a valid Romanian CUI")
+  if (issuer.defaultCurrency !== "RON") issues.push("defaultCurrency must be RON")
   if (!Number.isInteger(issuer.defaultPaymentTermDays) || issuer.defaultPaymentTermDays < 0) {
     issues.push("defaultPaymentTermDays must be a non-negative integer")
   }

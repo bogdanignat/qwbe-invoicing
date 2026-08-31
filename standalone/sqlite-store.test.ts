@@ -53,7 +53,7 @@ void test("persists an issued snapshot across store recreation and isolates orga
     })
     await Effect.runPromise(service.configureIssuer({
       legalName: "Exemplu SRL",
-      taxIdentifier: "RO12345678",
+      taxIdentifier: "RO12345674",
       address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" },
       defaultCurrency: "RON",
       defaultPaymentTermDays: 15,
@@ -67,7 +67,7 @@ void test("persists an issued snapshot across store recreation and isolates orga
     }))
     const customer = await Effect.runPromise(service.createCustomer({
       legalName: "Client SRL",
-      taxIdentifier: "RO87654321",
+      taxIdentifier: "RO87654329",
       address: { countryCode: "RO", city: "Iași", street: "Strada Mică 2" },
     }))
     const draft = await Effect.runPromise(service.createDraft({
