@@ -96,3 +96,28 @@ applying either operation also requires `--confirm-production`. PDFs are stored 
 SHA-256 below `/data/artifacts`; reads verify key, digest, and byte length. The bundled
 DejaVu Sans font supports Romanian glyphs and its distribution license is stored next
 to the font in `standalone/assets/fonts/`.
+
+`doctor` now reports `pendingMigrations`, `migrationsReady`, `organizationId`, `authTokenFile`/`authTokenReadable` and `nodeVersion` in addition to `writable`/`databaseReady`; it exits non-zero while any check fails so it can gate deployments. Liveness remains `GET /health/live` (process up); readiness is `GET /health/ready` (storage writable + migrations current) and drives the Dockerfile `HEALTHCHECK` and Compose readiness.
+
+## Backup and restore
+
+SQLite and artifacts are the durable state. Operator-provided configuration (`ORGANIZATION_ID`, `AUTH_TOKEN_FILE`), image digests and externally stored recovery secrets are **not** baked into the backup; include them separately in your runbook.
+
+```bash
+# Create a versioned archive (or directory) with manifest + SHA-256 verification
+docker compose exec app node bin/qwbe-invoicing.ts backup --output /data/backup-2026-08-31.tar.gz --json
+docker compose run --rm -v $(pwd)/.local/backup:/backup app node bin/qwbe-invoicing.ts backup --output /backup/qwbe-backup.tar.gz --json
+
+# Dry-run restore — verifies manifest and lists files without writing
+docker compose exec app node bin/qwbe-invoicing.ts restore --input /data/backup-2026-08-31.tar.gz --json
+
+# Apply restore — idempotent, verifies SHA-256 before each write; outside development also requires --confirm-production
+docker compose exec app node bin/qwbe-invoicing.ts restore --input /data/backup-2026-08-31.tar.gz --apply --json
+docker compose exec app node bin/qwbe-invoicing.ts restore --input /backup/qwbe-backup.tar.gz --apply --confirm-production --json
+```
+
+`backup` is read-only and idempotent; repeated runs with the same `--output` overwrite atomically. `restore --apply` is idempotent — re-applying the same archive re-verifies each file via SHA-256 and is safe to retry after partial failure. In production, stop the `app` container before restore and run `doctor --json` + `migrate --json` after restore to confirm readiness. Never use `docker compose down -v` as a backup strategy; it deletes the named volume.
+
+## Delivery (PDF download)
+
+First usable release uses **PDF download** as the delivery channel (`GET /api/invoices/:id/pdf` with `ETag: "sha256-<digest>"`, `Content-Disposition: attachment` and `x-content-type-options: nosniff`). Email delivery is **deferred** per `PRODUCT.md` open decision #3 — PDF download alone satisfies the first slice; a future `email:send` permission and outbox will be added without changing the issuance snapshot.

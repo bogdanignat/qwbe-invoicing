@@ -1,0 +1,6 @@
+# Replace with the real digests from the release after `ghcr.io/bogdanignat/qwbe-invoicing:<version>` is published.
+# Use `docker buildx imagetools inspect ghcr.io/bogdanignat/qwbe-invoicing:0.3.0 --raw | sha256sum` or copy from the GitHub release notes.
+# Pin production by digest for strict reproducibility:
+#   IMAGE_TAG=0.3.0@sha256:<amd64-digest>  (or use a separate IMAGE_DIGEST variable in your deployment wrapper)
+ghcr.io/bogdanignat/qwbe-invoicing:0.3.0 linux/amd64 sha256:0000000000000000000000000000000000000000000000000000000000000000
+ghcr.io/bogdanignat/qwbe-invoicing:0.3.0 linux/arm64 sha256:1111111111111111111111111111111111111111111111111111111111111111

@@ -10,6 +10,8 @@ export type Command =
   | { readonly name: "doctor"; readonly json: boolean }
   | { readonly name: "migrate"; readonly apply: boolean; readonly confirmProduction: boolean; readonly json: boolean }
   | { readonly name: "artifacts"; readonly apply: boolean; readonly confirmProduction: boolean; readonly json: boolean; readonly limit: number }
+  | { readonly name: "backup"; readonly output: string; readonly json: boolean }
+  | { readonly name: "restore"; readonly input: string; readonly apply: boolean; readonly confirmProduction: boolean; readonly json: boolean }
 
 const boundedLimit = (value: string | undefined): number => {
   const limit = Number(value ?? "50")
@@ -45,6 +47,40 @@ const parseCommandUnchecked = (args: ReadonlyArray<string>): Command => {
       confirmProduction: parsed.values["confirm-production"],
       json: parsed.values.json,
       limit: boundedLimit(parsed.values.limit),
+    }
+  }
+  if (name === "backup") {
+    const parsed = parseArgs({
+      args: rest,
+      options: {
+        output: { type: "string" },
+        json: { type: "boolean", default: false },
+      },
+      strict: true,
+    })
+    const output = parsed.values.output?.trim() ?? ""
+    if (output.length === 0) throw new CliInputError("backup requires --output <path> (.tar.gz or directory)")
+    return { name: "backup", output, json: parsed.values.json }
+  }
+  if (name === "restore") {
+    const parsed = parseArgs({
+      args: rest,
+      options: {
+        input: { type: "string" },
+        apply: { type: "boolean", default: false },
+        "confirm-production": { type: "boolean", default: false },
+        json: { type: "boolean", default: false },
+      },
+      strict: true,
+    })
+    const input = parsed.values.input?.trim() ?? ""
+    if (input.length === 0) throw new CliInputError("restore requires --input <path> (.tar.gz or directory)")
+    return {
+      name: "restore",
+      input,
+      apply: parsed.values.apply,
+      confirmProduction: parsed.values["confirm-production"],
+      json: parsed.values.json,
     }
   }
   if (name === "migrate") {
@@ -83,10 +119,14 @@ Usage:
   qwbe-invoicing doctor [--json]
   qwbe-invoicing migrate [--apply] [--confirm-production] [--json]
   qwbe-invoicing artifacts [--limit 50] [--apply] [--confirm-production] [--json]
+  qwbe-invoicing backup --output <path.tar.gz|dir> [--json]
+  qwbe-invoicing restore --input <path.tar.gz|dir> [--apply] [--confirm-production] [--json]
 
 migrate is a dry-run by default. --apply writes pending schema migrations.
 artifacts reports issued invoices without PDFs by default. --apply renders at most
 --limit invoices; failures are counted and successful items remain committed for a
 safe retry. Outside development, either --apply also requires --confirm-production.
+backup copies SQLite databases and artifacts to a .tar.gz archive or directory; it is read-only and idempotent.
+restore is a dry-run by default. --apply writes files to DATA_DIR; outside development it also requires --confirm-production.
 Exit codes: 0 success, 2 invalid input or guard refusal, 1 execution failure.
 `
