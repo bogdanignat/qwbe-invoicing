@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import { PermissionDenied, type InvoicingFailure } from "../contracts/failures.ts"
+import { DomainConflict, PermissionDenied, type InvoicingFailure } from "../contracts/failures.ts"
 import type { Clock, IdGenerator, RequestContext, RequestContextProvider, TransactionalStore } from "../contracts/host.ts"
 import { invoicingPermissions } from "../contracts/permissions.ts"
 import { negateMoney, validateCreateCorrectionInput, type CorrectionDocument, type CreateCorrectionInput } from "../domain/corrections.ts"
@@ -19,6 +19,13 @@ export const createCorrectionOperations = (d: CorrectionDependencies) => {
     return yield* d.store.transaction((tx) => Effect.gen(function*() {
       const orig = yield* tx.findIssuedInvoice(ctx.organization.id, input.originalInvoiceId)
       if (orig === undefined) return yield* Effect.fail(missing("invoice", input.originalInvoiceId))
+      const existing = yield* tx.listCorrections(ctx.organization.id, input.originalInvoiceId)
+      if (existing.length > 0) {
+        return yield* Effect.fail(new DomainConflict({
+          code: "invoice_already_corrected",
+          message: "An invoice can have only one full correction document",
+        }))
+      }
       const number = yield* tx.allocateCorrectionNumber(ctx.organization.id, fy(issueDate), orig.series)
       const issuedAt = now.toISOString()
       const negLines = orig.lines.map((l) => ({ ...l, totalExcludingTax: negateMoney(l.totalExcludingTax), taxAmount: negateMoney(l.taxAmount), totalIncludingTax: negateMoney(l.totalIncludingTax) }))

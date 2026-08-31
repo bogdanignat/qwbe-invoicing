@@ -27,12 +27,16 @@ credential from the Compose secret; the secret is never stored in the image or
 printed by the application. `ORGANIZATION_ID` selects the trusted organization for
 this initial single-organization host adapter.
 
+The standalone UI is available at `https://invoice.test/app` (also served from `/`). It is a React 19 + TypeScript application styled with Tailwind CSS 4 and built with Vite. Browser API calls, cancellation, concurrent invoice-detail loading and typed failures are Effect programs; TanStack Query bridges those programs into React server state. The local bearer token is held in an Effect `Ref` and is never written to browser storage or the URL. This remains a development transport until the production host provides HttpOnly sessions and CSRF protection.
+
+Build the browser bundle locally with `pnpm build:ui`; `pnpm test` runs this build automatically before the Node test suite. Docker builds the UI in a dedicated stage and copies only `standalone/ui-dist` into the runtime image. CLI operations remain available when the ignored local bundle is absent; only UI requests return `503` with an explicit build instruction.
+
 Every cube use-case is an `Effect` and has a 1:1 authenticated HTTP endpoint. Authenticated routes under `/api`:
 
 - `GET /api/issuer` / `PUT /api/issuer` — read / configure issuer (Effect)
-- `POST /api/customers` / `GET /api/customers/:id` — create / read customer (Effect)
+- `POST /api/customers` / `GET /api/customers` / `GET /api/customers/:id` / `DELETE /api/customers/:id` — create / list / read / soft-delete customer (Effect); deletion hides the customer from new work while preserving issued invoice snapshots
 - `POST /api/drafts` / `GET /api/drafts/:id` / `POST /api/drafts/:id/lines` / `POST /api/drafts/:id/issue` — draft lifecycle (Effect, draft editabil până la `issue`)
-- `GET /api/invoices/:id` — immutable issued snapshot (Effect)
+- `GET /api/invoices` / `GET /api/invoices/:id` — latest 100 issued invoices / immutable issued snapshot (Effect)
 - `POST /api/invoices/:id/pdf` (idempotent render) / `GET /api/invoices/:id/pdf` (download with SHA-256 ETag)
 - `POST /api/invoices/:id/payments` (record payment) / `GET /api/invoices/:id/payments` (list payments with derived status `unpaid`/`partially_paid`/`paid`/`overpaid`/`overdue`, `paidAmount`/`remainingAmount`)
 - `POST /api/invoices/:id/corrections` (storno fiscal — creează document nou imuabil cu referință la factura originală, motiv obligatoriu, totals negative) / `GET /api/invoices/:id/corrections` / `GET /api/corrections/:id` — după emitere nu se mai editează factura, doar storno

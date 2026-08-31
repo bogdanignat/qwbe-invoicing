@@ -224,8 +224,10 @@ export const handleApiRequest = async (request: ApiRequest, runtime: ApiRuntime)
     const correctionGet = /^\/api\/corrections\/([^/]+)$/.exec(request.url)
     if (request.method === "GET" && request.url === "/api/issuer") operation = service.getIssuer()
     else if (request.method === "PUT" && request.url === "/api/issuer") operation = service.configureIssuer(issuerInput(request.body))
+    else if (request.method === "GET" && request.url === "/api/customers") operation = service.listCustomers()
     else if (request.method === "GET" && customerGet?.[1] !== undefined) operation = service.getCustomer(customerGet[1])
     else if (request.method === "POST" && request.url === "/api/customers") operation = service.createCustomer(customerInput(request.body))
+    else if (request.method === "DELETE" && customerGet?.[1] !== undefined) operation = Effect.map(service.deleteCustomer(customerGet[1]), () => ({ deleted: true } as const))
     else if (request.method === "GET" && draftGet?.[1] !== undefined) operation = service.getDraft(draftGet[1])
     else if (request.method === "POST" && request.url === "/api/drafts") operation = service.createDraft(draftInput(request.body))
     else if (request.method === "POST" && line?.[1] !== undefined) operation = service.addDraftLine(lineInput(line[1], request.body))
@@ -235,6 +237,7 @@ export const handleApiRequest = async (request: ApiRequest, runtime: ApiRuntime)
       else if (request.method === "POST" && invoiceCorrections?.[1] !== undefined) operation = service.createCorrection(correctionInput(invoiceCorrections[1], request.body))
       else if (request.method === "GET" && invoiceCorrections?.[1] !== undefined) operation = service.listCorrections(invoiceCorrections[1])
       else if (request.method === "GET" && correctionGet?.[1] !== undefined) operation = service.getCorrection(correctionGet[1])
+      else if (request.method === "GET" && request.url === "/api/invoices") operation = service.listIssuedInvoices()
       else if (request.method === "GET" && invoice?.[1] !== undefined) operation = service.getIssuedInvoice(invoice[1])
       else if (request.method === "DELETE" && invoice?.[1] !== undefined) operation = Effect.map(service.deleteIssuedInvoice(invoice[1]), () => ({ deleted: true } as const))
       else if (request.method === "POST" && pdf?.[1] !== undefined) operation = documents.renderInvoice(pdf[1])
@@ -258,6 +261,7 @@ export const handleApiRequest = async (request: ApiRequest, runtime: ApiRuntime)
         const knownRoute = request.url === "/api/issuer"
           || request.url === "/api/customers"
           || request.url === "/api/drafts"
+          || request.url === "/api/invoices"
           || customerGet !== null
           || draftGet !== null
           || line !== null

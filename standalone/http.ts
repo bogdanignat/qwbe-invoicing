@@ -4,6 +4,7 @@ import { handleApiRequest } from "./api.ts"
 import { createRequestAuthenticator } from "./auth.ts"
 import type { RuntimeConfig } from "./config.ts"
 import { databaseReady } from "./migrations.ts"
+import { staticUiResponse } from "./static-ui.ts"
 
 interface HttpResponse {
   readonly status: number
@@ -31,11 +32,16 @@ const send = (
   headers: Readonly<Record<string, string>> = {},
 ) => {
   if (body instanceof Uint8Array) {
-    response.writeHead(status, headers)
+    response.writeHead(status, { "x-content-type-options": "nosniff", ...headers })
     response.end(body)
     return
   }
-  response.writeHead(status, { "content-type": "application/json; charset=utf-8", ...headers })
+  response.writeHead(status, {
+    "cache-control": "no-store",
+    "content-type": "application/json; charset=utf-8",
+    "x-content-type-options": "nosniff",
+    ...headers,
+  })
   response.end(`${JSON.stringify(body)}\n`)
 }
 
@@ -80,6 +86,11 @@ export const startServer = (
           const status = error instanceof Error && error.message === "request_body_too_large" ? 413 : 400
           send(response, status, { error: status === 413 ? "request_body_too_large" : "invalid_json" })
         }
+        return
+      }
+      const ui = staticUiResponse(request.method, path)
+      if (ui !== undefined) {
+        send(response, ui.status, ui.body, ui.headers)
         return
       }
       const result = route(request.method, path, isReady())

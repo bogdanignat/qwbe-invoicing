@@ -1,14 +1,15 @@
 import eslint from "@eslint/js"
+import reactHooks from "eslint-plugin-react-hooks"
 import tseslint from "typescript-eslint"
 
 export default tseslint.config(
   {
-    ignores: ["node_modules/**", "probes/fixtures/**"],
+    ignores: ["node_modules/**", "probes/fixtures/**", "standalone/ui-dist/**"],
   },
   eslint.configs.recommended,
   ...tseslint.configs.strictTypeChecked,
   {
-    files: ["**/*.ts"],
+    files: ["**/*.{ts,tsx}"],
     languageOptions: {
       parserOptions: {
         projectService: true,
@@ -26,5 +27,10 @@ export default tseslint.config(
         process: "readonly",
       },
     },
+  },
+  {
+    files: ["web/**/*.{ts,tsx}"],
+    plugins: { "react-hooks": reactHooks },
+    rules: { ...reactHooks.configs.recommended.rules },
   },
 )

@@ -9,6 +9,17 @@ RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile --prod
 
+FROM node:${NODE_VERSION}-alpine@${NODE_IMAGE_DIGEST} AS ui-builder
+ARG PNPM_VERSION=11.22.0
+WORKDIR /app
+RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN pnpm install --frozen-lockfile
+COPY vite.config.ts ./
+COPY web ./web
+COPY standalone/ui/app.css ./standalone/ui/app.css
+RUN pnpm build:ui
+
 FROM node:${NODE_VERSION}-alpine@${NODE_IMAGE_DIGEST} AS runtime
 ENV NODE_ENV=production \
     HOST=0.0.0.0 \
@@ -20,6 +31,7 @@ COPY package.json ./
 COPY bin ./bin
 COPY cube ./cube
 COPY standalone ./standalone
+COPY --from=ui-builder /app/standalone/ui-dist ./standalone/ui-dist
 RUN mkdir -p /data && chown -R node:node /app /data
 USER node
 EXPOSE 3000

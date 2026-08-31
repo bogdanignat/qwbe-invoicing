@@ -4,6 +4,7 @@ node_modules
 coverage
 dist
 build
+standalone/ui-dist
 data
 .env
 .env.*

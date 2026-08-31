@@ -26,6 +26,7 @@ export interface InvoicingDependencies {
 export interface InvoicingService extends DraftingOperations, PaymentOperations, CorrectionOperations {
   readonly issueInvoice: (input: { readonly draftId: string }) => Effect.Effect<IssuedInvoice, InvoicingFailure>
   readonly getIssuedInvoice: (id: string) => Effect.Effect<IssuedInvoice, InvoicingFailure>
+  readonly listIssuedInvoices: () => Effect.Effect<ReadonlyArray<IssuedInvoice>, InvoicingFailure>
   readonly deleteIssuedInvoice: (id: string) => Effect.Effect<void, InvoicingFailure>
 }
 
@@ -90,6 +91,13 @@ export const createInvoicingService = (dependencies: InvoicingDependencies): Inv
     }))
   })
 
+  const listIssuedInvoices = () => Effect.gen(function*() {
+    const context = yield* authorized(permissions.read)
+    const invoices = yield* dependencies.store.transaction((transaction) =>
+      transaction.listIssuedInvoices(context.organization.id))
+    return structuredClone(invoices)
+  })
+
   const deleteIssuedInvoice = (id: string) => Effect.gen(function*() {
     const context = yield* authorized(permissions.voidInvoices)
     return yield* dependencies.store.transaction((transaction) => Effect.gen(function*() {
@@ -118,7 +126,7 @@ export const createInvoicingService = (dependencies: InvoicingDependencies): Inv
     }))
   })
 
-  return { ...drafting, ...payments, ...corrections, issueInvoice, getIssuedInvoice, deleteIssuedInvoice }
+  return { ...drafting, ...payments, ...corrections, issueInvoice, getIssuedInvoice, listIssuedInvoices, deleteIssuedInvoice }
 }
 
 export type { DraftInvoice, IssuedInvoice } from "../domain/invoice.ts"

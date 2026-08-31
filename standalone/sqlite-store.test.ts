@@ -74,6 +74,8 @@ void test("persists an issued snapshot across store recreation and isolates orga
       customerId: customer.id,
       issueDate: "2026-09-01",
     }))
+    const openDraftDeletion = await Effect.runPromise(Effect.flip(service.deleteCustomer(customer.id)))
+    assert.equal(openDraftDeletion instanceof DomainConflict && openDraftDeletion.code === "customer_has_open_drafts", true)
     await Effect.runPromise(service.addDraftLine({
       draftId: draft.id,
       description: "Servicii software",
@@ -90,6 +92,12 @@ void test("persists an issued snapshot across store recreation and isolates orga
       store: createSqliteStore(directory),
       cubeIdentity: "invoicing",
     })
+    assert.deepEqual(await Effect.runPromise(restarted.getIssuedInvoice(issued.id)), issued)
+
+    await Effect.runPromise(restarted.deleteCustomer(customer.id))
+    assert.deepEqual(await Effect.runPromise(restarted.listCustomers()), [])
+    const deletedCustomer = await Effect.runPromise(Effect.flip(restarted.getCustomer(customer.id)))
+    assert.equal(deletedCustomer instanceof ResourceNotFound, true)
     assert.deepEqual(await Effect.runPromise(restarted.getIssuedInvoice(issued.id)), issued)
 
     const database = new DatabaseSync(databasePath(directory))
