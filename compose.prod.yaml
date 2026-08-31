@@ -1,0 +1,78 @@
+name: qwbe-invoicing
+
+# Production bundle — copy as compose.yaml on the host or include via `docker compose -f compose.prod.yaml up -d`.
+# No Warden network, no published app port by default. Put Caddy (profile `proxy`) in front for TLS.
+# Image is pinned by tag; for strict production also pin by digest from image-digests.txt:
+#   IMAGE_TAG=0.3.0@sha256:<digest> docker compose -f compose.prod.yaml --profile proxy up -d
+
+services:
+  migrate:
+    image: ghcr.io/bogdanignat/qwbe-invoicing:${IMAGE_TAG:-0.1.0}
+    command: ["node", "bin/qwbe-invoicing.ts", "migrate", "--apply", "--json"]
+    environment:
+      NODE_ENV: production
+      DATA_DIR: /data
+    volumes:
+      - invoicing-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    restart: "no"
+
+  app:
+    image: ghcr.io/bogdanignat/qwbe-invoicing:${IMAGE_TAG:-0.1.0}
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: 3000
+      DATA_DIR: /data
+      ORGANIZATION_ID: ${ORGANIZATION_ID:-local-organization}
+      AUTH_TOKEN_FILE: /run/secrets/api_token
+    secrets:
+      - api_token
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+    volumes:
+      - invoicing-data:/data
+    expose:
+      - "3000"
+    restart: unless-stopped
+    stop_grace_period: 15s
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/health/ready"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
+  caddy:
+    image: caddy:2-alpine
+    profiles: ["proxy"]
+    depends_on:
+      app:
+        condition: service_healthy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    restart: unless-stopped
+
+secrets:
+  api_token:
+    file: ${AUTH_TOKEN_PATH:-./.local/api-token}
+
+volumes:
+  invoicing-data:
+    name: qwbe-invoicing-data
+  caddy-data:
+    name: caddy-data
+  caddy-config:
+    name: caddy-config
