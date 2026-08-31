@@ -6,6 +6,7 @@ import { Effect } from "effect"
 import { documentsPermissions } from "../cube/invoicing/documents/index.ts"
 import { reconcileArtifacts } from "../standalone/artifact-reconciliation.ts"
 import { createStandaloneArtifactService } from "../standalone/artifact-runtime.ts"
+import { executeBackup, executeRestore, planRestore } from "../standalone/backup.ts"
 import { CliInputError, helpText, parseCommand, type Command } from "../standalone/cli.ts"
 import { runtimeConfig } from "../standalone/config.ts"
 import { startServer } from "../standalone/http.ts"
@@ -53,13 +54,29 @@ if (command !== undefined) {
       } catch {
         writable = false
       }
+      const pending = planMigrations(config.dataDirectory).pending
+      const authTokenReadable = (() => {
+        if (config.authTokenFile === undefined) return false
+        try {
+          accessSync(config.authTokenFile, constants.R_OK)
+          return true
+        } catch {
+          return false
+        }
+      })()
       const report = {
         dataDirectory: config.dataDirectory,
         writable,
         databaseReady: databaseReady(config.dataDirectory),
+        pendingMigrations: pending,
+        migrationsReady: pending.length === 0,
+        organizationId: config.organizationId ?? null,
+        authTokenFile: config.authTokenFile ?? null,
+        authTokenReadable,
+        nodeVersion: process.versions.node,
       }
       print(report, command.json)
-      if (!writable || !report.databaseReady) process.exitCode = 1
+      if (!writable || !report.databaseReady || !report.migrationsReady) process.exitCode = 1
     }
     if (command.name === "migrate") {
       if (command.apply && config.nodeEnvironment !== "development" && !command.confirmProduction) {
@@ -88,6 +105,33 @@ if (command !== undefined) {
         const report = await reconcileArtifacts(service, command.limit, command.apply)
         print(report, command.json)
         if (report.failed > 0) process.exitCode = 1
+      }
+    }
+    if (command.name === "backup") {
+      const report = executeBackup(config.dataDirectory, command.output)
+      print(report, command.json)
+      if (report.failed > 0) process.exitCode = 1
+    }
+    if (command.name === "restore") {
+      if (command.apply && config.nodeEnvironment !== "development" && !command.confirmProduction) {
+        console.error("restore --apply outside development requires --confirm-production")
+        process.exitCode = 2
+      } else {
+        const report = command.apply ? executeRestore(config.dataDirectory, command.input) : (() => {
+          const planned = planRestore(config.dataDirectory, command.input)
+          return {
+            dataDirectory: config.dataDirectory,
+            input: command.input,
+            scanned: planned.pending.length,
+            restored: 0,
+            failed: 0,
+            files: planned.pending,
+            dryRun: true,
+          }
+        })()
+        print(report, command.json)
+        const failed = (report as { failed?: number }).failed ?? 0
+        if (failed > 0) process.exitCode = 1
       }
     }
   } catch (error) {
