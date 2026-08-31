@@ -171,7 +171,7 @@ Payments are separate records and never mutate the issued invoice:
 - optional note and actor.
 
 Derived payment states include unpaid, partially paid, paid, overdue, and
-overpaid/credit where supported.
+overpaid/credit where supported. Overpayment is accepted deliberately so the ledger can represent excess bank receipts and concurrent imports instead of discarding them. The standard UI closes its payment form at zero remaining balance, while API/import calls may still produce the explicit `overpaid` state.
 
 ### 3.9 Corrections
 
@@ -411,7 +411,7 @@ stable.
 
 ### Phase 2 — usable standalone product
 
-- framework-free HTML/CSS/ES-module UI served by the standalone host (driven exclusively by the `Effect` HTTP API);
+- React 19 + TypeScript UI styled with Tailwind CSS 4, built with Vite and served by the standalone host; browser I/O, cancellation, concurrency and typed failures run through `Effect`, with TanStack Query as the React server-state adapter;
 - PDF rendering and preserved artifacts;
 - payment recording and status calculation;
 - correction documents;
@@ -446,7 +446,7 @@ The following decisions must be explicit before their relevant implementation:
    domestic VAT and non-VAT-registered issuers?
 3. Is email delivery required for the first usable release, or is PDF download
    sufficient?
-4. Resolved: framework-free HTML/CSS/ES modules, same-origin and API-first; the development bearer token remains memory-only until the production host provides HttpOnly sessions and CSRF protection.
+4. Resolved: React 19 + TypeScript + Tailwind CSS 4, Vite-built, same-origin and API-first. Effect is the browser runtime for HTTP effects and typed failures; TanStack Query bridges Effect programs into React server state. The development bearer token remains in an Effect `Ref` held only in memory until the production host provides HttpOnly sessions and CSRF protection.
 5. What retention policy and backup targets are promised to operators?
 6. Which public, versioned QWBE contracts replace the current private `0.0.0`
    compatibility snapshot?

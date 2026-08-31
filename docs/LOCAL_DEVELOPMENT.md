@@ -27,7 +27,9 @@ credential from the Compose secret; the secret is never stored in the image or
 printed by the application. `ORGANIZATION_ID` selects the trusted organization for
 this initial single-organization host adapter.
 
-The standalone UI is available at `https://invoice.test/app` (also served from `/`). It uses framework-free HTML/CSS/ES modules and asks for the local bearer token on every page load; the token stays only in JavaScript memory and is never written to browser storage. This is a development transport until the production host provides HttpOnly sessions and CSRF protection.
+The standalone UI is available at `https://invoice.test/app` (also served from `/`). It is a React 19 + TypeScript application styled with Tailwind CSS 4 and built with Vite. Browser API calls, cancellation, concurrent invoice-detail loading and typed failures are Effect programs; TanStack Query bridges those programs into React server state. The local bearer token is held in an Effect `Ref` and is never written to browser storage or the URL. This remains a development transport until the production host provides HttpOnly sessions and CSRF protection.
+
+Build the browser bundle locally with `pnpm build:ui`; `pnpm test` runs this build automatically before the Node test suite. Docker builds the UI in a dedicated stage and copies only `standalone/ui-dist` into the runtime image. CLI operations remain available when the ignored local bundle is absent; only UI requests return `503` with an explicit build instruction.
 
 Every cube use-case is an `Effect` and has a 1:1 authenticated HTTP endpoint. Authenticated routes under `/api`:
 

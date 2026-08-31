@@ -103,6 +103,51 @@ void test("requires host authentication and serves the complete invoice-core rou
       body: undefined,
     }, runtime)
     assert.deepEqual(invoices.body, [issued.body])
+    const payment = await handleApiRequest({
+      method: "POST",
+      url: `/api/invoices/${invoiceId}/payments`,
+      authorization,
+      body: { amount: "50.00", currency: "RON", paymentDate: "2026-09-02", method: "transfer" },
+    }, runtime)
+    assert.equal(payment.status, 200)
+    assert.equal((payment.body as { status: string }).status, "partially_paid")
+    const payments = await handleApiRequest({
+      method: "GET",
+      url: `/api/invoices/${invoiceId}/payments`,
+      authorization,
+      body: undefined,
+    }, runtime)
+    assert.deepEqual({
+      status: (payments.body as { status: string }).status,
+      paidAmount: (payments.body as { paidAmount: string }).paidAmount,
+      remainingAmount: (payments.body as { remainingAmount: string }).remainingAmount,
+      count: (payments.body as { payments: ReadonlyArray<unknown> }).payments.length,
+    }, { status: "partially_paid", paidAmount: "50.00", remainingAmount: "71.00", count: 1 })
+    const correction = await handleApiRequest({
+      method: "POST",
+      url: `/api/invoices/${invoiceId}/corrections`,
+      authorization,
+      body: { reason: "Corecție integrală de test", issueDate: "2026-09-03" },
+    }, runtime)
+    assert.equal(correction.status, 200)
+    assert.equal((correction.body as { totalIncludingTax: string }).totalIncludingTax, "-121.00")
+    const corrections = await handleApiRequest({
+      method: "GET",
+      url: `/api/invoices/${invoiceId}/corrections`,
+      authorization,
+      body: undefined,
+    }, runtime)
+    assert.equal((corrections.body as ReadonlyArray<unknown>).length, 1)
+    const duplicateCorrection = await handleApiRequest({
+      method: "POST",
+      url: `/api/invoices/${invoiceId}/corrections`,
+      authorization,
+      body: { reason: "Corecție duplicată", issueDate: "2026-09-04" },
+    }, runtime)
+    assert.deepEqual(duplicateCorrection, {
+      status: 409,
+      body: { error: "DomainConflict", code: "invoice_already_corrected" },
+    })
     const customers = await handleApiRequest({
       method: "GET",
       url: "/api/customers",

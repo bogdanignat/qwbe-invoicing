@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { chmodSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { spawnSync } from "node:child_process"
@@ -99,6 +99,8 @@ void test("readiness is observable over the HTTP contract", () => {
 })
 
 void test("serves the UI only from an exact allowlist with restrictive headers", () => {
+  assert.deepEqual(readdirSync(join(process.cwd(), "standalone/ui-dist")).sort(), ["assets", "index.html"])
+  assert.deepEqual(readdirSync(join(process.cwd(), "standalone/ui-dist/assets")).sort(), ["app.css", "app.js"])
   const page = staticUiResponse("GET", "/app")
   assert.ok(page)
   assert.equal(page.status, 200)
@@ -113,6 +115,11 @@ void test("serves the UI only from an exact allowlist with restrictive headers",
   assert.equal(script.status, 200)
   assert.equal(script.body.length, 0)
   assert.equal(script.headers["x-content-type-options"], "nosniff")
+  const scriptBody = staticUiResponse("GET", "/assets/app.js")
+  assert.ok(scriptBody)
+  assert.equal(scriptBody.body.length > 1_000, true)
+  assert.equal(staticUiResponse("GET", "/assets/app.css")?.status, 200)
+  assert.equal(staticUiResponse("GET", "/assets/api-client.js"), undefined)
   assert.equal(staticUiResponse("GET", "/assets/../api-token"), undefined)
   assert.equal(staticUiResponse("GET", "/assets/%2e%2e/api-token"), undefined)
   assert.equal(staticUiResponse("POST", "/assets/app.js")?.status, 405)

@@ -4,7 +4,7 @@ Status: architecture baseline before implementation
 Source snapshot: QWBE mother repository at `987e11b`  
 Package manager: pnpm  
 Runtime: Node.js + TypeScript + **Effect 3.x as primary runtime** (`effect`, `@effect/platform`, `@effect/platform-node`) — all cube application logic, host capabilities (Clock, Store, IdGenerator, Auth), and HTTP handling are modelled as `Effect`
-UI: framework-free HTML/CSS/ES modules served by the standalone host; API-first — every cube use-case has a corresponding authenticated HTTP API endpoint, and the UI contains no fiscal business logic
+UI: React 19 + TypeScript styled with Tailwind CSS 4, built with Vite and served by the standalone host; Effect owns browser API effects, typed failures, cancellation and concurrency, while TanStack Query integrates server state with React. The boundary remains API-first: every cube use-case has a corresponding authenticated HTTP endpoint, and the UI contains no fiscal business logic
 
 ## 1. Purpose
 
@@ -470,7 +470,7 @@ These are not solved by copying the mother prototype:
 3. Immutable issued-invoice model and numbering guarantees.
 4. SQLite transaction/outbox strategy.
 5. Durable e-invoice submission workflow.
-6. API-only operation versus a non-React UI technology.
+6. API-only operation versus the selected React + Effect UI adapter.
 7. Distribution shape: one cube package or a plugin delivering a cube tree.
 8. Recursive canonical identity contract required by future mounting.
 9. Which domains become child cubes, based on real ownership/lifecycle and size evidence.
