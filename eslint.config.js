@@ -27,4 +27,19 @@ export default tseslint.config(
       },
     },
   },
+  {
+    files: ["standalone/ui/**/*.js"],
+    languageOptions: {
+      globals: {
+        document: "readonly",
+        Element: "readonly",
+        FormData: "readonly",
+        HTMLButtonElement: "readonly",
+        HTMLFormElement: "readonly",
+        location: "readonly",
+        URL: "readonly",
+        window: "readonly",
+      },
+    },
+  },
 )

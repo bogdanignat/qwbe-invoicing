@@ -411,7 +411,7 @@ stable.
 
 ### Phase 2 — usable standalone product
 
-- non-React UI contract and implementation (driven by the `Effect` HTTP API);
+- framework-free HTML/CSS/ES-module UI served by the standalone host (driven exclusively by the `Effect` HTTP API);
 - PDF rendering and preserved artifacts;
 - payment recording and status calculation;
 - correction documents;
@@ -446,7 +446,7 @@ The following decisions must be explicit before their relevant implementation:
    domestic VAT and non-VAT-registered issuers?
 3. Is email delivery required for the first usable release, or is PDF download
    sufficient?
-4. Which non-React UI approach becomes the supported UI contract?
+4. Resolved: framework-free HTML/CSS/ES modules, same-origin and API-first; the development bearer token remains memory-only until the production host provides HttpOnly sessions and CSRF protection.
 5. What retention policy and backup targets are promised to operators?
 6. Which public, versioned QWBE contracts replace the current private `0.0.0`
    compatibility snapshot?

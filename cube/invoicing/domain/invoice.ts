@@ -31,6 +31,7 @@ export interface IssuerProfile extends PartySnapshot {
 export interface Customer extends PartySnapshot {
   readonly id: string
   readonly organizationId: string
+  readonly deletedAt?: string
 }
 
 export interface DraftLine {

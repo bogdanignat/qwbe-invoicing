@@ -15,6 +15,18 @@ export interface InvoicingTransaction {
     organizationId: string,
     id: string,
   ) => Effect.Effect<Customer | undefined, PersistenceFailure>
+  readonly listCustomers: (
+    organizationId: string,
+  ) => Effect.Effect<ReadonlyArray<Customer>, PersistenceFailure>
+  readonly softDeleteCustomer: (
+    organizationId: string,
+    id: string,
+    deletedAt: string,
+  ) => Effect.Effect<void, TransactionFailure>
+  readonly hasOpenDraftsForCustomer: (
+    organizationId: string,
+    customerId: string,
+  ) => Effect.Effect<boolean, PersistenceFailure>
   readonly saveDraft: (draft: DraftInvoice) => Effect.Effect<void, TransactionFailure>
   readonly findDraft: (
     organizationId: string,
@@ -30,6 +42,9 @@ export interface InvoicingTransaction {
     organizationId: string,
     id: string,
   ) => Effect.Effect<IssuedInvoice | undefined, PersistenceFailure>
+  readonly listIssuedInvoices: (
+    organizationId: string,
+  ) => Effect.Effect<ReadonlyArray<IssuedInvoice>, PersistenceFailure>
   readonly savePayment: (payment: Payment) => Effect.Effect<void, TransactionFailure>
   readonly listPayments: (
     organizationId: string,

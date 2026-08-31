@@ -12,6 +12,7 @@ import {
 import {
   DomainConflict,
   PermissionDenied,
+  ResourceNotFound,
   ValidationFailure,
   type Clock,
   type IdGenerator,
@@ -42,6 +43,23 @@ const memoryStore = (state: MemoryState): TransactionalStore<InvoicingTransactio
       findCustomer: (organizationId, id) => Effect.succeed(
         working.customers.get(id)?.organizationId === organizationId ? working.customers.get(id) : undefined,
       ),
+      listCustomers: (organizationId) => Effect.succeed(
+        [...working.customers.values()]
+          .filter((customer) => customer.organizationId === organizationId && customer.deletedAt === undefined)
+          .sort((a, b) => a.legalName.localeCompare(b.legalName) || a.id.localeCompare(b.id))
+          .slice(0, 100),
+      ),
+      softDeleteCustomer: (organizationId, id, deletedAt) => Effect.sync(() => {
+        const customer = working.customers.get(id)
+        if (customer === undefined || customer.organizationId !== organizationId) {
+          throw new DomainConflict({ code: "customer_not_found", message: "Customer not found" })
+        }
+        working.customers.set(id, { ...customer, deletedAt })
+      }),
+      hasOpenDraftsForCustomer: (organizationId, customerId) => Effect.succeed(
+        [...working.drafts.values()].some((draft) =>
+          draft.organizationId === organizationId && draft.customerId === customerId && draft.status === "draft"),
+      ),
       saveDraft: (draft) => Effect.sync(() => { working.drafts.set(draft.id, draft) }),
       findDraft: (organizationId, id) => Effect.succeed(
         working.drafts.get(id)?.organizationId === organizationId ? working.drafts.get(id) : undefined,
@@ -55,6 +73,12 @@ const memoryStore = (state: MemoryState): TransactionalStore<InvoicingTransactio
       saveIssuedInvoice: (invoice) => Effect.sync(() => { working.issued.set(invoice.id, invoice) }),
       findIssuedInvoice: (organizationId, id) => Effect.succeed(
         working.issued.get(id)?.organizationId === organizationId ? working.issued.get(id) : undefined,
+      ),
+      listIssuedInvoices: (organizationId) => Effect.succeed(
+        [...working.issued.values()]
+          .filter((invoice) => invoice.organizationId === organizationId)
+          .sort((a, b) => b.issueDate.localeCompare(a.issueDate) || b.number - a.number || a.id.localeCompare(b.id))
+          .slice(0, 100),
       ),
       savePayment: (payment) => Effect.sync(() => { working.payments.set(payment.id, payment) }),
       listPayments: (organizationId, invoiceId) => Effect.succeed(
@@ -201,6 +225,7 @@ void test("issues deterministic immutable invoice snapshots through the public s
   assert.equal(issued.totalIncludingTax, "151.25")
   assert.equal(issued.issuer.legalName, "Exemplu SRL")
   assert.equal(issued.customer.legalName, "Client SRL")
+  assert.deepEqual(await Effect.runPromise(service.listIssuedInvoices()), [issued])
 
   await Effect.runPromise(service.configureIssuer({
     legalName: "Exemplu Renamed SRL",
@@ -214,6 +239,17 @@ void test("issues deterministic immutable invoice snapshots through the public s
   const preserved = await Effect.runPromise(service.getIssuedInvoice(issued.id))
   assert.equal(preserved.issuer.legalName, "Exemplu SRL")
   assert.equal(preserved.series, "QWBE")
+
+  await Effect.runPromise(service.deleteCustomer(customer.id))
+  assert.deepEqual(await Effect.runPromise(service.listCustomers()), [])
+  const deletedCustomer = await Effect.runPromise(Effect.flip(service.getCustomer(customer.id)))
+  assert.equal(deletedCustomer instanceof ResourceNotFound, true)
+  const newDraft = await Effect.runPromise(Effect.flip(service.createDraft({
+    customerId: customer.id,
+    issueDate: "2026-09-02",
+  })))
+  assert.equal(newDraft instanceof ResourceNotFound, true)
+  assert.equal((await Effect.runPromise(service.getIssuedInvoice(issued.id))).customer.legalName, "Client SRL")
 })
 
 void test("keeps numbering and issued data unchanged when issuance rolls back", async () => {
@@ -248,6 +284,8 @@ void test("keeps numbering and issued data unchanged when issuance rolls back", 
     address: { countryCode: "RO", city: "Iași", street: "Strada Mică 2" },
   }))
   const draft = await Effect.runPromise(service.createDraft({ customerId: customer.id, issueDate: "2026-09-01" }))
+  const deletion = await Effect.runPromise(Effect.flip(service.deleteCustomer(customer.id)))
+  assert.equal(deletion instanceof DomainConflict && deletion.code === "customer_has_open_drafts", true)
   await Effect.runPromise(service.addDraftLine({
     draftId: draft.id,
     description: "Servicii",

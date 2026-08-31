@@ -96,6 +96,42 @@ void test("requires host authentication and serves the complete invoice-core rou
       body: undefined,
     }, runtime)
     assert.deepEqual(fetched.body, issued.body)
+    const invoices = await handleApiRequest({
+      method: "GET",
+      url: "/api/invoices",
+      authorization,
+      body: undefined,
+    }, runtime)
+    assert.deepEqual(invoices.body, [issued.body])
+    const customers = await handleApiRequest({
+      method: "GET",
+      url: "/api/customers",
+      authorization,
+      body: undefined,
+    }, runtime)
+    assert.equal(customers.status, 200)
+    assert.equal((customers.body as ReadonlyArray<unknown>).length, 1)
+    const deletedCustomer = await handleApiRequest({
+      method: "DELETE",
+      url: `/api/customers/${customerId}`,
+      authorization,
+      body: undefined,
+    }, runtime)
+    assert.deepEqual(deletedCustomer, { status: 200, body: { deleted: true } })
+    const customersAfterDelete = await handleApiRequest({
+      method: "GET",
+      url: "/api/customers",
+      authorization,
+      body: undefined,
+    }, runtime)
+    assert.deepEqual(customersAfterDelete.body, [])
+    const preservedInvoice = await handleApiRequest({
+      method: "GET",
+      url: `/api/invoices/${invoiceId}`,
+      authorization,
+      body: undefined,
+    }, runtime)
+    assert.deepEqual(preservedInvoice.body, issued.body)
     const rendered = await handleApiRequest({
       method: "POST",
       url: `/api/invoices/${invoiceId}/pdf`,

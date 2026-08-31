@@ -11,7 +11,7 @@
   "scripts": {
     "app": "node bin/qwbe-invoicing.ts",
     "local:setup": "node scripts/local-warden.mjs",
-    "test": "node --test \"cube/**/*.test.ts\" \"standalone/**/*.test.ts\" \"probes/**/*.test.mjs\"",
+    "test": "node --test \"cube/**/*.test.ts\" \"standalone/**/*.test.ts\" \"standalone/**/*.test.mjs\" \"probes/**/*.test.mjs\"",
     "typecheck": "tsc -p tsconfig.json",
     "lint": "eslint .",
     "gate:runtime": "node probes/runtime-version.mjs",

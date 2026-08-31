@@ -8,6 +8,7 @@ import test from "node:test"
 import { parseCommand } from "./cli.ts"
 import { route } from "./http.ts"
 import { applyMigrations, databaseReady, planMigrations } from "./migrations.ts"
+import { staticUiResponse } from "./static-ui.ts"
 
 void test("migration apply is idempotent", () => {
   const directory = mkdtempSync(join(tmpdir(), "qwbe-migrations-"))
@@ -19,10 +20,11 @@ void test("migration apply is idempotent", () => {
       "003-invoice-corrections",
       "004-invoice-delete-last",
       "005-allow-e-factura-status-update",
+      "006-customer-soft-delete",
       "documents/000-foundation",
       "documents/001-artifacts",
     ])
-    assert.equal(applyMigrations(directory).changed, 8)
+    assert.equal(applyMigrations(directory).changed, 9)
     assert.equal(applyMigrations(directory).changed, 0)
     assert.equal(databaseReady(directory), true)
   } finally {
@@ -94,4 +96,24 @@ void test("readiness is observable over the HTTP contract", () => {
   assert.equal(route("GET", "/health/ready", false).status, 503)
   assert.equal(route("GET", "/health/ready", true).status, 200)
   assert.equal(route("POST", "/", true).status, 405)
+})
+
+void test("serves the UI only from an exact allowlist with restrictive headers", () => {
+  const page = staticUiResponse("GET", "/app")
+  assert.ok(page)
+  assert.equal(page.status, 200)
+  assert.equal(page.headers["content-type"], "text/html; charset=utf-8")
+  const contentSecurityPolicy = page.headers["content-security-policy"]
+  assert.ok(contentSecurityPolicy)
+  assert.match(contentSecurityPolicy, /default-src 'none'/)
+  assert.match(Buffer.from(page.body).toString("utf8"), /QWBE Invoicing/)
+
+  const script = staticUiResponse("HEAD", "/assets/app.js")
+  assert.ok(script)
+  assert.equal(script.status, 200)
+  assert.equal(script.body.length, 0)
+  assert.equal(script.headers["x-content-type-options"], "nosniff")
+  assert.equal(staticUiResponse("GET", "/assets/../api-token"), undefined)
+  assert.equal(staticUiResponse("GET", "/assets/%2e%2e/api-token"), undefined)
+  assert.equal(staticUiResponse("POST", "/assets/app.js")?.status, 405)
 })

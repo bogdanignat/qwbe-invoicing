@@ -1,6 +1,6 @@
 import { Effect } from "effect"
 import { DomainConflict, ResourceNotFound, ValidationFailure, type InvoicingFailure } from "../contracts/failures.ts"
-import type { IdGenerator, RequestContext, TransactionalStore } from "../contracts/host.ts"
+import type { Clock, IdGenerator, RequestContext, TransactionalStore } from "../contracts/host.ts"
 import type { InvoicingPermissions } from "../contracts/permissions.ts"
 import { calculateLine } from "../domain/calculation.ts"
 import { addDays, type AddDraftLineInput, type ConfigureIssuerInput, type CreateCustomerInput, type CreateDraftInput, type Customer, type DraftInvoice, type IssuerProfile, type PartySnapshot } from "../domain/invoice.ts"
@@ -11,6 +11,8 @@ export interface DraftingOperations {
   readonly getIssuer: () => Effect.Effect<IssuerProfile, InvoicingFailure>
   readonly createCustomer: (i: CreateCustomerInput) => Effect.Effect<Customer, InvoicingFailure>
   readonly getCustomer: (id: string) => Effect.Effect<Customer, InvoicingFailure>
+  readonly listCustomers: () => Effect.Effect<ReadonlyArray<Customer>, InvoicingFailure>
+  readonly deleteCustomer: (id: string) => Effect.Effect<void, InvoicingFailure>
   readonly createDraft: (i: CreateDraftInput) => Effect.Effect<DraftInvoice, InvoicingFailure>
   readonly getDraft: (id: string) => Effect.Effect<DraftInvoice, InvoicingFailure>
   readonly addDraftLine: (i: AddDraftLineInput) => Effect.Effect<DraftInvoice, InvoicingFailure>
@@ -18,7 +20,7 @@ export interface DraftingOperations {
 const checked = <V>(op: () => V): Effect.Effect<V, ValidationFailure> => Effect.try({ try: op, catch: (e) => e instanceof ValidationFailure ? e : new ValidationFailure({ issues: ["invalid invoicing input"] }) })
 export const copyParty = (p: PartySnapshot): PartySnapshot => ({ legalName: p.legalName, taxIdentifier: p.taxIdentifier, address: { ...p.address } })
 export const missing = (r: string, id: string) => new ResourceNotFound({ resource: r, id })
-export const createDraftingOperations = (d: { readonly ids: IdGenerator; readonly store: TransactionalStore<InvoicingTransaction> }, perms: InvoicingPermissions, auth: (p: string) => Effect.Effect<RequestContext, InvoicingFailure>): DraftingOperations => {
+export const createDraftingOperations = (d: { readonly ids: IdGenerator; readonly clock: Clock; readonly store: TransactionalStore<InvoicingTransaction> }, perms: InvoicingPermissions, auth: (p: string) => Effect.Effect<RequestContext, InvoicingFailure>): DraftingOperations => {
   const configureIssuer = (input: ConfigureIssuerInput) => Effect.gen(function*() {
     const ctx = yield* auth(perms.manageSettings)
     const issuer: IssuerProfile = { ...copyParty(input), organizationId: ctx.organization.id, defaultCurrency: input.defaultCurrency, defaultPaymentTermDays: input.defaultPaymentTermDays, defaultSeries: input.defaultSeries, taxConfigurations: structuredClone(input.taxConfigurations) }
@@ -46,8 +48,31 @@ export const createDraftingOperations = (d: { readonly ids: IdGenerator; readonl
     const ctx = yield* auth(perms.read)
     return yield* d.store.transaction((tx) => Effect.gen(function*() {
       const c = yield* tx.findCustomer(ctx.organization.id, id)
-      if (c === undefined) return yield* Effect.fail(missing("customer", id))
+      if (c === undefined || c.deletedAt !== undefined) return yield* Effect.fail(missing("customer", id))
       return structuredClone(c)
+    }))
+  })
+  const listCustomers = () => Effect.gen(function*() {
+    const ctx = yield* auth(perms.read)
+    const customers = yield* d.store.transaction((tx) => tx.listCustomers(ctx.organization.id))
+    return structuredClone(customers)
+  })
+  const deleteCustomer = (id: string) => Effect.gen(function*() {
+    const ctx = yield* auth(perms.manageCustomers)
+    const deletedAt = yield* d.clock.now
+    return yield* d.store.transaction((tx) => Effect.gen(function*() {
+      const customer = yield* tx.findCustomer(ctx.organization.id, id)
+      if (customer === undefined) return yield* Effect.fail(missing("customer", id))
+      if (customer.deletedAt === undefined) {
+        const hasOpenDrafts = yield* tx.hasOpenDraftsForCustomer(ctx.organization.id, id)
+        if (hasOpenDrafts) {
+          return yield* Effect.fail(new DomainConflict({
+            code: "customer_has_open_drafts",
+            message: "Cannot delete a customer used by an open invoice draft",
+          }))
+        }
+        yield* tx.softDeleteCustomer(ctx.organization.id, id, deletedAt.toISOString())
+      }
     }))
   })
   const createDraft = (input: CreateDraftInput) => Effect.gen(function*() {
@@ -58,7 +83,7 @@ export const createDraftingOperations = (d: { readonly ids: IdGenerator; readonl
       const iss = yield* tx.findIssuer(ctx.organization.id)
       if (iss === undefined) return yield* Effect.fail(missing("issuer", ctx.organization.id))
       const cust = yield* tx.findCustomer(ctx.organization.id, input.customerId)
-      if (cust === undefined) return yield* Effect.fail(missing("customer", input.customerId))
+      if (cust === undefined || cust.deletedAt !== undefined) return yield* Effect.fail(missing("customer", input.customerId))
       const due = input.dueDate ?? addDays(input.issueDate, iss.defaultPaymentTermDays)
       yield* checked(() => { validateDate(due, "dueDate"); if (due < input.issueDate) throw new ValidationFailure({ issues: ["dueDate cannot be before issueDate"] }) })
       const draft: DraftInvoice = { id, organizationId: ctx.organization.id, customerId: cust.id, issueDate: input.issueDate, dueDate: due, currency: input.currency ?? iss.defaultCurrency, status: "draft", lines: [] }
@@ -90,5 +115,5 @@ export const createDraftingOperations = (d: { readonly ids: IdGenerator; readonl
       return structuredClone(upd)
     }))
   })
-  return { configureIssuer, getIssuer, createCustomer, getCustomer, createDraft, getDraft, addDraftLine }
+  return { configureIssuer, getIssuer, createCustomer, getCustomer, listCustomers, deleteCustomer, createDraft, getDraft, addDraftLine }
 }

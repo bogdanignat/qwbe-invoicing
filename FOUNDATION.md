@@ -4,7 +4,7 @@ Status: architecture baseline before implementation
 Source snapshot: QWBE mother repository at `987e11b`  
 Package manager: pnpm  
 Runtime: Node.js + TypeScript + **Effect 3.x as primary runtime** (`effect`, `@effect/platform`, `@effect/platform-node`) — all cube application logic, host capabilities (Clock, Store, IdGenerator, Auth), and HTTP handling are modelled as `Effect`
-UI: no React; API-first until a UI contract is selected — every cube use-case has a corresponding authenticated HTTP API endpoint
+UI: framework-free HTML/CSS/ES modules served by the standalone host; API-first — every cube use-case has a corresponding authenticated HTTP API endpoint, and the UI contains no fiscal business logic
 
 ## 1. Purpose
 

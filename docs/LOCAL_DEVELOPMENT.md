@@ -27,12 +27,14 @@ credential from the Compose secret; the secret is never stored in the image or
 printed by the application. `ORGANIZATION_ID` selects the trusted organization for
 this initial single-organization host adapter.
 
+The standalone UI is available at `https://invoice.test/app` (also served from `/`). It uses framework-free HTML/CSS/ES modules and asks for the local bearer token on every page load; the token stays only in JavaScript memory and is never written to browser storage. This is a development transport until the production host provides HttpOnly sessions and CSRF protection.
+
 Every cube use-case is an `Effect` and has a 1:1 authenticated HTTP endpoint. Authenticated routes under `/api`:
 
 - `GET /api/issuer` / `PUT /api/issuer` — read / configure issuer (Effect)
-- `POST /api/customers` / `GET /api/customers/:id` — create / read customer (Effect)
+- `POST /api/customers` / `GET /api/customers` / `GET /api/customers/:id` / `DELETE /api/customers/:id` — create / list / read / soft-delete customer (Effect); deletion hides the customer from new work while preserving issued invoice snapshots
 - `POST /api/drafts` / `GET /api/drafts/:id` / `POST /api/drafts/:id/lines` / `POST /api/drafts/:id/issue` — draft lifecycle (Effect, draft editabil până la `issue`)
-- `GET /api/invoices/:id` — immutable issued snapshot (Effect)
+- `GET /api/invoices` / `GET /api/invoices/:id` — latest 100 issued invoices / immutable issued snapshot (Effect)
 - `POST /api/invoices/:id/pdf` (idempotent render) / `GET /api/invoices/:id/pdf` (download with SHA-256 ETag)
 - `POST /api/invoices/:id/payments` (record payment) / `GET /api/invoices/:id/payments` (list payments with derived status `unpaid`/`partially_paid`/`paid`/`overpaid`/`overdue`, `paidAmount`/`remainingAmount`)
 - `POST /api/invoices/:id/corrections` (storno fiscal — creează document nou imuabil cu referință la factura originală, motiv obligatoriu, totals negative) / `GET /api/invoices/:id/corrections` / `GET /api/corrections/:id` — după emitere nu se mai editează factura, doar storno
