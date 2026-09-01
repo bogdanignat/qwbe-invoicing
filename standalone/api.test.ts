@@ -49,9 +49,30 @@ void test("requires host authentication and serves the complete invoice-core rou
     assert.equal(denied.status, 401)
 
     const authorization = `Bearer ${token}`
+    const mismatchedIssuer = await handleApiRequest({
+      method: "PUT",
+      url: "/api/issuer",
+      authorization,
+      body: { ...issuerBody, taxIdentifier: "12345674" },
+    }, runtime)
+    assert.equal(mismatchedIssuer.status, 400)
+    assert.deepEqual((mismatchedIssuer.body as { issues: ReadonlyArray<string> }).issues, [
+      "taxIdentifier without RO prefix requires RO_NON_VAT with rate 0",
+    ])
+    const issuerAfterRejectedSave = await handleApiRequest({ method: "GET", url: "/api/issuer", authorization, body: undefined }, runtime)
+    assert.equal(issuerAfterRejectedSave.status, 404)
     const issuer = await handleApiRequest({ method: "PUT", url: "/api/issuer", authorization, body: issuerBody }, runtime)
     assert.equal(issuer.status, 200)
     assert.equal((issuer.body as { taxIdentifier: string }).taxIdentifier, "RO12345674")
+    const rejectedUpdate = await handleApiRequest({
+      method: "PUT",
+      url: "/api/issuer",
+      authorization,
+      body: { ...issuerBody, taxIdentifier: "12345674" },
+    }, runtime)
+    assert.equal(rejectedUpdate.status, 400)
+    const issuerAfterRejectedUpdate = await handleApiRequest({ method: "GET", url: "/api/issuer", authorization, body: undefined }, runtime)
+    assert.equal((issuerAfterRejectedUpdate.body as { taxIdentifier: string }).taxIdentifier, "RO12345674")
     const customer = await handleApiRequest({
       method: "POST",
       url: "/api/customers",

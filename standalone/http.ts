@@ -2,6 +2,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 
 import { handleApiRequest } from "./api.ts"
 import { createRequestAuthenticator } from "./auth.ts"
+import { createBrowserSession } from "./browser-session.ts"
 import type { RuntimeConfig } from "./config.ts"
 import { databaseReady } from "./migrations.ts"
 import { staticUiResponse } from "./static-ui.ts"
@@ -61,11 +62,21 @@ const readBody = async (request: IncomingMessage): Promise<unknown> => {
   return JSON.parse(Buffer.concat(chunks).toString("utf8")) as unknown
 }
 
+const header = (value: string | ReadonlyArray<string> | undefined): string | undefined =>
+  typeof value === "string" ? value : undefined
+
+const loginToken = (body: unknown): string | undefined => {
+  if (typeof body !== "object" || body === null || Array.isArray(body)) return undefined
+  const token = (body as Readonly<Record<string, unknown>>).token
+  return typeof token === "string" && token.trim().length > 0 ? token : undefined
+}
+
 export const startServer = (
   config: RuntimeConfig,
   isReady: () => boolean = () => databaseReady(config.dataDirectory),
 ): Server => {
   const authenticate = createRequestAuthenticator(config)
+  const browserSession = createBrowserSession(config)
   const server = createServer((request, response) => {
     void (async () => {
       const path = request.url === undefined ? undefined : new URL(request.url, "http://localhost").pathname
@@ -75,16 +86,88 @@ export const startServer = (
           return
         }
         try {
+          const cookie = header(request.headers.cookie)
+          const origin = header(request.headers.origin)
+          const host = header(request.headers.host)
+          const csrfToken = header(request.headers["x-csrf-token"])
+          if (path === "/api/session") {
+            if (request.method === "POST") {
+              const token = loginToken(await readBody(request))
+              if (token === undefined) {
+                send(response, 400, { error: "invalid_credentials" })
+                return
+              }
+              const login = browserSession.login({ token, origin, host })
+              if (login.kind === "forbidden") {
+                send(response, 403, { error: "origin_not_allowed" })
+                return
+              }
+              if (login.kind === "unauthorized") {
+                send(response, 401, { error: "invalid_credentials" }, { "set-cookie": browserSession.clearCookie })
+                return
+              }
+              send(response, 200, { authenticated: true, csrfToken: login.csrfToken }, { "set-cookie": login.setCookie })
+              return
+            }
+            if (request.method === "GET") {
+              const session = browserSession.resume(cookie)
+              if (session.kind === "unauthorized") {
+                send(response, 401, { error: "AuthenticationRequired" }, { "set-cookie": browserSession.clearCookie })
+                return
+              }
+              send(response, 200, { authenticated: true, csrfToken: session.csrfToken })
+              return
+            }
+            if (request.method === "DELETE") {
+              const authorization = browserSession.authorize({ cookie, method: "DELETE", csrfToken, origin, host })
+              if (authorization.kind === "forbidden") {
+                send(response, 403, { error: "csrf_validation_failed" })
+                return
+              }
+              if (authorization.kind === "unauthorized") {
+                send(response, 401, { error: "AuthenticationRequired" }, { "set-cookie": browserSession.clearCookie })
+                return
+              }
+              browserSession.revoke(cookie)
+              send(response, 200, { authenticated: false }, { "set-cookie": browserSession.clearCookie })
+              return
+            }
+            send(response, 405, { error: "method_not_allowed" })
+            return
+          }
+          let authorization = header(request.headers.authorization)
+          if (authorization === undefined) {
+            const sessionAuthorization = browserSession.authorize({
+              cookie,
+              method: request.method ?? "GET",
+              csrfToken,
+              origin,
+              host,
+            })
+            if (sessionAuthorization.kind === "forbidden") {
+              send(response, 403, { error: "csrf_validation_failed" })
+              return
+            }
+            if (sessionAuthorization.kind === "authorized") authorization = sessionAuthorization.authorization
+          }
           const result = await handleApiRequest({
             method: request.method ?? "GET",
             url: path,
-            authorization: request.headers.authorization,
+            authorization,
             body: await readBody(request),
           }, { authenticate, dataDirectory: config.dataDirectory })
-          send(response, result.status, result.body, result.headers)
+          const responseHeaders = result.status === 401 && authorization === undefined && cookie !== undefined
+            ? { ...result.headers, "set-cookie": browserSession.clearCookie }
+            : result.headers
+          send(response, result.status, result.body, responseHeaders)
         } catch (error) {
-          const status = error instanceof Error && error.message === "request_body_too_large" ? 413 : 400
-          send(response, status, { error: status === 413 ? "request_body_too_large" : "invalid_json" })
+          if (error instanceof Error && error.message === "request_body_too_large") {
+            send(response, 413, { error: "request_body_too_large" })
+          } else if (error instanceof SyntaxError) {
+            send(response, 400, { error: "invalid_json" })
+          } else {
+            send(response, 500, { error: "internal_failure" })
+          }
         }
         return
       }

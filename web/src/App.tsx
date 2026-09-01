@@ -3,7 +3,8 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react"
 import type { ReactNode } from "react"
 import { Effect } from "effect"
 
-import { onUnauthorized, runUiEffect, setApiToken } from "./api.ts"
+import { loginApiSession, logoutApiSession, onUnauthorized, restoreApiSession, runUiEffect } from "./api.ts"
+import { Loading } from "./components/AsyncState.tsx"
 import { Page } from "./components/Page.tsx"
 import { Shell } from "./components/Shell.tsx"
 import { invoicingClient } from "./invoicing-client.ts"
@@ -24,28 +25,61 @@ const currentHash = (): string => window.location.hash.slice(1) || "/unlock"
 export const App = () => {
   const route = useSyncExternalStore(subscribeToHash, currentHash)
   const queryClient = useQueryClient()
-  const [unlocked, setUnlocked] = useState(false)
+  const [authState, setAuthState] = useState<"checking" | "locked" | "unlocked">("checking")
+  const [logoutPending, setLogoutPending] = useState(false)
   const [toast, setToast] = useState<string | undefined>(undefined)
   const toastTimer = useRef<number | undefined>(undefined)
   useEffect(() => onUnauthorized(() => {
     queryClient.clear()
-    setUnlocked(false)
+    setAuthState("locked")
     window.location.hash = "#/unlock"
   }), [queryClient])
+  useEffect(() => {
+    const controller = new AbortController()
+    void runUiEffect(restoreApiSession, controller.signal).then(() => {
+      if (controller.signal.aborted) return
+      queryClient.clear()
+      setAuthState("unlocked")
+      if (currentHash() === "/unlock") window.location.hash = "#/invoices"
+    }).catch(() => {
+      if (controller.signal.aborted) return
+      queryClient.clear()
+      setAuthState("locked")
+      window.location.hash = "#/unlock"
+    })
+    return () => { controller.abort() }
+  }, [queryClient])
   const notify = (message: string): void => {
     if (toastTimer.current !== undefined) window.clearTimeout(toastTimer.current)
     setToast(message)
     toastTimer.current = window.setTimeout(() => { setToast(undefined) }, 3200)
   }
   const unlock = async (token: string): Promise<void> => {
-    await runUiEffect(Effect.zipRight(setApiToken(token), invoicingClient.listCustomers()))
+    await runUiEffect(Effect.zipRight(loginApiSession(token), invoicingClient.listCustomers()))
     queryClient.clear()
-    setUnlocked(true)
+    setAuthState("unlocked")
     window.location.hash = "#/invoices"
+  }
+  const logout = async (): Promise<void> => {
+    if (logoutPending) return
+    setLogoutPending(true)
+    try {
+      await runUiEffect(logoutApiSession)
+    } catch (error) {
+      notify(error instanceof Error ? `${error.message} Sesiunea locală a fost închisă.` : "Sesiunea locală a fost închisă, dar serverul nu a confirmat ieșirea.")
+    } finally {
+      queryClient.clear()
+      setAuthState("locked")
+      setLogoutPending(false)
+      window.location.hash = "#/unlock"
+    }
   }
 
   let content: ReactNode
-  if (!unlocked) {
+  const unlocked = authState === "unlocked"
+  if (authState === "checking") {
+    content = <Loading label="Verific sesiunea…" />
+  } else if (!unlocked) {
     content = <UnlockView onUnlock={unlock} />
   } else if (route === "/invoices") {
     content = <InvoicesView />
@@ -63,5 +97,5 @@ export const App = () => {
     else content = <Page title="Pagina nu există" eyebrow="404"><p>Ruta cerută nu este disponibilă.</p><a className="button primary" href="#/invoices">Înapoi la facturi</a></Page>
   }
 
-  return <><Shell unlocked={unlocked} route={route}>{content}</Shell>{toast === undefined ? null : <div className="toast" role="status">{toast}</div>}</>
+  return <><Shell unlocked={unlocked} route={route} logoutPending={logoutPending} onLogout={logout}>{content}</Shell>{toast === undefined ? null : <div className="toast" role="status">{toast}</div>}</>
 }

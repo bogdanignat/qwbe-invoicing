@@ -13,7 +13,8 @@ import {
   writeFileSync,
 } from "node:fs"
 import { tmpdir } from "node:os"
-import { basename, dirname, join, relative } from "node:path"
+import { basename, dirname, isAbsolute, join, normalize, relative, resolve, sep } from "node:path"
+import { DatabaseSync } from "node:sqlite"
 
 export interface BackupReport {
   readonly dataDirectory: string
@@ -40,11 +41,49 @@ interface Manifest {
   readonly files: ReadonlyArray<{ readonly path: string; readonly sha256: string; readonly byteLength: number }>
 }
 
-const sqliteFiles = ["invoicing.sqlite", "documents.sqlite"] as const
+const sqliteFiles = ["invoicing.sqlite", "documents.sqlite", "sessions.sqlite"] as const
+const sqliteFileSet: ReadonlySet<string> = new Set(sqliteFiles)
 
 const sha256File = (path: string): string => {
   const bytes = readFileSync(path)
   return createHash("sha256").update(bytes).digest("hex")
+}
+
+const clearBrowserSessions = (path: string): void => {
+  if (!existsSync(path)) return
+  const database = new DatabaseSync(path)
+  try {
+    const table = database.prepare(
+      "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'browser_sessions'",
+    ).get()
+    if (table === undefined) return
+    database.exec("PRAGMA secure_delete = ON")
+    database.exec("DELETE FROM browser_sessions")
+    database.exec("VACUUM")
+  } finally {
+    database.close()
+  }
+}
+
+const safeDataPath = (root: string, path: string): string => {
+  const normalized = normalize(path)
+  const allowed = sqliteFileSet.has(normalized) || normalized.startsWith(`artifacts${sep}`)
+  if (path.length === 0 || path.includes("\0") || path.includes("\\") || isAbsolute(path)
+    || normalized !== path || normalized === ".." || normalized.startsWith(`..${sep}`) || !allowed) {
+    throw new Error(`backup path is not allowed: ${path}`)
+  }
+  const target = resolve(root, normalized)
+  if (!target.startsWith(`${resolve(root)}${sep}`)) throw new Error(`backup path escapes root: ${path}`)
+  return target
+}
+
+const snapshotSqlite = (source: string, target: string): void => {
+  const database = new DatabaseSync(source, { readOnly: true })
+  try {
+    database.exec(`VACUUM INTO '${target.replaceAll("'", "''")}'`)
+  } finally {
+    database.close()
+  }
 }
 
 const collectDataFiles = (dataDirectory: string): ReadonlyArray<string> => {
@@ -81,9 +120,11 @@ const stageBackup = (dataDirectory: string, staging: string): Manifest => {
   const files: Array<{ path: string; sha256: string; byteLength: number }> = []
   for (const full of absolute) {
     const rel = relative(dataDirectory, full)
-    const target = join(staging, rel)
+    const target = safeDataPath(staging, rel)
     ensureParentDirectory(target)
-    copyFileSync(full, target)
+    if (sqliteFileSet.has(rel)) snapshotSqlite(full, target)
+    else copyFileSync(full, target)
+    if (rel === "sessions.sqlite") clearBrowserSessions(target)
     const stat = statSync(target)
     files.push({ path: rel, sha256: sha256File(target), byteLength: stat.size })
   }
@@ -155,8 +196,11 @@ const verifyManifest = (staging: string): Manifest => {
   if (!existsSync(manifestPath)) throw new Error("backup manifest.json missing")
   const raw = readFileSync(manifestPath, "utf8")
   const parsed = JSON.parse(raw) as Manifest
+  const seen = new Set<string>()
   for (const entry of parsed.files) {
-    const filePath = join(staging, entry.path)
+    if (seen.has(entry.path)) throw new Error(`duplicate backup path: ${entry.path}`)
+    seen.add(entry.path)
+    const filePath = safeDataPath(staging, entry.path)
     if (!existsSync(filePath)) throw new Error(`backup file missing in archive: ${entry.path}`)
     const actual = sha256File(filePath)
     if (actual !== entry.sha256) throw new Error(`backup integrity mismatch for ${entry.path}`)
@@ -198,8 +242,8 @@ export const executeRestore = (dataDirectory: string, input: string): RestoreRep
     mkdirSync(dataDirectory, { recursive: true })
     let restored = 0
     for (const rel of files) {
-      const source = join(staging, rel)
-      const target = join(dataDirectory, rel)
+      const source = safeDataPath(staging, rel)
+      const target = safeDataPath(dataDirectory, rel)
       ensureParentDirectory(target)
       // Atomic copy via temp + rename when possible
       const tempTarget = `${target}.${String(Date.now())}.tmp`
@@ -233,6 +277,7 @@ export const executeRestore = (dataDirectory: string, input: string): RestoreRep
       void basename(target)
       restored += 1
     }
+    clearBrowserSessions(join(dataDirectory, "sessions.sqlite"))
     // Preserve manifest copy next to data for audit (optional)
     return {
       dataDirectory,
