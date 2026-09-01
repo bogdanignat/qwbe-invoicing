@@ -11,7 +11,7 @@ interface ShellProps {
 const links = [
   { href: "#/invoices", section: "invoices", label: "Facturi", icon: "▤" },
   { href: "#/customers", section: "customers", label: "Clienți", icon: "♙" },
-  { href: "#/settings", section: "settings", label: "Firmă", icon: "⚙" },
+  { href: "#/settings", section: "settings", label: "Setări firmă", icon: "⚙" },
 ] as const
 
 export const Shell = ({ unlocked, route, logoutPending, onLogout, children }: ShellProps) => {

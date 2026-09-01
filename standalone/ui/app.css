@@ -65,7 +65,7 @@ main { min-width: 0; padding: 3rem clamp(1.25rem, 4vw, 4.5rem) 5rem; }
 
 .button { display: inline-flex; justify-content: center; align-items: center; min-height: 2.55rem; padding: .65rem 1rem; border: 1px solid transparent; border-radius: .65rem; cursor: pointer; text-decoration: none; font-size: .83rem; font-weight: 750; transition: transform .12s ease, background .12s ease; }
 .button:hover:not(:disabled) { transform: translateY(-1px); }
-.button:focus-visible, .sidebar-foot button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible, a:focus-visible { outline: 3px solid #79c894; outline-offset: 2px; }
+.button:focus-visible, .dialog-close:focus-visible, .sidebar-foot button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, summary:focus-visible, a:focus-visible { outline: 3px solid #79c894; outline-offset: 2px; }
 .button:disabled { cursor: not-allowed; opacity: .45; }
 .button.primary { color: white; background: var(--forest); }
 .button.primary:hover:not(:disabled) { background: var(--forest-2); }
@@ -91,6 +91,7 @@ input:hover, select:hover, textarea:hover { border-color: #98aa9e; }
 .optional { color: var(--muted); font-weight: 500; }
 .form-actions { display: flex; justify-content: flex-end; gap: .65rem; margin-top: .25rem; }
 .form-card { width: min(780px, 100%); }
+.settings-help-row { display: flex; justify-content: flex-end; width: min(780px, 100%); margin: -1rem 0 .8rem; }
 .form-card hr { width: 100%; margin: .5rem 0; border: 0; border-top: 1px solid var(--line); }
 .inline-form { display: grid; grid-template-columns: minmax(170px, 2fr) repeat(3, minmax(100px, .7fr)) auto; gap: .75rem; align-items: end; margin-top: 1.4rem; padding-top: 1.25rem; border-top: 1px solid var(--line); }
 
@@ -121,6 +122,22 @@ td a { text-decoration-color: #9ab0a1; text-underline-offset: .2em; }
 .spinner { width: 2rem; height: 2rem; border: 3px solid #dbe4dd; border-top-color: var(--forest); border-radius: 50%; animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .toast { position: fixed; right: 1.25rem; bottom: 1.25rem; z-index: 15; max-width: 360px; padding: .85rem 1rem; border-radius: .65rem; color: white; background: var(--forest); box-shadow: 0 12px 30px rgb(0 0 0 / 18%); font-size: .82rem; }
+.settings-help-dialog { position: fixed; inset: 0; width: min(720px, calc(100vw - 2rem)); max-height: min(86vh, 820px); margin: auto; padding: 0; border: 1px solid var(--line); border-radius: 1rem; color: var(--ink); background: var(--paper); box-shadow: 0 24px 70px rgb(16 48 31 / 24%); }
+.settings-help-dialog::backdrop { background: rgb(13 46 30 / 55%); backdrop-filter: blur(2px); }
+.settings-help-dialog > header { position: sticky; z-index: 2; top: 0; display: flex; justify-content: space-between; gap: 1rem; align-items: start; padding: 1.4rem 1.5rem 1.1rem; border-bottom: 1px solid var(--line); background: var(--paper); }
+.settings-help-dialog h2 { margin: .2rem 0 0; font-family: Georgia, "Times New Roman", serif; font-size: 1.45rem; font-weight: 500; }
+.dialog-close { display: grid; place-items: center; width: 2.25rem; height: 2.25rem; padding: 0; border: 1px solid var(--line); border-radius: 50%; color: var(--muted); background: white; cursor: pointer; font-size: 1.45rem; line-height: 1; }
+.settings-help-body { display: grid; gap: 1.4rem; padding: 1.35rem 1.5rem; overflow-y: auto; }
+.settings-help-body section { display: grid; gap: .7rem; }
+.settings-help-body h3 { margin: 0; color: var(--forest); font-size: .83rem; letter-spacing: .05em; text-transform: uppercase; }
+.settings-help-body dl { display: grid; gap: .7rem; margin: 0; }
+.settings-help-body dl div { padding: .75rem .85rem; border-radius: .65rem; background: #f7f9f7; }
+.settings-help-body dt { margin-bottom: .25rem; color: var(--ink); font-size: .8rem; font-weight: 800; }
+.settings-help-body dd { color: var(--muted); font-size: .78rem; font-weight: 500; line-height: 1.55; }
+.settings-help-body .help-highlight { border: 1px solid #b9d8c5; background: var(--mint); }
+.settings-help-body .help-highlight dd { color: #31513e; }
+.settings-help-note { margin: 0; padding: .75rem .85rem; border-left: 3px solid #9abca7; color: var(--muted); background: #f7f9f7; font-size: .75rem; line-height: 1.55; }
+.dialog-actions { position: sticky; bottom: 0; display: flex; justify-content: flex-end; padding: 1rem 1.5rem 1.25rem; border-top: 1px solid var(--line); background: var(--paper); }
 
 .invoice-document { padding: 2rem; }
 .invoice-parties { display: grid; grid-template-columns: 1fr 1fr; gap: 3rem; margin-bottom: 2.25rem; }

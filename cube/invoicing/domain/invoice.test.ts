@@ -43,6 +43,32 @@ void test("validates Romanian CUI, country, and issuer currency", () => {
   }
   assert.throws(() => { validateIssuer({ ...issuer, taxIdentifier: "" }) }, hasIssue("taxIdentifier must be a valid Romanian CUI"))
   assert.throws(() => { validateIssuer({ ...issuer, defaultCurrency: "EUR" }) }, hasIssue("defaultCurrency must be RON"))
+  assert.throws(() => { validateIssuer({
+    ...issuer,
+    taxConfigurations: [{ code: "RO_STANDARD", category: "standard", rate: "21", effectiveFrom: "2026-01-01" }],
+  }) }, hasIssue("taxIdentifier without RO prefix requires RO_NON_VAT with rate 0"))
+  assert.throws(() => { validateIssuer({
+    ...issuer,
+    taxIdentifier: "RO45561046",
+  }) }, hasIssue("taxIdentifier with RO prefix requires a VAT-registered tax configuration"))
+  assert.throws(() => { validateIssuer({
+    ...issuer,
+    taxIdentifier: "RO45561046",
+    taxConfigurations: [{ code: "RO_NON_VAT", category: "standard", rate: "21", effectiveFrom: "2026-01-01" }],
+  }) }, hasIssue("tax configuration RO_NON_VAT rate must be 0"))
+  assert.throws(() => { validateIssuer({
+    ...issuer,
+    taxIdentifier: "RO45561046",
+    taxConfigurations: [
+      { code: "RO_STANDARD", category: "standard", rate: "21", effectiveFrom: "2026-01-01", effectiveTo: "2026-12-31" },
+      { code: "RO_NON_VAT", category: "standard", rate: "0", effectiveFrom: "2027-01-01" },
+    ],
+  }) }, hasIssue("taxIdentifier with RO prefix requires a VAT-registered tax configuration"))
+  assert.doesNotThrow(() => { validateIssuer({
+    ...issuer,
+    taxIdentifier: "RO45561046",
+    taxConfigurations: [{ code: "RO_REDUCED", category: "standard", rate: "11", effectiveFrom: "2026-01-01" }],
+  }) })
 })
 
 void test("resolves exactly one effective-dated issuer tax configuration", () => {

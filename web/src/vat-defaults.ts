@@ -36,6 +36,18 @@ export const inferRomanianVatDefaults = (
   return undefined
 }
 
+export const vatRegistrationMismatch = (
+  countryCode: string,
+  taxIdentifier: string,
+  registered: boolean,
+): string | undefined => {
+  const inferred = inferRomanianVatDefaults(countryCode, taxIdentifier)
+  if (inferred === undefined || inferred.registered === registered) return undefined
+  return inferred.registered
+    ? "CUI-ul cu prefix RO nu poate fi salvat ca neplătitor de TVA. Elimină prefixul RO sau bifează opțiunea."
+    : "CUI-ul fără prefix RO nu poate fi salvat ca plătitor de TVA. Adaugă prefixul RO sau debifează opțiunea."
+}
+
 export const resolveVatValues = (registered: boolean, entered: VatValues): VatValues => {
   if (!registered) return NON_VAT
   return isNonVat(entered) ? STANDARD_VAT : entered
@@ -53,6 +65,15 @@ const sameRate = (left: string, right: string): boolean => {
 }
 
 export const isNonVat = (vat: VatValues): boolean => vat.code === NON_VAT.code && sameRate(vat.rate, NON_VAT.rate)
+
+export const vatTimelineMismatch = (
+  countryCode: string,
+  taxIdentifier: string,
+  configurations: ReadonlyArray<EffectiveVat>,
+): string | undefined => {
+  const latest = [...configurations].sort((left, right) => right.effectiveFrom.localeCompare(left.effectiveFrom))[0]
+  return latest === undefined ? undefined : vatRegistrationMismatch(countryCode, taxIdentifier, !isNonVat(latest))
+}
 
 export const currentEffectiveVat = (
   configurations: ReadonlyArray<EffectiveVat>,

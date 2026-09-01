@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { currentEffectiveVat, hasStaleDraftTax, inferRomanianVatDefaults, nearestConfiguredVat, resolveVatValues, updateVatTimeline } from "./vat-defaults.ts"
+import { currentEffectiveVat, hasStaleDraftTax, inferRomanianVatDefaults, nearestConfiguredVat, resolveVatValues, updateVatTimeline, vatRegistrationMismatch, vatTimelineMismatch } from "./vat-defaults.ts"
 
 void test("infers non-VAT defaults for a Romanian issuer whose CUI has no RO prefix", () => {
   assert.deepEqual(inferRomanianVatDefaults("RO", "45561046"), {
@@ -24,7 +24,7 @@ void test("does not infer Romanian VAT defaults for incomplete or foreign identi
   assert.equal(inferRomanianVatDefaults("DE", "DE123456789"), undefined)
 })
 
-void test("explicit VAT registration is authoritative over the CUI suggestion", () => {
+void test("resolves VAT fields from the explicit checkbox before consistency validation", () => {
   assert.deepEqual(resolveVatValues(false, { code: "RO_STANDARD", rate: "21.00" }), {
     code: "RO_NON_VAT",
     rate: "0.00",
@@ -37,6 +37,23 @@ void test("explicit VAT registration is authoritative over the CUI suggestion", 
     code: "RO_STANDARD",
     rate: "19.00",
   })
+})
+
+void test("blocks VAT registration that contradicts the Romanian CUI prefix", () => {
+  assert.equal(vatRegistrationMismatch("RO", "45561046", true), "CUI-ul fără prefix RO nu poate fi salvat ca plătitor de TVA. Adaugă prefixul RO sau debifează opțiunea.")
+  assert.equal(vatRegistrationMismatch("RO", "RO45561046", false), "CUI-ul cu prefix RO nu poate fi salvat ca neplătitor de TVA. Elimină prefixul RO sau bifează opțiunea.")
+  assert.equal(vatRegistrationMismatch("RO", "45561046", false), undefined)
+  assert.equal(vatRegistrationMismatch("RO", "RO45561046", true), undefined)
+})
+
+void test("validates the CUI against the latest scheduled VAT regime", () => {
+  const scheduledNonVat = [
+    { code: "RO_STANDARD", category: "standard" as const, rate: "21.00", effectiveFrom: "2025-08-01", effectiveTo: "2026-12-31" },
+    { code: "RO_NON_VAT", category: "standard" as const, rate: "0.00", effectiveFrom: "2027-01-01" },
+  ]
+  assert.equal(vatTimelineMismatch("RO", "RO45561046", scheduledNonVat), "CUI-ul cu prefix RO nu poate fi salvat ca neplătitor de TVA. Elimină prefixul RO sau bifează opțiunea.")
+  assert.equal(vatTimelineMismatch("RO", "45561046", scheduledNonVat), undefined)
+  assert.equal(vatTimelineMismatch("RO", "RO45561046", [{ code: "RO_REDUCED", category: "standard", rate: "11.00", effectiveFrom: "2026-01-01" }]), undefined)
 })
 
 void test("detects draft tax snapshots that no longer match the effective issuer configuration", () => {

@@ -65,6 +65,9 @@ const validateTaxConfigurations = (configurations: ReadonlyArray<TaxConfiguratio
     if (!/^(?:\d|[1-9]\d|100)(?:\.\d{1,2})?$/.test(configuration.rate)) {
       issues.push(`tax configuration ${configuration.code} rate must be between 0 and 100 with at most two decimals`)
     }
+    if (configuration.code === "RO_NON_VAT" && Number(configuration.rate) !== 0) {
+      issues.push("tax configuration RO_NON_VAT rate must be 0")
+    }
     issues.push(...dateIssues(configuration))
   }
   const ordered = [...configurations].sort((left, right) => left.effectiveFrom.localeCompare(right.effectiveFrom))
@@ -88,6 +91,18 @@ export const validateIssuer = (issuer: IssuerProfile): void => {
   if (!/^[A-Z0-9][A-Z0-9_-]{0,19}$/.test(issuer.defaultSeries)) issues.push("defaultSeries is invalid")
   try { validateTaxConfigurations(issuer.taxConfigurations) } catch (error) {
     if (error instanceof ValidationFailure) issues.push(...error.issues)
+  }
+  const latest = [...issuer.taxConfigurations]
+    .sort((left, right) => right.effectiveFrom.localeCompare(left.effectiveFrom))[0]
+  if (latest !== undefined) {
+    const nonVat = latest.code === "RO_NON_VAT" && Number(latest.rate) === 0
+    const ro = issuer.taxIdentifier.startsWith("RO")
+    if (ro && nonVat) {
+      issues.push("taxIdentifier with RO prefix requires a VAT-registered tax configuration")
+    }
+    if (!ro && !nonVat) {
+      issues.push("taxIdentifier without RO prefix requires RO_NON_VAT with rate 0")
+    }
   }
   if (issues.length > 0) throw new ValidationFailure({ issues })
 }
