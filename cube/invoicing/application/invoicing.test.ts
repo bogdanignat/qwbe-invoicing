@@ -23,6 +23,7 @@ import {
 
 interface MemoryState {
   issuers: Map<string, Parameters<InvoicingTransaction["saveIssuer"]>[0]>
+  documentSeries: Map<string, Parameters<InvoicingTransaction["addDocumentSeries"]>[0]>
   customers: Map<string, Parameters<InvoicingTransaction["saveCustomer"]>[0]>
   drafts: Map<string, DraftInvoice>
   issued: Map<string, IssuedInvoice>
@@ -39,6 +40,19 @@ const memoryStore = (state: MemoryState): TransactionalStore<InvoicingTransactio
     const transaction: InvoicingTransaction = {
       saveIssuer: (issuer) => Effect.sync(() => { working.issuers.set(issuer.organizationId, issuer) }),
       findIssuer: (organizationId) => Effect.succeed(working.issuers.get(organizationId)),
+      addDocumentSeries: (documentSeries) => Effect.suspend(() => {
+        const key = `${documentSeries.organizationId}:${documentSeries.documentType}:${documentSeries.series}`
+        return working.documentSeries.has(key)
+          ? Effect.fail(new DomainConflict({ code: "document_series_exists", message: "Document series already exists" }))
+          : Effect.sync(() => { working.documentSeries.set(key, documentSeries) })
+      }),
+      findDocumentSeries: (organizationId, documentType, series) => Effect.succeed(
+        working.documentSeries.get(`${organizationId}:${documentType}:${series}`),
+      ),
+      listDocumentSeries: (organizationId) => Effect.succeed(
+        [...working.documentSeries.values()].filter((item) => item.organizationId === organizationId)
+          .sort((left, right) => left.documentType.localeCompare(right.documentType) || left.series.localeCompare(right.series)),
+      ),
       saveCustomer: (customer) => Effect.sync(() => { working.customers.set(customer.id, customer) }),
       findCustomer: (organizationId, id) => Effect.succeed(
         working.customers.get(id)?.organizationId === organizationId ? working.customers.get(id) : undefined,
@@ -123,6 +137,7 @@ const memoryStore = (state: MemoryState): TransactionalStore<InvoicingTransactio
     }
     return Effect.tap(use(transaction), () => Effect.sync(() => {
       state.issuers = working.issuers
+      state.documentSeries = working.documentSeries
       state.customers = working.customers
       state.drafts = working.drafts
       state.issued = working.issued
@@ -167,6 +182,7 @@ const sequentialIds = (): IdGenerator => {
 
 const emptyState = (): MemoryState => ({
   issuers: new Map(),
+  documentSeries: new Map(),
   customers: new Map(),
   drafts: new Map(),
   issued: new Map(),
@@ -191,30 +207,51 @@ void test("issues deterministic immutable invoice snapshots through the public s
     address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" },
     defaultCurrency: "RON",
     defaultPaymentTermDays: 15,
-    defaultSeries: "QWBE",
     taxConfigurations,
   }))
+  await Effect.runPromise(service.addDocumentSeries({ documentType: "invoice", series: "QWBE" }))
+  await Effect.runPromise(service.addDocumentSeries({ documentType: "invoice", series: "ALT" }))
+  await Effect.runPromise(service.addDocumentSeries({ documentType: "proforma", series: "PRO" }))
+  assert.deepEqual(await Effect.runPromise(service.listDocumentSeries()), [
+    { organizationId: "org-1", documentType: "invoice", series: "ALT" },
+    { organizationId: "org-1", documentType: "invoice", series: "QWBE" },
+    { organizationId: "org-1", documentType: "proforma", series: "PRO" },
+  ])
+  const duplicateSeries = await Effect.runPromise(Effect.flip(
+    service.addDocumentSeries({ documentType: "invoice", series: "QWBE" }),
+  ))
+  assert.equal(duplicateSeries instanceof DomainConflict && duplicateSeries.code === "document_series_exists", true)
   const customer = await Effect.runPromise(service.createCustomer({
     legalName: "Client SRL",
     taxIdentifier: "RO87654329",
     address: { countryCode: "RO", city: "Iași", street: "Strada Mică 2" },
   }))
+  const unknownSeries = await Effect.runPromise(Effect.flip(service.createDraft({
+    customerId: customer.id,
+    issueDate: "2026-09-01",
+    series: "UNKNOWN",
+  })))
+  assert.equal(unknownSeries instanceof ResourceNotFound && unknownSeries.resource === "document_series", true)
   const invalidDueDate = await Effect.runPromise(Effect.flip(service.createDraft({
     customerId: customer.id,
     issueDate: "2026-09-01",
+    series: "QWBE",
     dueDate: "2026-08-31",
   })))
   assert.equal(invalidDueDate instanceof ValidationFailure, true)
   const invalidCurrency = await Effect.runPromise(Effect.flip(service.createDraft({
     customerId: customer.id,
     issueDate: "2026-09-01",
+    series: "QWBE",
     currency: "EUR",
   })))
   assert.equal(invalidCurrency instanceof ValidationFailure && invalidCurrency.issues.includes("currency must be RON"), true)
   const draft = await Effect.runPromise(service.createDraft({
     customerId: customer.id,
     issueDate: "2026-09-01",
+    series: "QWBE",
   }))
+  assert.equal(draft.series, "QWBE")
   await Effect.runPromise(service.addDraftLine({
     draftId: draft.id,
     description: "Servicii software",
@@ -239,7 +276,6 @@ void test("issues deterministic immutable invoice snapshots through the public s
     address: { countryCode: "RO", city: "Botoșani", street: "Altă stradă 3" },
     defaultCurrency: "RON",
     defaultPaymentTermDays: 30,
-    defaultSeries: "NEW",
     taxConfigurations,
   }))
   const preserved = await Effect.runPromise(service.getIssuedInvoice(issued.id))
@@ -253,6 +289,7 @@ void test("issues deterministic immutable invoice snapshots through the public s
   const newDraft = await Effect.runPromise(Effect.flip(service.createDraft({
     customerId: customer.id,
     issueDate: "2026-09-02",
+    series: "QWBE",
   })))
   assert.equal(newDraft instanceof ResourceNotFound, true)
   assert.equal((await Effect.runPromise(service.getIssuedInvoice(issued.id))).customer.legalName, "Client SRL")
@@ -281,15 +318,15 @@ void test("keeps numbering and issued data unchanged when issuance rolls back", 
     address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" },
     defaultCurrency: "RON",
     defaultPaymentTermDays: 15,
-    defaultSeries: "QWBE",
     taxConfigurations,
   }))
+  await Effect.runPromise(service.addDocumentSeries({ documentType: "invoice", series: "QWBE" }))
   const customer = await Effect.runPromise(service.createCustomer({
     legalName: "Client SRL",
     taxIdentifier: "RO87654329",
     address: { countryCode: "RO", city: "Iași", street: "Strada Mică 2" },
   }))
-  const draft = await Effect.runPromise(service.createDraft({ customerId: customer.id, issueDate: "2026-09-01" }))
+  const draft = await Effect.runPromise(service.createDraft({ customerId: customer.id, issueDate: "2026-09-01", series: "QWBE" }))
   const deletion = await Effect.runPromise(Effect.flip(service.deleteCustomer(customer.id)))
   assert.equal(deletion instanceof DomainConflict && deletion.code === "customer_has_open_drafts", true)
   await Effect.runPromise(service.addDraftLine({
@@ -325,7 +362,6 @@ void test("refuses missing permissions and cross-organization reads", async () =
     address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" },
     defaultCurrency: "RON",
     defaultPaymentTermDays: 15,
-    defaultSeries: "QWBE",
     taxConfigurations,
   })))
   assert.equal(failure instanceof PermissionDenied, true)

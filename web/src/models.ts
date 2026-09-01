@@ -29,9 +29,19 @@ export interface Issuer extends Party {
   readonly organizationId: string
   readonly defaultCurrency: string
   readonly defaultPaymentTermDays: number
-  readonly defaultSeries: string
   readonly taxConfigurations: ReadonlyArray<TaxConfiguration>
 }
+
+export type DocumentType = "invoice" | "proforma"
+
+export interface DocumentSeries {
+  readonly organizationId: string
+  readonly documentType: DocumentType
+  readonly series: string
+}
+
+export const invoiceDocumentSeries = (series: ReadonlyArray<DocumentSeries>): ReadonlyArray<DocumentSeries> =>
+  series.filter((item) => item.documentType === "invoice")
 
 export interface DraftLine {
   readonly id: string
@@ -48,6 +58,7 @@ export interface DraftLine {
 export interface DraftInvoice {
   readonly id: string
   readonly customerId: string
+  readonly series: string
   readonly issueDate: string
   readonly dueDate: string
   readonly currency: string
@@ -158,13 +169,23 @@ const decodeTaxConfiguration: Decoder<TaxConfiguration> = (input) => {
   }
 }
 
+export const decodeDocumentSeries: Decoder<DocumentSeries> = (input) => {
+  const value = object(input)
+  const documentType = text(value.documentType, "documentType")
+  if (documentType !== "invoice" && documentType !== "proforma") throw new Error("invalid documentType")
+  return {
+    organizationId: text(value.organizationId, "organizationId"),
+    documentType,
+    series: text(value.series, "series"),
+  }
+}
+
 export const decodeIssuer: Decoder<Issuer> = (input) => {
   const value = object(input)
   return {
     ...decodeParty(value), organizationId: text(value.organizationId, "organizationId"),
     defaultCurrency: text(value.defaultCurrency, "defaultCurrency"),
     defaultPaymentTermDays: integer(value.defaultPaymentTermDays, "defaultPaymentTermDays"),
-    defaultSeries: text(value.defaultSeries, "defaultSeries"),
     taxConfigurations: array(value.taxConfigurations, decodeTaxConfiguration, "taxConfigurations"),
   }
 }
@@ -186,6 +207,7 @@ export const decodeDraft: Decoder<DraftInvoice> = (input) => {
   if (status !== "draft" && status !== "issued") throw new Error("invalid status")
   return {
     id: text(value.id, "id"), customerId: text(value.customerId, "customerId"),
+    series: text(value.series, "series"),
     issueDate: text(value.issueDate, "issueDate"), dueDate: text(value.dueDate, "dueDate"),
     currency: text(value.currency, "currency"), status,
     lines: array(value.lines, decodeDraftLine, "lines"),
@@ -237,6 +259,7 @@ export const decodeCorrection: Decoder<CorrectionDocument> = (input) => {
 }
 
 export const decodeCustomers: Decoder<ReadonlyArray<Customer>> = (input) => array(input, decodeCustomer, "customers")
+export const decodeDocumentSeriesList: Decoder<ReadonlyArray<DocumentSeries>> = (input) => array(input, decodeDocumentSeries, "documentSeries")
 export const decodeInvoices: Decoder<ReadonlyArray<IssuedInvoice>> = (input) => array(input, decodeInvoice, "invoices")
 export const decodeCorrections: Decoder<ReadonlyArray<CorrectionDocument>> = (input) => array(input, decodeCorrection, "corrections")
 export const decodeDeleted: Decoder<{ readonly deleted: true }> = (input) => {

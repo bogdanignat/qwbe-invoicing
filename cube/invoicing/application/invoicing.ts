@@ -59,12 +59,12 @@ export const createInvoicingService = (dependencies: InvoicingDependencies): Inv
       const customer = yield* transaction.findCustomer(context.organization.id, draft.customerId)
       if (customer === undefined) return yield* Effect.fail(missing("customer", draft.customerId))
       const fiscalYear = Number(draft.issueDate.slice(0, 4))
-      const number = yield* transaction.allocateInvoiceNumber(context.organization.id, fiscalYear, issuer.defaultSeries)
+      const number = yield* transaction.allocateInvoiceNumber(context.organization.id, fiscalYear, draft.series)
       const invoice: IssuedInvoice = {
         id: invoiceId,
         draftId: draft.id,
         organizationId: context.organization.id,
-        series: issuer.defaultSeries,
+        series: draft.series,
         number,
         issueDate: draft.issueDate,
         dueDate: draft.dueDate,

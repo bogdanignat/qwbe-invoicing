@@ -53,7 +53,7 @@ The organization/legal entity profile supports:
 - IBAN, bank, and payment instructions;
 - VAT registration and applicable tax regime;
 - contact details and logo;
-- default currency, payment term, invoice series, and invoice notes.
+- default currency, payment term, and invoice notes.
 
 Contact details, bank data, and logo are useful product fields but are not universal
 fiscal fields required on every invoice.
@@ -74,11 +74,12 @@ Personal data is limited to what the transaction and legal obligation require.
 
 ### 3.3 Numbering sequences
 
-- one or more configurable invoice series;
+- one or more configurable invoice or proforma series;
 - sequential and unique numbers within an explicit scope;
 - recommended scope: issuer, fiscal year, document type, and series;
 - atomic number allocation when an invoice is issued;
 - drafts do not consume fiscal numbers;
+- every invoice draft selects one configured invoice series; proforma series are registry-only until proforma issuance exists;
 - an allocated number is never silently reused;
 - gaps, abandoned allocations, and voided numbers remain explainable in the audit
   trail.

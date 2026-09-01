@@ -1,5 +1,5 @@
 import { ValidationFailure } from "../contracts/failures.ts"
-import type { IssuerProfile, PartySnapshot, TaxConfiguration } from "./invoice.ts"
+import type { DocumentSeries, IssuerProfile, PartySnapshot, TaxConfiguration } from "./invoice.ts"
 
 const required = (value: string, field: string, issues: Array<string>) => {
   if (value.trim().length === 0) issues.push(`${field} is required`)
@@ -88,7 +88,6 @@ export const validateIssuer = (issuer: IssuerProfile): void => {
   if (!Number.isInteger(issuer.defaultPaymentTermDays) || issuer.defaultPaymentTermDays < 0) {
     issues.push("defaultPaymentTermDays must be a non-negative integer")
   }
-  if (!/^[A-Z0-9][A-Z0-9_-]{0,19}$/.test(issuer.defaultSeries)) issues.push("defaultSeries is invalid")
   try { validateTaxConfigurations(issuer.taxConfigurations) } catch (error) {
     if (error instanceof ValidationFailure) issues.push(...error.issues)
   }
@@ -104,6 +103,14 @@ export const validateIssuer = (issuer: IssuerProfile): void => {
       issues.push("taxIdentifier without RO prefix requires RO_NON_VAT with rate 0")
     }
   }
+  if (issues.length > 0) throw new ValidationFailure({ issues })
+}
+
+export const validateDocumentSeries = (documentSeries: DocumentSeries): void => {
+  const issues: Array<string> = []
+  const documentType: unknown = documentSeries.documentType
+  if (documentType !== "invoice" && documentType !== "proforma") issues.push("documentType must be invoice or proforma")
+  if (!/^[A-Z0-9][A-Z0-9_-]{0,19}$/.test(documentSeries.series)) issues.push("series is invalid")
   if (issues.length > 0) throw new ValidationFailure({ issues })
 }
 

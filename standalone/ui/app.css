@@ -92,6 +92,8 @@ input:hover, select:hover, textarea:hover { border-color: #98aa9e; }
 .form-actions { display: flex; justify-content: flex-end; gap: .65rem; margin-top: .25rem; }
 .form-card { width: min(780px, 100%); }
 .settings-help-row { display: flex; justify-content: flex-end; width: min(780px, 100%); margin: -1rem 0 .8rem; }
+.document-series-form { margin-top: 1.25rem; }
+.document-series-inputs { margin-top: .75rem; }
 .form-card hr { width: 100%; margin: .5rem 0; border: 0; border-top: 1px solid var(--line); }
 .inline-form { display: grid; grid-template-columns: minmax(170px, 2fr) repeat(3, minmax(100px, .7fr)) auto; gap: .75rem; align-items: end; margin-top: 1.4rem; padding-top: 1.25rem; border-top: 1px solid var(--line); }
 

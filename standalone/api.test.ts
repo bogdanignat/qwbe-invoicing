@@ -32,7 +32,6 @@ void test("requires host authentication and serves the complete invoice-core rou
       address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" },
       defaultCurrency: "RON",
       defaultPaymentTermDays: 15,
-      defaultSeries: "QWBE",
       taxConfigurations: [{
         code: "RO_STANDARD",
         category: "standard",
@@ -64,6 +63,26 @@ void test("requires host authentication and serves the complete invoice-core rou
     const issuer = await handleApiRequest({ method: "PUT", url: "/api/issuer", authorization, body: issuerBody }, runtime)
     assert.equal(issuer.status, 200)
     assert.equal((issuer.body as { taxIdentifier: string }).taxIdentifier, "RO12345674")
+    const invoiceSeries = await handleApiRequest({
+      method: "POST", url: "/api/document-series", authorization,
+      body: { documentType: "invoice", series: "QWBE" },
+    }, runtime)
+    assert.equal(invoiceSeries.status, 200)
+    const proformaSeries = await handleApiRequest({
+      method: "POST", url: "/api/document-series", authorization,
+      body: { documentType: "proforma", series: "PRO" },
+    }, runtime)
+    assert.equal(proformaSeries.status, 200)
+    const series = await handleApiRequest({ method: "GET", url: "/api/document-series", authorization, body: undefined }, runtime)
+    assert.deepEqual(series.body, [
+      { organizationId: "org-1", documentType: "invoice", series: "QWBE" },
+      { organizationId: "org-1", documentType: "proforma", series: "PRO" },
+    ])
+    const duplicateSeries = await handleApiRequest({
+      method: "POST", url: "/api/document-series", authorization,
+      body: { documentType: "invoice", series: "QWBE" },
+    }, runtime)
+    assert.deepEqual(duplicateSeries, { status: 409, body: { error: "DomainConflict", code: "document_series_exists" } })
     const rejectedUpdate = await handleApiRequest({
       method: "PUT",
       url: "/api/issuer",
@@ -92,7 +111,7 @@ void test("requires host authentication and serves the complete invoice-core rou
       method: "POST",
       url: "/api/drafts",
       authorization,
-      body: { customerId, issueDate: "2026-09-01" },
+      body: { customerId, issueDate: "2026-09-01", series: "QWBE" },
     }, runtime)
     assert.equal(draft.status, 200)
     const draftId = (draft.body as { id: string }).id

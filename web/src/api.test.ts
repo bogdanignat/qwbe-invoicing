@@ -149,3 +149,69 @@ void test("surfaces the first typed validation issue instead of the backend tag"
     globalThis.fetch = originalFetch
   }
 })
+
+void test("localizes duplicate document series conflicts", async () => {
+  const originalFetch = globalThis.fetch
+  try {
+    globalThis.fetch = (input) => {
+      const sessionRequest = requestPath(input) === "/api/session"
+      return Promise.resolve(new Response(JSON.stringify(sessionRequest
+        ? { authenticated: true, csrfToken: "csrf-token" }
+        : { error: "DomainConflict", code: "document_series_exists" }), {
+        status: sessionRequest ? 200 : 409,
+        headers: { "content-type": "application/json" },
+      }))
+    }
+    await runUiEffect(loginApiSession("secret-token"))
+    await assert.rejects(
+      runUiEffect(invoicingClient.createDocumentSeries({ documentType: "invoice", series: "QWBE" })),
+      (error) => error instanceof ApiFailure && error.message === "Seria există deja pentru acest tip de document.",
+    )
+  } finally {
+    await runUiEffect(clearApiSession)
+    globalThis.fetch = originalFetch
+  }
+})
+
+void test("lists and creates document series with the final API contract", async () => {
+  const originalFetch = globalThis.fetch
+  const calls: Array<{ readonly path: string; readonly init: RequestInit }> = []
+  try {
+    globalThis.fetch = (input, init) => {
+      const path = requestPath(input)
+      calls.push({ path, init: init ?? {} })
+      const body = path === "/api/session"
+        ? { authenticated: true, csrfToken: "csrf-token" }
+        : path === "/api/drafts"
+          ? { id: "draft-1", customerId: "customer-1", series: "QWBE", issueDate: "2026-09-01", dueDate: "2026-09-16", currency: "RON", status: "draft", lines: [] }
+        : init?.method === "POST"
+          ? { organizationId: "org-1", documentType: "invoice", series: "QWBE" }
+          : [{ organizationId: "org-1", documentType: "invoice", series: "QWBE" }]
+      return Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } }))
+    }
+    await runUiEffect(loginApiSession("secret-token"))
+    assert.equal((await runUiEffect(invoicingClient.listDocumentSeries()))[0]?.series, "QWBE")
+    await runUiEffect(invoicingClient.createDocumentSeries({ documentType: "invoice", series: "QWBE" }))
+    const listCall = calls[1]
+    const createCall = calls[2]
+    assert.ok(listCall)
+    assert.ok(createCall)
+    assert.equal(listCall.path, "/api/document-series")
+    assert.equal(listCall.init.method, "GET")
+    assert.equal(createCall.path, "/api/document-series")
+    assert.equal(createCall.init.method, "POST")
+    const requestBody = createCall.init.body
+    if (typeof requestBody !== "string") throw new Error("Expected document series request body to be JSON")
+    assert.deepEqual(JSON.parse(requestBody), { documentType: "invoice", series: "QWBE" })
+    await runUiEffect(invoicingClient.createDraft({ customerId: "customer-1", series: "QWBE", issueDate: "2026-09-01" }))
+    const draftCall = calls[3]
+    assert.ok(draftCall)
+    assert.equal(draftCall.path, "/api/drafts")
+    const draftRequestBody = draftCall.init.body
+    if (typeof draftRequestBody !== "string") throw new Error("Expected draft request body to be JSON")
+    assert.deepEqual(JSON.parse(draftRequestBody), { customerId: "customer-1", series: "QWBE", issueDate: "2026-09-01" })
+  } finally {
+    await runUiEffect(clearApiSession)
+    globalThis.fetch = originalFetch
+  }
+})
