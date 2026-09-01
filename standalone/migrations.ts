@@ -6,9 +6,23 @@ import { invoicingMigrations, type InvoicingMigration } from "../cube/invoicing/
 import { documentsMigrations } from "../cube/invoicing/documents/index.ts"
 
 const foundationMigration: InvoicingMigration = { name: "000-foundation", statements: [] }
+const browserSessionsMigration: InvoicingMigration = {
+  name: "000-browser-sessions",
+  statements: [
+    `CREATE TABLE browser_sessions (
+      session_hash TEXT PRIMARY KEY,
+      credential_hash TEXT NOT NULL,
+      csrf_token TEXT NOT NULL,
+      created_at INTEGER NOT NULL,
+      expires_at INTEGER NOT NULL
+    ) STRICT`,
+    "CREATE INDEX browser_sessions_expiry ON browser_sessions (expires_at)",
+  ],
+}
 const invoicingPlan = { label: "", file: "invoicing.sqlite", migrations: [foundationMigration, ...invoicingMigrations] }
 const documentsPlan = { label: "documents/", file: "documents.sqlite", migrations: [foundationMigration, ...documentsMigrations] }
-const plans = [invoicingPlan, documentsPlan] as const
+const sessionsPlan = { label: "sessions/", file: "sessions.sqlite", migrations: [browserSessionsMigration] }
+const plans = [invoicingPlan, documentsPlan, sessionsPlan] as const
 
 export interface MigrationReport {
   readonly scanned: number
@@ -20,6 +34,7 @@ export interface MigrationReport {
 
 export const databasePath = (dataDirectory: string) => join(dataDirectory, invoicingPlan.file)
 export const documentsDatabasePath = (dataDirectory: string) => join(dataDirectory, documentsPlan.file)
+export const sessionsDatabasePath = (dataDirectory: string) => join(dataDirectory, sessionsPlan.file)
 
 const pathFor = (dataDirectory: string, plan: typeof plans[number]) => join(dataDirectory, plan.file)
 

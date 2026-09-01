@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { chmodSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs"
+import { chmodSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { spawnSync } from "node:child_process"
@@ -23,8 +23,9 @@ void test("migration apply is idempotent", () => {
       "006-customer-soft-delete",
       "documents/000-foundation",
       "documents/001-artifacts",
+      "sessions/000-browser-sessions",
     ])
-    assert.equal(applyMigrations(directory).changed, 9)
+    assert.equal(applyMigrations(directory).changed, 10)
     assert.equal(applyMigrations(directory).changed, 0)
     assert.equal(databaseReady(directory), true)
   } finally {
@@ -96,6 +97,11 @@ void test("readiness is observable over the HTTP contract", () => {
   assert.equal(route("GET", "/health/ready", false).status, 503)
   assert.equal(route("GET", "/health/ready", true).status, 200)
   assert.equal(route("POST", "/", true).status, 405)
+})
+
+void test("production Compose confirms the guarded migration apply", () => {
+  const compose = readFileSync(join(process.cwd(), "compose.prod.yaml"), "utf8")
+  assert.match(compose, /"migrate", "--apply", "--confirm-production", "--json"/)
 })
 
 void test("serves the UI only from an exact allowlist with restrictive headers", () => {

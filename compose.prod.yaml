@@ -8,7 +8,7 @@ name: qwbe-invoicing
 services:
   migrate:
     image: ghcr.io/bogdanignat/qwbe-invoicing:${IMAGE_TAG:-0.1.0}
-    command: ["node", "bin/qwbe-invoicing.ts", "migrate", "--apply", "--json"]
+    command: ["node", "bin/qwbe-invoicing.ts", "migrate", "--apply", "--confirm-production", "--json"]
     environment:
       NODE_ENV: production
       DATA_DIR: /data

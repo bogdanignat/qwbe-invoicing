@@ -16,7 +16,7 @@ export const UnlockView = ({ onUnlock }: { readonly onUnlock: (token: string) =>
   return <Page title="Bine ai revenit" eyebrow="QWBE Invoicing">
     <section className="unlock-card">
       <div className="unlock-icon" aria-hidden="true">⌁</div>
-      <p>Introdu tokenul API local pentru această sesiune. Nu îl salvăm în browser, URL sau storage.</p>
+      <p>Introdu tokenul API local. Browserul va păstra o sesiune securizată timp de 30 de zile; tokenul nu este salvat în JavaScript, URL sau storage.</p>
       {unlock.error === null ? null : <ErrorAlert error={unlock.error} />}
       <form onSubmit={submit}>
         <label htmlFor="api-token">Token API</label>

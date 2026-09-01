@@ -451,7 +451,7 @@ The following decisions must be explicit before their relevant implementation:
    domestic VAT and non-VAT-registered issuers?
 3. Is email delivery required for the first usable release, or is PDF download
    sufficient?
-4. Resolved: React 19 + TypeScript + Tailwind CSS 4, Vite-built, same-origin and API-first. Effect is the browser runtime for HTTP effects and typed failures; TanStack Query bridges Effect programs into React server state. The development bearer token remains in an Effect `Ref` held only in memory until the production host provides HttpOnly sessions and CSRF protection.
+4. Resolved: React 19 + TypeScript + Tailwind CSS 4, Vite-built, same-origin and API-first. Effect is the browser runtime for HTTP effects and typed failures; TanStack Query bridges Effect programs into React server state. The standalone host exchanges the local API token for a revocable, opaque 30-day session persisted server-side and referenced by an HttpOnly `SameSite=Strict` cookie. The browser keeps only the per-session CSRF token in Effect memory, while direct API clients may continue to use bearer authentication.
 5. What retention policy and backup targets are promised to operators?
 6. Which public, versioned QWBE contracts replace the current private `0.0.0`
    compatibility snapshot?
