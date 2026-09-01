@@ -39,15 +39,15 @@ const issueFixture = async (directory: string): Promise<string> => {
     address: { countryCode: "RO", city: "Botoșani", street: "Strada Independenței 1" },
     defaultCurrency: "RON",
     defaultPaymentTermDays: 15,
-    defaultSeries: "QWBE",
     taxConfigurations: [{ code: "RO_STANDARD", category: "standard", rate: "21", effectiveFrom: "2025-08-01" }],
   }))
+  await Effect.runPromise(service.addDocumentSeries({ documentType: "invoice", series: "QWBE" }))
   const customer = await Effect.runPromise(service.createCustomer({
     legalName: "Țesături România SRL",
     taxIdentifier: "RO87654329",
     address: { countryCode: "RO", city: "Iași", street: "Șoseaua Națională 2" },
   }))
-  const draft = await Effect.runPromise(service.createDraft({ customerId: customer.id, issueDate: "2026-09-01" }))
+  const draft = await Effect.runPromise(service.createDraft({ customerId: customer.id, issueDate: "2026-09-01", series: "QWBE" }))
   await Effect.runPromise(service.addDraftLine({
     draftId: draft.id,
     description: "Servicii de consultanță",

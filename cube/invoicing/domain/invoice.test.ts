@@ -2,7 +2,20 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import { ValidationFailure } from "../contracts/failures.ts"
-import { resolveTaxConfiguration, validateDate, validateIssuer, validateParty } from "./validation.ts"
+import { resolveTaxConfiguration, validateDate, validateDocumentSeries, validateIssuer, validateParty } from "./validation.ts"
+
+void test("validates supported document types and fiscal series format", () => {
+  assert.doesNotThrow(() => { validateDocumentSeries({ organizationId: "org-1", documentType: "invoice", series: "QWBE_01" }) })
+  assert.doesNotThrow(() => { validateDocumentSeries({ organizationId: "org-1", documentType: "proforma", series: "PRO-F" }) })
+  assert.throws(
+    () => { validateDocumentSeries({ organizationId: "org-1", documentType: "invoice", series: "lower" }) },
+    (error: unknown) => error instanceof ValidationFailure && error.issues.includes("series is invalid"),
+  )
+  assert.throws(
+    () => { validateDocumentSeries({ organizationId: "org-1", documentType: "receipt", series: "R" } as never) },
+    (error: unknown) => error instanceof ValidationFailure && error.issues.includes("documentType must be invoice or proforma"),
+  )
+})
 
 void test("validates calendar dates strictly including leap years", () => {
   assert.doesNotThrow(() => { validateDate("2028-02-29", "issueDate") })
@@ -38,7 +51,6 @@ void test("validates Romanian CUI, country, and issuer currency", () => {
     organizationId: "org-1",
     defaultCurrency: "RON",
     defaultPaymentTermDays: 15,
-    defaultSeries: "QWBE",
     taxConfigurations: [{ code: "RO_NON_VAT", category: "standard" as const, rate: "0", effectiveFrom: "2026-01-01" }],
   }
   assert.throws(() => { validateIssuer({ ...issuer, taxIdentifier: "" }) }, hasIssue("taxIdentifier must be a valid Romanian CUI"))
@@ -79,7 +91,6 @@ void test("resolves exactly one effective-dated issuer tax configuration", () =>
     address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" },
     defaultCurrency: "RON",
     defaultPaymentTermDays: 15,
-    defaultSeries: "QWBE",
     taxConfigurations: [
       { code: "RO_STANDARD", category: "standard" as const, rate: "19.00", effectiveFrom: "2020-01-01", effectiveTo: "2025-07-31" },
       { code: "RO_STANDARD", category: "standard" as const, rate: "21.00", effectiveFrom: "2025-08-01" },
@@ -102,7 +113,6 @@ void test("rejects overlapping effective ranges for the same tax code", () => {
     address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" },
     defaultCurrency: "RON",
     defaultPaymentTermDays: 15,
-    defaultSeries: "QWBE",
   }
   assert.throws(() => { validateIssuer({
     ...base,

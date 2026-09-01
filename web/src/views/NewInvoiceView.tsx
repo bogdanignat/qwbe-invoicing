@@ -4,27 +4,32 @@ import { EmptyState, ErrorAlert, Loading } from "../components/AsyncState.tsx"
 import { Page } from "../components/Page.tsx"
 import { formField, type FormSubmitEvent } from "../form.ts"
 import { today } from "../format.ts"
-import { invoicingClient } from "../invoicing-client.ts"
+import { invoicingClient, type CreateDraftInput } from "../invoicing-client.ts"
+import { invoiceDocumentSeries } from "../models.ts"
 
 export const NewInvoiceView = () => {
   const customers = useQuery({ queryKey: ["customers"], queryFn: ({ signal }) => runUiEffect(invoicingClient.listCustomers(), signal) })
+  const documentSeries = useQuery({ queryKey: ["document-series"], queryFn: ({ signal }) => runUiEffect(invoicingClient.listDocumentSeries(), signal) })
   const createDraft = useMutation({
-    mutationFn: (body: Readonly<Record<string, unknown>>) => runUiEffect(invoicingClient.createDraft(body)),
+    mutationFn: (body: CreateDraftInput) => runUiEffect(invoicingClient.createDraft(body)),
     onSuccess: (draft) => { window.location.hash = `#/drafts/${encodeURIComponent(draft.id)}` },
   })
   const submit = (event: FormSubmitEvent): void => {
     event.preventDefault()
     const form = event.currentTarget
     const dueDate = formField(form, "dueDate")
-    createDraft.mutate({ customerId: formField(form, "customerId"), issueDate: formField(form, "issueDate"), ...(dueDate === "" ? {} : { dueDate }) })
+    createDraft.mutate({ customerId: formField(form, "customerId"), series: formField(form, "series"), issueDate: formField(form, "issueDate"), ...(dueDate === "" ? {} : { dueDate }) })
   }
-  if (customers.isPending) return <Loading />
+  if (customers.isPending || documentSeries.isPending) return <Loading />
   if (customers.error !== null) return <Page title="Factură nouă" eyebrow="Draft fiscal"><ErrorAlert error={customers.error} /></Page>
+  if (documentSeries.error !== null) return <Page title="Factură nouă" eyebrow="Draft fiscal"><ErrorAlert error={documentSeries.error} /></Page>
+  const invoiceSeries = invoiceDocumentSeries(documentSeries.data)
   return <Page title="Factură nouă" eyebrow="Draft fiscal">
-    {customers.data.length === 0 ? <section className="card empty"><strong>Ai nevoie de un client activ.</strong><EmptyState>Adaugă clientul înainte să creezi factura.</EmptyState><a className="button primary" href="#/customers">Adaugă client</a></section> : <section className="card form-card">
+    {invoiceSeries.length === 0 ? <section className="card empty"><strong>Ai nevoie de o serie de factură.</strong><EmptyState>Configurează cel puțin o serie pentru tipul Factură înainte să creezi draftul.</EmptyState><a className="button primary" href="#/settings">Configurează seriile</a></section> : customers.data.length === 0 ? <section className="card empty"><strong>Ai nevoie de un client activ.</strong><EmptyState>Adaugă clientul înainte să creezi factura.</EmptyState><a className="button primary" href="#/customers">Adaugă client</a></section> : <section className="card form-card">
       {createDraft.error === null ? null : <ErrorAlert error={createDraft.error} />}
       <form onSubmit={submit}><div className="form-grid two">
         <label className="span-two">Client<select name="customerId" required defaultValue=""><option value="" disabled>Alege clientul</option>{customers.data.map((customer) => <option key={customer.id} value={customer.id}>{customer.legalName}{customer.taxIdentifier === "" ? "" : ` — ${customer.taxIdentifier}`}</option>)}</select></label>
+        <label>Serie factură<select name="series" required defaultValue=""><option value="" disabled>Alege seria</option>{invoiceSeries.map((item) => <option key={item.series} value={item.series}>{item.series}</option>)}</select></label>
         <label>Data emiterii<input name="issueDate" type="date" defaultValue={today()} required /></label>
         <label>Data scadenței <span className="optional">opțional</span><input name="dueDate" type="date" /></label>
         <div className="static-field"><span>Moneda</span><span className="fixed-value">Leu românesc (RON)</span></div>

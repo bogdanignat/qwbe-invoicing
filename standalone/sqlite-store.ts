@@ -8,6 +8,7 @@ import {
   type Address,
   type Customer,
   type DraftLine,
+  type DocumentSeries,
   type InvoicingTransaction,
   type IssuedInvoice,
   type PartySnapshot,
@@ -91,6 +92,12 @@ const customerFrom = (value: Row): Customer => {
     ...(deletedAt === undefined ? {} : { deletedAt }),
   }
 }
+
+const documentSeriesFrom = (value: Row): DocumentSeries => ({
+  organizationId: text(value, "organization_id"),
+  documentType: text(value, "document_type") as DocumentSeries["documentType"],
+  series: text(value, "series"),
+})
 
 const addressValues = (address: Address): ReadonlyArray<string | null> => [
   address.countryCode,
@@ -180,15 +187,14 @@ const transactionAdapter = (database: DatabaseSync): InvoicingTransaction => ({
   saveIssuer: (issuer) => write("save issuer", () => {
     database.prepare(`INSERT INTO issuers
       (organization_id, legal_name, tax_identifier, country_code, city, street, county, postal_code,
-       default_currency, default_payment_term_days, default_series)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       default_currency, default_payment_term_days)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT (organization_id) DO UPDATE SET legal_name=excluded.legal_name,
        tax_identifier=excluded.tax_identifier, country_code=excluded.country_code, city=excluded.city,
        street=excluded.street, county=excluded.county, postal_code=excluded.postal_code,
-       default_currency=excluded.default_currency, default_payment_term_days=excluded.default_payment_term_days,
-       default_series=excluded.default_series`)
+        default_currency=excluded.default_currency, default_payment_term_days=excluded.default_payment_term_days`)
       .run(issuer.organizationId, issuer.legalName, issuer.taxIdentifier, ...addressValues(issuer.address),
-        issuer.defaultCurrency, issuer.defaultPaymentTermDays, issuer.defaultSeries)
+        issuer.defaultCurrency, issuer.defaultPaymentTermDays)
     database.prepare("DELETE FROM issuer_tax_configurations WHERE organization_id = ?").run(issuer.organizationId)
     const statement = database.prepare(`INSERT INTO issuer_tax_configurations
       (organization_id, code, category, rate, effective_from, effective_to) VALUES (?, ?, ?, ?, ?, ?)`)
@@ -212,10 +218,28 @@ const transactionAdapter = (database: DatabaseSync): InvoicingTransaction => ({
     })
     return {
       ...partyFrom(value, ""), organizationId, defaultCurrency: text(value, "default_currency"),
-      defaultPaymentTermDays: integer(value, "default_payment_term_days"),
-      defaultSeries: text(value, "default_series"), taxConfigurations,
+      defaultPaymentTermDays: integer(value, "default_payment_term_days"), taxConfigurations,
     }
   }),
+  addDocumentSeries: (documentSeries) => write("add document series", () => {
+    const existing = database.prepare(`SELECT 1 FROM document_series
+      WHERE organization_id = ? AND document_type = ? AND series = ?`).get(
+      documentSeries.organizationId, documentSeries.documentType, documentSeries.series,
+    )
+    if (existing !== undefined) {
+      throw new DomainConflict({ code: "document_series_exists", message: "Document series already exists" })
+    }
+    database.prepare(`INSERT INTO document_series (organization_id, document_type, series)
+      VALUES (?, ?, ?)`).run(documentSeries.organizationId, documentSeries.documentType, documentSeries.series)
+  }),
+  findDocumentSeries: (organizationId, documentType, series) => read("find document series", () => {
+    const value = row(database.prepare(`SELECT * FROM document_series
+      WHERE organization_id = ? AND document_type = ? AND series = ?`).get(organizationId, documentType, series))
+    return value === undefined ? undefined : documentSeriesFrom(value)
+  }),
+  listDocumentSeries: (organizationId) => read("list document series", () =>
+    database.prepare(`SELECT * FROM document_series WHERE organization_id = ?
+      ORDER BY document_type, series`).all(organizationId).map((value) => documentSeriesFrom(value as Row))),
   saveCustomer: (customer) => write("save customer", () => {
     const result = database.prepare(`INSERT INTO customers
       (id, organization_id, legal_name, tax_identifier, country_code, city, street, county, postal_code)
@@ -248,11 +272,11 @@ const transactionAdapter = (database: DatabaseSync): InvoicingTransaction => ({
       WHERE organization_id = ? AND customer_id = ? AND status = 'draft' LIMIT 1`).get(organizationId, customerId) !== undefined),
   saveDraft: (draft) => write("save draft", () => {
     const result = database.prepare(`INSERT INTO invoice_drafts
-      (id, organization_id, customer_id, issue_date, due_date, currency, status) VALUES (?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT (id) DO UPDATE SET customer_id=excluded.customer_id, issue_date=excluded.issue_date,
+      (id, organization_id, customer_id, series, issue_date, due_date, currency, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT (id) DO UPDATE SET customer_id=excluded.customer_id, series=excluded.series, issue_date=excluded.issue_date,
        due_date=excluded.due_date, currency=excluded.currency, status=excluded.status
       WHERE invoice_drafts.organization_id=excluded.organization_id`)
-      .run(draft.id, draft.organizationId, draft.customerId, draft.issueDate, draft.dueDate, draft.currency, draft.status)
+      .run(draft.id, draft.organizationId, draft.customerId, draft.series, draft.issueDate, draft.dueDate, draft.currency, draft.status)
     if (result.changes === 0) throw new DomainConflict({ code: "draft_id_taken", message: "Draft id belongs to another organization" })
     saveLines(database, "draft_lines", draft.id, draft.lines)
   }),
@@ -260,7 +284,7 @@ const transactionAdapter = (database: DatabaseSync): InvoicingTransaction => ({
     const value = row(database.prepare("SELECT * FROM invoice_drafts WHERE organization_id = ? AND id = ?").get(organizationId, id))
     if (value === undefined) return undefined
     return {
-      id, organizationId, customerId: text(value, "customer_id"), issueDate: text(value, "issue_date"),
+      id, organizationId, customerId: text(value, "customer_id"), series: text(value, "series"), issueDate: text(value, "issue_date"),
       dueDate: text(value, "due_date"), currency: text(value, "currency"),
       status: text(value, "status") === "issued" ? "issued" : "draft", lines: loadLines(database, "draft_lines", id),
     }

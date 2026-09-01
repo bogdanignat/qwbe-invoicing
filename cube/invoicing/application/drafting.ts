@@ -3,12 +3,14 @@ import { DomainConflict, ResourceNotFound, ValidationFailure, type InvoicingFail
 import type { Clock, IdGenerator, RequestContext, TransactionalStore } from "../contracts/host.ts"
 import type { InvoicingPermissions } from "../contracts/permissions.ts"
 import { calculateLine } from "../domain/calculation.ts"
-import { addDays, type AddDraftLineInput, type ConfigureIssuerInput, type CreateCustomerInput, type CreateDraftInput, type Customer, type DraftInvoice, type IssuerProfile, type PartySnapshot } from "../domain/invoice.ts"
-import { resolveTaxConfiguration, validateDate, validateIssuer, validateParty } from "../domain/validation.ts"
+import { addDays, type AddDraftLineInput, type ConfigureDocumentSeriesInput, type ConfigureIssuerInput, type CreateCustomerInput, type CreateDraftInput, type Customer, type DocumentSeries, type DraftInvoice, type IssuerProfile, type PartySnapshot } from "../domain/invoice.ts"
+import { resolveTaxConfiguration, validateDate, validateDocumentSeries, validateIssuer, validateParty } from "../domain/validation.ts"
 import type { InvoicingTransaction } from "./ports.ts"
 export interface DraftingOperations {
   readonly configureIssuer: (i: ConfigureIssuerInput) => Effect.Effect<IssuerProfile, InvoicingFailure>
   readonly getIssuer: () => Effect.Effect<IssuerProfile, InvoicingFailure>
+  readonly addDocumentSeries: (i: ConfigureDocumentSeriesInput) => Effect.Effect<DocumentSeries, InvoicingFailure>
+  readonly listDocumentSeries: () => Effect.Effect<ReadonlyArray<DocumentSeries>, InvoicingFailure>
   readonly createCustomer: (i: CreateCustomerInput) => Effect.Effect<Customer, InvoicingFailure>
   readonly getCustomer: (id: string) => Effect.Effect<Customer, InvoicingFailure>
   readonly listCustomers: () => Effect.Effect<ReadonlyArray<Customer>, InvoicingFailure>
@@ -23,10 +25,21 @@ export const missing = (r: string, id: string) => new ResourceNotFound({ resourc
 export const createDraftingOperations = (d: { readonly ids: IdGenerator; readonly clock: Clock; readonly store: TransactionalStore<InvoicingTransaction> }, perms: InvoicingPermissions, auth: (p: string) => Effect.Effect<RequestContext, InvoicingFailure>): DraftingOperations => {
   const configureIssuer = (input: ConfigureIssuerInput) => Effect.gen(function*() {
     const ctx = yield* auth(perms.manageSettings)
-    const issuer: IssuerProfile = { ...copyParty(input), organizationId: ctx.organization.id, defaultCurrency: input.defaultCurrency, defaultPaymentTermDays: input.defaultPaymentTermDays, defaultSeries: input.defaultSeries, taxConfigurations: structuredClone(input.taxConfigurations) }
+    const issuer: IssuerProfile = { ...copyParty(input), organizationId: ctx.organization.id, defaultCurrency: input.defaultCurrency, defaultPaymentTermDays: input.defaultPaymentTermDays, taxConfigurations: structuredClone(input.taxConfigurations) }
     yield* checked(() => { validateIssuer(issuer) })
     yield* d.store.transaction((tx) => tx.saveIssuer(issuer))
     return structuredClone(issuer)
+  })
+  const addDocumentSeries = (input: ConfigureDocumentSeriesInput) => Effect.gen(function*() {
+    const ctx = yield* auth(perms.manageSettings)
+    const documentSeries: DocumentSeries = { organizationId: ctx.organization.id, documentType: input.documentType, series: input.series }
+    yield* checked(() => { validateDocumentSeries(documentSeries) })
+    yield* d.store.transaction((tx) => tx.addDocumentSeries(documentSeries))
+    return structuredClone(documentSeries)
+  })
+  const listDocumentSeries = () => Effect.gen(function*() {
+    const ctx = yield* auth(perms.read)
+    return structuredClone(yield* d.store.transaction((tx) => tx.listDocumentSeries(ctx.organization.id)))
   })
   const getIssuer = () => Effect.gen(function*() {
     const ctx = yield* auth(perms.read)
@@ -80,6 +93,7 @@ export const createDraftingOperations = (d: { readonly ids: IdGenerator; readonl
     const id = yield* d.ids.next
     yield* checked(() => {
       validateDate(input.issueDate, "issueDate")
+      validateDocumentSeries({ organizationId: ctx.organization.id, documentType: "invoice", series: input.series })
       if (input.currency !== undefined && input.currency !== "RON") {
         throw new ValidationFailure({ issues: ["currency must be RON"] })
       }
@@ -89,9 +103,11 @@ export const createDraftingOperations = (d: { readonly ids: IdGenerator; readonl
       if (iss === undefined) return yield* Effect.fail(missing("issuer", ctx.organization.id))
       const cust = yield* tx.findCustomer(ctx.organization.id, input.customerId)
       if (cust === undefined || cust.deletedAt !== undefined) return yield* Effect.fail(missing("customer", input.customerId))
+      const documentSeries = yield* tx.findDocumentSeries(ctx.organization.id, "invoice", input.series)
+      if (documentSeries === undefined) return yield* Effect.fail(missing("document_series", input.series))
       const due = input.dueDate ?? addDays(input.issueDate, iss.defaultPaymentTermDays)
       yield* checked(() => { validateDate(due, "dueDate"); if (due < input.issueDate) throw new ValidationFailure({ issues: ["dueDate cannot be before issueDate"] }) })
-      const draft: DraftInvoice = { id, organizationId: ctx.organization.id, customerId: cust.id, issueDate: input.issueDate, dueDate: due, currency: input.currency ?? iss.defaultCurrency, status: "draft", lines: [] }
+      const draft: DraftInvoice = { id, organizationId: ctx.organization.id, customerId: cust.id, series: documentSeries.series, issueDate: input.issueDate, dueDate: due, currency: input.currency ?? iss.defaultCurrency, status: "draft", lines: [] }
       yield* tx.saveDraft(draft)
       return structuredClone(draft)
     }))
@@ -120,5 +136,5 @@ export const createDraftingOperations = (d: { readonly ids: IdGenerator; readonl
       return structuredClone(upd)
     }))
   })
-  return { configureIssuer, getIssuer, createCustomer, getCustomer, listCustomers, deleteCustomer, createDraft, getDraft, addDraftLine }
+  return { configureIssuer, getIssuer, addDocumentSeries, listDocumentSeries, createCustomer, getCustomer, listCustomers, deleteCustomer, createDraft, getDraft, addDraftLine }
 }

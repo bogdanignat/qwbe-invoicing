@@ -12,6 +12,7 @@ void test("exports a minimal authenticated QWBE cube definition", () => {
   assert.deepEqual(cube.manifest.tables, [
     "issuers",
     "issuer_tax_configurations",
+    "document_series",
     "customers",
     "invoice_drafts",
     "draft_lines",

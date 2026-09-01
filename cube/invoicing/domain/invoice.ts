@@ -24,8 +24,20 @@ export interface IssuerProfile extends PartySnapshot {
   readonly organizationId: string
   readonly defaultCurrency: string
   readonly defaultPaymentTermDays: number
-  readonly defaultSeries: string
   readonly taxConfigurations: ReadonlyArray<TaxConfiguration>
+}
+
+export type DocumentType = "invoice" | "proforma"
+
+export interface DocumentSeries {
+  readonly organizationId: string
+  readonly documentType: DocumentType
+  readonly series: string
+}
+
+export interface ConfigureDocumentSeriesInput {
+  readonly documentType: DocumentType
+  readonly series: string
 }
 
 export interface Customer extends PartySnapshot {
@@ -51,6 +63,7 @@ export interface DraftInvoice {
   readonly id: string
   readonly organizationId: string
   readonly customerId: string
+  readonly series: string
   readonly issueDate: string
   readonly dueDate: string
   readonly currency: string
@@ -93,7 +106,6 @@ export interface ConfigureIssuerInput {
   readonly address: Address
   readonly defaultCurrency: string
   readonly defaultPaymentTermDays: number
-  readonly defaultSeries: string
   readonly taxConfigurations: ReadonlyArray<TaxConfiguration>
 }
 
@@ -105,6 +117,7 @@ export interface CreateCustomerInput {
 
 export interface CreateDraftInput {
   readonly customerId: string
+  readonly series: string
   readonly issueDate: string
   readonly currency?: string
   readonly dueDate?: string

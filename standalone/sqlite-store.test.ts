@@ -57,7 +57,6 @@ void test("persists an issued snapshot across store recreation and isolates orga
       address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" },
       defaultCurrency: "RON",
       defaultPaymentTermDays: 15,
-      defaultSeries: "QWBE",
       taxConfigurations: [{
         code: "RO_STANDARD",
         category: "standard",
@@ -65,6 +64,13 @@ void test("persists an issued snapshot across store recreation and isolates orga
         effectiveFrom: "2025-08-01",
       }],
     }))
+    await Effect.runPromise(service.addDocumentSeries({ documentType: "invoice", series: "QWBE" }))
+    await Effect.runPromise(service.addDocumentSeries({ documentType: "invoice", series: "ALT" }))
+    await Effect.runPromise(service.addDocumentSeries({ documentType: "proforma", series: "PRO" }))
+    const duplicate = await Effect.runPromise(Effect.flip(
+      service.addDocumentSeries({ documentType: "invoice", series: "QWBE" }),
+    ))
+    assert.equal(duplicate instanceof DomainConflict && duplicate.code === "document_series_exists", true)
     const customer = await Effect.runPromise(service.createCustomer({
       legalName: "Client SRL",
       taxIdentifier: "RO87654329",
@@ -73,7 +79,15 @@ void test("persists an issued snapshot across store recreation and isolates orga
     const draft = await Effect.runPromise(service.createDraft({
       customerId: customer.id,
       issueDate: "2026-09-01",
+      series: "QWBE",
     }))
+    const databaseBeforeIssue = new DatabaseSync(databasePath(directory))
+    try {
+      assert.throws(() => databaseBeforeIssue.prepare("UPDATE invoice_drafts SET series = 'PRO' WHERE id = ?").run(draft.id))
+      assert.throws(() => databaseBeforeIssue.prepare("UPDATE invoice_drafts SET series = 'ALT' WHERE id = ?").run(draft.id))
+    } finally {
+      databaseBeforeIssue.close()
+    }
     const openDraftDeletion = await Effect.runPromise(Effect.flip(service.deleteCustomer(customer.id)))
     assert.equal(openDraftDeletion instanceof DomainConflict && openDraftDeletion.code === "customer_has_open_drafts", true)
     await Effect.runPromise(service.addDraftLine({
@@ -93,6 +107,12 @@ void test("persists an issued snapshot across store recreation and isolates orga
       cubeIdentity: "invoicing",
     })
     assert.deepEqual(await Effect.runPromise(restarted.getIssuedInvoice(issued.id)), issued)
+    assert.equal((await Effect.runPromise(restarted.getDraft(draft.id))).series, "QWBE")
+    assert.deepEqual(await Effect.runPromise(restarted.listDocumentSeries()), [
+      { organizationId: "org-1", documentType: "invoice", series: "ALT" },
+      { organizationId: "org-1", documentType: "invoice", series: "QWBE" },
+      { organizationId: "org-1", documentType: "proforma", series: "PRO" },
+    ])
 
     await Effect.runPromise(restarted.deleteCustomer(customer.id))
     assert.deepEqual(await Effect.runPromise(restarted.listCustomers()), [])
@@ -132,6 +152,12 @@ void test("rolls sequence allocation back with the surrounding transaction", asy
   try {
     applyMigrations(directory)
     const store = createSqliteStore(directory)
+    await Effect.runPromise(store.transaction((transaction) => transaction.addDocumentSeries({
+      organizationId: "org-1", documentType: "invoice", series: "QWBE",
+    })))
+    await Effect.runPromise(store.transaction((transaction) => transaction.addDocumentSeries({
+      organizationId: "org-1", documentType: "invoice", series: "ALT",
+    })))
     const failure = await Effect.runPromise(Effect.flip(store.transaction((transaction) => Effect.gen(function*() {
       yield* transaction.allocateInvoiceNumber("org-1", 2026, "QWBE")
       return yield* Effect.fail(new DomainConflict({ code: "forced", message: "rollback" }))
@@ -141,6 +167,9 @@ void test("rolls sequence allocation back with the surrounding transaction", asy
     const allocated = await Effect.runPromise(store.transaction((transaction) =>
       transaction.allocateInvoiceNumber("org-1", 2026, "QWBE")))
     assert.equal(allocated, 1)
+    const alternate = await Effect.runPromise(store.transaction((transaction) =>
+      transaction.allocateInvoiceNumber("org-1", 2026, "ALT")))
+    assert.equal(alternate, 1)
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }

@@ -21,6 +21,14 @@ const failureMessages: Readonly<Record<string, string>> = {
   csrf_validation_failed: "Sesiunea nu a putut valida cererea. Reîncarcă pagina și încearcă din nou.",
   invalid_credentials: "Tokenul API este incorect.",
   origin_not_allowed: "Originea cererii de autentificare nu este permisă.",
+  ResourceNotFound: "Resursa cerută nu mai există. Reîncarcă pagina și încearcă din nou.",
+  customer_has_open_drafts: "Clientul are drafturi deschise.",
+  document_series_exists: "Seria există deja pentru acest tip de document.",
+  invoice_already_sent_to_anaf: "Factura a fost deja transmisă în RO e-Factura și nu poate fi ștearsă.",
+  invoice_has_corrections: "Factura are documente de corecție și nu poate fi ștearsă.",
+  invoice_has_payments: "Factura are plăți înregistrate și nu poate fi ștearsă.",
+  invoice_already_corrected: "Factura are deja un document storno integral.",
+  only_last_invoice_can_be_deleted: "Poți șterge doar ultima factură emisă din serie.",
 }
 
 export const clearApiSession = Ref.set(csrfTokenRef, undefined)
@@ -39,7 +47,7 @@ const parseFailure = (input: unknown, status: number): ApiFailure => {
   const error = typeof value.error === "string" ? value.error : undefined
   const message = typeof value.message === "string"
     ? value.message
-    : issues[0] ?? (error === undefined ? `Cererea a eșuat (${String(status)}).` : failureMessages[error] ?? error)
+    : issues[0] ?? (code === undefined ? (error === undefined ? `Cererea a eșuat (${String(status)}).` : failureMessages[error] ?? error) : failureMessages[code] ?? error ?? code)
   return new ApiFailure({ message, status, issues, ...(code === undefined ? {} : { code }) })
 }
 

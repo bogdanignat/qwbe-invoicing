@@ -13,6 +13,7 @@ import {
   createInvoicingService,
   type AddDraftLineInput,
   type ConfigureIssuerInput,
+  type ConfigureDocumentSeriesInput,
   type CreateCustomerInput,
   type CreateDraftInput,
   type InvoicingFailure,
@@ -112,7 +113,6 @@ const issuerInput = (value: unknown): ConfigureIssuerInput => {
     address: address(input.address),
     defaultCurrency: text(input.defaultCurrency, "defaultCurrency"),
     defaultPaymentTermDays: integer(input.defaultPaymentTermDays, "defaultPaymentTermDays"),
-    defaultSeries: text(input.defaultSeries, "defaultSeries"),
     taxConfigurations: taxConfigurations(input.taxConfigurations),
   }
 }
@@ -126,12 +126,22 @@ const customerInput = (value: unknown): CreateCustomerInput => {
   }
 }
 
+const documentSeriesInput = (value: unknown): ConfigureDocumentSeriesInput => {
+  const input = object(value)
+  const documentType = text(input.documentType, "documentType")
+  if (documentType !== "invoice" && documentType !== "proforma") {
+    throw new ValidationFailure({ issues: ["documentType must be invoice or proforma"] })
+  }
+  return { documentType, series: text(input.series, "series") }
+}
+
 const draftInput = (value: unknown): CreateDraftInput => {
   const input = object(value)
   const currency = optionalText(input.currency, "currency")
   const dueDate = optionalText(input.dueDate, "dueDate")
   return {
     customerId: text(input.customerId, "customerId"),
+    series: text(input.series, "series"),
     issueDate: text(input.issueDate, "issueDate"),
     ...(currency === undefined ? {} : { currency }),
     ...(dueDate === undefined ? {} : { dueDate }),
@@ -224,6 +234,8 @@ export const handleApiRequest = async (request: ApiRequest, runtime: ApiRuntime)
     const correctionGet = /^\/api\/corrections\/([^/]+)$/.exec(request.url)
     if (request.method === "GET" && request.url === "/api/issuer") operation = service.getIssuer()
     else if (request.method === "PUT" && request.url === "/api/issuer") operation = service.configureIssuer(issuerInput(request.body))
+    else if (request.method === "GET" && request.url === "/api/document-series") operation = service.listDocumentSeries()
+    else if (request.method === "POST" && request.url === "/api/document-series") operation = service.addDocumentSeries(documentSeriesInput(request.body))
     else if (request.method === "GET" && request.url === "/api/customers") operation = service.listCustomers()
     else if (request.method === "GET" && customerGet?.[1] !== undefined) operation = service.getCustomer(customerGet[1])
     else if (request.method === "POST" && request.url === "/api/customers") operation = service.createCustomer(customerInput(request.body))
@@ -260,6 +272,7 @@ export const handleApiRequest = async (request: ApiRequest, runtime: ApiRuntime)
       else {
         const knownRoute = request.url === "/api/issuer"
           || request.url === "/api/customers"
+          || request.url === "/api/document-series"
           || request.url === "/api/drafts"
           || request.url === "/api/invoices"
           || customerGet !== null

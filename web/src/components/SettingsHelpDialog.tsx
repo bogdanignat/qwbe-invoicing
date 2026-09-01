@@ -19,7 +19,14 @@ export const SettingsHelpDialog = () => {
           <dl>
             <div><dt>Monedă implicită</dt><dd>În această versiune facturile sunt emise în RON, de aceea moneda este fixă.</dd></div>
             <div><dt>Termen de plată</dt><dd>Numărul de zile folosit pentru calcularea automată a scadenței atunci când nu alegi manual o dată.</dd></div>
-            <div><dt>Serie implicită</dt><dd>Prefixul numărului facturii, de exemplu „QWBE 123”. Se aplică documentelor emise ulterior și nu renumerotează facturile existente.</dd></div>
+          </dl>
+        </section>
+        <section>
+          <h3>Serii de documente</h3>
+          <dl>
+            <div><dt>Tip document</dt><dd>Seriile pentru Factură și Proformă sunt configurate separat. La crearea unei facturi poți alege numai o serie de tip Factură.</dd></div>
+            <div><dt>Serie</dt><dd>Prefixul numărului documentului, de exemplu „QWBE” în „QWBE 123”. Configurarea este doar de adăugare: seriile existente rămân în listă.</dd></div>
+            <div><dt>Serie fixată în draft</dt><dd>Seria aleasă se salvează în draft și nu se schimbă la emitere. Emiterea alocă numai următorul număr fiscal din acea serie.</dd></div>
           </dl>
         </section>
         <section className="settings-help-vat">

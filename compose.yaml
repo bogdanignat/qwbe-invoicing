@@ -66,4 +66,4 @@ networks:
 
 volumes:
   invoicing-data:
-    name: qwbe-invoicing-data
+    name: ${DATA_VOLUME_NAME:-qwbe-invoicing-data}

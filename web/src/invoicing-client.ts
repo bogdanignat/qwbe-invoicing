@@ -3,8 +3,8 @@ import { Effect } from "effect"
 import { apiBlob, apiRequest, type ApiFailure } from "./api.ts"
 import {
   decodeCorrection, decodeCorrections, decodeCustomer, decodeCustomers, decodeDeleted, decodeDraft,
-  decodeInvoice, decodeInvoices, decodeIssuer, decodePaymentSummary,
-  type CorrectionDocument, type Customer, type DraftInvoice, type IssuedInvoice, type Issuer, type PaymentSummary,
+  decodeDocumentSeries, decodeDocumentSeriesList, decodeInvoice, decodeInvoices, decodeIssuer, decodePaymentSummary,
+  type CorrectionDocument, type Customer, type DocumentSeries, type DocumentType, type DraftInvoice, type IssuedInvoice, type Issuer, type PaymentSummary,
 } from "./models.ts"
 
 const ignored = (): undefined => undefined
@@ -16,6 +16,18 @@ export interface InvoiceBundle {
   readonly corrections: ReadonlyArray<CorrectionDocument>
 }
 
+export type CreateDocumentSeriesInput = {
+  readonly documentType: DocumentType
+  readonly series: string
+}
+
+export type CreateDraftInput = {
+  readonly customerId: string
+  readonly series: string
+  readonly issueDate: string
+  readonly dueDate?: string
+}
+
 export const invoicingClient = {
   listCustomers: () => apiRequest("/api/customers", decodeCustomers),
   createCustomer: (body: Readonly<Record<string, unknown>>) => apiRequest("/api/customers", decodeCustomer, { method: "POST", body }),
@@ -25,7 +37,9 @@ export const invoicingClient = {
     Effect.catchAll((failure) => failure.status === 404 ? Effect.succeed(null) : Effect.fail(failure)),
   ),
   saveIssuer: (body: Readonly<Record<string, unknown>>) => apiRequest("/api/issuer", decodeIssuer, { method: "PUT", body }),
-  createDraft: (body: Readonly<Record<string, unknown>>) => apiRequest("/api/drafts", decodeDraft, { method: "POST", body }),
+  listDocumentSeries: () => apiRequest("/api/document-series", decodeDocumentSeriesList),
+  createDocumentSeries: (body: CreateDocumentSeriesInput) => apiRequest("/api/document-series", decodeDocumentSeries, { method: "POST", body }),
+  createDraft: (body: CreateDraftInput) => apiRequest("/api/drafts", decodeDraft, { method: "POST", body }),
   getDraft: (id: string) => apiRequest(`/api/drafts/${encoded(id)}`, decodeDraft),
   addDraftLine: (id: string, body: Readonly<Record<string, unknown>>) => apiRequest(`/api/drafts/${encoded(id)}/lines`, decodeDraft, { method: "POST", body }),
   issueDraft: (id: string) => apiRequest(`/api/drafts/${encoded(id)}/issue`, decodeInvoice, { method: "POST", body: {} }),
@@ -42,4 +56,4 @@ export const invoicingClient = {
   createCorrection: (id: string, body: Readonly<Record<string, unknown>>) => apiRequest(`/api/invoices/${encoded(id)}/corrections`, decodeCorrection, { method: "POST", body }),
 } as const
 
-export type { Customer, DraftInvoice, IssuedInvoice, Issuer }
+export type { Customer, DocumentSeries, DraftInvoice, IssuedInvoice, Issuer }
