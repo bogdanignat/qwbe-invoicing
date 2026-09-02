@@ -9,9 +9,10 @@ import {
   DocumentRenderingFailure,
   type InvoiceRenderer,
   type RenderableInvoice,
+  type RenderableParty,
 } from "../cube/invoicing/documents/index.ts"
 
-export const invoiceTemplateVersion = "invoice-v1"
+export const invoiceTemplateVersion = "invoice-v2"
 const defaultFontPath = fileURLToPath(new URL("./assets/fonts/DejaVuSans.ttf", import.meta.url))
 const pageWidth = 595.28
 const pageHeight = 841.89
@@ -86,13 +87,16 @@ const space = (layout: Layout, height: number) => {
   else layout.y -= height
 }
 
-const partyLines = (label: string, party: RenderableInvoice["issuer"]): ReadonlyArray<string> => [
-  label,
-  party.legalName,
-  ...(party.taxIdentifier === "" ? [] : [`CUI: ${party.taxIdentifier}`]),
-  `${party.address.street}, ${party.address.city}`,
-  [party.address.county, party.address.postalCode, party.address.countryCode].filter(Boolean).join(", "),
-]
+export const partyIdentifierLine = (party: RenderableParty): string | undefined => party.taxIdentifier === ""
+  ? undefined
+  : `${party.partyType === "individual" ? "CNP" : "CUI"}: ${party.taxIdentifier}`
+
+const partyLines = (label: string, party: RenderableParty): ReadonlyArray<string> => {
+  const identifier = partyIdentifierLine(party)
+  return [label, party.legalName, ...(identifier === undefined ? [] : [identifier]),
+    `${party.address.street}, ${party.address.city}`,
+    [party.address.county, party.address.postalCode, party.address.countryCode].filter(Boolean).join(", ")]
+}
 
 export const renderInvoicePdf = async (
   invoice: RenderableInvoice,

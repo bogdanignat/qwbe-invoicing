@@ -38,6 +38,8 @@ export type {
   InvoiceSource,
   PdfObjectStore,
   RenderableInvoice,
+  RenderableBuyer,
+  RenderableParty,
   RenderedDocument,
   RequestContext,
   StoredPdf,

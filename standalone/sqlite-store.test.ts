@@ -54,7 +54,7 @@ void test("persists an issued snapshot across store recreation and isolates orga
     await Effect.runPromise(service.configureIssuer({
       legalName: "Exemplu SRL",
       taxIdentifier: "RO12345674",
-      address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" },
+      address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1", postalCode: "710000" },
       defaultCurrency: "RON",
       defaultPaymentTermDays: 15,
       taxConfigurations: [{
@@ -72,6 +72,7 @@ void test("persists an issued snapshot across store recreation and isolates orga
     ))
     assert.equal(duplicate instanceof DomainConflict && duplicate.code === "document_series_exists", true)
     const customer = await Effect.runPromise(service.createCustomer({
+      partyType: "company",
       legalName: "Client SRL",
       taxIdentifier: "RO87654329",
       address: { countryCode: "RO", city: "Iași", street: "Strada Mică 2" },
@@ -107,7 +108,10 @@ void test("persists an issued snapshot across store recreation and isolates orga
       cubeIdentity: "invoicing",
     })
     assert.deepEqual(await Effect.runPromise(restarted.getIssuedInvoice(issued.id)), issued)
-    assert.equal((await Effect.runPromise(restarted.getDraft(draft.id))).series, "QWBE")
+    const persistedDraft = await Effect.runPromise(restarted.getDraft(draft.id))
+    assert.equal(persistedDraft.series, "QWBE")
+    assert.equal(persistedDraft.customer.partyType, "company")
+    assert.equal(persistedDraft.totalIncludingTax, "151.25")
     assert.deepEqual(await Effect.runPromise(restarted.listDocumentSeries()), [
       { organizationId: "org-1", documentType: "invoice", series: "ALT" },
       { organizationId: "org-1", documentType: "invoice", series: "QWBE" },
@@ -128,6 +132,14 @@ void test("persists an issued snapshot across store recreation and isolates orga
         .run("0.00", issued.id))
       assert.throws(() => database.prepare("UPDATE issued_invoices SET total_including_tax = ? WHERE id = ?")
         .run("0.00", issued.id))
+      assert.throws(() => database.prepare("UPDATE issued_invoices SET issuer_county = ? WHERE id = ?")
+        .run("BT", issued.id))
+      assert.throws(() => database.prepare("UPDATE issued_invoices SET issuer_postal_code = NULL WHERE id = ?")
+        .run(issued.id))
+      assert.throws(() => database.prepare("DELETE FROM issued_lines WHERE invoice_id = ?").run(issued.id))
+      assert.throws(() => database.prepare("DELETE FROM issued_tax_breakdown WHERE invoice_id = ?").run(issued.id))
+      assert.throws(() => database.prepare("DELETE FROM issued_invoices WHERE id = ?").run(issued.id))
+      assert.throws(() => database.prepare("DELETE FROM invoice_drafts WHERE id = ?").run(draft.id))
     } finally {
       database.close()
     }

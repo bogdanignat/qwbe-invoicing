@@ -1,14 +1,15 @@
 import { ValidationFailure } from "../contracts/failures.ts"
+import type { BuyerSnapshot, DraftLine, PartySnapshot, TaxBreakdown } from "./invoice.ts"
 export interface CreateCorrectionInput { readonly originalInvoiceId: string; readonly reason: string; readonly issueDate?: string }
 export interface CorrectionDocument {
   readonly id: string; readonly organizationId: string; readonly originalInvoiceId: string
   readonly fiscalYear: number; readonly series: string; readonly number: number
   readonly issueDate: string; readonly issuedAt: string; readonly reason: string
   readonly currency: string
-  readonly issuer: { readonly legalName: string; readonly taxIdentifier: string; readonly address: { readonly countryCode: string; readonly city: string; readonly street: string; readonly county?: string; readonly postalCode?: string } }
-  readonly customer: { readonly legalName: string; readonly taxIdentifier: string; readonly address: { readonly countryCode: string; readonly city: string; readonly street: string; readonly county?: string; readonly postalCode?: string } }
-  readonly lines: ReadonlyArray<{ readonly id: string; readonly description: string; readonly quantity: string; readonly unitPrice: string; readonly taxCode: string; readonly taxCategory: string; readonly taxRate: string; readonly totalExcludingTax: string; readonly taxAmount: string; readonly totalIncludingTax: string }>
-  readonly taxBreakdown: ReadonlyArray<{ readonly taxCode: string; readonly category: string; readonly rate: string; readonly taxableAmount: string; readonly taxAmount: string }>
+  readonly issuer: PartySnapshot
+  readonly customer: BuyerSnapshot
+  readonly lines: ReadonlyArray<DraftLine>
+  readonly taxBreakdown: ReadonlyArray<TaxBreakdown>
   readonly totalExcludingTax: string; readonly taxTotal: string; readonly totalIncludingTax: string
 }
 export const validateCreateCorrectionInput = (input: CreateCorrectionInput): void => {

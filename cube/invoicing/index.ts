@@ -44,6 +44,7 @@ export const cube = {
 }
 
 export * from "./contracts/index.ts"
+export { calculateTotals } from "./domain/calculation.ts"
 export { createInvoicingService } from "./application/invoicing.ts"
 export type {
   InvoicingDependencies,
@@ -55,6 +56,7 @@ export type {
 export type {
   Address,
   AddDraftLineInput,
+  BuyerSnapshot,
   ConfigureIssuerInput,
   ConfigureDocumentSeriesInput,
   CreateCustomerInput,
@@ -65,8 +67,11 @@ export type {
   DraftLine,
   IssuerProfile,
   PartySnapshot,
+  PartyType,
   TaxBreakdown,
   TaxConfiguration,
+  UpdateDraftInput,
+  UpdateDraftLineInput,
 } from "./domain/invoice.ts"
 export type {
   Payment,

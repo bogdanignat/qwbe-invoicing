@@ -97,6 +97,7 @@ void test("requires host authentication and serves the complete invoice-core rou
       url: "/api/customers",
       authorization,
       body: {
+        partyType: "individual",
         legalName: "Ion Popescu",
         taxIdentifier: " ",
         address: { countryCode: "RO", city: "Iași", street: "Strada Mică 2" },
@@ -105,6 +106,17 @@ void test("requires host authentication and serves the complete invoice-core rou
     assert.equal(customer.status, 200)
     assert.equal(typeof customer.body, "object")
     assert.equal((customer.body as { taxIdentifier: string }).taxIdentifier, "")
+    const companyWithoutCui = await handleApiRequest({
+      method: "POST", url: "/api/customers", authorization,
+      body: { partyType: "company", legalName: "Fără CUI SRL", taxIdentifier: "", address: { countryCode: "RO", city: "Iași", street: "Strada 2" } },
+    }, runtime)
+    assert.equal(companyWithoutCui.status, 400)
+    assert.equal((companyWithoutCui.body as { issues: ReadonlyArray<string> }).issues.includes("taxIdentifier is required for company"), true)
+    const draftWithoutCui = await handleApiRequest({
+      method: "POST", url: "/api/drafts", authorization,
+      body: { customer: { partyType: "company", legalName: "Fără CUI SRL", taxIdentifier: "", address: { countryCode: "RO", city: "Iași", street: "Strada 2" } }, issueDate: "2026-09-01", series: "QWBE" },
+    }, runtime)
+    assert.equal(draftWithoutCui.status, 400)
     const customerId = (customer.body as { id: string }).id
 
     const draft = await handleApiRequest({
@@ -115,6 +127,28 @@ void test("requires host authentication and serves the complete invoice-core rou
     }, runtime)
     assert.equal(draft.status, 200)
     const draftId = (draft.body as { id: string }).id
+    assert.equal((draft.body as { customer: { partyType: string } }).customer.partyType, "individual")
+    assert.equal((draft.body as { totalIncludingTax: string }).totalIncludingTax, "0.00")
+    const ambiguousBuyer = await handleApiRequest({
+      method: "POST", url: "/api/drafts", authorization,
+      body: { customerId, customer: customer.body, issueDate: "2026-09-01", series: "QWBE" },
+    }, runtime)
+    assert.equal(ambiguousBuyer.status, 400)
+    const disposable = await handleApiRequest({
+      method: "POST", url: "/api/drafts", authorization,
+      body: { customer: { partyType: "individual", legalName: "Client unic", taxIdentifier: "", address: { countryCode: "RO", city: "Iași", street: "Strada 3" } }, issueDate: "2026-09-01", series: "QWBE" },
+    }, runtime)
+    const disposableId = (disposable.body as { id: string }).id
+    const drafts = await handleApiRequest({ method: "GET", url: "/api/drafts", authorization, body: undefined }, runtime)
+    assert.equal((drafts.body as ReadonlyArray<unknown>).length, 2)
+    assert.deepEqual(await handleApiRequest({ method: "DELETE", url: `/api/drafts/${disposableId}`, authorization, body: undefined }, runtime), {
+      status: 200, body: { deleted: true },
+    })
+    const updatedDraft = await handleApiRequest({
+      method: "PUT", url: `/api/drafts/${draftId}`, authorization,
+      body: { customer: { partyType: "individual", legalName: "Maria Ionescu", taxIdentifier: "", address: { countryCode: "RO", city: "Iași", street: "Strada Nouă 4" } }, issueDate: "2026-09-01", dueDate: "2026-09-20" },
+    }, runtime)
+    assert.equal((updatedDraft.body as { customer: { legalName: string } }).customer.legalName, "Maria Ionescu")
     const line = await handleApiRequest({
       method: "POST",
       url: `/api/drafts/${draftId}/lines`,
@@ -122,6 +156,20 @@ void test("requires host authentication and serves the complete invoice-core rou
       body: { description: "Servicii", quantity: "1", unitPrice: "100", taxCode: "RO_STANDARD" },
     }, runtime)
     assert.equal(line.status, 200)
+    const lineId = (line.body as { lines: ReadonlyArray<{ id: string }> }).lines[0]?.id as string
+    const editedLine = await handleApiRequest({
+      method: "PUT", url: `/api/drafts/${draftId}/lines/${lineId}`, authorization,
+      body: { description: "Servicii extinse", quantity: "2", unitPrice: "100", taxCode: "RO_STANDARD" },
+    }, runtime)
+    assert.equal((editedLine.body as { totalIncludingTax: string }).totalIncludingTax, "242.00")
+    const cleared = await handleApiRequest({
+      method: "DELETE", url: `/api/drafts/${draftId}/lines/${lineId}`, authorization, body: undefined,
+    }, runtime)
+    assert.equal((cleared.body as { totalIncludingTax: string }).totalIncludingTax, "0.00")
+    await handleApiRequest({
+      method: "POST", url: `/api/drafts/${draftId}/lines`, authorization,
+      body: { description: "Servicii", quantity: "1", unitPrice: "100", taxCode: "RO_STANDARD" },
+    }, runtime)
     const issued = await handleApiRequest({
       method: "POST",
       url: `/api/drafts/${draftId}/issue`,
@@ -130,6 +178,7 @@ void test("requires host authentication and serves the complete invoice-core rou
     }, runtime)
     assert.equal(issued.status, 200)
     assert.equal((issued.body as { totalIncludingTax: string }).totalIncludingTax, "121.00")
+    assert.equal((issued.body as { customer: { legalName: string } }).customer.legalName, "Maria Ionescu")
     const invoiceId = (issued.body as { id: string }).id
     const fetched = await handleApiRequest({
       method: "GET",
@@ -145,6 +194,12 @@ void test("requires host authentication and serves the complete invoice-core rou
       body: undefined,
     }, runtime)
     assert.deepEqual(invoices.body, [issued.body])
+    assert.deepEqual(await handleApiRequest({
+      method: "DELETE", url: `/api/invoices/${invoiceId}`, authorization, body: undefined,
+    }, runtime), { status: 405, body: { error: "method_not_allowed" } })
+    assert.equal((await handleApiRequest({
+      method: "DELETE", url: `/api/drafts/${draftId}`, authorization, body: undefined,
+    }, runtime)).status, 409)
     const payment = await handleApiRequest({
       method: "POST",
       url: `/api/invoices/${invoiceId}/payments`,

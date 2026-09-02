@@ -1,5 +1,5 @@
 import { ValidationFailure } from "../contracts/failures.ts"
-import type { DocumentSeries, IssuerProfile, PartySnapshot, TaxConfiguration } from "./invoice.ts"
+import type { BuyerSnapshot, DocumentSeries, IssuerProfile, PartySnapshot, TaxConfiguration } from "./invoice.ts"
 
 const required = (value: string, field: string, issues: Array<string>) => {
   if (value.trim().length === 0) issues.push(`${field} is required`)
@@ -28,6 +28,29 @@ export const validateParty = (party: PartySnapshot): void => {
   required(party.address.street, "address.street", issues)
   if (party.taxIdentifier.trim() !== "" && !isValidRomanianCui(party.taxIdentifier)) issues.push("taxIdentifier must be a valid Romanian CUI")
   if (party.address.countryCode !== "RO") issues.push("address.countryCode must be RO")
+  if (issues.length > 0) throw new ValidationFailure({ issues })
+}
+
+const isValidRomanianCnp = (value: string): boolean => {
+  if (!/^\d{13}$/.test(value)) return false
+  const key = "279146358279"
+  let sum = 0
+  for (let index = 0; index < key.length; index += 1) sum += Number(value[index]) * Number(key[index])
+  const remainder = sum % 11
+  return Number(value.at(-1)) === (remainder === 10 ? 1 : remainder)
+}
+
+export const validateBuyer = (buyer: BuyerSnapshot): void => {
+  const issues: Array<string> = []
+  const partyType: unknown = buyer.partyType
+  if (partyType !== "company" && partyType !== "individual") issues.push("partyType must be company or individual")
+  try { validateParty({ ...buyer, taxIdentifier: buyer.partyType === "individual" ? "" : buyer.taxIdentifier }) } catch (error) {
+    if (error instanceof ValidationFailure) issues.push(...error.issues)
+  }
+  if (buyer.partyType === "company" && buyer.taxIdentifier.trim() === "") issues.push("taxIdentifier is required for company")
+  if (buyer.partyType === "individual" && buyer.taxIdentifier !== "" && !isValidRomanianCnp(buyer.taxIdentifier)) {
+    issues.push("taxIdentifier must be a valid Romanian CNP")
+  }
   if (issues.length > 0) throw new ValidationFailure({ issues })
 }
 

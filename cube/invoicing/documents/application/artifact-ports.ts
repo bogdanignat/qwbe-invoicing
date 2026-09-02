@@ -26,6 +26,7 @@ export interface RequestContext {
 }
 
 export interface RenderableParty {
+  readonly partyType?: "company" | "individual"
   readonly legalName: string
   readonly taxIdentifier: string
   readonly address: {
@@ -35,6 +36,10 @@ export interface RenderableParty {
     readonly county?: string
     readonly postalCode?: string
   }
+}
+
+export interface RenderableBuyer extends RenderableParty {
+  readonly partyType: "company" | "individual"
 }
 
 export interface RenderableLine {
@@ -57,7 +62,7 @@ export interface RenderableInvoice {
   readonly issuedAt: string
   readonly currency: string
   readonly issuer: RenderableParty
-  readonly customer: RenderableParty
+  readonly customer: RenderableBuyer
   readonly lines: ReadonlyArray<RenderableLine>
   readonly taxBreakdown: ReadonlyArray<{
     readonly rate: string

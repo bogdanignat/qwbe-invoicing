@@ -3,7 +3,7 @@ import { PermissionDenied, ValidationFailure, type InvoicingFailure } from "../c
 import type { Clock, IdGenerator, RequestContext, RequestContextProvider, TransactionalStore } from "../contracts/host.ts"
 import { invoicingPermissions } from "../contracts/permissions.ts"
 import { derivePaymentStatus, formatMinor, sumPaymentsMinor, validateRecordPaymentInput, type Payment, type PaymentStatus, type RecordPaymentInput } from "../domain/payments.ts"
-import { missing } from "./drafting.ts"
+import { missing } from "./support.ts"
 import type { InvoicingTransaction } from "./ports.ts"
 export interface PaymentDependencies { readonly context: RequestContextProvider; readonly clock: Clock; readonly ids: IdGenerator; readonly store: TransactionalStore<InvoicingTransaction>; readonly cubeIdentity: string }
 export interface RecordPaymentResult { readonly payment: Payment; readonly status: PaymentStatus; readonly paidAmount: string; readonly remainingAmount: string }

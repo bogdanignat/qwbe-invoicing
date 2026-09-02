@@ -84,7 +84,7 @@ export const App = () => {
   } else if (route === "/invoices") {
     content = <InvoicesView />
   } else if (route === "/invoices/new") {
-    content = <NewInvoiceView />
+    content = <NewInvoiceView notify={notify} />
   } else if (route === "/customers") {
     content = <CustomersView notify={notify} />
   } else if (route === "/settings") {

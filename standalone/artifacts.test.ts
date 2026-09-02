@@ -43,6 +43,7 @@ const issueFixture = async (directory: string): Promise<string> => {
   }))
   await Effect.runPromise(service.addDocumentSeries({ documentType: "invoice", series: "QWBE" }))
   const customer = await Effect.runPromise(service.createCustomer({
+    partyType: "company",
     legalName: "Țesături România SRL",
     taxIdentifier: "RO87654329",
     address: { countryCode: "RO", city: "Iași", street: "Șoseaua Națională 2" },

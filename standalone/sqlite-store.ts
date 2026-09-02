@@ -4,8 +4,10 @@ import { Effect } from "effect"
 
 import {
   DomainConflict,
+  calculateTotals,
   PersistenceFailure,
   type Address,
+  type BuyerSnapshot,
   type Customer,
   type DraftLine,
   type DocumentSeries,
@@ -83,10 +85,15 @@ const partyFrom = (value: Row, prefix: string): PartySnapshot => ({
   address: addressFrom(value, prefix),
 })
 
+const buyerFrom = (value: Row, prefix: string): BuyerSnapshot => ({
+  ...partyFrom(value, prefix),
+  partyType: text(value, `${prefix}party_type`) as BuyerSnapshot["partyType"],
+})
+
 const customerFrom = (value: Row): Customer => {
   const deletedAt = optionalText(value, "deleted_at")
   return {
-    ...partyFrom(value, ""),
+    ...buyerFrom(value, ""),
     id: text(value, "id"),
     organizationId: text(value, "organization_id"),
     ...(deletedAt === undefined ? {} : { deletedAt }),
@@ -175,7 +182,7 @@ const issuedInvoiceFrom = (database: DatabaseSync, value: Row): IssuedInvoice =>
     series: text(value, "series"), number: integer(value, "number"),
     issueDate: text(value, "issue_date"), dueDate: text(value, "due_date"),
     issuedAt: text(value, "issued_at"), currency: text(value, "currency"),
-    issuer: partyFrom(value, "issuer_"), customer: partyFrom(value, "customer_"),
+    issuer: partyFrom(value, "issuer_"), customer: buyerFrom(value, "customer_"),
     lines: loadLines(database, "issued_lines", id), taxBreakdown,
     totalExcludingTax: text(value, "total_excluding_tax"), taxTotal: text(value, "tax_total"),
     totalIncludingTax: text(value, "total_including_tax"),
@@ -242,13 +249,13 @@ const transactionAdapter = (database: DatabaseSync): InvoicingTransaction => ({
       ORDER BY document_type, series`).all(organizationId).map((value) => documentSeriesFrom(value as Row))),
   saveCustomer: (customer) => write("save customer", () => {
     const result = database.prepare(`INSERT INTO customers
-      (id, organization_id, legal_name, tax_identifier, country_code, city, street, county, postal_code)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT (id) DO UPDATE SET legal_name=excluded.legal_name, tax_identifier=excluded.tax_identifier,
+      (id, organization_id, party_type, legal_name, tax_identifier, country_code, city, street, county, postal_code)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT (id) DO UPDATE SET party_type=excluded.party_type, legal_name=excluded.legal_name, tax_identifier=excluded.tax_identifier,
        country_code=excluded.country_code, city=excluded.city, street=excluded.street,
        county=excluded.county, postal_code=excluded.postal_code
       WHERE customers.organization_id=excluded.organization_id`)
-      .run(customer.id, customer.organizationId, customer.legalName, customer.taxIdentifier, ...addressValues(customer.address))
+      .run(customer.id, customer.organizationId, customer.partyType, customer.legalName, customer.taxIdentifier, ...addressValues(customer.address))
     if (result.changes === 0) throw new DomainConflict({ code: "customer_id_taken", message: "Customer id belongs to another organization" })
   }),
   findCustomer: (organizationId, id) => read("find customer", () => {
@@ -272,22 +279,50 @@ const transactionAdapter = (database: DatabaseSync): InvoicingTransaction => ({
       WHERE organization_id = ? AND customer_id = ? AND status = 'draft' LIMIT 1`).get(organizationId, customerId) !== undefined),
   saveDraft: (draft) => write("save draft", () => {
     const result = database.prepare(`INSERT INTO invoice_drafts
-      (id, organization_id, customer_id, series, issue_date, due_date, currency, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT (id) DO UPDATE SET customer_id=excluded.customer_id, series=excluded.series, issue_date=excluded.issue_date,
+      (id, organization_id, customer_id, customer_party_type, customer_legal_name, customer_tax_identifier,
+       customer_country_code, customer_city, customer_street, customer_county, customer_postal_code,
+       series, issue_date, due_date, currency, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT (id) DO UPDATE SET customer_id=excluded.customer_id, customer_party_type=excluded.customer_party_type,
+       customer_legal_name=excluded.customer_legal_name, customer_tax_identifier=excluded.customer_tax_identifier,
+       customer_country_code=excluded.customer_country_code, customer_city=excluded.customer_city,
+       customer_street=excluded.customer_street, customer_county=excluded.customer_county,
+       customer_postal_code=excluded.customer_postal_code, issue_date=excluded.issue_date,
        due_date=excluded.due_date, currency=excluded.currency, status=excluded.status
-      WHERE invoice_drafts.organization_id=excluded.organization_id`)
-      .run(draft.id, draft.organizationId, draft.customerId, draft.series, draft.issueDate, draft.dueDate, draft.currency, draft.status)
+       WHERE invoice_drafts.organization_id=excluded.organization_id`)
+      .run(draft.id, draft.organizationId, draft.customerId ?? null, draft.customer.partyType,
+        draft.customer.legalName, draft.customer.taxIdentifier, ...addressValues(draft.customer.address),
+        draft.series, draft.issueDate, draft.dueDate, draft.currency, draft.status)
     if (result.changes === 0) throw new DomainConflict({ code: "draft_id_taken", message: "Draft id belongs to another organization" })
     saveLines(database, "draft_lines", draft.id, draft.lines)
   }),
   findDraft: (organizationId, id) => read("find draft", () => {
     const value = row(database.prepare("SELECT * FROM invoice_drafts WHERE organization_id = ? AND id = ?").get(organizationId, id))
     if (value === undefined) return undefined
+    const customerId = optionalText(value, "customer_id")
+    const lines = loadLines(database, "draft_lines", id)
     return {
-      id, organizationId, customerId: text(value, "customer_id"), series: text(value, "series"), issueDate: text(value, "issue_date"),
+      id, organizationId, ...(customerId === undefined ? {} : { customerId }), customer: buyerFrom(value, "customer_"),
+      series: text(value, "series"), issueDate: text(value, "issue_date"),
       dueDate: text(value, "due_date"), currency: text(value, "currency"),
-      status: text(value, "status") === "issued" ? "issued" : "draft", lines: loadLines(database, "draft_lines", id),
+      status: text(value, "status") === "issued" ? "issued" : "draft", lines, ...calculateTotals(lines),
     }
+  }),
+  listDrafts: (organizationId) => read("list drafts", () => {
+    const values = database.prepare(`SELECT * FROM invoice_drafts WHERE organization_id = ? AND status = 'draft'
+      ORDER BY issue_date DESC, id LIMIT 100`).all(organizationId) as ReadonlyArray<Row>
+    return values.map((value) => {
+      const id = text(value, "id")
+      const customerId = optionalText(value, "customer_id")
+      const lines = loadLines(database, "draft_lines", id)
+      return { id, organizationId, ...(customerId === undefined ? {} : { customerId }), customer: buyerFrom(value, "customer_"),
+        series: text(value, "series"), issueDate: text(value, "issue_date"), dueDate: text(value, "due_date"),
+        currency: text(value, "currency"), status: "draft" as const, lines, ...calculateTotals(lines) }
+    })
+  }),
+  deleteDraft: (organizationId, id) => write("delete draft", () => {
+    const result = database.prepare("DELETE FROM invoice_drafts WHERE organization_id = ? AND id = ? AND status = 'draft'")
+      .run(organizationId, id)
+    if (result.changes === 0) throw new DomainConflict({ code: "draft_not_editable", message: "Draft cannot be deleted" })
   }),
   allocateInvoiceNumber: (organizationId, fiscalYear, series) => write("allocate invoice number", () => {
     const value = row(database.prepare(`INSERT INTO invoice_sequences
@@ -301,14 +336,14 @@ const transactionAdapter = (database: DatabaseSync): InvoicingTransaction => ({
     database.prepare(`INSERT INTO issued_invoices
       (id, draft_id, organization_id, fiscal_year, document_type, series, number, issue_date, due_date,
        issued_at, currency, issuer_legal_name, issuer_tax_identifier, issuer_country_code, issuer_city,
-       issuer_street, issuer_county, issuer_postal_code, customer_legal_name, customer_tax_identifier,
+        issuer_street, issuer_county, issuer_postal_code, customer_legal_name, customer_tax_identifier, customer_party_type,
        customer_country_code, customer_city, customer_street, customer_county, customer_postal_code,
        total_excluding_tax, tax_total, total_including_tax, e_factura_status)
-      VALUES (?, ?, ?, ?, 'invoice', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+       VALUES (?, ?, ?, ?, 'invoice', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .run(invoice.id, invoice.draftId, invoice.organizationId, Number(invoice.issueDate.slice(0, 4)),
         invoice.series, invoice.number, invoice.issueDate, invoice.dueDate, invoice.issuedAt, invoice.currency,
         invoice.issuer.legalName, invoice.issuer.taxIdentifier, ...addressValues(invoice.issuer.address),
-        invoice.customer.legalName, invoice.customer.taxIdentifier, ...addressValues(invoice.customer.address),
+        invoice.customer.legalName, invoice.customer.taxIdentifier, invoice.customer.partyType, ...addressValues(invoice.customer.address),
         invoice.totalExcludingTax, invoice.taxTotal, invoice.totalIncludingTax, (invoice as unknown as { eFacturaStatus?: string }).eFacturaStatus ?? "not_sent")
     saveLines(database, "issued_lines", invoice.id, invoice.lines)
     const statement = database.prepare(`INSERT INTO issued_tax_breakdown
@@ -349,13 +384,13 @@ const transactionAdapter = (database: DatabaseSync): InvoicingTransaction => ({
     database.prepare(`INSERT INTO correction_documents
       (id, organization_id, original_invoice_id, fiscal_year, document_type, series, number, issue_date, issued_at, reason, currency,
        issuer_legal_name, issuer_tax_identifier, issuer_country_code, issuer_city, issuer_street, issuer_county, issuer_postal_code,
-       customer_legal_name, customer_tax_identifier, customer_country_code, customer_city, customer_street, customer_county, customer_postal_code,
+        customer_legal_name, customer_tax_identifier, customer_party_type, customer_country_code, customer_city, customer_street, customer_county, customer_postal_code,
        total_excluding_tax, tax_total, total_including_tax)
-      VALUES (?, ?, ?, ?, 'correction', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+       VALUES (?, ?, ?, ?, 'correction', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .run(correction.id, correction.organizationId, correction.originalInvoiceId, correction.fiscalYear,
         correction.series, correction.number, correction.issueDate, correction.issuedAt, correction.reason, correction.currency,
         correction.issuer.legalName, correction.issuer.taxIdentifier, ...addressValues(correction.issuer.address),
-        correction.customer.legalName, correction.customer.taxIdentifier, ...addressValues(correction.customer.address),
+        correction.customer.legalName, correction.customer.taxIdentifier, correction.customer.partyType, ...addressValues(correction.customer.address),
         correction.totalExcludingTax, correction.taxTotal, correction.totalIncludingTax)
     const lineStmt = database.prepare(`INSERT INTO correction_lines
       (id, correction_id, line_position, description, quantity, unit_price, tax_code, tax_category, tax_rate, total_excluding_tax, tax_amount, total_including_tax)
@@ -376,7 +411,7 @@ const transactionAdapter = (database: DatabaseSync): InvoicingTransaction => ({
     return {
       id, organizationId, originalInvoiceId: text(value, "original_invoice_id"), fiscalYear: integer(value, "fiscal_year"), series: text(value, "series"), number: integer(value, "number"),
       issueDate: text(value, "issue_date"), issuedAt: text(value, "issued_at"), reason: text(value, "reason"), currency: text(value, "currency"),
-      issuer: partyFrom(value, "issuer_"), customer: partyFrom(value, "customer_"), lines, taxBreakdown,
+      issuer: partyFrom(value, "issuer_"), customer: buyerFrom(value, "customer_"), lines, taxBreakdown,
       totalExcludingTax: text(value, "total_excluding_tax"), taxTotal: text(value, "tax_total"), totalIncludingTax: text(value, "total_including_tax"),
     }
   }),
@@ -392,39 +427,10 @@ const transactionAdapter = (database: DatabaseSync): InvoicingTransaction => ({
       return {
         id, organizationId, originalInvoiceId: text(value, "original_invoice_id"), fiscalYear: integer(value, "fiscal_year"), series: text(value, "series"), number: integer(value, "number"),
         issueDate: text(value, "issue_date"), issuedAt: text(value, "issued_at"), reason: text(value, "reason"), currency: text(value, "currency"),
-        issuer: partyFrom(value, "issuer_"), customer: partyFrom(value, "customer_"), lines, taxBreakdown,
+        issuer: partyFrom(value, "issuer_"), customer: buyerFrom(value, "customer_"), lines, taxBreakdown,
         totalExcludingTax: text(value, "total_excluding_tax"), taxTotal: text(value, "tax_total"), totalIncludingTax: text(value, "total_including_tax"),
       }
     })
-  }),
-  getMaxInvoiceNumber: (organizationId, fiscalYear, series) => read("get max invoice number", () => {
-    const value = row(database.prepare("SELECT MAX(number) as max_number FROM issued_invoices WHERE organization_id = ? AND fiscal_year = ? AND document_type = 'invoice' AND series = ?").get(organizationId, fiscalYear, series))
-    const max = value?.max_number
-    return typeof max === "number" ? max : undefined
-  }),
-  revertDraftToDraft: (organizationId, draftId) => write("revert draft", () => {
-    const result = database.prepare("UPDATE invoice_drafts SET status = 'draft' WHERE organization_id = ? AND id = ? AND status = 'issued'").run(organizationId, draftId)
-    if (result.changes === 0) throw new DomainConflict({ code: "draft_not_issued", message: "Draft is not issued" })
-  }),
-  deleteIssuedInvoice: (organizationId, id) => write("delete issued invoice", () => {
-    const inv = row(database.prepare("SELECT * FROM issued_invoices WHERE organization_id = ? AND id = ?").get(organizationId, id))
-    if (inv === undefined) throw new DomainConflict({ code: "invoice_not_found", message: "Invoice not found" })
-    const fiscalYear = integer(inv, "fiscal_year")
-    const series = text(inv, "series")
-    const number = integer(inv, "number")
-    database.prepare("DELETE FROM issued_tax_breakdown WHERE invoice_id = ?").run(id)
-    database.prepare("DELETE FROM issued_lines WHERE invoice_id = ?").run(id)
-    database.prepare("DELETE FROM invoice_payments WHERE invoice_id = ? AND organization_id = ?").run(id, organizationId)
-    const del = database.prepare("DELETE FROM issued_invoices WHERE organization_id = ? AND id = ?").run(organizationId, id)
-    if (del.changes === 0) throw new DomainConflict({ code: "invoice_not_deleted", message: "Invoice could not be deleted" })
-    const seq = row(database.prepare("SELECT last_number FROM invoice_sequences WHERE organization_id = ? AND fiscal_year = ? AND document_type = 'invoice' AND series = ?").get(organizationId, fiscalYear, series))
-    if (seq !== undefined && integer(seq, "last_number") === number) {
-      database.prepare("UPDATE invoice_sequences SET last_number = last_number - 1 WHERE organization_id = ? AND fiscal_year = ? AND document_type = 'invoice' AND series = ?").run(organizationId, fiscalYear, series)
-      const updated = row(database.prepare("SELECT last_number FROM invoice_sequences WHERE organization_id = ? AND fiscal_year = ? AND document_type = 'invoice' AND series = ?").get(organizationId, fiscalYear, series))
-      if (updated !== undefined && integer(updated, "last_number") === 0) {
-        database.prepare("DELETE FROM invoice_sequences WHERE organization_id = ? AND fiscal_year = ? AND document_type = 'invoice' AND series = ?").run(organizationId, fiscalYear, series)
-      }
-    }
   }),
 })
 

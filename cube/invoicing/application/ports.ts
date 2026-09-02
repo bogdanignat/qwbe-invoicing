@@ -41,6 +41,13 @@ export interface InvoicingTransaction {
     organizationId: string,
     id: string,
   ) => Effect.Effect<DraftInvoice | undefined, PersistenceFailure>
+  readonly listDrafts: (
+    organizationId: string,
+  ) => Effect.Effect<ReadonlyArray<DraftInvoice>, PersistenceFailure>
+  readonly deleteDraft: (
+    organizationId: string,
+    id: string,
+  ) => Effect.Effect<void, TransactionFailure>
   readonly allocateInvoiceNumber: (
     organizationId: string,
     fiscalYear: number,
@@ -73,17 +80,4 @@ export interface InvoicingTransaction {
     organizationId: string,
     originalInvoiceId: string,
   ) => Effect.Effect<ReadonlyArray<CorrectionDocument>, PersistenceFailure>
-  readonly deleteIssuedInvoice: (
-    organizationId: string,
-    id: string,
-  ) => Effect.Effect<void, TransactionFailure>
-  readonly getMaxInvoiceNumber: (
-    organizationId: string,
-    fiscalYear: number,
-    series: string,
-  ) => Effect.Effect<number | undefined, PersistenceFailure>
-  readonly revertDraftToDraft: (
-    organizationId: string,
-    draftId: string,
-  ) => Effect.Effect<void, TransactionFailure>
 }

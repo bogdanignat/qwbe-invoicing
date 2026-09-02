@@ -2,9 +2,9 @@ import { Effect } from "effect"
 
 import { apiBlob, apiRequest, type ApiFailure } from "./api.ts"
 import {
-  decodeCorrection, decodeCorrections, decodeCustomer, decodeCustomers, decodeDeleted, decodeDraft,
+  decodeCorrection, decodeCorrections, decodeCustomer, decodeCustomers, decodeDeleted, decodeDraft, decodeDrafts,
   decodeDocumentSeries, decodeDocumentSeriesList, decodeInvoice, decodeInvoices, decodeIssuer, decodePaymentSummary,
-  type CorrectionDocument, type Customer, type DocumentSeries, type DocumentType, type DraftInvoice, type IssuedInvoice, type Issuer, type PaymentSummary,
+  type BuyerSnapshot, type CorrectionDocument, type Customer, type DocumentSeries, type DocumentType, type DraftInvoice, type IssuedInvoice, type Issuer, type PaymentSummary,
 } from "./models.ts"
 
 const ignored = (): undefined => undefined
@@ -21,11 +21,27 @@ export type CreateDocumentSeriesInput = {
   readonly series: string
 }
 
-export type CreateDraftInput = {
-  readonly customerId: string
+type BuyerSource =
+  | { readonly customerId: string; readonly customer?: never }
+  | { readonly customer: BuyerSnapshot; readonly customerId?: never }
+
+export type CreateDraftInput = BuyerSource & {
   readonly series: string
   readonly issueDate: string
+  readonly currency?: "RON"
   readonly dueDate?: string
+}
+
+export type UpdateDraftInput = BuyerSource & {
+  readonly issueDate: string
+  readonly dueDate?: string
+}
+
+export interface DraftLineInput {
+  readonly description: string
+  readonly quantity: string
+  readonly unitPrice: string
+  readonly taxCode: string
 }
 
 export const invoicingClient = {
@@ -40,15 +56,19 @@ export const invoicingClient = {
   listDocumentSeries: () => apiRequest("/api/document-series", decodeDocumentSeriesList),
   createDocumentSeries: (body: CreateDocumentSeriesInput) => apiRequest("/api/document-series", decodeDocumentSeries, { method: "POST", body }),
   createDraft: (body: CreateDraftInput) => apiRequest("/api/drafts", decodeDraft, { method: "POST", body }),
+  listDrafts: () => apiRequest("/api/drafts", decodeDrafts),
   getDraft: (id: string) => apiRequest(`/api/drafts/${encoded(id)}`, decodeDraft),
-  addDraftLine: (id: string, body: Readonly<Record<string, unknown>>) => apiRequest(`/api/drafts/${encoded(id)}/lines`, decodeDraft, { method: "POST", body }),
+  updateDraft: (id: string, body: UpdateDraftInput) => apiRequest(`/api/drafts/${encoded(id)}`, decodeDraft, { method: "PUT", body }),
+  deleteDraft: (id: string) => apiRequest(`/api/drafts/${encoded(id)}`, decodeDeleted, { method: "DELETE" }),
+  addDraftLine: (id: string, body: DraftLineInput) => apiRequest(`/api/drafts/${encoded(id)}/lines`, decodeDraft, { method: "POST", body }),
+  updateDraftLine: (id: string, lineId: string, body: DraftLineInput) => apiRequest(`/api/drafts/${encoded(id)}/lines/${encoded(lineId)}`, decodeDraft, { method: "PUT", body }),
+  deleteDraftLine: (id: string, lineId: string) => apiRequest(`/api/drafts/${encoded(id)}/lines/${encoded(lineId)}`, decodeDraft, { method: "DELETE" }),
   issueDraft: (id: string) => apiRequest(`/api/drafts/${encoded(id)}/issue`, decodeInvoice, { method: "POST", body: {} }),
   getInvoiceBundle: (id: string): Effect.Effect<InvoiceBundle, ApiFailure> => Effect.all({
     invoice: apiRequest(`/api/invoices/${encoded(id)}`, decodeInvoice),
     paymentSummary: apiRequest(`/api/invoices/${encoded(id)}/payments`, decodePaymentSummary),
     corrections: apiRequest(`/api/invoices/${encoded(id)}/corrections`, decodeCorrections),
   }, { concurrency: "unbounded" }),
-  deleteInvoice: (id: string) => apiRequest(`/api/invoices/${encoded(id)}`, decodeDeleted, { method: "DELETE" }),
   downloadInvoicePdf: (id: string) => apiRequest(`/api/invoices/${encoded(id)}/pdf`, ignored, { method: "POST", body: {} }).pipe(
     Effect.zipRight(apiBlob(`/api/invoices/${encoded(id)}/pdf`)),
   ),

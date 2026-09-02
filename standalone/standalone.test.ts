@@ -21,11 +21,12 @@ void test("migration apply is idempotent", () => {
       "004-invoice-delete-last",
       "005-allow-e-factura-status-update",
       "006-customer-soft-delete",
+      "007-complete-invoice-authoring",
       "documents/000-foundation",
       "documents/001-artifacts",
       "sessions/000-browser-sessions",
     ])
-    assert.equal(applyMigrations(directory).changed, 10)
+    assert.equal(applyMigrations(directory).changed, 11)
     assert.equal(applyMigrations(directory).changed, 0)
     assert.equal(databaseReady(directory), true)
   } finally {

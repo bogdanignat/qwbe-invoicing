@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import { ValidationFailure } from "../contracts/failures.ts"
-import { resolveTaxConfiguration, validateDate, validateDocumentSeries, validateIssuer, validateParty } from "./validation.ts"
+import { resolveTaxConfiguration, validateBuyer, validateDate, validateDocumentSeries, validateIssuer, validateParty } from "./validation.ts"
 
 void test("validates supported document types and fiscal series format", () => {
   assert.doesNotThrow(() => { validateDocumentSeries({ organizationId: "org-1", documentType: "invoice", series: "QWBE_01" }) })
@@ -81,6 +81,24 @@ void test("validates Romanian CUI, country, and issuer currency", () => {
     taxIdentifier: "RO45561046",
     taxConfigurations: [{ code: "RO_REDUCED", category: "standard", rate: "11", effectiveFrom: "2026-01-01" }],
   }) })
+})
+
+void test("validates explicit buyer type with optional CUI or CNP semantics", () => {
+  const address = { countryCode: "RO", city: "Iași", street: "Strada Mică 2" }
+  assert.throws(
+    () => { validateBuyer({ partyType: "company", legalName: "Client SRL", taxIdentifier: "", address }) },
+    (error: unknown) => error instanceof ValidationFailure && error.issues.includes("taxIdentifier is required for company"),
+  )
+  assert.doesNotThrow(() => { validateBuyer({ partyType: "individual", legalName: "Ion Popescu", taxIdentifier: "", address }) })
+  assert.doesNotThrow(() => { validateBuyer({ partyType: "individual", legalName: "Ion Popescu", taxIdentifier: "1800101221144", address }) })
+  assert.throws(
+    () => { validateBuyer({ partyType: "individual", legalName: "Ion Popescu", taxIdentifier: "1800101221145", address }) },
+    (error: unknown) => error instanceof ValidationFailure && error.issues.includes("taxIdentifier must be a valid Romanian CNP"),
+  )
+  assert.throws(
+    () => { validateBuyer({ partyType: "person" as never, legalName: "Ion Popescu", taxIdentifier: "", address }) },
+    (error: unknown) => error instanceof ValidationFailure && error.issues.includes("partyType must be company or individual"),
+  )
 })
 
 void test("resolves exactly one effective-dated issuer tax configuration", () => {

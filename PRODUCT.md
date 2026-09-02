@@ -3,6 +3,7 @@
 Status: product baseline before implementation  
 Jurisdiction: Romania  
 Last researched: 2026-08-30  
+Mother alignment reviewed: 2026-09-02 against QWBE `a98d9ef` (see `FOUNDATION.md` section 18)
 Architecture companion: [`FOUNDATION.md`](./FOUNDATION.md)
 
 ## 1. Product direction
@@ -60,7 +61,9 @@ fiscal fields required on every invoice.
 
 ### 3.2 Customers
 
-The customer register supports legal entities and natural persons:
+The customer register is optional convenience data, not a prerequisite for issuing
+an invoice. Authoring supports both a saved customer and a one-time buyer entered
+directly on the draft. Both legal entities and natural persons support:
 
 - legal name or personal name;
 - tax and VAT identifiers where applicable;
@@ -69,8 +72,9 @@ The customer register supports legal entities and natural persons:
 - optional email, phone, and contact person;
 - default currency, payment term, and notes.
 
-The application does not request or store a national personal identifier by default.
-Personal data is limited to what the transaction and legal obligation require.
+Legal entities require a valid Romanian CUI/CIF. For natural persons, CNP is
+optional and is requested or stored only when the transaction and legal obligation
+require it. Personal data is otherwise kept to the minimum necessary.
 
 ### 3.3 Numbering sequences
 
@@ -90,7 +94,7 @@ The database must enforce uniqueness. UI validation alone is insufficient.
 
 A draft contains:
 
-- issuer and customer references;
+- issuer reference and a buyer snapshot, optionally linked to a saved customer;
 - issue date, supply date, tax-point date where applicable, and due date;
 - document currency and tax currency;
 - exchange rate, date, and source when required;
@@ -113,6 +117,9 @@ Each line supports:
 - tax category and tax rate;
 - tax exemption or reverse-charge reason and legal basis where applicable;
 - tax amount and line total.
+
+Invoice lines can always be entered and edited manually. A product or service
+catalog may prefill line data later, but it is never required for authoring.
 
 VAT is modeled per line and summarized per tax category/rate. Tax rates are
 effective-dated configuration, not hardcoded constants.
@@ -293,14 +300,18 @@ The standalone product is installed through a versioned Docker Compose bundle:
 Docker Compose
 ├── app       versioned multi-architecture QWBE Invoicing image
 ├── migrate   one-shot command from the same image
-├── data      persistent SQLite and document volume
+├── data      persistent SQLite and document volume (standalone host only, see below)
 └── proxy     optional Caddy profile for TLS
 ```
 
-SQLite remains the initial persistence target because the QWBE foundation already
-defines cube-owned SQLite storage. This keeps a small self-hosted deployment simple.
-A future SaaS or horizontally scaled deployment may add a PostgreSQL adapter; that
-is not an MVP dependency.
+SQLite is the standalone host's persistence today. It was chosen when the QWBE
+foundation defined cube-owned SQLite storage; since QWB-44 (30 August 2026) the
+mother runs one Postgres database with one schema per cube and no SQLite at all, so
+that justification no longer holds. SQLite still keeps a small self-hosted deployment
+simple, but it is now a standalone-host decision, and mounted operation under the
+mother needs either a Postgres persistence adapter for the same domain schema or a
+mother-side capability for per-cube schema migrations. Open decision 7 in section 11
+records the choice to make before the next persistence change.
 
 Deployment requirements:
 
@@ -312,8 +323,9 @@ Deployment requirements:
 - secrets are mounted from files and never baked into the image;
 - versioned images are pinned by release and, for production, digest;
 - releases target `linux/amd64` and `linux/arm64`;
-- backup and restore include SQLite, issued representations/uploads, configuration,
-  exact image digests, and separately protected recovery secrets;
+- backup and restore include the database (SQLite today; a Postgres dump if the
+  standalone host moves), issued representations/uploads, configuration, exact image
+  digests, and separately protected recovery secrets;
 - normal upgrade documentation never uses `docker compose down -v`.
 
 Recommended image location:
@@ -370,9 +382,9 @@ The first complete vertical slice is:
 
 ```text
 configure issuer
-  -> create customer
-  -> create draft
-  -> add taxed lines
+  -> select a saved customer or enter a one-time buyer
+  -> create and edit a draft
+  -> add, edit, and remove manual taxed lines
   -> issue with series and number
   -> read the immutable issued invoice
 ```
@@ -409,7 +421,7 @@ stable.
 
 - money, quantity, tax, address, and identifier value objects;
 - issuer/customer snapshots;
-- invoice draft aggregate and deterministic totals;
+- invoice draft aggregate, saved-customer or one-time-buyer authoring, and deterministic totals;
 - numbering sequence;
 - atomic issuance use case as `Effect`;
 - SQLite schema and migrations;
@@ -431,7 +443,8 @@ stable.
 - migration and restore drills;
 - security review and audit-log verification;
 - exact cube artifact and compatibility checks against a versioned QWBE public
-  contract.
+  contract, including the shared `qwbe-core/package` checker (QWB-40) once the
+  package shape can be judged by it.
 
 ### Later — RO e-Factura
 
@@ -456,6 +469,14 @@ The following decisions must be explicit before their relevant implementation:
 5. What retention policy and backup targets are promised to operators?
 6. Which public, versioned QWBE contracts replace the current private `0.0.0`
    compatibility snapshot?
+7. Persistence alignment: does the standalone host move to Postgres to match the
+   mother (one schema per cube, kernel outbox), or does it keep SQLite and add a
+   Postgres adapter for mounted mode only? Either way the database must keep
+   enforcing number uniqueness and issued-invoice immutability, which the mother's
+   six-operation jsonb store cannot express today.
+8. Package shape: keep the `kind: "cube"` package or reshape into a plugin pack
+   (`cubes: ["invoicing", "invoicing/documents"]`) so the mother's shared checker and
+   hierarchy rule apply.
 
 ## 12. Primary references
 
