@@ -78,6 +78,16 @@ const memoryStore = (state: MemoryState): TransactionalStore<InvoicingTransactio
       findDraft: (organizationId, id) => Effect.succeed(
         working.drafts.get(id)?.organizationId === organizationId ? working.drafts.get(id) : undefined,
       ),
+      listDrafts: (organizationId) => Effect.succeed([...working.drafts.values()]
+        .filter((draft) => draft.organizationId === organizationId && draft.status === "draft")
+        .sort((a, b) => b.issueDate.localeCompare(a.issueDate) || a.id.localeCompare(b.id))),
+      deleteDraft: (organizationId, id) => Effect.sync(() => {
+        const draft = working.drafts.get(id)
+        if (draft === undefined || draft.organizationId !== organizationId || draft.status !== "draft") {
+          throw new DomainConflict({ code: "draft_not_editable", message: "Draft cannot be deleted" })
+        }
+        working.drafts.delete(id)
+      }),
       allocateInvoiceNumber: (organizationId, fiscalYear, series) => Effect.sync(() => {
         const key = `${organizationId}:${String(fiscalYear)}:${series}`
         const next = (working.sequences.get(key) ?? 0) + 1
@@ -114,26 +124,6 @@ const memoryStore = (state: MemoryState): TransactionalStore<InvoicingTransactio
         [...working.corrections.values()].filter((c) => c.organizationId === organizationId && c.originalInvoiceId === originalInvoiceId)
           .sort((a, b) => a.issuedAt.localeCompare(b.issuedAt)),
       ),
-      getMaxInvoiceNumber: (organizationId, fiscalYear, series) => Effect.succeed(
-        Math.max(0, ...[...working.issued.values()].filter((i) => i.organizationId === organizationId && Number(i.issueDate.slice(0, 4)) === fiscalYear && i.series === series).map((i) => i.number)) || undefined as number | undefined,
-      ),
-      revertDraftToDraft: (organizationId, draftId) => Effect.sync(() => {
-        const d = working.drafts.get(draftId)
-        if (d === undefined || d.organizationId !== organizationId || d.status !== "issued") throw new DomainConflict({ code: "draft_not_issued", message: "Draft not issued" })
-        working.drafts.set(draftId, { ...d, status: "draft" })
-      }),
-      deleteIssuedInvoice: (organizationId, id) => Effect.sync(() => {
-        const inv = working.issued.get(id)
-        if (inv === undefined || inv.organizationId !== organizationId) throw new DomainConflict({ code: "invoice_not_found", message: "Invoice not found" })
-        working.issued.delete(id)
-        // delete lines/breakdown are inside issued object, no separate tables in memory
-        const key = `${organizationId}:${String(Number(inv.issueDate.slice(0, 4)))}:${inv.series}`
-        const current = working.sequences.get(key)
-        if (current !== undefined && current === inv.number) {
-          if (current <= 1) working.sequences.delete(key)
-          else working.sequences.set(key, current - 1)
-        }
-      }),
     }
     return Effect.tap(use(transaction), () => Effect.sync(() => {
       state.issuers = working.issuers
@@ -222,6 +212,7 @@ void test("issues deterministic immutable invoice snapshots through the public s
   ))
   assert.equal(duplicateSeries instanceof DomainConflict && duplicateSeries.code === "document_series_exists", true)
   const customer = await Effect.runPromise(service.createCustomer({
+    partyType: "company",
     legalName: "Client SRL",
     taxIdentifier: "RO87654329",
     address: { countryCode: "RO", city: "Iași", street: "Strada Mică 2" },
@@ -322,6 +313,7 @@ void test("keeps numbering and issued data unchanged when issuance rolls back", 
   }))
   await Effect.runPromise(service.addDocumentSeries({ documentType: "invoice", series: "QWBE" }))
   const customer = await Effect.runPromise(service.createCustomer({
+    partyType: "company",
     legalName: "Client SRL",
     taxIdentifier: "RO87654329",
     address: { countryCode: "RO", city: "Iași", street: "Strada Mică 2" },
@@ -365,4 +357,80 @@ void test("refuses missing permissions and cross-organization reads", async () =
     taxConfigurations,
   })))
   assert.equal(failure instanceof PermissionDenied, true)
+})
+
+void test("authors snapshot-owned drafts and recalculates every server-derived amount", async () => {
+  const state = emptyState()
+  const service = createInvoicingService({
+    context: contextProvider({ identity, organization: { id: "org-1" } }), clock: fixedClock,
+    ids: sequentialIds(), store: memoryStore(state), cubeIdentity: "invoicing",
+  })
+  await Effect.runPromise(service.configureIssuer({
+    legalName: "Exemplu SRL", taxIdentifier: "RO12345674",
+    address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" },
+    defaultCurrency: "RON", defaultPaymentTermDays: 15,
+    taxConfigurations: [
+      { code: "RO_STANDARD", category: "standard", rate: "19", effectiveFrom: "2020-01-01", effectiveTo: "2025-07-31" },
+      { code: "RO_STANDARD", category: "standard", rate: "21", effectiveFrom: "2025-08-01" },
+    ],
+  }))
+  await Effect.runPromise(service.addDocumentSeries({ documentType: "invoice", series: "QWBE" }))
+  const saved = await Effect.runPromise(service.createCustomer({
+    partyType: "company", legalName: "Original SRL", taxIdentifier: "RO87654329",
+    address: { countryCode: "RO", city: "Iași", street: "Strada Mică 2" },
+  }))
+  const savedDraft = await Effect.runPromise(service.createDraft({ customerId: saved.id, series: "QWBE", issueDate: "2025-07-31" }))
+  assert.equal(savedDraft.customer.legalName, "Original SRL")
+  assert.equal(savedDraft.totalIncludingTax, "0.00")
+  state.customers.set(saved.id, { ...saved, legalName: "Directory Renamed SRL" })
+  await Effect.runPromise(service.addDraftLine({ draftId: savedDraft.id, description: "Snapshot", quantity: "1", unitPrice: "100", taxCode: "RO_STANDARD" }))
+  const savedIssued = await Effect.runPromise(service.issueInvoice({ draftId: savedDraft.id }))
+  assert.equal(savedIssued.customer.legalName, "Original SRL")
+  assert.equal(savedIssued.customer.partyType, "company")
+
+  const inlineBuyer = {
+    partyType: "individual" as const, legalName: "Ion Popescu", taxIdentifier: "",
+    address: { countryCode: "RO", city: "Cluj-Napoca", street: "Strada Unu 1" },
+  }
+  const invalidSource = await Effect.runPromise(Effect.flip(service.createDraft({
+    customerId: saved.id, customer: inlineBuyer, series: "QWBE", issueDate: "2025-07-31",
+  } as never)))
+  assert.equal(invalidSource instanceof ValidationFailure, true)
+  const draft = await Effect.runPromise(service.createDraft({ customer: inlineBuyer, series: "QWBE", issueDate: "2025-07-31" }))
+  assert.equal(draft.customerId, undefined)
+  let edited = await Effect.runPromise(service.addDraftLine({
+    draftId: draft.id, description: "Consultanță", quantity: "1", unitPrice: "100", taxCode: "RO_STANDARD",
+  }))
+  const lineId = edited.lines[0]?.id as string
+  assert.equal(edited.totalIncludingTax, "119.00")
+  edited = await Effect.runPromise(service.updateDraft({ customer: inlineBuyer, draftId: draft.id, issueDate: "2025-08-01" }))
+  assert.equal(edited.lines[0]?.taxRate, "21.00")
+  assert.equal(edited.totalIncludingTax, "121.00")
+  const unsafeDate = await Effect.runPromise(Effect.flip(service.updateDraft({
+    customer: inlineBuyer, draftId: draft.id, issueDate: "2019-12-31",
+  })))
+  assert.equal(unsafeDate instanceof ValidationFailure, true)
+  assert.equal((await Effect.runPromise(service.getDraft(draft.id))).issueDate, "2025-08-01")
+  edited = await Effect.runPromise(service.updateDraftLine({
+    draftId: draft.id, lineId, description: "Consultanță extinsă", quantity: "2", unitPrice: "100", taxCode: "RO_STANDARD",
+  }))
+  assert.equal(edited.totalIncludingTax, "242.00")
+  edited = await Effect.runPromise(service.deleteDraftLine(draft.id, lineId))
+  assert.equal(edited.totalIncludingTax, "0.00")
+  const replacement = await Effect.runPromise(service.addDraftLine({
+    draftId: draft.id, description: "Final", quantity: "1", unitPrice: "50", taxCode: "RO_STANDARD",
+  }))
+  assert.deepEqual(await Effect.runPromise(service.listDrafts()), [replacement])
+  await Effect.runPromise(service.issueInvoice({ draftId: draft.id }))
+  for (const mutation of [
+    service.deleteDraft(draft.id),
+    service.deleteDraftLine(draft.id, replacement.lines[0]?.id as string),
+    service.updateDraft({ customer: inlineBuyer, draftId: draft.id, issueDate: "2025-08-02" }),
+  ]) {
+    const failure = await Effect.runPromise(Effect.flip(mutation))
+    assert.equal(failure instanceof DomainConflict && failure.code === "invoice_already_issued", true)
+  }
+  const disposable = await Effect.runPromise(service.createDraft({ customer: inlineBuyer, series: "QWBE", issueDate: "2025-08-02" }))
+  await Effect.runPromise(service.deleteDraft(disposable.id))
+  assert.equal(await Effect.runPromise(Effect.flip(service.getDraft(disposable.id))) instanceof ResourceNotFound, true)
 })

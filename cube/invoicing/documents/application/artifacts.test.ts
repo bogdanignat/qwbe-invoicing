@@ -28,6 +28,7 @@ const invoice: RenderableInvoice = {
     address: { countryCode: "RO", city: "Botoșani", street: "Strada Independenței 1" },
   },
   customer: {
+    partyType: "company",
     legalName: "Țesături România SRL",
     taxIdentifier: "RO87654329",
     address: { countryCode: "RO", city: "Iași", street: "Șoseaua Națională 2" },

@@ -3,7 +3,7 @@ import { DomainConflict, PermissionDenied, type InvoicingFailure } from "../cont
 import type { Clock, IdGenerator, RequestContext, RequestContextProvider, TransactionalStore } from "../contracts/host.ts"
 import { invoicingPermissions } from "../contracts/permissions.ts"
 import { negateMoney, validateCreateCorrectionInput, type CorrectionDocument, type CreateCorrectionInput } from "../domain/corrections.ts"
-import { missing } from "./drafting.ts"
+import { missing } from "./support.ts"
 import type { InvoicingTransaction } from "./ports.ts"
 export interface CorrectionDependencies { readonly context: RequestContextProvider; readonly clock: Clock; readonly ids: IdGenerator; readonly store: TransactionalStore<InvoicingTransaction>; readonly cubeIdentity: string }
 const fy = (d: string): number => Number(d.slice(0, 4))
@@ -33,7 +33,7 @@ export const createCorrectionOperations = (d: CorrectionDependencies) => {
       const corr: CorrectionDocument = {
         id, organizationId: ctx.organization.id, originalInvoiceId: orig.id, fiscalYear: fy(issueDate), series: orig.series, number, issueDate, issuedAt, reason: input.reason.trim(), currency: orig.currency,
         issuer: { legalName: orig.issuer.legalName, taxIdentifier: orig.issuer.taxIdentifier, address: { ...orig.issuer.address } },
-        customer: { legalName: orig.customer.legalName, taxIdentifier: orig.customer.taxIdentifier, address: { ...orig.customer.address } },
+        customer: { legalName: orig.customer.legalName, taxIdentifier: orig.customer.taxIdentifier, partyType: orig.customer.partyType, address: { ...orig.customer.address } },
         lines: negLines, taxBreakdown: negBreakdown,
         totalExcludingTax: negateMoney(orig.totalExcludingTax), taxTotal: negateMoney(orig.taxTotal), totalIncludingTax: negateMoney(orig.totalIncludingTax),
       }

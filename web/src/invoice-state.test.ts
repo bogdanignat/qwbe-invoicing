@@ -15,11 +15,10 @@ void test("allows payments only while an invoice has a remaining balance", () =>
   assert.equal(invoiceActionState(summary("paid", "0.00", true), []).canRecordPayment, false)
 })
 
-void test("allows only one full correction and marks dependent records", () => {
+void test("allows only one full correction and identifies overpayment", () => {
   assert.deepEqual(invoiceActionState(summary("overpaid", "0.00", true), [correction]), {
     canRecordPayment: false,
     canCreateFullCorrection: false,
-    hasDependentRecords: true,
     isOverpaid: true,
   })
 })

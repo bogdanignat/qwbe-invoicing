@@ -12,6 +12,12 @@ export interface PartySnapshot {
   readonly address: Address
 }
 
+export type PartyType = "company" | "individual"
+
+export interface BuyerSnapshot extends PartySnapshot {
+  readonly partyType: PartyType
+}
+
 export interface TaxConfiguration {
   readonly code: string
   readonly category: "standard"
@@ -40,7 +46,7 @@ export interface ConfigureDocumentSeriesInput {
   readonly series: string
 }
 
-export interface Customer extends PartySnapshot {
+export interface Customer extends BuyerSnapshot {
   readonly id: string
   readonly organizationId: string
   readonly deletedAt?: string
@@ -62,13 +68,18 @@ export interface DraftLine {
 export interface DraftInvoice {
   readonly id: string
   readonly organizationId: string
-  readonly customerId: string
+  readonly customer: BuyerSnapshot
+  readonly customerId?: string
   readonly series: string
   readonly issueDate: string
   readonly dueDate: string
   readonly currency: string
   readonly status: "draft" | "issued"
   readonly lines: ReadonlyArray<DraftLine>
+  readonly taxBreakdown: ReadonlyArray<TaxBreakdown>
+  readonly totalExcludingTax: string
+  readonly taxTotal: string
+  readonly totalIncludingTax: string
 }
 
 export interface TaxBreakdown {
@@ -91,7 +102,7 @@ export interface IssuedInvoice {
   readonly issuedAt: string
   readonly currency: string
   readonly issuer: PartySnapshot
-  readonly customer: PartySnapshot
+  readonly customer: BuyerSnapshot
   readonly lines: ReadonlyArray<DraftLine>
   readonly taxBreakdown: ReadonlyArray<TaxBreakdown>
   readonly totalExcludingTax: string
@@ -109,17 +120,22 @@ export interface ConfigureIssuerInput {
   readonly taxConfigurations: ReadonlyArray<TaxConfiguration>
 }
 
-export interface CreateCustomerInput {
-  readonly legalName: string
-  readonly taxIdentifier: string
-  readonly address: Address
-}
+export type CreateCustomerInput = BuyerSnapshot
 
-export interface CreateDraftInput {
-  readonly customerId: string
+export type BuyerSource =
+  | { readonly customerId: string; readonly customer?: never }
+  | { readonly customer: BuyerSnapshot; readonly customerId?: never }
+
+export type CreateDraftInput = BuyerSource & {
   readonly series: string
   readonly issueDate: string
   readonly currency?: string
+  readonly dueDate?: string
+}
+
+export type UpdateDraftInput = BuyerSource & {
+  readonly draftId: string
+  readonly issueDate: string
   readonly dueDate?: string
 }
 
@@ -129,6 +145,10 @@ export interface AddDraftLineInput {
   readonly quantity: string
   readonly unitPrice: string
   readonly taxCode: string
+}
+
+export interface UpdateDraftLineInput extends AddDraftLineInput {
+  readonly lineId: string
 }
 
 export const addDays = (date: string, days: number): string => {

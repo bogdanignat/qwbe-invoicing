@@ -79,20 +79,35 @@ const applyPlan = (dataDirectory: string, plan: typeof plans[number]): number =>
     database.exec(
       "CREATE TABLE IF NOT EXISTS schema_migrations (name TEXT PRIMARY KEY, applied_at TEXT NOT NULL) STRICT",
     )
-    const pending = pendingFor(database, plan)
-    for (const migration of pending) {
-      for (const statement of migration.statements) database.exec(statement)
-      database.prepare("INSERT INTO schema_migrations (name, applied_at) VALUES (?, ?)")
-        .run(migration.name, new Date().toISOString())
-    }
     database.exec("COMMIT")
     transactionOpen = false
+    const pending = pendingFor(database, plan)
+    for (const migration of pending) {
+      const foreignKeysOff = "foreignKeys" in migration && migration.foreignKeys === "off"
+      if (foreignKeysOff) database.exec("PRAGMA foreign_keys = OFF")
+      try {
+        database.exec("BEGIN IMMEDIATE")
+        transactionOpen = true
+        for (const statement of migration.statements) database.exec(statement)
+        if (foreignKeysOff && database.prepare("PRAGMA foreign_key_check").all().length > 0) {
+          throw new Error(`foreign key check failed after ${migration.name}`)
+        }
+        database.prepare("INSERT INTO schema_migrations (name, applied_at) VALUES (?, ?)")
+          .run(migration.name, new Date().toISOString())
+        database.exec("COMMIT")
+        transactionOpen = false
+      } finally {
+        if (foreignKeysOff && !transactionOpen) database.exec("PRAGMA foreign_keys = ON")
+      }
+    }
     return pending.length
   } catch (error) {
-    if (transactionOpen) database.exec("ROLLBACK")
+    if (transactionOpen) {
+      database.exec("ROLLBACK")
+    }
     throw error
   } finally {
-    database.close()
+    try { database.exec("PRAGMA foreign_keys = ON") } finally { database.close() }
   }
 }
 

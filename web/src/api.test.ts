@@ -183,7 +183,7 @@ void test("lists and creates document series with the final API contract", async
       const body = path === "/api/session"
         ? { authenticated: true, csrfToken: "csrf-token" }
         : path === "/api/drafts"
-          ? { id: "draft-1", customerId: "customer-1", series: "QWBE", issueDate: "2026-09-01", dueDate: "2026-09-16", currency: "RON", status: "draft", lines: [] }
+          ? { id: "draft-1", organizationId: "org-1", customerId: "customer-1", customer: { partyType: "company", legalName: "Client", taxIdentifier: "RO1", address: { countryCode: "RO", city: "Iași", street: "Strada 1" } }, series: "QWBE", issueDate: "2026-09-01", dueDate: "2026-09-16", currency: "RON", status: "draft", lines: [], taxBreakdown: [], totalExcludingTax: "0.00", taxTotal: "0.00", totalIncludingTax: "0.00" }
         : init?.method === "POST"
           ? { organizationId: "org-1", documentType: "invoice", series: "QWBE" }
           : [{ organizationId: "org-1", documentType: "invoice", series: "QWBE" }]

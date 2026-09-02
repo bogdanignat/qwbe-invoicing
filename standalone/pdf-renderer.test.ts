@@ -5,7 +5,7 @@ import { Effect } from "effect"
 import { PDFDocument } from "pdf-lib"
 
 import type { RenderableInvoice } from "../cube/invoicing/documents/index.ts"
-import { createPdfRenderer, invoiceTemplateVersion } from "./pdf-renderer.ts"
+import { createPdfRenderer, invoiceTemplateVersion, partyIdentifierLine } from "./pdf-renderer.ts"
 
 const invoice: RenderableInvoice = {
   id: "invoice-1",
@@ -22,6 +22,7 @@ const invoice: RenderableInvoice = {
     address: { countryCode: "RO", city: "Botoșani", street: "Strada Independenței 1" },
   },
   customer: {
+    partyType: "company",
     legalName: "Țesături România SRL",
     taxIdentifier: "RO87654329",
     address: { countryCode: "RO", city: "Iași", street: "Șoseaua Națională 2" },
@@ -56,6 +57,16 @@ void test("renders deterministic valid PDFs with Romanian glyphs and fixed metad
   assert.equal(parsed.getTitle(), "Factura QWBE 7")
   assert.equal(parsed.getAuthor(), "Știință și Tehnică SRL")
   assert.equal(parsed.getCreationDate()?.toISOString(), invoice.issuedAt)
+})
+
+void test("renders an individual buyer with a CNP label and omits an empty identifier", async () => {
+  const individual = { ...invoice.customer, partyType: "individual" as const, legalName: "Ion Popescu", taxIdentifier: "1800101221144" }
+  assert.equal(partyIdentifierLine(individual), "CNP: 1800101221144")
+  assert.equal(partyIdentifierLine({ ...individual, taxIdentifier: "" }), undefined)
+  assert.equal(partyIdentifierLine(invoice.issuer), "CUI: RO12345674")
+  const rendered = await Effect.runPromise(createPdfRenderer().render({ ...invoice, customer: individual }))
+  const parsed = await PDFDocument.load(rendered.bytes, { updateMetadata: false })
+  assert.equal(parsed.getPageCount(), 1)
 })
 
 void test("paginates long descriptions and unbroken Romanian text", async () => {

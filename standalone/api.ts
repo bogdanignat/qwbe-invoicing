@@ -11,11 +11,6 @@ import {
   ResourceNotFound,
   ValidationFailure,
   createInvoicingService,
-  type AddDraftLineInput,
-  type ConfigureIssuerInput,
-  type ConfigureDocumentSeriesInput,
-  type CreateCustomerInput,
-  type CreateDraftInput,
   type InvoicingFailure,
 } from "../cube/invoicing/index.ts"
 import {
@@ -27,6 +22,7 @@ import {
   type DocumentsFailure,
 } from "../cube/invoicing/documents/index.ts"
 import { createStandaloneArtifactService } from "./artifact-runtime.ts"
+import { correctionInput, customerInput, documentSeriesInput, draftInput, issuerInput, lineInput, paymentInput, updateDraftInput, updateLineInput } from "./api-inputs.ts"
 import type { RequestAuthenticator } from "./auth.ts"
 import { createSqliteStore } from "./sqlite-store.ts"
 
@@ -46,142 +42,6 @@ export interface ApiResponse {
 export interface ApiRuntime {
   readonly authenticate: RequestAuthenticator
   readonly dataDirectory: string
-}
-
-type JsonObject = Readonly<Record<string, unknown>>
-
-const object = (value: unknown): JsonObject => {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    throw new ValidationFailure({ issues: ["request body must be a JSON object"] })
-  }
-  return value as JsonObject
-}
-
-const text = (value: unknown, field: string): string => {
-  if (typeof value !== "string") throw new ValidationFailure({ issues: [`${field} must be a string`] })
-  return value
-}
-
-const optionalText = (value: unknown, field: string): string | undefined =>
-  value === undefined ? undefined : text(value, field)
-
-const integer = (value: unknown, field: string): number => {
-  if (typeof value !== "number" || !Number.isInteger(value)) {
-    throw new ValidationFailure({ issues: [`${field} must be an integer`] })
-  }
-  return value
-}
-
-const address = (value: unknown) => {
-  const input = object(value)
-  const result = {
-    countryCode: text(input.countryCode, "address.countryCode"),
-    city: text(input.city, "address.city"),
-    street: text(input.street, "address.street"),
-    county: optionalText(input.county, "address.county"),
-    postalCode: optionalText(input.postalCode, "address.postalCode"),
-  }
-  return {
-    countryCode: result.countryCode,
-    city: result.city,
-    street: result.street,
-    ...(result.county === undefined ? {} : { county: result.county }),
-    ...(result.postalCode === undefined ? {} : { postalCode: result.postalCode }),
-  }
-}
-
-const taxConfigurations = (value: unknown): ConfigureIssuerInput["taxConfigurations"] => {
-  if (!Array.isArray(value)) throw new ValidationFailure({ issues: ["taxConfigurations must be an array"] })
-  return value.map((item) => {
-    const input = object(item)
-    const effectiveTo = optionalText(input.effectiveTo, "taxConfigurations.effectiveTo")
-    return {
-      code: text(input.code, "taxConfigurations.code"),
-      category: "standard" as const,
-      rate: text(input.rate, "taxConfigurations.rate"),
-      effectiveFrom: text(input.effectiveFrom, "taxConfigurations.effectiveFrom"),
-      ...(effectiveTo === undefined ? {} : { effectiveTo }),
-    }
-  })
-}
-
-const issuerInput = (value: unknown): ConfigureIssuerInput => {
-  const input = object(value)
-  return {
-    legalName: text(input.legalName, "legalName"),
-    taxIdentifier: text(input.taxIdentifier, "taxIdentifier").trim().toUpperCase(),
-    address: address(input.address),
-    defaultCurrency: text(input.defaultCurrency, "defaultCurrency"),
-    defaultPaymentTermDays: integer(input.defaultPaymentTermDays, "defaultPaymentTermDays"),
-    taxConfigurations: taxConfigurations(input.taxConfigurations),
-  }
-}
-
-const customerInput = (value: unknown): CreateCustomerInput => {
-  const input = object(value)
-  return {
-    legalName: text(input.legalName, "legalName"),
-    taxIdentifier: text(input.taxIdentifier, "taxIdentifier").trim().toUpperCase(),
-    address: address(input.address),
-  }
-}
-
-const documentSeriesInput = (value: unknown): ConfigureDocumentSeriesInput => {
-  const input = object(value)
-  const documentType = text(input.documentType, "documentType")
-  if (documentType !== "invoice" && documentType !== "proforma") {
-    throw new ValidationFailure({ issues: ["documentType must be invoice or proforma"] })
-  }
-  return { documentType, series: text(input.series, "series") }
-}
-
-const draftInput = (value: unknown): CreateDraftInput => {
-  const input = object(value)
-  const currency = optionalText(input.currency, "currency")
-  const dueDate = optionalText(input.dueDate, "dueDate")
-  return {
-    customerId: text(input.customerId, "customerId"),
-    series: text(input.series, "series"),
-    issueDate: text(input.issueDate, "issueDate"),
-    ...(currency === undefined ? {} : { currency }),
-    ...(dueDate === undefined ? {} : { dueDate }),
-  }
-}
-
-const lineInput = (draftId: string, value: unknown): AddDraftLineInput => {
-  const input = object(value)
-  return {
-    draftId,
-    description: text(input.description, "description"),
-    quantity: text(input.quantity, "quantity"),
-    unitPrice: text(input.unitPrice, "unitPrice"),
-    taxCode: text(input.taxCode, "taxCode"),
-  }
-}
-
-const paymentInput = (invoiceId: string, value: unknown) => {
-  const input = object(value)
-  const externalReference = optionalText(input.externalReference, "externalReference")
-  const note = optionalText(input.note, "note")
-  return {
-    invoiceId,
-    amount: text(input.amount, "amount"),
-    currency: text(input.currency, "currency"),
-    paymentDate: text(input.paymentDate, "paymentDate"),
-    method: text(input.method, "method"),
-    ...(externalReference === undefined ? {} : { externalReference }),
-    ...(note === undefined ? {} : { note }),
-  }
-}
-
-const correctionInput = (originalInvoiceId: string, value: unknown) => {
-  const input = object(value)
-  const issueDate = optionalText(input.issueDate, "issueDate")
-  return {
-    originalInvoiceId,
-    reason: text(input.reason, "reason"),
-    ...(issueDate === undefined ? {} : { issueDate }),
-  }
 }
 
 type ApiFailure = InvoicingFailure | DocumentsFailure
@@ -226,6 +86,7 @@ export const handleApiRequest = async (request: ApiRequest, runtime: ApiRuntime)
     const customerGet = /^\/api\/customers\/([^/]+)$/.exec(request.url)
     const draftGet = /^\/api\/drafts\/([^/]+)$/.exec(request.url)
     const line = /^\/api\/drafts\/([^/]+)\/lines$/.exec(request.url)
+    const lineItem = /^\/api\/drafts\/([^/]+)\/lines\/([^/]+)$/.exec(request.url)
     const issue = /^\/api\/drafts\/([^/]+)\/issue$/.exec(request.url)
     const invoice = /^\/api\/invoices\/([^/]+)$/.exec(request.url)
     const pdf = /^\/api\/invoices\/([^/]+)\/pdf$/.exec(request.url)
@@ -240,9 +101,14 @@ export const handleApiRequest = async (request: ApiRequest, runtime: ApiRuntime)
     else if (request.method === "GET" && customerGet?.[1] !== undefined) operation = service.getCustomer(customerGet[1])
     else if (request.method === "POST" && request.url === "/api/customers") operation = service.createCustomer(customerInput(request.body))
     else if (request.method === "DELETE" && customerGet?.[1] !== undefined) operation = Effect.map(service.deleteCustomer(customerGet[1]), () => ({ deleted: true } as const))
+    else if (request.method === "GET" && request.url === "/api/drafts") operation = service.listDrafts()
     else if (request.method === "GET" && draftGet?.[1] !== undefined) operation = service.getDraft(draftGet[1])
     else if (request.method === "POST" && request.url === "/api/drafts") operation = service.createDraft(draftInput(request.body))
+    else if (request.method === "PUT" && draftGet?.[1] !== undefined) operation = service.updateDraft(updateDraftInput(draftGet[1], request.body))
+    else if (request.method === "DELETE" && draftGet?.[1] !== undefined) operation = Effect.map(service.deleteDraft(draftGet[1]), () => ({ deleted: true } as const))
     else if (request.method === "POST" && line?.[1] !== undefined) operation = service.addDraftLine(lineInput(line[1], request.body))
+      else if (request.method === "PUT" && lineItem?.[1] !== undefined && lineItem[2] !== undefined) operation = service.updateDraftLine(updateLineInput(lineItem[1], lineItem[2], request.body))
+      else if (request.method === "DELETE" && lineItem?.[1] !== undefined && lineItem[2] !== undefined) operation = service.deleteDraftLine(lineItem[1], lineItem[2])
       else if (request.method === "POST" && issue?.[1] !== undefined) operation = service.issueInvoice({ draftId: issue[1] })
       else if (request.method === "GET" && payments?.[1] !== undefined) operation = service.listPayments(payments[1])
       else if (request.method === "POST" && payments?.[1] !== undefined) operation = service.recordPayment(paymentInput(payments[1], request.body))
@@ -251,7 +117,6 @@ export const handleApiRequest = async (request: ApiRequest, runtime: ApiRuntime)
       else if (request.method === "GET" && correctionGet?.[1] !== undefined) operation = service.getCorrection(correctionGet[1])
       else if (request.method === "GET" && request.url === "/api/invoices") operation = service.listIssuedInvoices()
       else if (request.method === "GET" && invoice?.[1] !== undefined) operation = service.getIssuedInvoice(invoice[1])
-      else if (request.method === "DELETE" && invoice?.[1] !== undefined) operation = Effect.map(service.deleteIssuedInvoice(invoice[1]), () => ({ deleted: true } as const))
       else if (request.method === "POST" && pdf?.[1] !== undefined) operation = documents.renderInvoice(pdf[1])
       else if (request.method === "GET" && pdf?.[1] !== undefined) {
         const result = await Effect.runPromise(Effect.either(documents.downloadInvoice(pdf[1])))
@@ -278,6 +143,7 @@ export const handleApiRequest = async (request: ApiRequest, runtime: ApiRuntime)
           || customerGet !== null
           || draftGet !== null
           || line !== null
+          || lineItem !== null
           || issue !== null
           || invoice !== null
           || pdf !== null

@@ -146,7 +146,7 @@ export const SettingsView = ({ notify }: { readonly notify: (message: string) =>
           <label>Noua configurație TVA valabilă de la<input name="taxEffectiveFrom" type="date" defaultValue={tax?.effectiveFrom ?? today()} required /></label>
         </div>
         <p className="hint" id="vat-hint">Prefixul RO și bifa „Plătitoare de TVA” trebuie să corespundă. Configurația nu poate fi salvată cât timp sunt în contradicție.</p>
-        <p className="status-note warning" id="vat-mismatch" hidden={vatMismatchMessage === undefined}>{vatMismatchMessage}</p>
+        <p className="status-note warning" id="vat-mismatch" role="status" aria-live="polite" hidden={vatMismatchMessage === undefined}>{vatMismatchMessage}</p>
         <output name="vatStatus" className="sr-only" aria-live="polite">{vatRegistered ? "Firma este configurată ca plătitoare de TVA." : "Firma este configurată ca neplătitoare de TVA, cu cotă 0%."}</output>
         <div className="form-actions"><button className="button primary" type="submit" disabled={saveIssuer.isPending}>{saveIssuer.isPending ? "Se salvează…" : "Salvează datele firmei"}</button></div>
       </form>

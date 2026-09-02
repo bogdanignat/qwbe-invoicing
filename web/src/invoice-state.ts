@@ -3,7 +3,6 @@ import type { CorrectionDocument, PaymentSummary } from "./models.ts"
 export interface InvoiceActionState {
   readonly canRecordPayment: boolean
   readonly canCreateFullCorrection: boolean
-  readonly hasDependentRecords: boolean
   readonly isOverpaid: boolean
 }
 
@@ -12,6 +11,5 @@ const hasPositiveBalance = (value: string): boolean => /^\d+\.\d{2}$/.test(value
 export const invoiceActionState = (paymentSummary: PaymentSummary, corrections: ReadonlyArray<CorrectionDocument>): InvoiceActionState => ({
   canRecordPayment: hasPositiveBalance(paymentSummary.remainingAmount),
   canCreateFullCorrection: corrections.length === 0,
-  hasDependentRecords: paymentSummary.payments.length > 0 || corrections.length > 0,
   isOverpaid: paymentSummary.status === "overpaid",
 })
