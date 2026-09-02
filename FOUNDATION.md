@@ -1,7 +1,8 @@
 # QWBE Invoicing Foundation
 
 Status: architecture baseline before implementation  
-Source snapshot: QWBE mother repository at `987e11b`  
+Source snapshot: QWBE mother repository at `a98d9ef` (main, 31 August 2026; previous baseline `987e11b`)
+Conformance review against that snapshot: 2 September 2026, section 18
 Package manager: pnpm  
 Runtime: Node.js + TypeScript + **Effect 3.x as primary runtime** (`effect`, `@effect/platform`, `@effect/platform-node`) — all cube application logic, host capabilities (Clock, Store, IdGenerator, Auth), and HTTP handling are modelled as `Effect`
 UI: React 19 + TypeScript styled with Tailwind CSS 4, built with Vite and served by the standalone host; Effect owns browser API effects, typed failures, cancellation and concurrency, while TanStack Query integrates server state with React. The boundary remains API-first: every cube use-case has a corresponding authenticated HTTP endpoint, and the UI contains no fiscal business logic
@@ -213,7 +214,7 @@ Legal cross-cube paths are:
 | Commands | Permission-checked invocation mediated by the kernel |
 | Capability | Narrow typed service declared and injected by the host |
 
-The current intended public boundary is exposed under names such as `qwbe-core/auth`, `qwbe-core/cube`, and `qwbe-core/permissions`. It is not yet a released compatibility guarantee: `qwbe-core` is private and version `0.0.0`. External consumption requires a versioned published package or an explicit compatibility artifact. The invoicing cube must never import mother kernel internals or sibling cube implementations.
+The current intended public boundary is exposed under names such as `qwbe-core/auth`, `qwbe-core/cube`, `qwbe-core/permissions`, and, since QWB-40, `qwbe-core/package` (the shared package contract checker). It is not yet a released compatibility guarantee: `qwbe-core` is private and version `0.0.0`. External consumption requires a versioned published package or an explicit compatibility artifact. The invoicing cube must never import mother kernel internals or sibling cube implementations.
 
 Static boundaries must reject:
 
@@ -233,7 +234,12 @@ The invariant inherited from QWBE is:
 
 > One cube equals one directory. Installing it touches no existing file.
 
-Each cube owns its tables and receives a store restricted to those tables. Another cube's data is never read through its SQLite file.
+Each cube owns its tables and receives a store restricted to those tables. Since QWB-44 (ADR-0001) the mother stores every cube in one Postgres database, one schema per cube, opened under a NOLOGIN role per cube that holds `USAGE` on its own schema and DML on its tables only. Another cube's data is never readable: the engine refuses it, not only the lint. The kernel-facing `Store` interface stayed the six operations (`all`, `page`, `byId`, `insert`, `update`, `count`) over jsonb row bodies with `id`, `type`, `createdAt`, `deleted` as real columns.
+
+Two consequences matter for this repository:
+
+- the cube role has no `CREATE` on its schema, so a cube cannot run its own DDL, not even through the declared `usesBatch` raw-SQL capability introduced by QWB-45. Relational tables with constraints and triggers, which is what `cube/invoicing/contracts/core-migrations.json` declares, have no legal creation path in mounted mode today. Either the mother grows a per-cube schema-migration capability or the cube persists through the six-operation store;
+- SQLite is no longer a mother concept at all. The SQLite dialect in the cube's migrations (`STRICT`, `GLOB`, triggers) is a standalone-host choice and must be treated as such, not as inherited design.
 
 For the first invoicing slice, likely owned concepts include:
 
@@ -271,7 +277,7 @@ Do not use this bus as the source of truth for:
 - payment reconciliation;
 - cancellation or correction workflows.
 
-Those operations require durable state, idempotency, an audit trail, and resumable effects. A transactional outbox or workflow journal must be designed when that slice starts.
+Those operations require durable state, idempotency, an audit trail, and resumable effects. A transactional outbox or workflow journal must be designed when that slice starts. Since QWB-44 the mother kernel writes one `qwbe.outbox` row in the same transaction as every store write (ADR-0001 section 5); nothing consumes it yet, and cubes holding `usesBatch` are exempt. When the invoicing outbox is designed it should align with that table's shape rather than invent a parallel one.
 
 Source: QWBE `core/src/kernel/bus.ts`.
 
@@ -322,13 +328,15 @@ Rules:
 
 ### Known limitation in the mother size scanner
 
-The current QWBE `unitDirs` discovers only top-level cube directories and recursively counts their descendants. A nested child cube is therefore included in the parent's measured unit rather than measured as an independent recursive unit.
+The current QWBE `unitDirs` discovers only top-level cube directories and recursively counts their descendants (plus the kernel, `pg`, and `metadata` subsystems as their own units since QWB-41/QWB-44; a top-level `frontend/` in a pack is skipped at depth 0 only). A nested child cube is therefore included in the parent's measured unit rather than measured as an independent recursive unit.
 
 This repository must have a native size/test gate from its first implementation commit; the mother scripts cannot discover the standalone layout correctly. Configure the invoicing cube root explicitly, include all production code it owns, exclude standalone-host code and tests from the cube size, and add gate self-tests proving that an oversized or testless cube fails.
 
 The scanner must understand recursive cube roots before child cubes are introduced. Each cube is measured as its own unit while a parent's own size excludes source owned by child-cube directories. Otherwise splitting into a legitimate child cannot reduce the parent's unit measurement.
 
 Sources: QWBE `qwbe.config.json`, `probes/sizecaps.mjs`, and `probes/size-lib.mjs`.
+
+Status on 2 September 2026: this repository's `qwbe.config.json` was raised in four steps to 11,000 / 65,000 / 20 while the mother still enforces 6,000 / 40,000 / 15 with a recorded baseline and a split-first rule. Measured after complete invoice authoring, `cube/invoicing` holds 63,158 code characters across 19 files, with two files over 6,000 (`application/draft-authoring.ts` 10,192 and `domain/validation.ts` 7,447). That is inherited debt this document said would not exist; the repair is either to split (draft authoring and validation, and a child-cube boundary if one is real) or to record a baseline the mother's way, never a silent raise.
 
 ## 11. Tests and verification
 
@@ -361,6 +369,7 @@ Initial compatibility target from the mother repository:
 - ESM (`"type": "module"`);
 - TypeScript source executed with Node type stripping where appropriate;
 - `effect` `^3.21.0` — core runtime (required);
+- `pg` `^8.23.0` — the mother's Postgres driver since QWB-44 (host concern; the cube never imports it);
 - `@effect/platform` `^0.96.0` — HTTP API surface (required);
 - `@effect/platform-node` `^0.107.0` — Node adapter (required);
 - imports include `.ts` where Node executes source directly.
@@ -387,6 +396,10 @@ Sources: QWBE root `package.json`, `core/package.json`, and `core/tsconfig.json`
 
 ## 13. Package and installation constraints
 
+Since QWB-40 the mother publishes one shared checker, `checkPackageSource` from `qwbe-core/package` (documented in `docs/package-contract.md`). It judges a package root holding `qwbe-package.json` with a `cubes` array next to a `cubes/` directory: declared cubes must exist on disk and vice versa, imports must reach the kernel only through `qwbe-core/*`, and cube code may import none of `fs`, `fs/promises`, `child_process`, `worker_threads`, `module`, `vm`, `sqlite`. Optional rule sets: `readOnly` and `hierarchy` (child declares `parent` and a non-empty `dataMigration`, parent declares `screen: true`, each `manifest.name` equals its path leaf). A pack is expected to ship a `source-contract.test` that runs the checker and asserts zero findings, plus a runtime probe that boots the kernel and attacks the installed cube over HTTP.
+
+This repository's `cube/invoicing/` is a `kind: "cube"` package with `index.ts` at its root. The installer still accepts that shape (`install.ts` reads `cubes = [name]` and requires the root `index.ts`), but the shared checker cannot run on it because it assumes the `cubes/` layout. The nested `cube/invoicing/documents/qwbe-package.json` is a convention of this repository's own gates only; the mother ignores it and discovers `documents` as the child `invoicing/documents` through the directory. Open decision 7 in section 16 covers whether to reshape into a plugin pack.
+
 The future distributable must pass the mother package contract before it becomes discoverable:
 
 - strict package and cube slug grammar;
@@ -409,7 +422,7 @@ A standalone cube package must contain at its package root:
 - every cube-owned source dependency reachable from that entry;
 - no standalone host, pnpm workspace, local database, test output, or unrelated tooling.
 
-The install artifact and authoring repository are different boundaries. A packaging allowlist must prove exactly what is emitted. Note that the current mother source filter does not exclude `pnpm-lock.yaml`, TypeScript tests, or a plural `tests/` directory reliably; our artifact builder must exclude them itself rather than trusting the mother filter.
+The install artifact and authoring repository are different boundaries. A packaging allowlist must prove exactly what is emitted. Note that the current mother source filter excludes top-level `node_modules`, `.venv`, `.git`, `docs`, `probes`, `test`, and, since QWB-48, `frontend`, `dist`, `build`, plus `package.json`, lockfile, `tsconfig.json`, and `*.test.(m)js`. It still does not exclude `pnpm-lock.yaml`, TypeScript tests, or a plural `tests/` directory; our artifact builder must exclude them itself rather than trusting the mother filter.
 
 Sources: QWBE `core/src/install-contract.ts`, `core/src/package-source.ts`, `core/src/kernel/install.ts`, and `core/src/kernel/install-from.ts`.
 
@@ -444,7 +457,7 @@ Prefer colocated tests. Do not create empty directories or placeholder abstracti
 
 The mother repository proves boundaries but is not production invoicing infrastructure. Do not copy these current limitations as canonical design:
 
-- generic JSON storage without typed schema migrations;
+- generic jsonb row storage without per-cube schema migrations (the kernel has numbered SQL migrations for its own `qwbe` schema since QWB-44; cube tables are still created by the kernel in one fixed shape);
 - 32-bit random record ids;
 - global entity-name namespace;
 - in-memory event delivery;
@@ -468,10 +481,10 @@ These are not solved by copying the mother prototype:
 1. Exact invoicing MVP and legal jurisdiction.
 2. Organization selection and authorization contract.
 3. Immutable issued-invoice model and numbering guarantees.
-4. SQLite transaction/outbox strategy.
+4. Persistence alignment with the mother: the standalone host runs SQLite while the mother runs Postgres with one schema per cube and a role that cannot create tables. Options are a Postgres standalone host with a per-cube schema-migration capability contributed to the mother, or a rewrite onto the six-operation store, which cannot enforce the uniqueness PRODUCT.md section 3.3 requires at the database level.
 5. Durable e-invoice submission workflow.
 6. API-only operation versus the selected React + Effect UI adapter.
-7. Distribution shape: one cube package or a plugin delivering a cube tree.
+7. Distribution shape: one `kind: "cube"` package (current, installer-accepted, outside the shared checker) or a plugin pack with `cubes: ["invoicing", "invoicing/documents"]` that the `qwbe-core/package` checker and its `hierarchy` rule can judge.
 8. Recursive canonical identity contract required by future mounting.
 9. Which domains become child cubes, based on real ownership/lifecycle and size evidence.
 10. How stable `qwbe-core/*` contracts are consumed from an external pnpm repository before they are published.
@@ -489,3 +502,20 @@ Before writing business code:
 7. run type, unit, boundary, and size gates.
 
 Do not copy the mother kernel into this repository. Reuse its public contracts and proven rules; keep the invoicing domain independent of its implementation details.
+
+## 18. Conformance review against `a98d9ef`
+
+Reviewed on 2 September 2026 after the mother's `main` moved from `987e11b` to `a98d9ef` (98 commits, tickets QWB-40 to QWB-48). What the mother changed and where this repository stands:
+
+| Mother change | Ticket | Invoicing status |
+|---|---|---|
+| Shared package contract checker, `qwbe-core/package`, `docs/package-contract.md` | QWB-40 | Not run: the `kind: "cube"` shape is outside the checker's `cubes/` layout. Own gates cover manifest shape, size, tests, boundaries, but not the `imports-internal` and `cube-builtins` rules the mother enforces. |
+| Per-cube field metadata, `version` drift gate, `fields`, `relations`, `searchable` | QWB-41 | Not applicable yet: the cube declares no `entity` and no HTTP handlers. Declare `version` once the cube serves an entity. |
+| External frontend auth: `QWBE_ALLOWED_ORIGINS`, CORS allowlist, httpOnly cookie through a proxy, 7-day token | QWB-42 | Aligned in spirit: the standalone host already keeps the token out of the browser behind an HttpOnly `SameSite=Strict` cookie. Session length differs (30 days here, 7 in the mother); not a contract. |
+| One Postgres, one schema per cube, NOLOGIN role per cube, kernel outbox, SQLite removed | QWB-43, QWB-44 | Not aligned. Standalone persists in SQLite with relational tables and triggers inside the cube directory; no creation path exists for that schema in mounted mode. Open decision 4. |
+| `usesBatch` raw-SQL capability (declared, outbox-exempt) | QWB-45 | Not usable as an escape: the role has no `CREATE`, so DDL is refused. |
+| Custom field values under the reserved `custom` key of a row body | QWB-46 | No impact on relational tables. `custom` becomes a reserved column name if the cube ever moves to the six-operation store. |
+| Installer strips a pack's top-level `frontend/`, `dist/`, `build/` | QWB-48 | No impact: the UI lives in `web/` and `standalone/ui-dist`, outside the package. Mounted-mode UI remains open decision 6. |
+| Size caps unchanged at 6,000 / 40,000 / 15 | - | Not aligned: caps raised locally to 11,000 / 65,000 / 20; `cube/invoicing` measures 63,158 characters across 19 files. Section 10. |
+
+Pre-existing gaps that the pull did not create but that a mounted install would hit first: `create()` returns `handlers: {}`, so the cube serves no HTTP surface under the mother (every endpoint lives in `standalone/api.ts`); `CurrentOrganization` is still a standalone-only contract (section 4); `qwbe-core` is still `0.0.0` and private (open decision 10).

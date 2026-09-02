@@ -20,7 +20,9 @@ curl --fail --cacert ~/.warden/ssl/rootca/certs/ca.cert.pem https://invoice.test
 ```
 
 `migrate` runs once before `app` and initializes `/data/invoicing.sqlite` plus the
-child documents cube database `/data/documents.sqlite`. Repeated `docker compose up -d`
+child documents cube database `/data/documents.sqlite`. SQLite is a standalone-host
+choice: the QWBE mother has run one Postgres database with one schema per cube since
+QWB-44, so nothing here describes mounted operation (see `FOUNDATION.md` section 18). Repeated `docker compose up -d`
 is safe: both migration plans are idempotent and do not consume invoice numbers
 or create business records. The API reads its standalone bearer
 credential from the Compose secret; the secret is never stored in the image or
@@ -35,13 +37,15 @@ Every cube use-case is an `Effect` and has a 1:1 authenticated HTTP endpoint. Au
 
 - `GET /api/issuer` / `PUT /api/issuer` — read / configure issuer (Effect)
 - `GET /api/document-series` / `POST /api/document-series` — list / register invoice or proforma series; exact duplicates return `409 document_series_exists`
-- `POST /api/customers` / `GET /api/customers` / `GET /api/customers/:id` / `DELETE /api/customers/:id` — create / list / read / soft-delete customer (Effect); deletion hides the customer from new work while preserving issued invoice snapshots
-- `POST /api/drafts` / `GET /api/drafts/:id` / `POST /api/drafts/:id/lines` / `POST /api/drafts/:id/issue` — draft lifecycle (`series` obligatoriu și preconfigurat ca `invoice`; draft editabil până la `issue`)
+- `POST /api/customers` / `GET /api/customers` / `GET /api/customers/:id` / `DELETE /api/customers/:id` — create / list / read / soft-delete optional customer records; `partyType=company` requires a valid CUI/CIF, while `partyType=individual` accepts an optional valid CNP; deletion hides the customer from new work while preserving issued invoice snapshots
+- `POST /api/drafts` / `GET /api/drafts` / `GET|PUT|DELETE /api/drafts/:id` — create / list / read / edit / delete drafts; creation and update require exactly one of `customerId` (saved customer) or `customer` (one-time buyer snapshot), and `series` is mandatory and preconfigured as `invoice` on create
+- `POST /api/drafts/:id/lines` / `PUT|DELETE /api/drafts/:id/lines/:lineId` — add / edit / remove manual invoice lines; no product catalog is required
+- `POST /api/drafts/:id/issue` — atomically allocate the next number and freeze the immutable invoice snapshot; issued drafts can no longer be edited or deleted
 - `GET /api/invoices` / `GET /api/invoices/:id` — latest 100 issued invoices / immutable issued snapshot (Effect)
 - `POST /api/invoices/:id/pdf` (idempotent render) / `GET /api/invoices/:id/pdf` (download with SHA-256 ETag)
 - `POST /api/invoices/:id/payments` (record payment) / `GET /api/invoices/:id/payments` (list payments with derived status `unpaid`/`partially_paid`/`paid`/`overpaid`/`overdue`, `paidAmount`/`remainingAmount`)
 - `POST /api/invoices/:id/corrections` (storno fiscal — creează document nou imuabil cu referință la factura originală, motiv obligatoriu, totals negative) / `GET /api/invoices/:id/corrections` / `GET /api/corrections/:id` — după emitere nu se mai editează factura, doar storno
-- `DELETE /api/invoices/:id` — șterge **doar ultima** factură emisă pe serie (numărul se eliberează, `invoice_sequences` decrementat, draftul revine la `draft`), doar dacă `e_factura_status='not_sent'` (blocaj ANAF), fără plăți și fără corecții; altfel `409 only_last_invoice_can_be_deleted` / `invoice_already_sent_to_anaf` / `invoice_has_payments|corrections`
+- Issued invoices have no `DELETE` endpoint and allocated invoice numbers are never reused; mistakes are handled through correction documents
 
 Issued invoices remain immutable; payments are separate `Effect` records and never mutate the fiscal snapshot. For local calls, pass
 `Authorization: Bearer $(cat .local/api-token)` and JSON request bodies. The bearer
@@ -54,7 +58,9 @@ Stop containers without deleting data:
 docker compose down
 ```
 
-Never use `docker compose down -v` as a normal reset; `-v` deletes the SQLite volume.
+Until the first real release, local development data is disposable and may be reset
+deliberately. `docker compose down -v` still must not be used as an accidental or
+routine stop command because `-v` deletes the SQLite volume.
 
 ## Laptop hosts and certificate trust
 
