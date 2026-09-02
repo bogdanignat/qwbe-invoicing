@@ -6,6 +6,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import test from "node:test"
 
+import { apiDocsResponse } from "./api-docs.ts"
 import { startServer } from "./http.ts"
 import { applyMigrations } from "./migrations.ts"
 
@@ -15,6 +16,7 @@ void test("the HTTP host exchanges the API token for a cookie session", async ()
   const tokenFile = join(directory, "api-token")
   writeFileSync(tokenFile, token, { mode: 0o600 })
   applyMigrations(directory)
+  let docsAttempts = 0
   const server = startServer({
     host: "127.0.0.1",
     port: 0,
@@ -22,7 +24,11 @@ void test("the HTTP host exchanges the API token for a cookie session", async ()
     nodeEnvironment: "test",
     authTokenFile: tokenFile,
     organizationId: "org-1",
-  }, () => true)
+  }, () => true, async () => {
+    docsAttempts += 1
+    if (docsAttempts === 1) throw new Error("simulated docs render failure")
+    return apiDocsResponse()
+  })
 
   try {
     if (!server.listening) await once(server, "listening")
@@ -42,6 +48,18 @@ void test("the HTTP host exchanges the API token for a cookie session", async ()
 
     const resumed = await fetch(`${origin}/api/session`, { headers: { cookie } })
     assert.equal(resumed.status, 200)
+    const anonymousDocs = await fetch(`${origin}/api`)
+    assert.equal(anonymousDocs.status, 401)
+    const failedDocs = await fetch(`${origin}/api`, { headers: { cookie } })
+    assert.equal(failedDocs.status, 500)
+    assert.deepEqual(await failedDocs.json(), { error: "internal_failure" })
+    const docs = await fetch(`${origin}/api`, { headers: { cookie } })
+    assert.equal(docs.status, 200)
+    assert.match(docs.headers.get("content-type") ?? "", /^text\/html/)
+    const docsHtml = await docs.text()
+    assert.match(docsHtml, /SwaggerUIBundle/)
+    assert.match(docsHtml, /QWBE Invoicing API/)
+    assert.equal(docsAttempts, 2)
     const customers = await fetch(`${origin}/api/customers`, { headers: { cookie } })
     assert.equal(customers.status, 200)
     const rejectedWrite = await fetch(`${origin}/api/customers`, {

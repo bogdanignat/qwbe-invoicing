@@ -48,6 +48,19 @@ void test("requires host authentication and serves the complete invoice-core rou
     assert.equal(denied.status, 401)
 
     const authorization = `Bearer ${token}`
+    const invalidCategory = await handleApiRequest({
+      method: "PUT",
+      url: "/api/issuer",
+      authorization,
+      body: {
+        ...issuerBody,
+        taxConfigurations: [{ ...issuerBody.taxConfigurations[0], category: "reduced" }],
+      },
+    }, runtime)
+    assert.deepEqual(invalidCategory, {
+      status: 400,
+      body: { error: "ValidationFailure", issues: ["taxConfigurations.category must be standard"] },
+    })
     const mismatchedIssuer = await handleApiRequest({
       method: "PUT",
       url: "/api/issuer",

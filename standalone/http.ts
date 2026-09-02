@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http"
 
+import { apiDocsResponse } from "./api-docs.ts"
 import { handleApiRequest } from "./api.ts"
 import { createRequestAuthenticator } from "./auth.ts"
 import { createBrowserSession } from "./browser-session.ts"
@@ -74,12 +75,31 @@ const loginToken = (body: unknown): string | undefined => {
 export const startServer = (
   config: RuntimeConfig,
   isReady: () => boolean = () => databaseReady(config.dataDirectory),
+  renderApiDocs: () => Promise<Awaited<ReturnType<typeof apiDocsResponse>>> = apiDocsResponse,
 ): Server => {
   const authenticate = createRequestAuthenticator(config)
   const browserSession = createBrowserSession(config)
   const server = createServer((request, response) => {
     void (async () => {
       const path = request.url === undefined ? undefined : new URL(request.url, "http://localhost").pathname
+      if (path === "/api" && request.method === "GET") {
+        if (!isReady()) {
+          send(response, 503, { error: "not_ready" })
+          return
+        }
+        const session = browserSession.resume(header(request.headers.cookie))
+        if (session.kind === "unauthorized") {
+          send(response, 401, { error: "AuthenticationRequired" }, { "set-cookie": browserSession.clearCookie })
+          return
+        }
+        try {
+          const docs = await renderApiDocs()
+          send(response, docs.status, docs.body, docs.headers)
+        } catch {
+          send(response, 500, { error: "internal_failure" })
+        }
+        return
+      }
       if (path?.startsWith("/api/") === true) {
         if (!isReady()) {
           send(response, 503, { error: "not_ready" })
