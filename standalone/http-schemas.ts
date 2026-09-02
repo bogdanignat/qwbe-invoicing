@@ -1,0 +1,259 @@
+import { HttpApiSchema } from "@effect/platform"
+import { Schema } from "effect"
+
+const optionalString = Schema.optional(Schema.String)
+
+export const Address = Schema.Struct({
+  countryCode: Schema.String,
+  city: Schema.String,
+  street: Schema.String,
+  county: optionalString,
+  postalCode: optionalString,
+})
+
+export const Party = Schema.Struct({
+  legalName: Schema.String,
+  taxIdentifier: Schema.String,
+  address: Address,
+})
+
+export const Buyer = Schema.Struct({
+  partyType: Schema.Literal("company", "individual"),
+  legalName: Schema.String,
+  taxIdentifier: Schema.String,
+  address: Address,
+})
+
+export const TaxConfiguration = Schema.Struct({
+  code: Schema.String,
+  category: Schema.Literal("standard"),
+  rate: Schema.String,
+  effectiveFrom: Schema.String,
+  effectiveTo: optionalString,
+})
+
+const TaxConfigurationInput = Schema.Struct({
+  code: Schema.String,
+  category: Schema.optional(Schema.Literal("standard")),
+  rate: Schema.String,
+  effectiveFrom: Schema.String,
+  effectiveTo: optionalString,
+})
+
+export const IssuerInput = Schema.Struct({
+  legalName: Schema.String,
+  taxIdentifier: Schema.String,
+  address: Address,
+  defaultCurrency: Schema.String,
+  defaultPaymentTermDays: Schema.Int,
+  taxConfigurations: Schema.Array(TaxConfigurationInput),
+})
+
+export const Issuer = Schema.Struct({
+  legalName: Schema.String,
+  taxIdentifier: Schema.String,
+  address: Address,
+  organizationId: Schema.String,
+  defaultCurrency: Schema.String,
+  defaultPaymentTermDays: Schema.Int,
+  taxConfigurations: Schema.Array(TaxConfiguration),
+})
+
+export const DocumentSeriesInput = Schema.Struct({
+  documentType: Schema.Literal("invoice", "proforma"),
+  series: Schema.String,
+})
+
+export const DocumentSeries = Schema.Struct({
+  organizationId: Schema.String,
+  documentType: Schema.Literal("invoice", "proforma"),
+  series: Schema.String,
+})
+
+export const Customer = Schema.Struct({
+  id: Schema.String,
+  organizationId: Schema.String,
+  partyType: Schema.Literal("company", "individual"),
+  legalName: Schema.String,
+  taxIdentifier: Schema.String,
+  address: Address,
+  deletedAt: optionalString,
+})
+
+export const DraftLine = Schema.Struct({
+  id: Schema.String,
+  description: Schema.String,
+  quantity: Schema.String,
+  unitPrice: Schema.String,
+  taxCode: Schema.String,
+  taxCategory: Schema.Literal("standard"),
+  taxRate: Schema.String,
+  totalExcludingTax: Schema.String,
+  taxAmount: Schema.String,
+  totalIncludingTax: Schema.String,
+})
+
+export const TaxBreakdown = Schema.Struct({
+  taxCode: Schema.String,
+  category: Schema.Literal("standard"),
+  rate: Schema.String,
+  taxableAmount: Schema.String,
+  taxAmount: Schema.String,
+})
+
+export const DraftInvoice = Schema.Struct({
+  id: Schema.String,
+  organizationId: Schema.String,
+  customer: Buyer,
+  customerId: optionalString,
+  series: Schema.String,
+  issueDate: Schema.String,
+  dueDate: Schema.String,
+  currency: Schema.String,
+  status: Schema.Literal("draft", "issued"),
+  lines: Schema.Array(DraftLine),
+  taxBreakdown: Schema.Array(TaxBreakdown),
+  totalExcludingTax: Schema.String,
+  taxTotal: Schema.String,
+  totalIncludingTax: Schema.String,
+})
+
+export const IssuedInvoice = Schema.Struct({
+  id: Schema.String,
+  draftId: Schema.String,
+  organizationId: Schema.String,
+  series: Schema.String,
+  number: Schema.Int,
+  issueDate: Schema.String,
+  dueDate: Schema.String,
+  issuedAt: Schema.String,
+  currency: Schema.String,
+  issuer: Party,
+  customer: Buyer,
+  lines: Schema.Array(DraftLine),
+  taxBreakdown: Schema.Array(TaxBreakdown),
+  totalExcludingTax: Schema.String,
+  taxTotal: Schema.String,
+  totalIncludingTax: Schema.String,
+  eFacturaStatus: Schema.Literal("not_sent", "pending", "sent", "accepted", "rejected"),
+})
+
+const BuyerById = Schema.Struct({ customerId: Schema.String })
+const InlineBuyer = Schema.Struct({ customer: Buyer })
+export const DraftInput = Schema.Union(
+  Schema.Struct({ customerId: Schema.String, series: Schema.String, issueDate: Schema.String, currency: optionalString, dueDate: optionalString }),
+  Schema.Struct({ customer: Buyer, series: Schema.String, issueDate: Schema.String, currency: optionalString, dueDate: optionalString }),
+)
+export const UpdateDraftInput = Schema.Union(
+  Schema.Struct({ ...BuyerById.fields, issueDate: Schema.String, dueDate: optionalString }),
+  Schema.Struct({ ...InlineBuyer.fields, issueDate: Schema.String, dueDate: optionalString }),
+)
+export const DraftLineInput = Schema.Struct({
+  description: Schema.String,
+  quantity: Schema.String,
+  unitPrice: Schema.String,
+  taxCode: Schema.String,
+})
+
+export const PaymentInput = Schema.Struct({
+  amount: Schema.String,
+  currency: Schema.String,
+  paymentDate: Schema.String,
+  method: Schema.String,
+  externalReference: optionalString,
+  note: optionalString,
+})
+export const PaymentStatus = Schema.Literal("unpaid", "partially_paid", "paid", "overpaid", "overdue")
+export const Payment = Schema.Struct({
+  id: Schema.String,
+  invoiceId: Schema.String,
+  organizationId: Schema.String,
+  amount: Schema.String,
+  currency: Schema.String,
+  paymentDate: Schema.String,
+  method: Schema.String,
+  externalReference: optionalString,
+  note: optionalString,
+  actorId: Schema.String,
+  createdAt: Schema.String,
+})
+export const RecordPaymentResult = Schema.Struct({
+  payment: Payment,
+  status: PaymentStatus,
+  paidAmount: Schema.String,
+  remainingAmount: Schema.String,
+})
+export const PaymentSummary = Schema.Struct({
+  invoiceId: Schema.String,
+  status: PaymentStatus,
+  paidAmount: Schema.String,
+  remainingAmount: Schema.String,
+  payments: Schema.Array(Payment),
+})
+
+export const CorrectionInput = Schema.Struct({ reason: Schema.String, issueDate: optionalString })
+export const Correction = Schema.Struct({
+  id: Schema.String,
+  organizationId: Schema.String,
+  originalInvoiceId: Schema.String,
+  fiscalYear: Schema.Int,
+  series: Schema.String,
+  number: Schema.Int,
+  issueDate: Schema.String,
+  issuedAt: Schema.String,
+  reason: Schema.String,
+  currency: Schema.String,
+  issuer: Party,
+  customer: Buyer,
+  lines: Schema.Array(DraftLine),
+  taxBreakdown: Schema.Array(TaxBreakdown),
+  totalExcludingTax: Schema.String,
+  taxTotal: Schema.String,
+  totalIncludingTax: Schema.String,
+})
+
+export const Artifact = Schema.Struct({
+  invoiceId: Schema.String,
+  organizationId: Schema.String,
+  objectKey: Schema.String,
+  sha256: Schema.String,
+  byteLength: Schema.Int,
+  mediaType: Schema.Literal("application/pdf"),
+  templateVersion: Schema.String,
+  generatedAt: Schema.String,
+})
+export const Pdf = HttpApiSchema.Uint8Array({ contentType: "application/pdf" })
+export const Deleted = Schema.Struct({ deleted: Schema.Literal(true) })
+export const LoginInput = Schema.Struct({ token: Schema.String })
+export const AuthenticatedSession = Schema.Struct({ authenticated: Schema.Literal(true), csrfToken: Schema.String })
+export const LoggedOutSession = Schema.Struct({ authenticated: Schema.Literal(false) })
+
+const errorUnion = (status: number, ...members: ReadonlyArray<Schema.Schema.Any>) =>
+  Schema.Union(...members.map((member) => member.annotations(HttpApiSchema.annotations({ status }))))
+const tagged = (status: number, ...tags: ReadonlyArray<string>) =>
+  errorUnion(status, ...tags.map((error) => Schema.Struct({ error: Schema.Literal(error) })))
+export const ValidationError = errorUnion(
+  400,
+  Schema.Struct({ error: Schema.Literal("ValidationFailure"), issues: Schema.Array(Schema.String) }),
+)
+export const InvalidJsonError = tagged(400, "invalid_json")
+export const InvalidCredentialsRequestError = tagged(400, "invalid_credentials")
+export const AuthenticationRequiredError = tagged(401, "AuthenticationRequired")
+export const InvalidCredentialsError = tagged(401, "invalid_credentials")
+export const PermissionDeniedError = tagged(403, "PermissionDenied")
+export const DocumentsPermissionDeniedError = tagged(403, "DocumentsPermissionDenied")
+export const CsrfError = tagged(403, "csrf_validation_failed")
+export const OriginForbiddenError = tagged(403, "origin_not_allowed")
+export const ResourceNotFoundError = tagged(404, "ResourceNotFound")
+export const DocumentNotFoundError = tagged(404, "DocumentNotFound")
+export const DomainConflictError = errorUnion(
+  409,
+  Schema.Struct({ error: Schema.Literal("DomainConflict"), code: Schema.String }),
+)
+export const ArtifactConflictError = tagged(409, "ArtifactConflict")
+export const PayloadTooLargeError = tagged(413, "request_body_too_large")
+export const InvoicingInternalError = tagged(500, "PersistenceFailure", "internal_failure")
+export const DocumentsInternalError = tagged(500, "DocumentPersistenceFailure", "DocumentRenderingFailure", "internal_failure")
+export const SessionInternalError = tagged(500, "internal_failure")
+export const BusinessUnavailableError = tagged(503, "OrganizationContextMissing", "not_ready")
+export const ReadinessError = tagged(503, "not_ready")

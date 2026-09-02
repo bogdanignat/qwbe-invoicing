@@ -31,6 +31,8 @@ this initial single-organization host adapter.
 
 The standalone UI is available at `https://invoice.test/app` (also served from `/`). It is a React 19 + TypeScript application styled with Tailwind CSS 4 and built with Vite. Browser API calls, cancellation, concurrent invoice-detail loading and typed failures are Effect programs; TanStack Query bridges Effect programs into React server state. On unlock, the host exchanges the local bearer token for a revocable, opaque 30-day session persisted in `sessions.sqlite` and referenced by an HttpOnly `SameSite=Strict` cookie (`Secure` for HTTPS origins and in production). The token is never written to browser JavaScript, storage, or the URL. State-changing requests carry a per-session CSRF token held only in Effect memory; the UI restores it from the cookie-backed session after a reload or host restart.
 
+After unlocking the UI, open `https://invoice.test/api` for the authenticated Swagger page. Its OpenAPI 3.1 document is generated from the same Effect `HttpApi` contract used to classify runtime routes; it is not a separately maintained endpoint list. The page stays behind the browser session so the full contract is not exposed anonymously.
+
 Build the browser bundle locally with `pnpm build:ui`; `pnpm test` runs this build automatically before the Node test suite. Docker builds the UI in a dedicated stage and copies only `standalone/ui-dist` into the runtime image. CLI operations remain available when the ignored local bundle is absent; only UI requests return `503` with an explicit build instruction.
 
 Every cube use-case is an `Effect` and has a 1:1 authenticated HTTP endpoint. Authenticated routes under `/api`:

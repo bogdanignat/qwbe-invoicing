@@ -64,6 +64,9 @@ export const issuerInput = (value: unknown): ConfigureIssuerInput => {
     defaultPaymentTermDays: integer(input.defaultPaymentTermDays, "defaultPaymentTermDays"),
     taxConfigurations: input.taxConfigurations.map((item) => {
       const tax = object(item)
+      if (tax.category !== undefined && tax.category !== "standard") {
+        throw new ValidationFailure({ issues: ["taxConfigurations.category must be standard"] })
+      }
       const effectiveTo = optionalText(tax.effectiveTo, "taxConfigurations.effectiveTo")
       return { code: text(tax.code, "taxConfigurations.code"), category: "standard" as const,
         rate: text(tax.rate, "taxConfigurations.rate"), effectiveFrom: text(tax.effectiveFrom, "taxConfigurations.effectiveFrom"),
