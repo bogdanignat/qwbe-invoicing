@@ -1,4 +1,5 @@
 import { ValidationFailure } from "../contracts/failures.ts"
+import { validateDate } from "./validation.ts"
 
 export type PaymentStatus = "unpaid" | "partially_paid" | "paid" | "overpaid" | "overdue"
 
@@ -49,22 +50,13 @@ export const validateRecordPaymentInput = (input: RecordPaymentInput): void => {
     issues.push("externalReference must not be empty when provided")
   }
   if (input.note !== undefined && input.note.trim().length === 0) issues.push("note must not be empty when provided")
-  const dateMatch = /^(\d{4})-(\d{2})-(\d{2})$/.exec(input.paymentDate)
-  if (dateMatch === null) {
-    issues.push("paymentDate must be a calendar date in YYYY-MM-DD format")
-  } else {
-    const year = Number(dateMatch[1])
-    const month = Number(dateMatch[2])
-    const day = Number(dateMatch[3])
-    const date = new Date(Date.UTC(year, month - 1, day))
-    if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) {
-      issues.push("paymentDate must be a valid calendar date")
-    }
+  try { validateDate(input.paymentDate, "paymentDate") } catch (error) {
+    if (error instanceof ValidationFailure) issues.push(...error.issues)
   }
   if (issues.length > 0) throw new ValidationFailure({ issues })
 }
 
-const moneyMinor = (value: string): bigint => {
+export const moneyMinor = (value: string): bigint => {
   const match = /^(\d+)\.(\d{2})$/.exec(value.trim())
   if (match === null) return parseMoneyMinor(value, "money")
   return BigInt(match[1] ?? "0") * 100n + BigInt(match[2] ?? "0")
@@ -75,7 +67,7 @@ export const sumPaymentsMinor = (payments: ReadonlyArray<Payment>): bigint =>
 
 export const derivePaymentStatus = (input: {
   readonly totalIncludingTax: string
-  readonly dueDate: string
+  readonly dueDate: string | null
   readonly payments: ReadonlyArray<Payment>
   readonly now: Date
 }): PaymentStatus => {
@@ -86,7 +78,8 @@ export const derivePaymentStatus = (input: {
   else if (paid < total) status = "partially_paid"
   else if (paid === total) status = "paid"
   else status = "overpaid"
-  if ((status === "unpaid" || status === "partially_paid") && input.dueDate < input.now.toISOString().slice(0, 10)) {
+  if (input.dueDate !== null && (status === "unpaid" || status === "partially_paid")
+    && input.dueDate < input.now.toISOString().slice(0, 10)) {
     return "overdue"
   }
   return status

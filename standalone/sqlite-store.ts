@@ -9,11 +9,13 @@ import {
   type Address,
   type BuyerSnapshot,
   type Customer,
+  type DraftInvoice,
   type DraftLine,
   type DocumentSeries,
   type InvoicingTransaction,
   type IssuedInvoice,
   type PartySnapshot,
+  type Proforma,
   type TaxBreakdown,
   type TaxConfiguration,
   type TransactionalStore,
@@ -34,7 +36,9 @@ const writeFailure = (error: unknown, operation: string): WriteFailure => {
   if (error instanceof DomainConflict) return error
   if (typeof error === "object" && error !== null && "code" in error
     && typeof error.code === "string" && error.code.startsWith("SQLITE_CONSTRAINT")) {
-    return new DomainConflict({ code: "persistence_conflict", message: `Conflict while performing ${operation}` })
+    return operation === "save proforma invoice conversion"
+      ? new DomainConflict({ code: "proforma_already_converted", message: "Proforma was already converted" })
+      : new DomainConflict({ code: "persistence_conflict", message: `Conflict while performing ${operation}` })
   }
   return persistence(operation)
 }
@@ -60,6 +64,8 @@ const optionalText = (value: Row, field: string): string | undefined => {
   if (typeof result !== "string") throw new Error(`invalid ${field}`)
   return result
 }
+
+const nullableText = (value: Row, field: string): string | null => optionalText(value, field) ?? null
 
 const integer = (value: Row, field: string): number => {
   const result = value[field]
@@ -145,23 +151,29 @@ const lineFrom = (value: Row): DraftLine => ({
   totalIncludingTax: text(value, "total_including_tax"),
 })
 
-const saveLines = (database: DatabaseSync, table: "draft_lines" | "issued_lines", parentId: string, lines: ReadonlyArray<DraftLine>) => {
-  const parentColumn = table === "draft_lines" ? "draft_id" : "invoice_id"
-  const idColumns = table === "draft_lines" ? "id, draft_id" : "id, invoice_id"
+type LineTable = "draft_lines" | "issued_lines" | "proforma_lines"
+type LineTarget = { readonly table: "draft_lines" | "issued_lines" }
+  | { readonly table: "proforma_lines"; readonly organizationId: string }
+const lineParent = (table: LineTable) => table === "draft_lines" ? "draft_id" : table === "issued_lines" ? "invoice_id" : "proforma_id"
+const saveLines = (database: DatabaseSync, target: LineTarget, parentId: string, lines: ReadonlyArray<DraftLine>) => {
+  const { table } = target
+  const parentColumn = lineParent(table)
+  const scoped = table === "proforma_lines"
+  const idColumns = `id, ${parentColumn}${scoped ? ", organization_id" : ""}`
   database.prepare(`DELETE FROM ${table} WHERE ${parentColumn} = ?`).run(parentId)
   const statement = database.prepare(`INSERT INTO ${table}
     (${idColumns}, line_position, description, quantity, unit_price, tax_code, tax_category,
       tax_rate, total_excluding_tax, tax_amount, total_including_tax)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    VALUES (?, ?, ${scoped ? "?, " : ""}?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
   lines.forEach((line, position) => statement.run(
-    line.id, parentId, position, line.description, line.quantity, line.unitPrice,
+    line.id, parentId, ...(target.table === "proforma_lines" ? [target.organizationId] : []), position, line.description, line.quantity, line.unitPrice,
     line.taxCode, line.taxCategory, line.taxRate, line.totalExcludingTax,
     line.taxAmount, line.totalIncludingTax,
   ))
 }
 
-const loadLines = (database: DatabaseSync, table: "draft_lines" | "issued_lines", parentId: string): ReadonlyArray<DraftLine> => {
-  const parentColumn = table === "draft_lines" ? "draft_id" : "invoice_id"
+const loadLines = (database: DatabaseSync, table: LineTable, parentId: string): ReadonlyArray<DraftLine> => {
+  const parentColumn = lineParent(table)
   return database.prepare(`SELECT * FROM ${table} WHERE ${parentColumn} = ? ORDER BY line_position`).all(parentId)
     .map((value) => lineFrom(value as Row))
 }
@@ -178,15 +190,48 @@ const issuedInvoiceFrom = (database: DatabaseSync, value: Row): IssuedInvoice =>
     }
   })
   return {
-    id, draftId: text(value, "draft_id"), organizationId: text(value, "organization_id"),
+    id, draftId: nullableText(value, "draft_id"), sourceProformaId: nullableText(value, "source_proforma_id"),
+    organizationId: text(value, "organization_id"),
     series: text(value, "series"), number: integer(value, "number"),
-    issueDate: text(value, "issue_date"), dueDate: text(value, "due_date"),
+    issueDate: text(value, "issue_date"), dueDate: nullableText(value, "due_date"),
     issuedAt: text(value, "issued_at"), currency: text(value, "currency"),
     issuer: partyFrom(value, "issuer_"), customer: buyerFrom(value, "customer_"),
     lines: loadLines(database, "issued_lines", id), taxBreakdown,
     totalExcludingTax: text(value, "total_excluding_tax"), taxTotal: text(value, "tax_total"),
     totalIncludingTax: text(value, "total_including_tax"),
     eFacturaStatus: (optionalText(value, "e_factura_status") ?? "not_sent") as IssuedInvoice["eFacturaStatus"],
+  }
+}
+
+const taxFrom = (database: DatabaseSync, table: "proforma_tax_breakdown", parentColumn: "proforma_id", id: string): ReadonlyArray<TaxBreakdown> =>
+  database.prepare(`SELECT * FROM ${table} WHERE ${parentColumn} = ? ORDER BY line_position`).all(id).map((item) => {
+    const tax = item as Row
+    return { taxCode: text(tax, "tax_code"), category: "standard", rate: text(tax, "rate"),
+      taxableAmount: text(tax, "taxable_amount"), taxAmount: text(tax, "tax_amount") }
+  })
+
+const proformaFrom = (database: DatabaseSync, value: Row): Proforma => {
+  const id = text(value, "id")
+  return {
+    id, sourceDraftId: nullableText(value, "source_draft_id"), organizationId: text(value, "organization_id"),
+    invoiceSeries: text(value, "invoice_series"),
+    convertedDraftId: nullableText(value, "converted_draft_id"),
+    convertedInvoiceId: nullableText(value, "converted_invoice_id"),
+    series: text(value, "series"), number: integer(value, "number"), issueDate: text(value, "issue_date"),
+    dueDate: nullableText(value, "due_date"), issuedAt: text(value, "issued_at"), currency: text(value, "currency"),
+    issuer: partyFrom(value, "issuer_"), customer: buyerFrom(value, "customer_"),
+    lines: loadLines(database, "proforma_lines", id), taxBreakdown: taxFrom(database, "proforma_tax_breakdown", "proforma_id", id),
+    totalExcludingTax: text(value, "total_excluding_tax"), taxTotal: text(value, "tax_total"),
+    totalIncludingTax: text(value, "total_including_tax"),
+  }
+}
+
+const draftStatus = (value: Row): DraftInvoice["status"] => {
+  switch (text(value, "status")) {
+    case "draft": return "draft"
+    case "issued": return "issued"
+    case "proforma_issued": return "proforma_issued"
+    default: throw new Error("invalid status")
   }
 }
 
@@ -293,7 +338,7 @@ const transactionAdapter = (database: DatabaseSync): InvoicingTransaction => ({
         draft.customer.legalName, draft.customer.taxIdentifier, ...addressValues(draft.customer.address),
         draft.series, draft.issueDate, draft.dueDate, draft.currency, draft.status)
     if (result.changes === 0) throw new DomainConflict({ code: "draft_id_taken", message: "Draft id belongs to another organization" })
-    saveLines(database, "draft_lines", draft.id, draft.lines)
+    saveLines(database, { table: "draft_lines" }, draft.id, draft.lines)
   }),
   findDraft: (organizationId, id) => read("find draft", () => {
     const value = row(database.prepare("SELECT * FROM invoice_drafts WHERE organization_id = ? AND id = ?").get(organizationId, id))
@@ -303,8 +348,8 @@ const transactionAdapter = (database: DatabaseSync): InvoicingTransaction => ({
     return {
       id, organizationId, ...(customerId === undefined ? {} : { customerId }), customer: buyerFrom(value, "customer_"),
       series: text(value, "series"), issueDate: text(value, "issue_date"),
-      dueDate: text(value, "due_date"), currency: text(value, "currency"),
-      status: text(value, "status") === "issued" ? "issued" : "draft", lines, ...calculateTotals(lines),
+      dueDate: nullableText(value, "due_date"), currency: text(value, "currency"),
+      status: draftStatus(value), lines, ...calculateTotals(lines),
     }
   }),
   listDrafts: (organizationId) => read("list drafts", () => {
@@ -315,7 +360,7 @@ const transactionAdapter = (database: DatabaseSync): InvoicingTransaction => ({
       const customerId = optionalText(value, "customer_id")
       const lines = loadLines(database, "draft_lines", id)
       return { id, organizationId, ...(customerId === undefined ? {} : { customerId }), customer: buyerFrom(value, "customer_"),
-        series: text(value, "series"), issueDate: text(value, "issue_date"), dueDate: text(value, "due_date"),
+        series: text(value, "series"), issueDate: text(value, "issue_date"), dueDate: nullableText(value, "due_date"),
         currency: text(value, "currency"), status: "draft" as const, lines, ...calculateTotals(lines) }
     })
   }),
@@ -324,28 +369,28 @@ const transactionAdapter = (database: DatabaseSync): InvoicingTransaction => ({
       .run(organizationId, id)
     if (result.changes === 0) throw new DomainConflict({ code: "draft_not_editable", message: "Draft cannot be deleted" })
   }),
-  allocateInvoiceNumber: (organizationId, fiscalYear, series) => write("allocate invoice number", () => {
+  allocateDocumentNumber: (organizationId, fiscalYear, documentType, series) => write("allocate document number", () => {
     const value = row(database.prepare(`INSERT INTO invoice_sequences
-      (organization_id, fiscal_year, document_type, series, last_number) VALUES (?, ?, 'invoice', ?, 1)
+      (organization_id, fiscal_year, document_type, series, last_number) VALUES (?, ?, ?, ?, 1)
       ON CONFLICT (organization_id, fiscal_year, document_type, series)
-      DO UPDATE SET last_number=last_number+1 RETURNING last_number`).get(organizationId, fiscalYear, series))
+      DO UPDATE SET last_number=last_number+1 RETURNING last_number`).get(organizationId, fiscalYear, documentType, series))
     if (value === undefined) throw new Error("missing allocated number")
     return integer(value, "last_number")
   }),
   saveIssuedInvoice: (invoice) => write("save issued invoice", () => {
     database.prepare(`INSERT INTO issued_invoices
-      (id, draft_id, organization_id, fiscal_year, document_type, series, number, issue_date, due_date,
+      (id, draft_id, source_proforma_id, organization_id, fiscal_year, document_type, series, number, issue_date, due_date,
        issued_at, currency, issuer_legal_name, issuer_tax_identifier, issuer_country_code, issuer_city,
         issuer_street, issuer_county, issuer_postal_code, customer_legal_name, customer_tax_identifier, customer_party_type,
        customer_country_code, customer_city, customer_street, customer_county, customer_postal_code,
        total_excluding_tax, tax_total, total_including_tax, e_factura_status)
-       VALUES (?, ?, ?, ?, 'invoice', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .run(invoice.id, invoice.draftId, invoice.organizationId, Number(invoice.issueDate.slice(0, 4)),
+       VALUES (?, ?, ?, ?, ?, 'invoice', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(invoice.id, invoice.draftId, invoice.sourceProformaId, invoice.organizationId, Number(invoice.issueDate.slice(0, 4)),
         invoice.series, invoice.number, invoice.issueDate, invoice.dueDate, invoice.issuedAt, invoice.currency,
         invoice.issuer.legalName, invoice.issuer.taxIdentifier, ...addressValues(invoice.issuer.address),
         invoice.customer.legalName, invoice.customer.taxIdentifier, invoice.customer.partyType, ...addressValues(invoice.customer.address),
         invoice.totalExcludingTax, invoice.taxTotal, invoice.totalIncludingTax, (invoice as unknown as { eFacturaStatus?: string }).eFacturaStatus ?? "not_sent")
-    saveLines(database, "issued_lines", invoice.id, invoice.lines)
+    saveLines(database, { table: "issued_lines" }, invoice.id, invoice.lines)
     const statement = database.prepare(`INSERT INTO issued_tax_breakdown
       (invoice_id, line_position, tax_code, category, rate, taxable_amount, tax_amount) VALUES (?, ?, ?, ?, ?, ?, ?)`)
     invoice.taxBreakdown.forEach((tax, position) => statement.run(
@@ -360,6 +405,59 @@ const transactionAdapter = (database: DatabaseSync): InvoicingTransaction => ({
     database.prepare(`SELECT * FROM issued_invoices WHERE organization_id = ?
       ORDER BY issue_date DESC, number DESC, id LIMIT 100`).all(organizationId)
       .map((value) => issuedInvoiceFrom(database, value as Row))),
+  saveProforma: (proforma) => write("save proforma", () => {
+    database.prepare(`INSERT INTO proformas
+      (id,source_draft_id,organization_id,fiscal_year,document_type,series,invoice_series,number,issue_date,due_date,issued_at,currency,
+       issuer_legal_name,issuer_tax_identifier,issuer_country_code,issuer_city,issuer_street,issuer_county,issuer_postal_code,
+       customer_party_type,customer_legal_name,customer_tax_identifier,customer_country_code,customer_city,customer_street,customer_county,customer_postal_code,
+        total_excluding_tax,tax_total,total_including_tax) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+      .run(proforma.id, proforma.sourceDraftId, proforma.organizationId, Number(proforma.issueDate.slice(0, 4)), "proforma",
+        proforma.series, proforma.invoiceSeries, proforma.number, proforma.issueDate, proforma.dueDate, proforma.issuedAt, proforma.currency,
+        proforma.issuer.legalName, proforma.issuer.taxIdentifier, ...addressValues(proforma.issuer.address), proforma.customer.partyType,
+        proforma.customer.legalName, proforma.customer.taxIdentifier, ...addressValues(proforma.customer.address),
+        proforma.totalExcludingTax, proforma.taxTotal, proforma.totalIncludingTax)
+    saveLines(database, { table: "proforma_lines", organizationId: proforma.organizationId }, proforma.id, proforma.lines)
+    const statement = database.prepare(`INSERT INTO proforma_tax_breakdown
+      (proforma_id,organization_id,line_position,tax_code,category,rate,taxable_amount,tax_amount) VALUES(?,?,?,?,?,?,?,?)`)
+    proforma.taxBreakdown.forEach((tax, position) => statement.run(
+      proforma.id, proforma.organizationId, position, tax.taxCode, tax.category, tax.rate, tax.taxableAmount, tax.taxAmount,
+    ))
+    database.prepare("UPDATE proformas SET sealed=1 WHERE id=? AND organization_id=? AND sealed=0")
+      .run(proforma.id, proforma.organizationId)
+  }),
+  findProforma: (organizationId, id) => read("find proforma", () => {
+    const value = row(database.prepare(`SELECT p.*,c.resulting_draft_id AS converted_draft_id,i.resulting_invoice_id AS converted_invoice_id FROM proformas p
+      LEFT JOIN proforma_conversions c ON c.organization_id=p.organization_id AND c.proforma_id=p.id
+      LEFT JOIN proforma_invoice_conversions i ON i.organization_id=p.organization_id AND i.proforma_id=p.id
+      WHERE p.organization_id=? AND p.id=? AND p.sealed=1`).get(organizationId, id))
+    return value === undefined ? undefined : proformaFrom(database, value)
+  }),
+  listProformas: (organizationId) => read("list proformas", () =>
+    database.prepare(`SELECT p.*,c.resulting_draft_id AS converted_draft_id,i.resulting_invoice_id AS converted_invoice_id FROM proformas p
+      LEFT JOIN proforma_conversions c ON c.organization_id=p.organization_id AND c.proforma_id=p.id
+      LEFT JOIN proforma_invoice_conversions i ON i.organization_id=p.organization_id AND i.proforma_id=p.id
+      WHERE p.organization_id=? AND p.sealed=1 ORDER BY p.issue_date DESC,p.number DESC,p.id LIMIT 100`)
+      .all(organizationId).map((value) => proformaFrom(database, value as Row))),
+  findProformaConversion: (organizationId, proformaId) => read("find proforma conversion", () => {
+    const value = row(database.prepare("SELECT * FROM proforma_conversions WHERE organization_id=? AND proforma_id=?")
+      .get(organizationId, proformaId))
+    return value === undefined ? undefined : {
+      proformaId: text(value, "proforma_id"), organizationId: text(value, "organization_id"),
+      resultingDraftId: text(value, "resulting_draft_id"), actorId: text(value, "actor_id"),
+      convertedAt: text(value, "converted_at"),
+    }
+  }),
+  findProformaInvoiceConversion: (organizationId, proformaId) => read("find proforma invoice conversion", () => {
+    const value = row(database.prepare("SELECT * FROM proforma_invoice_conversions WHERE organization_id=? AND proforma_id=?")
+      .get(organizationId, proformaId))
+    return value === undefined ? undefined : { proformaId: text(value, "proforma_id"), organizationId: text(value, "organization_id"),
+      resultingInvoiceId: text(value, "resulting_invoice_id"), actorId: text(value, "actor_id"), convertedAt: text(value, "converted_at") }
+  }),
+  saveProformaInvoiceConversion: (conversion) => write("save proforma invoice conversion", () => {
+    database.prepare(`INSERT INTO proforma_invoice_conversions(proforma_id,organization_id,resulting_invoice_id,actor_id,converted_at)
+      VALUES(?,?,?,?,?)`).run(conversion.proformaId, conversion.organizationId, conversion.resultingInvoiceId,
+        conversion.actorId, conversion.convertedAt)
+  }),
   savePayment: (payment) => write("save payment", () => {
     const result = database.prepare(`INSERT INTO invoice_payments
       (id, invoice_id, organization_id, amount, currency, payment_date, method, external_reference, note, actor_id, created_at)
@@ -372,14 +470,6 @@ const transactionAdapter = (database: DatabaseSync): InvoicingTransaction => ({
   listPayments: (organizationId, invoiceId) => read("list payments", () =>
     database.prepare("SELECT * FROM invoice_payments WHERE organization_id = ? AND invoice_id = ? ORDER BY payment_date, created_at, id")
       .all(organizationId, invoiceId).map((value) => paymentFrom(value as Row))),
-  allocateCorrectionNumber: (organizationId, fiscalYear, series) => write("allocate correction number", () => {
-    const value = row(database.prepare(`INSERT INTO invoice_sequences
-      (organization_id, fiscal_year, document_type, series, last_number) VALUES (?, ?, 'correction', ?, 1)
-      ON CONFLICT (organization_id, fiscal_year, document_type, series)
-      DO UPDATE SET last_number=last_number+1 RETURNING last_number`).get(organizationId, fiscalYear, series))
-    if (value === undefined) throw new Error("missing allocated number")
-    return integer(value, "last_number")
-  }),
   saveCorrection: (correction) => write("save correction", () => {
     database.prepare(`INSERT INTO correction_documents
       (id, organization_id, original_invoice_id, fiscal_year, document_type, series, number, issue_date, issued_at, reason, currency,

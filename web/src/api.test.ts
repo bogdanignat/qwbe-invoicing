@@ -173,6 +173,30 @@ void test("localizes duplicate document series conflicts", async () => {
   }
 })
 
+void test("localizes sealed-document workflow conflicts", async () => {
+  const originalFetch = globalThis.fetch
+  try {
+    for (const [code, message] of [
+      ["draft_already_issued", "Draftul a fost deja emis și nu mai poate fi folosit pentru un alt document."],
+      ["proforma_already_converted", "Proforma a fost deja transformată într-un draft de factură."],
+      ["invoice_already_issued", "Draftul a fost deja emis ca factură și este blocat."],
+    ] as const) {
+      globalThis.fetch = (input) => {
+        const sessionRequest = requestPath(input) === "/api/session"
+        return Promise.resolve(new Response(JSON.stringify(sessionRequest
+          ? { authenticated: true, csrfToken: "csrf-token" }
+          : { error: "DomainConflict", code, message: "Untranslated backend conflict" }), { status: sessionRequest ? 200 : 409, headers: { "content-type": "application/json" } }))
+      }
+      await runUiEffect(loginApiSession("secret-token"))
+      await assert.rejects(runUiEffect(apiRequest("/api/test", (input) => input)), (error) => error instanceof ApiFailure && error.message === message)
+      await runUiEffect(clearApiSession)
+    }
+  } finally {
+    await runUiEffect(clearApiSession)
+    globalThis.fetch = originalFetch
+  }
+})
+
 void test("lists and creates document series with the final API contract", async () => {
   const originalFetch = globalThis.fetch
   const calls: Array<{ readonly path: string; readonly init: RequestInit }> = []
@@ -210,6 +234,64 @@ void test("lists and creates document series with the final API contract", async
     const draftRequestBody = draftCall.init.body
     if (typeof draftRequestBody !== "string") throw new Error("Expected draft request body to be JSON")
     assert.deepEqual(JSON.parse(draftRequestBody), { customerId: "customer-1", series: "QWBE", issueDate: "2026-09-01" })
+  } finally {
+    await runUiEffect(clearApiSession)
+    globalThis.fetch = originalFetch
+  }
+})
+
+void test("calls direct and draft issuance, proforma invoice, registry, detail, and PDF routes", async () => {
+  const originalFetch = globalThis.fetch
+  const calls: Array<{ readonly path: string; readonly init: RequestInit }> = []
+  const draft = {
+    id: "draft-2", organizationId: "org-1", customerId: "customer-1",
+    customer: { partyType: "company", legalName: "Client", taxIdentifier: "RO1", address: { countryCode: "RO", city: "Iași", street: "Strada 1" } },
+    series: "QWBE", issueDate: "2026-09-01", dueDate: null, currency: "RON", status: "draft", lines: [], taxBreakdown: [],
+    totalExcludingTax: "0.00", taxTotal: "0.00", totalIncludingTax: "0.00",
+  }
+  const proforma = {
+    ...draft, id: "proforma-1", sourceDraftId: "draft-1", series: "PRO", number: 7, issuedAt: "2026-09-01T10:00:00.000Z",
+    issuer: { legalName: "QWBE", taxIdentifier: "RO2", address: { countryCode: "RO", city: "Botoșani", street: "Strada 2" } },
+    invoiceSeries: "QWBE", convertedDraftId: null, convertedInvoiceId: null,
+  }
+  const invoice = { ...proforma, id: "invoice-1", draftId: null, sourceProformaId: "proforma-1", series: "QWBE", number: 8, eFacturaStatus: "not_sent" }
+  const authoring = { customerId: "customer-1", series: "QWBE", issueDate: "2026-09-01", dueDate: null,
+    currency: "RON" as const, lines: [{ description: "Serviciu", quantity: "1", unitPrice: "100", taxCode: "RO_STANDARD" }] }
+  try {
+    globalThis.fetch = (input, init) => {
+      const path = requestPath(input)
+      calls.push({ path, init: init ?? {} })
+      if (path === "/api/session") return Promise.resolve(new Response(JSON.stringify({ authenticated: true, csrfToken: "csrf-token" }), { status: 200, headers: { "content-type": "application/json" } }))
+      if (path.endsWith("/pdf") && init?.method === "GET") return Promise.resolve(new Response("pdf", { status: 200, headers: { "content-type": "application/pdf" } }))
+      const body = path === "/api/proformas" && init?.method === "GET" ? [proforma]
+        : path === "/api/invoices" || path.endsWith("/invoice") ? invoice
+          : path.endsWith("/pdf") ? {} : proforma
+      return Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } }))
+    }
+    await runUiEffect(loginApiSession("secret-token"))
+    await runUiEffect(invoicingClient.issueDraftProforma("draft/1", "PRO"))
+    await runUiEffect(invoicingClient.issueProforma({ ...authoring, proformaSeries: "PRO" }))
+    await runUiEffect(invoicingClient.issueInvoice(authoring))
+    await runUiEffect(invoicingClient.listProformas())
+    await runUiEffect(invoicingClient.getProforma("proforma/1"))
+    await runUiEffect(invoicingClient.issueInvoiceFromProforma("proforma/1"))
+    assert.equal((await runUiEffect(invoicingClient.downloadProformaPdf("proforma/1"))).size, 3)
+    assert.deepEqual(calls.slice(1).map(({ path, init }) => [init.method, path]), [
+      ["POST", "/api/drafts/draft%2F1/proformas"],
+      ["POST", "/api/proformas"],
+      ["POST", "/api/invoices"],
+      ["GET", "/api/proformas"],
+      ["GET", "/api/proformas/proforma%2F1"],
+      ["POST", "/api/proformas/proforma%2F1/invoice"],
+      ["POST", "/api/proformas/proforma%2F1/pdf"],
+      ["GET", "/api/proformas/proforma%2F1/pdf"],
+    ])
+    const issueBody = calls[1]?.init.body
+    assert.equal(typeof issueBody, "string")
+    assert.deepEqual(JSON.parse(issueBody as string), { series: "PRO" })
+    const directProformaBody = calls[2]?.init.body
+    if (typeof directProformaBody !== "string") throw new Error("Expected direct proforma body")
+    assert.deepEqual(JSON.parse(directProformaBody), { ...authoring, proformaSeries: "PRO" })
   } finally {
     await runUiEffect(clearApiSession)
     globalThis.fetch = originalFetch

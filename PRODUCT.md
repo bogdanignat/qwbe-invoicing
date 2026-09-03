@@ -1,6 +1,6 @@
 # QWBE Invoicing Product Scope
 
-Status: product baseline before implementation  
+Status: product baseline; T-1069 implemented
 Jurisdiction: Romania  
 Last researched: 2026-08-30  
 Mother alignment reviewed: 2026-09-02 against QWBE `a98d9ef` (see `FOUNDATION.md` section 18)
@@ -30,7 +30,8 @@ model are extension seams, not first-release UI capabilities.
 ## 2. Legal and product boundary
 
 The application can create, issue, render, preserve, correct, and track payment of
-invoices. The first release does **not** submit invoices to RO e-Factura.
+invoices. It can also issue, render, preserve, list, and convert non-fiscal proformas.
+The first release does **not** submit invoices to RO e-Factura.
 
 This distinction must be visible in product documentation: taxpayers subject to
 RO e-Factura obligations need another compliant channel for XML submission until
@@ -78,13 +79,15 @@ require it. Personal data is otherwise kept to the minimum necessary.
 
 ### 3.3 Numbering sequences
 
-- one or more configurable invoice or proforma series;
+- separately configured invoice and proforma series;
 - sequential and unique numbers within an explicit scope;
 - recommended scope: issuer, fiscal year, document type, and series;
-- atomic number allocation when an invoice is issued;
-- drafts do not consume fiscal numbers;
-- every invoice draft selects one configured invoice series; proforma series are registry-only until proforma issuance exists;
-- an allocated number is never silently reused;
+- atomic allocation from the applicable document-type sequence when an invoice or
+  proforma is issued;
+- drafts do not consume invoice or proforma numbers;
+- every invoice draft selects one configured invoice series, while proforma issuance
+  explicitly selects a configured proforma series;
+- an allocated invoice or proforma number is never silently reused;
 - gaps, abandoned allocations, and voided numbers remain explainable in the audit
   trail.
 
@@ -95,7 +98,7 @@ The database must enforce uniqueness. UI validation alone is insufficient.
 A draft contains:
 
 - issuer reference and a buyer snapshot, optionally linked to a saved customer;
-- issue date, supply date, tax-point date where applicable, and due date;
+- issue date, optional due date, supply date, and tax-point date where applicable;
 - document currency and tax currency;
 - exchange rate, date, and source when required;
 - contract, purchase-order, delivery, and preceding-document references;
@@ -103,7 +106,11 @@ A draft contains:
 - allowances, charges, and notes;
 - payment terms and payment instructions.
 
-Drafts remain editable and do not represent issued fiscal documents.
+Drafts remain editable and do not represent issued fiscal documents. Saving one is
+optional: the authoring form can issue an invoice or immutable numbered proforma
+directly, while a saved draft can still issue either document. A proforma can issue
+exactly one invoice from its preserved snapshot; the invoice number is allocated in
+that same atomic operation. No intermediate draft is required.
 
 ### 3.5 Invoice lines and taxes
 
@@ -149,6 +156,10 @@ Depending on the operation and tax regime, an issued invoice must preserve:
 
 Due date, IBAN, bank, email, and phone are strongly recommended product fields but
 are not universal mandatory elements in the standard invoice list.
+
+`dueDate` is nullable on drafts, proformas, and issued invoices. Absence of a due
+date is preserved through proforma conversion and invoice issuance; it never makes
+an unpaid or partially paid invoice overdue by date alone.
 
 ### 3.7 Issuance and immutable snapshot
 
@@ -220,13 +231,22 @@ Required protections include:
 No blockchain is required. Integrity, reproducible snapshots, hashes, access
 controls, and an append-oriented audit history provide the required product trail.
 
-## 4. Documents outside the first slice
+## 4. Additional document workflows
 
 ### Proforma
 
-A proforma is useful and may be implemented after the regular invoice. It is a
-non-fiscal commercial document, uses a separate sequence, and can be converted to a
-draft invoice without becoming part of the fiscal invoice numbering.
+Implemented in T-1069. A proforma is an immutable, numbered non-fiscal commercial
+snapshot emitted directly from authored content or from an optional saved draft. It uses a separately configured
+proforma series and sequence scope; its number is never reused and never consumes an
+invoice number. It can be listed, opened in detail, and rendered/downloaded as a PDF
+that conspicuously says `DOCUMENT NEFISCAL`. Invoice issuance is allowed exactly once
+and copies the preserved snapshot directly into a numbered immutable fiscal document.
+
+A proforma has no RO e-Factura submission state, payment ledger, overdue state, or
+invoice-correction/storno semantics. Proforma delivery currently means downloadable
+PDF, not email.
+
+The remaining document types are outside the implemented scope:
 
 ### Simplified invoice
 
@@ -282,15 +302,18 @@ submission obligations must be researched again immediately before that integrat
 ## 6. Initial lifecycle
 
 ```text
-draft -> issued -> delivered -> partially_paid -> paid
-                    |               |
-                    +-----------> overdue
-                    |
-                    +-----------> corrected by a new document
+authored document ─┬─> optional editable draft ─┬─> issued invoice
+                  │                            └─> immutable numbered proforma
+                  ├─> issued invoice
+                  └─> immutable numbered proforma ─> exactly-once issued invoice
+
+issued invoice -> delivered -> partially_paid -> paid / overdue / corrected
 ```
 
 `Draft` is editable. Every state from `issued` onward refers to an immutable fiscal
-snapshot plus separate lifecycle/payment/correction records.
+snapshot plus separate lifecycle/payment/correction records. A proforma is immutable
+but non-fiscal and has none of the invoice payment, overdue, correction, or e-Factura
+states.
 
 ## 7. Canonical deployment
 
@@ -304,14 +327,13 @@ Docker Compose
 └── proxy     optional Caddy profile for TLS
 ```
 
-SQLite is the standalone host's persistence today. It was chosen when the QWBE
-foundation defined cube-owned SQLite storage; since QWB-44 (30 August 2026) the
-mother runs one Postgres database with one schema per cube and no SQLite at all, so
-that justification no longer holds. SQLite still keeps a small self-hosted deployment
-simple, but it is now a standalone-host decision, and mounted operation under the
-mother needs either a Postgres persistence adapter for the same domain schema or a
-mother-side capability for per-cube schema migrations. Open decision 7 in section 11
-records the choice to make before the next persistence change.
+SQLite is the standalone host's persistence. This remains an intentional deployment
+choice even though the QWBE mother runs Postgres. The confirmed future integration
+direction is an external application/sidecar: the mother may provide installation
+and authentication integration, while invoicing data remains owned by this
+application in SQLite. This repository does not require a Postgres persistence
+adapter and does not store invoicing data in the mother's Postgres database. Mother
+integration itself is not implemented.
 
 Deployment requirements:
 
@@ -323,9 +345,9 @@ Deployment requirements:
 - secrets are mounted from files and never baked into the image;
 - versioned images are pinned by release and, for production, digest;
 - releases target `linux/amd64` and `linux/arm64`;
-- backup and restore include the database (SQLite today; a Postgres dump if the
-  standalone host moves), issued representations/uploads, configuration, exact image
-  digests, and separately protected recovery secrets;
+- backup and restore include the SQLite databases plus invoice and proforma artifact
+  metadata and files; the operator runbook separately protects configuration, exact
+  image digests, and recovery secrets;
 - normal upgrade documentation never uses `docker compose down -v`.
 
 Recommended image location:
@@ -402,9 +424,9 @@ Required tests precede implementation and cover:
 - migration compatibility;
 - boundary and size gates from `FOUNDATION.md`.
 
-PDF rendering, payment recording, and correction documents follow this slice. Direct
-ANAF integration begins only after the invoice core and durable workflow seam are
-stable.
+PDF rendering, payment recording, correction documents, and the proforma workflow
+are implemented. Direct ANAF integration begins only after the invoice core and
+durable workflow seam are stable.
 
 ## 10. Initial delivery phases
 
@@ -433,7 +455,7 @@ stable.
 - PDF rendering and preserved artifacts;
 - payment recording and status calculation;
 - correction documents;
-- email/download delivery;
+- PDF download delivery; email remains future work;
 - first-run bootstrap, backup, restore, health, and operator documentation.
 
 ### Phase 3 — release hardening
@@ -463,17 +485,16 @@ The following decisions must be explicit before their relevant implementation:
    installation manage several?
 2. Which VAT regimes are supported in the first public release beyond ordinary
    domestic VAT and non-VAT-registered issuers?
-3. Is email delivery required for the first usable release, or is PDF download
-   sufficient?
+3. Resolved for the first usable release: delivery is PDF download. Email remains a
+   future capability; proforma delivery specifically means download, not email.
 4. Resolved: React 19 + TypeScript + Tailwind CSS 4, Vite-built, same-origin and API-first. Effect is the browser runtime for HTTP effects and typed failures; TanStack Query bridges Effect programs into React server state. The standalone host exchanges the local API token for a revocable, opaque 30-day session persisted server-side and referenced by an HttpOnly `SameSite=Strict` cookie. The browser keeps only the per-session CSRF token in Effect memory, while direct API clients may continue to use bearer authentication.
 5. What retention policy and backup targets are promised to operators?
 6. Which public, versioned QWBE contracts replace the current private `0.0.0`
    compatibility snapshot?
-7. Persistence alignment: does the standalone host move to Postgres to match the
-   mother (one schema per cube, kernel outbox), or does it keep SQLite and add a
-   Postgres adapter for mounted mode only? Either way the database must keep
-   enforcing number uniqueness and issued-invoice immutability, which the mother's
-   six-operation jsonb store cannot express today.
+7. Resolved: standalone remains SQLite. Intended future mother integration is an
+   external application/sidecar for installation and authentication; invoicing data
+   does not move into the mother's Postgres database. The integration contract and
+   packaging are still unimplemented.
 8. Package shape: keep the `kind: "cube"` package or reshape into a plugin pack
    (`cubes: ["invoicing", "invoicing/documents"]`) so the mother's shared checker and
    hierarchy rule apply.

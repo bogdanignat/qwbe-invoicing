@@ -18,6 +18,14 @@ const descriptors = new Map<string, StaticAssetDescriptor>([
   ["/assets/app.js", { relativePath: "./ui-dist/assets/app.js", contentType: "text/javascript; charset=utf-8", cacheControl: "no-cache" }],
   ["/assets/app.css", { relativePath: "./ui-dist/assets/app.css", contentType: "text/css; charset=utf-8", cacheControl: "no-cache" }],
 ])
+const uiRoutePatterns = [
+  /^\/unlock$/,
+  /^\/customers$/,
+  /^\/settings$/,
+  /^\/invoices(?:\/new|\/[^/]+)?$/,
+  /^\/proformas(?:\/[^/]+)?$/,
+  /^\/drafts\/[^/]+$/,
+] as const
 const cache = new Map<string, StaticAsset>()
 
 const load = (descriptor: StaticAssetDescriptor): StaticAsset | undefined => {
@@ -48,7 +56,7 @@ const missingBundle = (method: string | undefined): StaticUiResponse => {
 
 export const staticUiResponse = (method: string | undefined, path: string | undefined): StaticUiResponse | undefined => {
   if (path === undefined) return undefined
-  const descriptor = descriptors.get(path)
+  const descriptor = descriptors.get(path) ?? (uiRoutePatterns.some((pattern) => pattern.test(path)) ? html : undefined)
   if (descriptor === undefined) return undefined
   if (method !== "GET" && method !== "HEAD") return { status: 405, body: new Uint8Array(), headers: { ...securityHeaders, allow: "GET, HEAD", "cache-control": "no-store" } }
   const asset = load(descriptor)

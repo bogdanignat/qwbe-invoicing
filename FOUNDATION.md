@@ -1,6 +1,6 @@
 # QWBE Invoicing Foundation
 
-Status: architecture baseline before implementation  
+Status: architecture baseline; T-1069 reflected
 Source snapshot: QWBE mother repository at `a98d9ef` (main, 31 August 2026; previous baseline `987e11b`)
 Conformance review against that snapshot: 2 September 2026, section 18
 Package manager: pnpm  
@@ -12,8 +12,10 @@ UI: React 19 + TypeScript styled with Tailwind CSS 4, built with Vite and served
 Build an invoicing application that:
 
 - runs as a useful standalone application;
-- is itself a QWBE cube;
-- can later be mounted below a mother cube;
+- keeps the invoicing domain packaged as a QWBE cube boundary;
+- may later integrate with the QWBE mother as an external application/sidecar for
+  installation and authentication, without moving invoicing data into the mother's
+  database;
 - does not own login, passwords, or sessions;
 - keeps its business logic unchanged when its host changes;
 - follows the isolation, size, test, and package rules proven by QWBE.
@@ -53,7 +55,7 @@ Split a child cube only when at least one real boundary exists:
 
 Possible future children such as e-invoice transport, payment reconciliation, or reporting are not created until those boundaries are real.
 
-## 3. Two hosts, one application core
+## 3. Host boundaries
 
 ### Standalone mode
 
@@ -64,16 +66,25 @@ standalone host
 └── invoicing cube
 ```
 
-### Mounted mode
+### Intended future mother integration
 
 ```text
 mother runtime
-├── global authentication
-├── global accounts and organizations
-└── invoicing cube
+├── installation/authentication integration
+└── external invoicing application/sidecar
+    ├── host adapters
+    ├── invoicing cube
+    └── standalone-owned SQLite data
 ```
 
-The invoicing cube depends on host-provided contracts. It must not detect which host is running it.
+Bogdan confirmed this external application/sidecar direction for future mother
+integration. The mother may establish identity and installation lifecycle, but this
+application continues to own invoicing persistence in SQLite. It does not require a
+Postgres adapter and does not store invoicing records in the mother's Postgres
+schemas. The installation/authentication integration contract is not implemented.
+
+The invoicing cube depends on host-provided contracts. It must not embed a specific
+authentication implementation in business logic.
 
 The standalone host is a composition root and operational shell. It is not part of the invoicing business domain.
 
@@ -116,6 +127,7 @@ invoicing:customer.manage
 invoicing:invoice.draft
 invoicing:invoice.issue
 invoicing:invoice.void
+invoicing:proforma.issue
 invoicing:payment.record
 invoicing:settings.manage
 ```
@@ -236,16 +248,22 @@ The invariant inherited from QWBE is:
 
 Each cube owns its tables and receives a store restricted to those tables. Since QWB-44 (ADR-0001) the mother stores every cube in one Postgres database, one schema per cube, opened under a NOLOGIN role per cube that holds `USAGE` on its own schema and DML on its tables only. Another cube's data is never readable: the engine refuses it, not only the lint. The kernel-facing `Store` interface stayed the six operations (`all`, `page`, `byId`, `insert`, `update`, `count`) over jsonb row bodies with `id`, `type`, `createdAt`, `deleted` as real columns.
 
-Two consequences matter for this repository:
+Two consequences explain why direct mounted persistence is not the selected
+integration direction:
 
-- the cube role has no `CREATE` on its schema, so a cube cannot run its own DDL, not even through the declared `usesBatch` raw-SQL capability introduced by QWB-45. Relational tables with constraints and triggers, which is what `cube/invoicing/contracts/core-migrations.json` declares, have no legal creation path in mounted mode today. Either the mother grows a per-cube schema-migration capability or the cube persists through the six-operation store;
+- the cube role has no `CREATE` on its schema, so a directly mounted cube cannot run its own DDL, not even through the declared `usesBatch` raw-SQL capability introduced by QWB-45. Relational tables with constraints and triggers, which is what the invoicing migrations declare, have no legal creation path in mounted mode today;
 - SQLite is no longer a mother concept at all. The SQLite dialect in the cube's migrations (`STRICT`, `GLOB`, triggers) is a standalone-host choice and must be treated as such, not as inherited design.
+
+This app therefore remains SQLite-backed and externally integrated. A Postgres
+persistence adapter in this repository is not required by the future mother
+integration architecture.
 
 For the first invoicing slice, likely owned concepts include:
 
 - invoice drafts and issued invoice snapshots;
+- immutable proforma snapshots and one-time conversion records;
 - invoice lines;
-- numbering sequences;
+- separately scoped invoice and proforma numbering sequences;
 - issuer snapshot used at issue time;
 - customer snapshot used at issue time;
 - monetary totals and tax breakdowns;
@@ -296,11 +314,17 @@ The current mother implementation is not yet sufficient for no-rewrite recursive
 - package identities allow only one or two segments;
 - enablement checks only one ancestor.
 
-Therefore mounting `invoicing` below a mother cube without source changes requires a mother-kernel evolution toward arbitrary identity paths and identity-derived declarations.
+Therefore mounting `invoicing` below a mother cube without source changes would
+require a mother-kernel evolution toward arbitrary identity paths and
+identity-derived declarations. Direct mounting is no longer the selected integration
+architecture; these constraints remain relevant only to the existing compatibility
+artifact.
 
 There is a second blocker: current hierarchy makes the parent directory the install/uninstall unit. A separately shipped child cannot be added below an already installed mother without modifying the mother's directory, which conflicts with the installation invariant. Future integration needs an explicit contributed-child or mount-point contract; current parent/child nesting alone cannot satisfy this repository's delivery goal.
 
-Until both contracts exist, this repository remains standalone and avoids coupling to the temporary two-segment grammar.
+This repository remains standalone and avoids coupling to the temporary two-segment
+grammar. Future mother integration is instead an external app/sidecar and remains
+unimplemented.
 
 Sources: QWBE `core/src/kernel/scan.ts`, `core/src/kernel/manifest-validation.ts`, `core/src/package-source.ts`, and `core/src/kernel/discovery.ts`.
 
@@ -481,7 +505,10 @@ These are not solved by copying the mother prototype:
 1. Exact invoicing MVP and legal jurisdiction.
 2. Organization selection and authorization contract.
 3. Immutable issued-invoice model and numbering guarantees.
-4. Persistence alignment with the mother: the standalone host runs SQLite while the mother runs Postgres with one schema per cube and a role that cannot create tables. Options are a Postgres standalone host with a per-cube schema-migration capability contributed to the mother, or a rewrite onto the six-operation store, which cannot enforce the uniqueness PRODUCT.md section 3.3 requires at the database level.
+4. Resolved: standalone persistence remains SQLite. Future mother integration is an
+   external app/sidecar for installation and authentication, not a Postgres adapter
+   or storage of invoicing data in the mother's database. The integration protocol
+   remains open and unimplemented.
 5. Durable e-invoice submission workflow.
 6. API-only operation versus the selected React + Effect UI adapter.
 7. Distribution shape: one `kind: "cube"` package (current, installer-accepted, outside the shared checker) or a plugin pack with `cubes: ["invoicing", "invoicing/documents"]` that the `qwbe-core/package` checker and its `hierarchy` rule can judge.
@@ -512,10 +539,10 @@ Reviewed on 2 September 2026 after the mother's `main` moved from `987e11b` to `
 | Shared package contract checker, `qwbe-core/package`, `docs/package-contract.md` | QWB-40 | Not run: the `kind: "cube"` shape is outside the checker's `cubes/` layout. Own gates cover manifest shape, size, tests, boundaries, but not the `imports-internal` and `cube-builtins` rules the mother enforces. |
 | Per-cube field metadata, `version` drift gate, `fields`, `relations`, `searchable` | QWB-41 | Not applicable yet: the cube declares no `entity` and no HTTP handlers. Declare `version` once the cube serves an entity. |
 | External frontend auth: `QWBE_ALLOWED_ORIGINS`, CORS allowlist, httpOnly cookie through a proxy, 7-day token | QWB-42 | Aligned in spirit: the standalone host already keeps the token out of the browser behind an HttpOnly `SameSite=Strict` cookie. Session length differs (30 days here, 7 in the mother); not a contract. |
-| One Postgres, one schema per cube, NOLOGIN role per cube, kernel outbox, SQLite removed | QWB-43, QWB-44 | Not aligned. Standalone persists in SQLite with relational tables and triggers inside the cube directory; no creation path exists for that schema in mounted mode. Open decision 4. |
+| One Postgres, one schema per cube, NOLOGIN role per cube, kernel outbox, SQLite removed | QWB-43, QWB-44 | Intentionally separate: standalone persists in SQLite with relational tables and triggers. Confirmed future mother integration is an external app/sidecar for installation/authentication, not direct persistence in mother Postgres; the integration is not implemented. |
 | `usesBatch` raw-SQL capability (declared, outbox-exempt) | QWB-45 | Not usable as an escape: the role has no `CREATE`, so DDL is refused. |
 | Custom field values under the reserved `custom` key of a row body | QWB-46 | No impact on relational tables. `custom` becomes a reserved column name if the cube ever moves to the six-operation store. |
-| Installer strips a pack's top-level `frontend/`, `dist/`, `build/` | QWB-48 | No impact: the UI lives in `web/` and `standalone/ui-dist`, outside the package. Mounted-mode UI remains open decision 6. |
+| Installer strips a pack's top-level `frontend/`, `dist/`, `build/` | QWB-48 | No impact: the UI lives in `web/` and `standalone/ui-dist`, outside the package. Future external-app integration remains unimplemented. |
 | Size caps unchanged at 6,000 / 40,000 / 15 | - | Not aligned: caps raised locally to 11,000 / 65,000 / 20; `cube/invoicing` measures 63,158 characters across 19 files. Section 10. |
 
 Pre-existing gaps that the pull did not create but that a mounted install would hit first: `create()` returns `handlers: {}`, so the cube serves no HTTP surface under the mother (every endpoint lives in `standalone/api.ts`); `CurrentOrganization` is still a standalone-only contract (section 4); `qwbe-core` is still `0.0.0` and private (open decision 10).

@@ -5,6 +5,7 @@ build/
 standalone/ui-dist/
 data/
 .local/
+.playwright-mcp/
 .env
 .env.*
 !.env.example

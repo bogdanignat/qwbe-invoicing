@@ -24,7 +24,9 @@ child documents cube database `/data/documents.sqlite`. SQLite is a standalone-h
 choice: the QWBE mother has run one Postgres database with one schema per cube since
 QWB-44, so nothing here describes mounted operation (see `FOUNDATION.md` section 18). Repeated `docker compose up -d`
 is safe: both migration plans are idempotent and do not consume invoice numbers
-or create business records. The API reads its standalone bearer
+or proforma numbers or create business records. T-1069 adds invoicing migration
+`008-proforma-workflow`, `009-proforma-direct-invoice`, and documents migration `documents/002-proforma-artifacts`;
+existing databases receive them through the same startup migration step. The API reads its standalone bearer
 credential from the Compose secret; the secret is never stored in the image or
 printed by the application. `ORGANIZATION_ID` selects the trusted organization for
 this initial single-organization host adapter.
@@ -40,14 +42,34 @@ Every cube use-case is an `Effect` and has a 1:1 authenticated HTTP endpoint. Au
 - `GET /api/issuer` / `PUT /api/issuer` — read / configure issuer (Effect)
 - `GET /api/document-series` / `POST /api/document-series` — list / register invoice or proforma series; exact duplicates return `409 document_series_exists`
 - `POST /api/customers` / `GET /api/customers` / `GET /api/customers/:id` / `DELETE /api/customers/:id` — create / list / read / soft-delete optional customer records; `partyType=company` requires a valid CUI/CIF, while `partyType=individual` accepts an optional valid CNP; deletion hides the customer from new work while preserving issued invoice snapshots
-- `POST /api/drafts` / `GET /api/drafts` / `GET|PUT|DELETE /api/drafts/:id` — create / list / read / edit / delete drafts; creation and update require exactly one of `customerId` (saved customer) or `customer` (one-time buyer snapshot), and `series` is mandatory and preconfigured as `invoice` on create
+- `POST /api/drafts` / `GET /api/drafts` / `GET|PUT|DELETE /api/drafts/:id` — create / list / read / edit / delete drafts; creation and update require exactly one of `customerId` (saved customer) or `customer` (one-time buyer snapshot), `series` is mandatory and preconfigured as `invoice` on create, and `dueDate` may be omitted or set to `null`
 - `POST /api/drafts/:id/lines` / `PUT|DELETE /api/drafts/:id/lines/:lineId` — add / edit / remove manual invoice lines; no product catalog is required
 - `POST /api/drafts/:id/issue` — atomically allocate the next number and freeze the immutable invoice snapshot; issued drafts can no longer be edited or deleted
+- `POST /api/invoices` — issue an invoice atomically from complete authoring content without first persisting a draft
 - `GET /api/invoices` / `GET /api/invoices/:id` — latest 100 issued invoices / immutable issued snapshot (Effect)
 - `POST /api/invoices/:id/pdf` (idempotent render) / `GET /api/invoices/:id/pdf` (download with SHA-256 ETag)
 - `POST /api/invoices/:id/payments` (record payment) / `GET /api/invoices/:id/payments` (list payments with derived status `unpaid`/`partially_paid`/`paid`/`overpaid`/`overdue`, `paidAmount`/`remainingAmount`)
 - `POST /api/invoices/:id/corrections` (storno fiscal — creează document nou imuabil cu referință la factura originală, motiv obligatoriu, totals negative) / `GET /api/invoices/:id/corrections` / `GET /api/corrections/:id` — după emitere nu se mai editează factura, doar storno
 - Issued invoices have no `DELETE` endpoint and allocated invoice numbers are never reused; mistakes are handled through correction documents
+
+T-1069 proforma route inventory (seven authenticated routes):
+
+- `POST /api/proformas` — emit an immutable proforma directly from complete authoring content; no draft is persisted
+- `POST /api/drafts/:draftId/proformas` — emit an immutable proforma from the editable draft, using the requested configured proforma series
+- `GET /api/proformas` — list proformas
+- `GET /api/proformas/:id` — read proforma detail, including conversion state
+- `POST /api/proformas/:id/invoice` — issue exactly one immutable invoice directly from the preserved proforma snapshot and allocate its invoice number atomically
+- `POST /api/proformas/:proformaId/pdf` — idempotently render the proforma PDF
+- `GET /api/proformas/:proformaId/pdf` — download the proforma PDF
+
+The original direct draft-to-invoice route remains available. Invoice numbers are
+allocated only by invoice issuance, through `POST /api/invoices`, `POST /api/drafts/:id/issue`,
+or `POST /api/proformas/:id/invoice`. Invoice and proforma series use
+separate configured sequence scopes, and neither kind reuses allocated numbers.
+`dueDate` is nullable on draft, proforma, and invoice responses; without one, an
+invoice is not `overdue` from the calendar date alone. Proformas have list/detail/PDF
+support, but no e-Factura, payment, overdue, or correction/storno semantics. Their PDF
+is conspicuously marked `DOCUMENT NEFISCAL`.
 
 Issued invoices remain immutable; payments are separate `Effect` records and never mutate the fiscal snapshot. For local calls, pass
 `Authorization: Bearer $(cat .local/api-token)` and JSON request bodies. The bearer
@@ -99,7 +121,8 @@ docker compose logs --tail=100 app migrate
 ```
 
 Migration and artifact reconciliation commands are dry-run unless `--apply` is
-supplied. Artifact apply is bounded by `--limit`, commits successful PDFs one by one,
+supplied. Artifact reconciliation covers both invoices and proformas. Apply is
+bounded by `--limit`, commits successful PDFs one by one,
 and can be rerun safely after partial failure. In non-development environments,
 applying either operation also requires `--confirm-production`. PDFs are stored by
 SHA-256 below `/data/artifacts`; reads verify key, digest, and byte length. The bundled
@@ -110,7 +133,12 @@ to the font in `standalone/assets/fonts/`.
 
 ## Backup and restore
 
-SQLite and artifacts are the durable state. Operator-provided configuration (`ORGANIZATION_ID`, `AUTH_TOKEN_FILE`), image digests and externally stored recovery secrets are **not** baked into the backup; include them separately in your runbook.
+SQLite and artifacts are the durable state. The existing backup file set includes
+`invoicing.sqlite`, `documents.sqlite`, and artifact files, so proforma records,
+conversion metadata, proforma artifact metadata, and proforma PDFs are included
+without a new backup format. Operator-provided configuration (`ORGANIZATION_ID`,
+`AUTH_TOKEN_FILE`), image digests and externally stored recovery secrets are **not**
+baked into the backup; include them separately in your runbook.
 
 ```bash
 # Create a versioned archive (or directory) with manifest + SHA-256 verification
@@ -129,4 +157,4 @@ docker compose exec app node bin/qwbe-invoicing.ts restore --input /backup/qwbe-
 
 ## Delivery (PDF download)
 
-First usable release uses **PDF download** as the delivery channel (`GET /api/invoices/:id/pdf` with `ETag: "sha256-<digest>"`, `Content-Disposition: attachment` and `x-content-type-options: nosniff`). Email delivery is **deferred** per `PRODUCT.md` open decision #3 — PDF download alone satisfies the first slice; a future `email:send` permission and outbox will be added without changing the issuance snapshot.
+First usable release uses **PDF download** as the delivery channel (`GET /api/invoices/:id/pdf` or `GET /api/proformas/:proformaId/pdf`, with `ETag: "sha256-<digest>"`, `Content-Disposition: attachment` and `x-content-type-options: nosniff`). Email remains a future capability; downloading the conspicuously non-fiscal proforma PDF is delivery, not an email action. A future `email:send` permission and outbox can be added without changing immutable document snapshots.

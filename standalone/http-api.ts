@@ -16,9 +16,10 @@ export const operationNames = [
   "getIssuer", "configureIssuer", "listDocumentSeries", "addDocumentSeries",
   "listCustomers", "getCustomer", "createCustomer", "deleteCustomer",
   "listDrafts", "getDraft", "createDraft", "updateDraft", "deleteDraft",
-  "addDraftLine", "updateDraftLine", "deleteDraftLine", "issueInvoice",
+  "addDraftLine", "updateDraftLine", "deleteDraftLine", "issueDraftInvoice", "issueInvoice",
   "listPayments", "recordPayment", "createCorrection", "listCorrections", "getCorrection",
   "listIssuedInvoices", "getIssuedInvoice", "renderInvoicePdf", "downloadInvoicePdf",
+  "issueDraftProforma", "issueProforma", "listProformas", "getProforma", "issueInvoiceFromProforma", "renderProformaPdf", "downloadProformaPdf",
   "getSession", "createSession", "deleteSession",
 ] as const
 export type OperationName = typeof operationNames[number]
@@ -42,6 +43,7 @@ const id = HttpApiSchema.param("id", Schema.String)
 const draftId = HttpApiSchema.param("draftId", Schema.String)
 const lineId = HttpApiSchema.param("lineId", Schema.String)
 const invoiceId = HttpApiSchema.param("invoiceId", Schema.String)
+const proformaId = HttpApiSchema.param("proformaId", Schema.String)
 const csrfHeaders = Schema.Struct({
   "x-csrf-token": Schema.optional(Schema.String.annotations({
     description: "Required for unsafe requests authenticated with sessionCookie; ignored for bearerAuth.",
@@ -100,19 +102,32 @@ const invoicing = HttpApiGroup.make("invoicing")
   .add(invoicingBase(conflict(notFound(validation(body(HttpApiEndpoint.post("addDraftLine")`/drafts/${draftId}/lines`.setPayload(S.DraftLineInput).addSuccess(S.DraftInvoice)))))))
   .add(invoicingBase(conflict(notFound(validation(body(HttpApiEndpoint.put("updateDraftLine")`/drafts/${draftId}/lines/${lineId}`.setPayload(S.DraftLineInput).addSuccess(S.DraftInvoice)))))))
   .add(invoicingBase(conflict(notFound(body(HttpApiEndpoint.del("deleteDraftLine")`/drafts/${draftId}/lines/${lineId}`.addSuccess(S.DraftInvoice))))))
-  .add(invoicingBase(conflict(notFound(validation(body(HttpApiEndpoint.post("issueInvoice")`/drafts/${draftId}/issue`.addSuccess(S.IssuedInvoice)))))))
+  .add(invoicingBase(conflict(notFound(validation(body(HttpApiEndpoint.post("issueDraftInvoice")`/drafts/${draftId}/issue`.addSuccess(S.IssuedInvoice)))))))
   .add(invoicingBase(notFound(HttpApiEndpoint.get("listPayments")`/invoices/${invoiceId}/payments`.addSuccess(S.PaymentSummary))))
   .add(invoicingBase(notFound(validation(body(HttpApiEndpoint.post("recordPayment")`/invoices/${invoiceId}/payments`.setPayload(S.PaymentInput).addSuccess(S.RecordPaymentResult))))))
   .add(invoicingBase(conflict(notFound(validation(body(HttpApiEndpoint.post("createCorrection")`/invoices/${invoiceId}/corrections`.setPayload(S.CorrectionInput).addSuccess(S.Correction)))))))
   .add(invoicingBase(HttpApiEndpoint.get("listCorrections")`/invoices/${invoiceId}/corrections`.addSuccess(Schema.Array(S.Correction))))
   .add(invoicingBase(notFound(HttpApiEndpoint.get("getCorrection")`/corrections/${id}`.addSuccess(S.Correction))))
   .add(invoicingBase(HttpApiEndpoint.get("listIssuedInvoices", "/invoices").addSuccess(Schema.Array(S.IssuedInvoice))))
+  .add(invoicingBase(conflict(notFound(validation(body(HttpApiEndpoint.post("issueInvoice", "/invoices").setPayload(S.AuthoringDocumentInput).addSuccess(S.IssuedInvoice)))))))
   .add(invoicingBase(notFound(HttpApiEndpoint.get("getIssuedInvoice")`/invoices/${id}`.addSuccess(S.IssuedInvoice))))
+  .add(invoicingBase(conflict(notFound(validation(body(HttpApiEndpoint.post("issueDraftProforma")`/drafts/${draftId}/proformas`
+    .setPayload(S.IssueProformaInput).addSuccess(S.Proforma)))))))
+  .add(invoicingBase(HttpApiEndpoint.get("listProformas", "/proformas").addSuccess(Schema.Array(S.Proforma))))
+  .add(invoicingBase(conflict(notFound(validation(body(HttpApiEndpoint.post("issueProforma", "/proformas")
+    .setPayload(S.AuthoringProformaInput).addSuccess(S.Proforma)))))))
+  .add(invoicingBase(notFound(HttpApiEndpoint.get("getProforma")`/proformas/${id}`.addSuccess(S.Proforma))))
+  .add(invoicingBase(conflict(notFound(body(HttpApiEndpoint.post("issueInvoiceFromProforma")`/proformas/${id}/invoice`
+    .setPayload(S.EmptyInput).addSuccess(S.IssuedInvoice))))))
 
 const documents = HttpApiGroup.make("documents")
   .add(documentsBase(body(HttpApiEndpoint.post("renderInvoicePdf")`/invoices/${invoiceId}/pdf`.addSuccess(S.Artifact)
     .addError(S.DocumentNotFoundError).addError(S.ArtifactConflictError))))
   .add(documentsBase(HttpApiEndpoint.get("downloadInvoicePdf")`/invoices/${invoiceId}/pdf`.addSuccess(S.Pdf)
+    .addError(S.DocumentNotFoundError)))
+  .add(documentsBase(body(HttpApiEndpoint.post("renderProformaPdf")`/proformas/${proformaId}/pdf`.setPayload(S.EmptyInput)
+    .addSuccess(S.ProformaArtifact).addError(S.DocumentNotFoundError).addError(S.ArtifactConflictError))))
+  .add(documentsBase(HttpApiEndpoint.get("downloadProformaPdf")`/proformas/${proformaId}/pdf`.addSuccess(S.Pdf)
     .addError(S.DocumentNotFoundError)))
 
 const sessions = HttpApiGroup.make("sessions")

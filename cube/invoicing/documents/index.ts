@@ -9,7 +9,7 @@ export const cube = {
   manifest: {
     name: identity,
     parent: "invoicing",
-    tables: ["invoice_artifacts"],
+    tables: ["invoice_artifacts", "proforma_artifacts"],
     requiresAuth: true,
     permissions: [
       { name: documentsPermissions.read, roles: ["admin"] },
@@ -36,8 +36,11 @@ export type {
   InvoiceArtifact,
   InvoiceRenderer,
   InvoiceSource,
+  PdfArtifact,
   PdfObjectStore,
+  ProformaArtifact,
   RenderableInvoice,
+  RenderableProforma,
   RenderableBuyer,
   RenderableParty,
   RenderedDocument,

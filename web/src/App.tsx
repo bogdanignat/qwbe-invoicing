@@ -8,22 +8,19 @@ import { Loading } from "./components/AsyncState.tsx"
 import { Page } from "./components/Page.tsx"
 import { Shell } from "./components/Shell.tsx"
 import { invoicingClient } from "./invoicing-client.ts"
+import { currentRoute, navigate, subscribeToRoute } from "./navigation.ts"
 import { CustomersView } from "./views/CustomersView.tsx"
 import { DraftView } from "./views/DraftView.tsx"
 import { InvoiceDetailView } from "./views/InvoiceDetailView.tsx"
 import { InvoicesView } from "./views/InvoicesView.tsx"
 import { NewInvoiceView } from "./views/NewInvoiceView.tsx"
+import { ProformaDetailView } from "./views/ProformaDetailView.tsx"
+import { ProformasView } from "./views/ProformasView.tsx"
 import { SettingsView } from "./views/SettingsView.tsx"
 import { UnlockView } from "./views/UnlockView.tsx"
 
-const subscribeToHash = (callback: () => void): (() => void) => {
-  window.addEventListener("hashchange", callback)
-  return () => { window.removeEventListener("hashchange", callback) }
-}
-const currentHash = (): string => window.location.hash.slice(1) || "/unlock"
-
 export const App = () => {
-  const route = useSyncExternalStore(subscribeToHash, currentHash)
+  const route = useSyncExternalStore(subscribeToRoute, currentRoute)
   const queryClient = useQueryClient()
   const [authState, setAuthState] = useState<"checking" | "locked" | "unlocked">("checking")
   const [logoutPending, setLogoutPending] = useState(false)
@@ -32,7 +29,7 @@ export const App = () => {
   useEffect(() => onUnauthorized(() => {
     queryClient.clear()
     setAuthState("locked")
-    window.location.hash = "#/unlock"
+    navigate("/unlock", { replace: true })
   }), [queryClient])
   useEffect(() => {
     const controller = new AbortController()
@@ -40,12 +37,12 @@ export const App = () => {
       if (controller.signal.aborted) return
       queryClient.clear()
       setAuthState("unlocked")
-      if (currentHash() === "/unlock") window.location.hash = "#/invoices"
+      if (currentRoute() === "/unlock") navigate("/invoices", { replace: true })
     }).catch(() => {
       if (controller.signal.aborted) return
       queryClient.clear()
       setAuthState("locked")
-      window.location.hash = "#/unlock"
+      navigate("/unlock", { replace: true })
     })
     return () => { controller.abort() }
   }, [queryClient])
@@ -58,7 +55,7 @@ export const App = () => {
     await runUiEffect(Effect.zipRight(loginApiSession(token), invoicingClient.listCustomers()))
     queryClient.clear()
     setAuthState("unlocked")
-    window.location.hash = "#/invoices"
+    navigate("/invoices", { replace: true })
   }
   const logout = async (): Promise<void> => {
     if (logoutPending) return
@@ -71,7 +68,7 @@ export const App = () => {
       queryClient.clear()
       setAuthState("locked")
       setLogoutPending(false)
-      window.location.hash = "#/unlock"
+      navigate("/unlock", { replace: true })
     }
   }
 
@@ -85,6 +82,8 @@ export const App = () => {
     content = <InvoicesView />
   } else if (route === "/invoices/new") {
     content = <NewInvoiceView notify={notify} />
+  } else if (route === "/proformas") {
+    content = <ProformasView />
   } else if (route === "/customers") {
     content = <CustomersView notify={notify} />
   } else if (route === "/settings") {
@@ -92,9 +91,11 @@ export const App = () => {
   } else {
     const draft = /^\/drafts\/([^/]+)$/.exec(route)
     const invoice = /^\/invoices\/([^/]+)$/.exec(route)
+    const proforma = /^\/proformas\/([^/]+)$/.exec(route)
     if (draft?.[1] !== undefined) content = <DraftView id={decodeURIComponent(draft[1])} notify={notify} />
     else if (invoice?.[1] !== undefined) content = <InvoiceDetailView id={decodeURIComponent(invoice[1])} notify={notify} />
-    else content = <Page title="Pagina nu există" eyebrow="404"><p>Ruta cerută nu este disponibilă.</p><a className="button primary" href="#/invoices">Înapoi la facturi</a></Page>
+    else if (proforma?.[1] !== undefined) content = <ProformaDetailView id={decodeURIComponent(proforma[1])} />
+    else content = <Page title="Pagina nu există" eyebrow="404"><p>Ruta cerută nu este disponibilă.</p><a className="button primary" href="/invoices">Înapoi la facturi</a></Page>
   }
 
   return <><Shell unlocked={unlocked} route={route} logoutPending={logoutPending} onLogout={logout}>{content}</Shell>{toast === undefined ? null : <div className="toast" role="status">{toast}</div>}</>

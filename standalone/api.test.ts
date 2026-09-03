@@ -142,6 +142,12 @@ void test("requires host authentication and serves the complete invoice-core rou
     const draftId = (draft.body as { id: string }).id
     assert.equal((draft.body as { customer: { partyType: string } }).customer.partyType, "individual")
     assert.equal((draft.body as { totalIncludingTax: string }).totalIncludingTax, "0.00")
+    assert.equal((draft.body as { dueDate: string | null }).dueDate, null)
+    const invalidDueDate = await handleApiRequest({
+      method: "POST", url: "/api/drafts", authorization,
+      body: { customerId, issueDate: "2026-09-01", series: "QWBE", dueDate: 7 },
+    }, runtime)
+    assert.equal(invalidDueDate.status, 400)
     const ambiguousBuyer = await handleApiRequest({
       method: "POST", url: "/api/drafts", authorization,
       body: { customerId, customer: customer.body, issueDate: "2026-09-01", series: "QWBE" },
@@ -233,6 +239,88 @@ void test("requires host authentication and serves the complete invoice-core rou
       remainingAmount: (payments.body as { remainingAmount: string }).remainingAmount,
       count: (payments.body as { payments: ReadonlyArray<unknown> }).payments.length,
     }, { status: "partially_paid", paidAmount: "50.00", remainingAmount: "71.00", count: 1 })
+    const proformaDraft = await handleApiRequest({
+      method: "POST", url: "/api/drafts", authorization,
+      body: { customerId, issueDate: "2026-09-05", dueDate: null, series: "QWBE" },
+    }, runtime)
+    const proformaDraftId = (proformaDraft.body as { id: string }).id
+    await handleApiRequest({
+      method: "POST", url: `/api/drafts/${proformaDraftId}/lines`, authorization,
+      body: { description: "Avans", quantity: "1", unitPrice: "50", taxCode: "RO_STANDARD" },
+    }, runtime)
+    assert.equal((await handleApiRequest({
+      method: "POST", url: `/api/drafts/${proformaDraftId}/proformas`, authorization, body: { series: 7 },
+    }, runtime)).status, 400)
+    const proforma = await handleApiRequest({
+      method: "POST", url: `/api/drafts/${proformaDraftId}/proformas`, authorization, body: { series: "PRO" },
+    }, runtime)
+    assert.equal(proforma.status, 200)
+    assert.equal((proforma.body as { dueDate: string | null }).dueDate, null)
+    assert.equal((proforma.body as { convertedDraftId: string | null }).convertedDraftId, null)
+    const proformaId = (proforma.body as { id: string }).id
+    assert.deepEqual(await handleApiRequest({
+      method: "POST", url: `/api/drafts/${proformaDraftId}/proformas`, authorization, body: { series: "PRO" },
+    }, runtime), { status: 409, body: { error: "DomainConflict", code: "draft_already_issued" } })
+    const sealedSource = await handleApiRequest({
+      method: "GET", url: `/api/drafts/${proformaDraftId}`, authorization, body: undefined,
+    }, runtime)
+    assert.equal(sealedSource.status, 200)
+    assert.equal((sealedSource.body as { status: string }).status, "proforma_issued")
+    assert.deepEqual(await handleApiRequest({
+      method: "DELETE", url: `/api/drafts/${proformaDraftId}`, authorization, body: undefined,
+    }, runtime), { status: 409, body: { error: "DomainConflict", code: "draft_already_issued" } })
+    assert.deepEqual((await handleApiRequest({ method: "GET", url: "/api/proformas", authorization, body: undefined }, runtime)).body, [proforma.body])
+    assert.deepEqual((await handleApiRequest({ method: "GET", url: `/api/proformas/${proformaId}`, authorization, body: undefined }, runtime)).body, proforma.body)
+    assert.equal((await handleApiRequest({ method: "GET", url: "/api/proformas/missing", authorization, body: undefined }, runtime)).status, 404)
+    assert.equal((await handleApiRequest({ method: "POST", url: "/api/proformas/missing/invoice", authorization, body: {} }, runtime)).status, 404)
+    assert.equal((await handleApiRequest({ method: "POST", url: `/api/proformas/${proformaId}/invoice`, authorization, body: [] }, runtime)).status, 400)
+    assert.equal((await handleApiRequest({ method: "POST", url: "/api/proformas/missing/pdf", authorization, body: {} }, runtime)).status, 404)
+    assert.equal((await handleApiRequest({ method: "GET", url: "/api/proformas/missing/pdf", authorization, body: undefined }, runtime)).status, 404)
+    assert.equal((await handleApiRequest({ method: "POST", url: `/api/proformas/${proformaId}/pdf`, authorization, body: [] }, runtime)).status, 400)
+    const renderedProforma = await handleApiRequest({
+      method: "POST", url: `/api/proformas/${proformaId}/pdf`, authorization, body: {},
+    }, runtime)
+    assert.equal(renderedProforma.status, 200)
+    assert.equal((renderedProforma.body as { proformaId: string; templateVersion: string }).proformaId, proformaId)
+    assert.equal((renderedProforma.body as { templateVersion: string }).templateVersion, "proforma-v1")
+    assert.deepEqual((await handleApiRequest({
+      method: "POST", url: `/api/proformas/${proformaId}/pdf`, authorization, body: {},
+    }, runtime)).body, renderedProforma.body)
+    const proformaPdf = await handleApiRequest({
+      method: "GET", url: `/api/proformas/${proformaId}/pdf`, authorization, body: undefined,
+    }, runtime)
+    assert.equal(proformaPdf.status, 200)
+    assert.equal(proformaPdf.headers?.["content-disposition"], `attachment; filename="proforma-${proformaId}.pdf"`)
+    assert.equal(proformaPdf.headers.etag, `"sha256-${(renderedProforma.body as { sha256: string }).sha256}"`)
+    assert.equal(proformaPdf.headers["content-type"], "application/pdf")
+    assert.equal(Buffer.from((proformaPdf.body as Uint8Array).subarray(0, 5)).toString("ascii"), "%PDF-")
+    const converted = await handleApiRequest({
+      method: "POST", url: `/api/proformas/${proformaId}/invoice`, authorization, body: {},
+    }, runtime)
+    assert.equal(converted.status, 200)
+    assert.equal((converted.body as { dueDate: string | null }).dueDate, null)
+    assert.equal((converted.body as { draftId: string | null }).draftId, null)
+    assert.equal((converted.body as { sourceProformaId: string | null }).sourceProformaId, proformaId)
+    assert.deepEqual(await handleApiRequest({
+      method: "POST", url: `/api/proformas/${proformaId}/invoice`, authorization, body: {},
+    }, runtime), { status: 409, body: { error: "DomainConflict", code: "proforma_already_converted" } })
+    assert.equal(typeof ((await handleApiRequest({
+      method: "GET", url: `/api/proformas/${proformaId}`, authorization, body: undefined,
+    }, runtime)).body as { convertedInvoiceId: string | null }).convertedInvoiceId, "string")
+    const authoredBody = { customerId, series: "QWBE", issueDate: "2026-09-06", dueDate: null, currency: "RON",
+      lines: [{ description: "Direct", quantity: "1", unitPrice: "25", taxCode: "RO_STANDARD" }] }
+    assert.equal((await handleApiRequest({ method: "POST", url: "/api/invoices", authorization,
+      body: { ...authoredBody, lines: { description: "bad" } } }, runtime)).status, 400)
+    const directInvoice = await handleApiRequest({ method: "POST", url: "/api/invoices", authorization, body: authoredBody }, runtime)
+    assert.equal(directInvoice.status, 200)
+    assert.equal((directInvoice.body as { draftId: string | null }).draftId, null)
+    const directProforma = await handleApiRequest({ method: "POST", url: "/api/proformas", authorization,
+      body: { ...authoredBody, issueDate: "2026-09-07", proformaSeries: "PRO" } }, runtime)
+    assert.equal(directProforma.status, 200)
+    assert.equal((directProforma.body as { sourceDraftId: string | null }).sourceDraftId, null)
+    const directProformaId = (directProforma.body as { id: string }).id
+    assert.equal((await handleApiRequest({ method: "POST", url: `/api/proformas/${directProformaId}/invoice`, authorization, body: {} }, runtime)).status, 200)
+    assert.deepEqual((await handleApiRequest({ method: "GET", url: "/api/drafts", authorization, body: undefined }, runtime)).body, [])
     const correction = await handleApiRequest({
       method: "POST",
       url: `/api/invoices/${invoiceId}/corrections`,
@@ -331,6 +419,20 @@ void test("authenticates before parsing protected request bodies", async () => {
       dataDirectory: directory,
     })
     assert.equal(response.status, 401)
+    for (const [method, url, body] of [
+      ["POST", "/api/drafts/draft-1/proformas", { series: "PRO" }],
+      ["GET", "/api/proformas", undefined],
+      ["GET", "/api/proformas/proforma-1", undefined],
+      ["POST", "/api/proformas/proforma-1/invoice", {}],
+      ["POST", "/api/proformas/proforma-1/pdf", {}],
+      ["GET", "/api/proformas/proforma-1/pdf", undefined],
+    ] as const) {
+      assert.equal((await handleApiRequest({ method, url, authorization: undefined, body }, {
+        authenticate: createRequestAuthenticator({ host: "127.0.0.1", port: 3000, dataDirectory: directory,
+          nodeEnvironment: "test", authTokenFile: undefined, organizationId: "org-1" }),
+        dataDirectory: directory,
+      })).status, 401)
+    }
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }

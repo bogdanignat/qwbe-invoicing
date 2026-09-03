@@ -2,6 +2,8 @@ import { HttpApiSchema } from "@effect/platform"
 import { Schema } from "effect"
 
 const optionalString = Schema.optional(Schema.String)
+const nullableString = Schema.NullOr(Schema.String)
+const optionalNullableString = Schema.optional(nullableString)
 
 export const Address = Schema.Struct({
   countryCode: Schema.String,
@@ -108,9 +110,9 @@ export const DraftInvoice = Schema.Struct({
   customerId: optionalString,
   series: Schema.String,
   issueDate: Schema.String,
-  dueDate: Schema.String,
+  dueDate: nullableString,
   currency: Schema.String,
-  status: Schema.Literal("draft", "issued"),
+  status: Schema.Literal("draft", "issued", "proforma_issued"),
   lines: Schema.Array(DraftLine),
   taxBreakdown: Schema.Array(TaxBreakdown),
   totalExcludingTax: Schema.String,
@@ -120,12 +122,13 @@ export const DraftInvoice = Schema.Struct({
 
 export const IssuedInvoice = Schema.Struct({
   id: Schema.String,
-  draftId: Schema.String,
+  draftId: nullableString,
+  sourceProformaId: nullableString,
   organizationId: Schema.String,
   series: Schema.String,
   number: Schema.Int,
   issueDate: Schema.String,
-  dueDate: Schema.String,
+  dueDate: nullableString,
   issuedAt: Schema.String,
   currency: Schema.String,
   issuer: Party,
@@ -141,12 +144,12 @@ export const IssuedInvoice = Schema.Struct({
 const BuyerById = Schema.Struct({ customerId: Schema.String })
 const InlineBuyer = Schema.Struct({ customer: Buyer })
 export const DraftInput = Schema.Union(
-  Schema.Struct({ customerId: Schema.String, series: Schema.String, issueDate: Schema.String, currency: optionalString, dueDate: optionalString }),
-  Schema.Struct({ customer: Buyer, series: Schema.String, issueDate: Schema.String, currency: optionalString, dueDate: optionalString }),
+  Schema.Struct({ customerId: Schema.String, series: Schema.String, issueDate: Schema.String, currency: optionalString, dueDate: optionalNullableString }),
+  Schema.Struct({ customer: Buyer, series: Schema.String, issueDate: Schema.String, currency: optionalString, dueDate: optionalNullableString }),
 )
 export const UpdateDraftInput = Schema.Union(
-  Schema.Struct({ ...BuyerById.fields, issueDate: Schema.String, dueDate: optionalString }),
-  Schema.Struct({ ...InlineBuyer.fields, issueDate: Schema.String, dueDate: optionalString }),
+  Schema.Struct({ ...BuyerById.fields, issueDate: Schema.String, dueDate: optionalNullableString }),
+  Schema.Struct({ ...InlineBuyer.fields, issueDate: Schema.String, dueDate: optionalNullableString }),
 )
 export const DraftLineInput = Schema.Struct({
   description: Schema.String,
@@ -154,6 +157,15 @@ export const DraftLineInput = Schema.Struct({
   unitPrice: Schema.String,
   taxCode: Schema.String,
 })
+const AuthoringFields = { series: Schema.String, issueDate: Schema.String, dueDate: optionalNullableString,
+  currency: Schema.Literal("RON"), lines: Schema.Array(DraftLineInput) }
+export const AuthoringDocumentInput = Schema.Union(
+  Schema.Struct({ ...BuyerById.fields, ...AuthoringFields }), Schema.Struct({ ...InlineBuyer.fields, ...AuthoringFields }),
+)
+export const AuthoringProformaInput = Schema.Union(
+  Schema.Struct({ ...BuyerById.fields, ...AuthoringFields, proformaSeries: Schema.String }),
+  Schema.Struct({ ...InlineBuyer.fields, ...AuthoringFields, proformaSeries: Schema.String }),
+)
 
 export const PaymentInput = Schema.Struct({
   amount: Schema.String,
@@ -214,6 +226,39 @@ export const Correction = Schema.Struct({
 
 export const Artifact = Schema.Struct({
   invoiceId: Schema.String,
+  organizationId: Schema.String,
+  objectKey: Schema.String,
+  sha256: Schema.String,
+  byteLength: Schema.Int,
+  mediaType: Schema.Literal("application/pdf"),
+  templateVersion: Schema.String,
+  generatedAt: Schema.String,
+})
+export const Proforma = Schema.Struct({
+  id: Schema.String,
+  sourceDraftId: nullableString,
+  invoiceSeries: Schema.String,
+  convertedDraftId: nullableString,
+  convertedInvoiceId: nullableString,
+  organizationId: Schema.String,
+  series: Schema.String,
+  number: Schema.Int,
+  issueDate: Schema.String,
+  dueDate: nullableString,
+  issuedAt: Schema.String,
+  currency: Schema.String,
+  issuer: Party,
+  customer: Buyer,
+  lines: Schema.Array(DraftLine),
+  taxBreakdown: Schema.Array(TaxBreakdown),
+  totalExcludingTax: Schema.String,
+  taxTotal: Schema.String,
+  totalIncludingTax: Schema.String,
+})
+export const IssueProformaInput = Schema.Struct({ series: Schema.String })
+export const EmptyInput = Schema.Struct({})
+export const ProformaArtifact = Schema.Struct({
+  proformaId: Schema.String,
   organizationId: Schema.String,
   objectKey: Schema.String,
   sha256: Schema.String,

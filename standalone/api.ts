@@ -22,7 +22,7 @@ import {
   type DocumentsFailure,
 } from "../cube/invoicing/documents/index.ts"
 import { createStandaloneArtifactService } from "./artifact-runtime.ts"
-import { correctionInput, customerInput, documentSeriesInput, draftInput, issuerInput, lineInput, paymentInput, updateDraftInput, updateLineInput } from "./api-inputs.ts"
+import { authoringInvoiceInput, authoringProformaInput, correctionInput, customerInput, documentSeriesInput, draftInput, emptyInput, issuerInput, issueProformaInput, lineInput, paymentInput, updateDraftInput, updateLineInput } from "./api-inputs.ts"
 import { matchApplicationRoute } from "./api-route-adapter.ts"
 import type { RequestAuthenticator } from "./auth.ts"
 import { createSqliteStore } from "./sqlite-store.ts"
@@ -110,7 +110,8 @@ export const handleApiRequest = async (request: ApiRequest, runtime: ApiRuntime)
       case "addDraftLine": operation = service.addDraftLine(lineInput(pathParam("draftId"), request.body)); break
       case "updateDraftLine": operation = service.updateDraftLine(updateLineInput(pathParam("draftId"), pathParam("lineId"), request.body)); break
       case "deleteDraftLine": operation = service.deleteDraftLine(pathParam("draftId"), pathParam("lineId")); break
-      case "issueInvoice": operation = service.issueInvoice({ draftId: pathParam("draftId") }); break
+      case "issueDraftInvoice": operation = service.issueInvoice({ draftId: pathParam("draftId") }); break
+      case "issueInvoice": operation = service.issueInvoice(authoringInvoiceInput(request.body)); break
       case "listPayments": operation = service.listPayments(pathParam("invoiceId")); break
       case "recordPayment": operation = service.recordPayment(paymentInput(pathParam("invoiceId"), request.body)); break
       case "createCorrection": operation = service.createCorrection(correctionInput(pathParam("invoiceId"), request.body)); break
@@ -118,6 +119,11 @@ export const handleApiRequest = async (request: ApiRequest, runtime: ApiRuntime)
       case "getCorrection": operation = service.getCorrection(pathParam("id")); break
       case "listIssuedInvoices": operation = service.listIssuedInvoices(); break
       case "getIssuedInvoice": operation = service.getIssuedInvoice(pathParam("id")); break
+      case "issueDraftProforma": operation = service.issueProforma(issueProformaInput(pathParam("draftId"), request.body)); break
+      case "issueProforma": operation = service.issueProforma(authoringProformaInput(request.body)); break
+      case "listProformas": operation = service.listProformas(); break
+      case "getProforma": operation = service.getProforma(pathParam("id")); break
+      case "issueInvoiceFromProforma": emptyInput(request.body); operation = service.issueInvoiceFromProforma({ proformaId: pathParam("id") }); break
       case "renderInvoicePdf": operation = documents.renderInvoice(pathParam("invoiceId")); break
       case "downloadInvoicePdf": {
         const invoiceId = pathParam("invoiceId")
@@ -130,6 +136,24 @@ export const handleApiRequest = async (request: ApiRequest, runtime: ApiRuntime)
           headers: {
             "content-type": "application/pdf",
             "content-disposition": `attachment; filename="invoice-${filenameId}.pdf"`,
+            "content-length": String(result.right.bytes.length),
+            "x-content-type-options": "nosniff",
+            etag: `"sha256-${result.right.artifact.sha256}"`,
+          },
+        }
+      }
+      case "renderProformaPdf": emptyInput(request.body); operation = documents.renderProforma(pathParam("proformaId")); break
+      case "downloadProformaPdf": {
+        const proformaId = pathParam("proformaId")
+        const result = await Effect.runPromise(Effect.either(documents.downloadProforma(proformaId)))
+        if (Either.isLeft(result)) return failureResponse(result.left)
+        const filenameId = proformaId.replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 100) || "proforma"
+        return {
+          status: 200,
+          body: result.right.bytes,
+          headers: {
+            "content-type": "application/pdf",
+            "content-disposition": `attachment; filename="proforma-${filenameId}.pdf"`,
             "content-length": String(result.right.bytes.length),
             "x-content-type-options": "nosniff",
             etag: `"sha256-${result.right.artifact.sha256}"`,

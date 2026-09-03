@@ -25,6 +25,9 @@ const failureMessages: Readonly<Record<string, string>> = {
   customer_has_open_drafts: "Clientul are drafturi deschise.",
   document_series_exists: "Seria există deja pentru acest tip de document.",
   invoice_already_corrected: "Factura are deja un document storno integral.",
+  draft_already_issued: "Draftul a fost deja emis și nu mai poate fi folosit pentru un alt document.",
+  proforma_already_converted: "Proforma a fost deja transformată într-un draft de factură.",
+  invoice_already_issued: "Draftul a fost deja emis ca factură și este blocat.",
 }
 
 export const clearApiSession = Ref.set(csrfTokenRef, undefined)
@@ -41,9 +44,10 @@ const parseFailure = (input: unknown, status: number): ApiFailure => {
   const code = typeof value.code === "string" ? value.code : undefined
   const issues = Array.isArray(value.issues) ? value.issues.filter((issue): issue is string => typeof issue === "string") : []
   const error = typeof value.error === "string" ? value.error : undefined
-  const message = typeof value.message === "string"
+  const localizedCode = code === undefined ? undefined : failureMessages[code]
+  const message = localizedCode ?? (typeof value.message === "string"
     ? value.message
-    : issues[0] ?? (code === undefined ? (error === undefined ? `Cererea a eșuat (${String(status)}).` : failureMessages[error] ?? error) : failureMessages[code] ?? error ?? code)
+    : issues[0] ?? (code === undefined ? (error === undefined ? `Cererea a eșuat (${String(status)}).` : failureMessages[error] ?? error) : error ?? code))
   return new ApiFailure({ message, status, issues, ...(code === undefined ? {} : { code }) })
 }
 
