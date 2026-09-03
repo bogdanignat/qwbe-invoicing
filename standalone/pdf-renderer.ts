@@ -10,9 +10,11 @@ import {
   type InvoiceRenderer,
   type RenderableInvoice,
   type RenderableParty,
+  type RenderableProforma,
 } from "../cube/invoicing/documents/index.ts"
 
 export const invoiceTemplateVersion = "invoice-v2"
+export const proformaTemplateVersion = "proforma-v1"
 const defaultFontPath = fileURLToPath(new URL("./assets/fonts/DejaVuSans.ttf", import.meta.url))
 const pageWidth = 595.28
 const pageHeight = 841.89
@@ -91,6 +93,9 @@ export const partyIdentifierLine = (party: RenderableParty): string | undefined 
   ? undefined
   : `${party.partyType === "individual" ? "CNP" : "CUI"}: ${party.taxIdentifier}`
 
+export const documentDateLine = (document: Pick<RenderableDocument, "issueDate" | "dueDate">): string =>
+  `Data emiterii: ${document.issueDate}${document.dueDate === null ? "" : `   Scadență: ${document.dueDate}`}`
+
 const partyLines = (label: string, party: RenderableParty): ReadonlyArray<string> => {
   const identifier = partyIdentifierLine(party)
   return [label, party.legalName, ...(identifier === undefined ? [] : [identifier]),
@@ -98,20 +103,25 @@ const partyLines = (label: string, party: RenderableParty): ReadonlyArray<string
     [party.address.county, party.address.postalCode, party.address.countryCode].filter(Boolean).join(", ")]
 }
 
-export const renderInvoicePdf = async (
-  invoice: RenderableInvoice,
+type RenderableDocument = RenderableInvoice | RenderableProforma
+
+const renderPdf = async (
+  invoice: RenderableDocument,
   fontBytes: Uint8Array,
+  kind: "invoice" | "proforma",
 ): Promise<Uint8Array> => {
   const document = await PDFDocument.create({ updateMetadata: false })
   document.registerFontkit(fontkit)
   const font = await document.embedFont(fontBytes, { subset: true, customName: "DejaVuSans" })
   const issuedAt = new Date(invoice.issuedAt)
-  const label = `Factura ${invoice.series} ${String(invoice.number)}`
+  const isProforma = kind === "proforma"
+  const label = `${isProforma ? "Proformă" : "Factura"} ${invoice.series} ${String(invoice.number)}`
+  const templateVersion = isProforma ? proformaTemplateVersion : invoiceTemplateVersion
   document.setTitle(label)
   document.setAuthor(invoice.issuer.legalName)
-  document.setSubject("Factură")
+  document.setSubject(isProforma ? "PROFORMĂ — DOCUMENT NEFISCAL" : "Factură")
   document.setCreator("QWBE Invoicing")
-  document.setProducer(`QWBE Invoicing ${invoiceTemplateVersion}`)
+  document.setProducer(`QWBE Invoicing ${templateVersion}`)
   document.setCreationDate(issuedAt)
   document.setModificationDate(issuedAt)
 
@@ -123,9 +133,10 @@ export const renderInvoicePdf = async (
     y: pageHeight - margin,
     pageNumber: 1,
   }
-  draw(layout, "FACTURĂ", { size: 22, bold: true })
+  draw(layout, isProforma ? "PROFORMĂ" : "FACTURĂ", { size: 22, bold: true })
+  if (isProforma) draw(layout, "DOCUMENT NEFISCAL", { size: 15, bold: true })
   draw(layout, `${invoice.series} nr. ${String(invoice.number)}`, { size: 13 })
-  draw(layout, `Data emiterii: ${invoice.issueDate}   Scadență: ${invoice.dueDate}`)
+  draw(layout, documentDateLine(invoice))
   draw(layout, `Monedă: ${invoice.currency}`)
   space(layout, 12)
 
@@ -134,7 +145,7 @@ export const renderInvoicePdf = async (
   for (const line of partyLines("CLIENT", invoice.customer)) draw(layout, line, { width: pageWidth - margin * 2 })
   space(layout, 18)
 
-  draw(layout, "POZIȚII FACTURĂ", { size: 12, bold: true })
+  draw(layout, isProforma ? "POZIȚII PROFORMĂ" : "POZIȚII FACTURĂ", { size: 12, bold: true })
   invoice.lines.forEach((line, index) => {
     draw(layout, `${String(index + 1)}. ${line.description}`, { bold: true })
     draw(layout,
@@ -152,10 +163,16 @@ export const renderInvoicePdf = async (
   space(layout, 8)
   draw(layout, `TOTAL FĂRĂ TVA: ${invoice.totalExcludingTax} ${invoice.currency}`, { bold: true })
   draw(layout, `TVA: ${invoice.taxTotal} ${invoice.currency}`, { bold: true })
-  draw(layout, `TOTAL DE PLATĂ: ${invoice.totalIncludingTax} ${invoice.currency}`, { size: 14, bold: true })
+  draw(layout, `${isProforma ? "TOTAL PROFORMĂ" : "TOTAL DE PLATĂ"}: ${invoice.totalIncludingTax} ${invoice.currency}`, { size: 14, bold: true })
 
   return document.save({ useObjectStreams: false, addDefaultPage: false, updateFieldAppearances: false })
 }
+
+export const renderInvoicePdf = async (invoice: RenderableInvoice, fontBytes: Uint8Array): Promise<Uint8Array> =>
+  renderPdf(invoice, fontBytes, "invoice")
+
+export const renderProformaPdf = async (proforma: RenderableProforma, fontBytes: Uint8Array): Promise<Uint8Array> =>
+  renderPdf(proforma, fontBytes, "proforma")
 
 export const createPdfRenderer = (fontPath = defaultFontPath): InvoiceRenderer => {
   const fontBytes = readFile(fontPath).then((bytes) => new Uint8Array(bytes))
@@ -167,6 +184,14 @@ export const createPdfRenderer = (fontPath = defaultFontPath): InvoiceRenderer =
         templateVersion: invoiceTemplateVersion,
       }),
       catch: () => new DocumentRenderingFailure({ template: invoiceTemplateVersion }),
+    }),
+    renderProforma: (proforma) => Effect.tryPromise({
+      try: async () => ({
+        bytes: await renderProformaPdf(proforma, await fontBytes),
+        mediaType: "application/pdf" as const,
+        templateVersion: proformaTemplateVersion,
+      }),
+      catch: () => new DocumentRenderingFailure({ template: proformaTemplateVersion }),
     }),
   }
 }

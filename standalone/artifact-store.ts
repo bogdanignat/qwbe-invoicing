@@ -6,7 +6,7 @@ import { Effect } from "effect"
 
 import {
   DocumentPersistenceFailure,
-  type InvoiceArtifact,
+  type PdfArtifact,
   type PdfObjectStore,
   type StoredPdf,
 } from "../cube/invoicing/documents/index.ts"
@@ -57,7 +57,7 @@ const persist = async (root: string, bytes: Uint8Array): Promise<StoredPdf> => {
   return verified(key, new Uint8Array(await readFile(target)))
 }
 
-const safePath = (root: string, artifact: InvoiceArtifact): string => {
+const safePath = (root: string, artifact: PdfArtifact): string => {
   if (!/^sha256\/[a-f0-9]{2}\/[a-f0-9]{64}[.]pdf$/.test(artifact.objectKey)) {
     throw new Error("invalid artifact object key")
   }

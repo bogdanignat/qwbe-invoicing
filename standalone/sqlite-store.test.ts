@@ -23,6 +23,7 @@ const permissions = [
   "invoicing:customer.manage",
   "invoicing:invoice.draft",
   "invoicing:invoice.issue",
+  "invoicing:proforma.issue",
   "invoicing:settings.manage",
 ]
 
@@ -99,6 +100,32 @@ void test("persists an issued snapshot across store recreation and isolates orga
       taxCode: "RO_STANDARD",
     }))
     const issued = await Effect.runPromise(service.issueInvoice({ draftId: draft.id }))
+    const proformaSource = await Effect.runPromise(service.createDraft({
+      customerId: customer.id, issueDate: "2026-09-01", dueDate: null, series: "QWBE",
+    }))
+    const proformaAuthored = await Effect.runPromise(service.addDraftLine({
+      draftId: proformaSource.id, description: "Avans", quantity: "1", unitPrice: "50", taxCode: "RO_STANDARD",
+    }))
+    const proforma = await Effect.runPromise(service.issueProforma({ draftId: proformaSource.id, series: "PRO" }))
+    assert.equal(proforma.convertedDraftId, null)
+    assert.equal((await Effect.runPromise(service.getProforma(proforma.id))).convertedDraftId, null)
+    assert.equal((await Effect.runPromise(service.listProformas()))[0]?.convertedDraftId, null)
+    const converted = await Effect.runPromise(service.issueInvoiceFromProforma({ proformaId: proforma.id }))
+    assert.deepEqual(converted.lines, proformaAuthored.lines)
+    assert.equal(converted.series, "QWBE")
+    assert.equal(converted.dueDate, null)
+    assert.equal((await Effect.runPromise(service.getProforma(proforma.id))).convertedInvoiceId, converted.id)
+    const duplicateConversion = await Effect.runPromise(Effect.flip(service.issueInvoiceFromProforma({ proformaId: proforma.id })))
+    assert.equal(duplicateConversion instanceof DomainConflict && duplicateConversion.code === "proforma_already_converted", true)
+    const directProforma = await Effect.runPromise(service.issueProforma({ customerId: customer.id, series: "QWBE",
+      proformaSeries: "PRO", issueDate: "2026-09-02", currency: "RON",
+      lines: [{ description: "Direct", quantity: "1", unitPrice: "75", taxCode: "RO_STANDARD" }] }))
+    const directInvoice = await Effect.runPromise(service.issueInvoiceFromProforma({ proformaId: directProforma.id }))
+    assert.equal(directInvoice.sourceProformaId, directProforma.id)
+    assert.deepEqual(directInvoice.lines, directProforma.lines)
+    assert.equal((await Effect.runPromise(service.getProforma(directProforma.id))).convertedInvoiceId, directInvoice.id)
+    const duplicateDirect = await Effect.runPromise(Effect.flip(service.issueInvoiceFromProforma({ proformaId: directProforma.id })))
+    assert.equal(duplicateDirect instanceof DomainConflict && duplicateDirect.code === "proforma_already_converted", true)
 
     const restarted = createInvoicingService({
       context: context("org-1"),
@@ -108,6 +135,11 @@ void test("persists an issued snapshot across store recreation and isolates orga
       cubeIdentity: "invoicing",
     })
     assert.deepEqual(await Effect.runPromise(restarted.getIssuedInvoice(issued.id)), issued)
+    assert.deepEqual(await Effect.runPromise(restarted.getIssuedInvoice(directInvoice.id)), directInvoice)
+    assert.deepEqual(await Effect.runPromise(restarted.getProforma(proforma.id)), { ...proforma, convertedInvoiceId: converted.id })
+    assert.deepEqual((await Effect.runPromise(restarted.listProformas())).find(({ id }) => id === proforma.id),
+      { ...proforma, convertedInvoiceId: converted.id })
+    assert.equal((await Effect.runPromise(restarted.getDraft(proformaSource.id))).status, "proforma_issued")
     const persistedDraft = await Effect.runPromise(restarted.getDraft(draft.id))
     assert.equal(persistedDraft.series, "QWBE")
     assert.equal(persistedDraft.customer.partyType, "company")
@@ -140,6 +172,31 @@ void test("persists an issued snapshot across store recreation and isolates orga
       assert.throws(() => database.prepare("DELETE FROM issued_tax_breakdown WHERE invoice_id = ?").run(issued.id))
       assert.throws(() => database.prepare("DELETE FROM issued_invoices WHERE id = ?").run(issued.id))
       assert.throws(() => database.prepare("DELETE FROM invoice_drafts WHERE id = ?").run(draft.id))
+      assert.throws(() => database.prepare("UPDATE proformas SET total_including_tax='0.00' WHERE id=?").run(proforma.id))
+      assert.equal(database.prepare("SELECT sealed FROM proformas WHERE id=?").get(proforma.id)?.sealed, 1)
+      assert.equal(database.prepare("SELECT actor_id FROM proforma_invoice_conversions WHERE proforma_id=?").get(proforma.id)?.actor_id, "user-1")
+      assert.throws(() => database.prepare(`INSERT INTO proforma_lines
+        SELECT 'late-line',proforma_id,organization_id,line_position+10,description,quantity,unit_price,tax_code,tax_category,
+        tax_rate,total_excluding_tax,tax_amount,total_including_tax FROM proforma_lines WHERE proforma_id=? LIMIT 1`).run(proforma.id))
+      assert.throws(() => database.prepare(`INSERT INTO proforma_tax_breakdown
+        SELECT proforma_id,organization_id,line_position+10,tax_code,category,rate,taxable_amount,tax_amount
+        FROM proforma_tax_breakdown WHERE proforma_id=? LIMIT 1`).run(proforma.id))
+      assert.throws(() => database.prepare("DELETE FROM proforma_lines WHERE proforma_id=?").run(proforma.id))
+      assert.throws(() => database.prepare("DELETE FROM proforma_tax_breakdown WHERE proforma_id=?").run(proforma.id))
+      assert.throws(() => database.prepare("DELETE FROM proforma_invoice_conversions WHERE proforma_id=?").run(proforma.id))
+      database.prepare(`INSERT INTO invoice_drafts SELECT 'wrong-series-source',organization_id,NULL,customer_party_type,
+        customer_legal_name,customer_tax_identifier,customer_country_code,customer_city,customer_street,customer_county,
+        customer_postal_code,series,issue_date,due_date,currency,'proforma_issued' FROM invoice_drafts WHERE id=?`).run(proformaSource.id)
+      assert.throws(() => database.prepare(`INSERT INTO proformas SELECT 'wrong-series-proforma','wrong-series-source',
+        organization_id,fiscal_year,document_type,'QWBE',number+10,issue_date,due_date,issued_at,currency,issuer_legal_name,
+        issuer_tax_identifier,issuer_country_code,issuer_city,issuer_street,issuer_county,issuer_postal_code,customer_party_type,
+        customer_legal_name,customer_tax_identifier,customer_country_code,customer_city,customer_street,customer_county,
+        customer_postal_code,total_excluding_tax,tax_total,total_including_tax,0 FROM proformas WHERE id=?`).run(proforma.id))
+      assert.throws(() => database.prepare(`INSERT INTO proformas SELECT 'missing-series-proforma','wrong-series-source',
+        organization_id,fiscal_year,document_type,'MISSING',number+11,issue_date,due_date,issued_at,currency,issuer_legal_name,
+        issuer_tax_identifier,issuer_country_code,issuer_city,issuer_street,issuer_county,issuer_postal_code,customer_party_type,
+        customer_legal_name,customer_tax_identifier,customer_country_code,customer_city,customer_street,customer_county,
+        customer_postal_code,total_excluding_tax,tax_total,total_including_tax,0 FROM proformas WHERE id=?`).run(proforma.id))
     } finally {
       database.close()
     }
@@ -154,6 +211,7 @@ void test("persists an issued snapshot across store recreation and isolates orga
     })
     const failure = await Effect.runPromise(Effect.flip(otherOrganization.getIssuedInvoice(issued.id)))
     assert.equal(failure instanceof ResourceNotFound, true)
+    assert.equal(await Effect.runPromise(Effect.flip(otherOrganization.getProforma(proforma.id))) instanceof ResourceNotFound, true)
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
@@ -170,18 +228,25 @@ void test("rolls sequence allocation back with the surrounding transaction", asy
     await Effect.runPromise(store.transaction((transaction) => transaction.addDocumentSeries({
       organizationId: "org-1", documentType: "invoice", series: "ALT",
     })))
+    await Effect.runPromise(store.transaction((transaction) => transaction.addDocumentSeries({
+      organizationId: "org-1", documentType: "proforma", series: "QWBE",
+    })))
     const failure = await Effect.runPromise(Effect.flip(store.transaction((transaction) => Effect.gen(function*() {
-      yield* transaction.allocateInvoiceNumber("org-1", 2026, "QWBE")
+       yield* transaction.allocateDocumentNumber("org-1", 2026, "invoice", "QWBE")
+       yield* transaction.allocateDocumentNumber("org-1", 2026, "proforma", "QWBE")
       return yield* Effect.fail(new DomainConflict({ code: "forced", message: "rollback" }))
     }))))
     assert.equal(failure instanceof DomainConflict, true)
 
     const allocated = await Effect.runPromise(store.transaction((transaction) =>
-      transaction.allocateInvoiceNumber("org-1", 2026, "QWBE")))
+      transaction.allocateDocumentNumber("org-1", 2026, "invoice", "QWBE")))
     assert.equal(allocated, 1)
     const alternate = await Effect.runPromise(store.transaction((transaction) =>
-      transaction.allocateInvoiceNumber("org-1", 2026, "ALT")))
+      transaction.allocateDocumentNumber("org-1", 2026, "invoice", "ALT")))
     assert.equal(alternate, 1)
+    const proforma = await Effect.runPromise(store.transaction((transaction) =>
+      transaction.allocateDocumentNumber("org-1", 2026, "proforma", "QWBE")))
+    assert.equal(proforma, 1)
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }

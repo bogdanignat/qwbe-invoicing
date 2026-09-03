@@ -34,6 +34,7 @@ export interface IssuerProfile extends PartySnapshot {
 }
 
 export type DocumentType = "invoice" | "proforma"
+export type NumberedDocumentType = DocumentType | "correction"
 
 export interface DocumentSeries {
   readonly organizationId: string
@@ -41,10 +42,7 @@ export interface DocumentSeries {
   readonly series: string
 }
 
-export interface ConfigureDocumentSeriesInput {
-  readonly documentType: DocumentType
-  readonly series: string
-}
+export type ConfigureDocumentSeriesInput = Pick<DocumentSeries, "documentType" | "series">
 
 export interface Customer extends BuyerSnapshot {
   readonly id: string
@@ -65,21 +63,24 @@ export interface DraftLine {
   readonly totalIncludingTax: string
 }
 
-export interface DraftInvoice {
-  readonly id: string
-  readonly organizationId: string
+interface DocumentContent {
   readonly customer: BuyerSnapshot
-  readonly customerId?: string
-  readonly series: string
   readonly issueDate: string
-  readonly dueDate: string
+  readonly dueDate: string | null
   readonly currency: string
-  readonly status: "draft" | "issued"
-  readonly lines: ReadonlyArray<DraftLine>
+  readonly lines: readonly DraftLine[]
   readonly taxBreakdown: ReadonlyArray<TaxBreakdown>
   readonly totalExcludingTax: string
   readonly taxTotal: string
   readonly totalIncludingTax: string
+}
+
+export interface DraftInvoice extends DocumentContent {
+  readonly id: string
+  readonly organizationId: string
+  readonly customerId?: string
+  readonly series: string
+  readonly status: "draft" | "issued" | "proforma_issued"
 }
 
 export interface TaxBreakdown {
@@ -90,35 +91,49 @@ export interface TaxBreakdown {
   readonly taxAmount: string
 }
 
-export type EFacturaStatus = "not_sent" | "pending" | "sent" | "accepted" | "rejected"
-export interface IssuedInvoice {
+interface NumberedDocumentSnapshot extends DocumentContent {
   readonly id: string
-  readonly draftId: string
   readonly organizationId: string
   readonly series: string
   readonly number: number
-  readonly issueDate: string
-  readonly dueDate: string
   readonly issuedAt: string
-  readonly currency: string
   readonly issuer: PartySnapshot
-  readonly customer: BuyerSnapshot
-  readonly lines: ReadonlyArray<DraftLine>
-  readonly taxBreakdown: ReadonlyArray<TaxBreakdown>
-  readonly totalExcludingTax: string
-  readonly taxTotal: string
-  readonly totalIncludingTax: string
+}
+
+export type EFacturaStatus = "not_sent" | "pending" | "sent" | "accepted" | "rejected"
+export interface IssuedInvoice extends NumberedDocumentSnapshot {
+  readonly draftId: string | null
+  readonly sourceProformaId: string | null
   readonly eFacturaStatus: EFacturaStatus
 }
 
-export interface ConfigureIssuerInput {
-  readonly legalName: string
-  readonly taxIdentifier: string
-  readonly address: Address
-  readonly defaultCurrency: string
-  readonly defaultPaymentTermDays: number
-  readonly taxConfigurations: ReadonlyArray<TaxConfiguration>
+export interface Proforma extends NumberedDocumentSnapshot {
+  readonly sourceDraftId: string | null
+  readonly invoiceSeries: string
+  readonly convertedDraftId: string | null
+  readonly convertedInvoiceId: string | null
 }
+
+export type ProformaConversion = Readonly<{
+  proformaId: string
+  organizationId: string
+  resultingDraftId: string
+  actorId: string
+  convertedAt: string
+}>
+
+export type ProformaInvoiceConversion = Readonly<{
+  proformaId: string
+  organizationId: string
+  resultingInvoiceId: string
+  actorId: string
+  convertedAt: string
+}>
+
+export type IssueProformaInput = { readonly draftId: string; readonly series: string }
+export type ConvertProformaInput = { readonly proformaId: string }
+
+export type ConfigureIssuerInput = Omit<IssuerProfile, "organizationId">
 
 export type CreateCustomerInput = BuyerSnapshot
 
@@ -126,17 +141,34 @@ export type BuyerSource =
   | { readonly customerId: string; readonly customer?: never }
   | { readonly customer: BuyerSnapshot; readonly customerId?: never }
 
+export interface RawDocumentLine {
+  readonly description: string
+  readonly quantity: string
+  readonly unitPrice: string
+  readonly taxCode: string
+}
+
+export type AuthoringDocumentInput = BuyerSource & {
+  readonly series: string
+  readonly issueDate: string
+  readonly dueDate?: string | null
+  readonly currency: "RON"
+  readonly lines: ReadonlyArray<RawDocumentLine>
+}
+
+export type AuthoringProformaInput = AuthoringDocumentInput & { readonly proformaSeries: string }
+
 export type CreateDraftInput = BuyerSource & {
   readonly series: string
   readonly issueDate: string
   readonly currency?: string
-  readonly dueDate?: string
+  readonly dueDate?: string | null
 }
 
 export type UpdateDraftInput = BuyerSource & {
   readonly draftId: string
   readonly issueDate: string
-  readonly dueDate?: string
+  readonly dueDate?: string | null
 }
 
 export interface AddDraftLineInput {
@@ -147,12 +179,4 @@ export interface AddDraftLineInput {
   readonly taxCode: string
 }
 
-export interface UpdateDraftLineInput extends AddDraftLineInput {
-  readonly lineId: string
-}
-
-export const addDays = (date: string, days: number): string => {
-  const value = new Date(`${date}T00:00:00.000Z`)
-  value.setUTCDate(value.getUTCDate() + days)
-  return value.toISOString().slice(0, 10)
-}
+export type UpdateDraftLineInput = AddDraftLineInput & { readonly lineId: string }

@@ -22,11 +22,14 @@ void test("migration apply is idempotent", () => {
       "005-allow-e-factura-status-update",
       "006-customer-soft-delete",
       "007-complete-invoice-authoring",
+      "008-proforma-workflow",
+      "009-proforma-direct-invoice",
       "documents/000-foundation",
       "documents/001-artifacts",
+      "documents/002-proforma-artifacts",
       "sessions/000-browser-sessions",
     ])
-    assert.equal(applyMigrations(directory).changed, 11)
+    assert.equal(applyMigrations(directory).changed, 14)
     assert.equal(applyMigrations(directory).changed, 0)
     assert.equal(databaseReady(directory), true)
   } finally {
@@ -116,10 +119,11 @@ void test("serves assets and clean UI routes only from an allowlist with restric
   assert.ok(contentSecurityPolicy)
   assert.match(contentSecurityPolicy, /default-src 'none'/)
   assert.match(Buffer.from(page.body).toString("utf8"), /QWBE Invoicing/)
-  for (const path of ["/unlock", "/invoices", "/invoices/new", "/invoices/invoice-1", "/drafts/draft-1", "/customers", "/settings"]) {
+  for (const path of ["/unlock", "/invoices", "/invoices/new", "/invoices/invoice-1", "/drafts/draft-1", "/proformas", "/proformas/proforma-1", "/customers", "/settings"]) {
     assert.equal(staticUiResponse("GET", path)?.headers["content-type"], "text/html; charset=utf-8")
   }
   assert.equal(staticUiResponse("GET", "/api/invoices"), undefined)
+  assert.equal(staticUiResponse("GET", "/api/proformas"), undefined)
   assert.equal(staticUiResponse("GET", "/health/live"), undefined)
   assert.equal(staticUiResponse("GET", "/unknown"), undefined)
 

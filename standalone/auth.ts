@@ -40,6 +40,7 @@ export const createRequestAuthenticator = (config: RuntimeConfig): RequestAuthen
     invoicing.manageCustomers,
     invoicing.draftInvoices,
     invoicing.issueInvoices,
+    invoicing.issueProformas,
     invoicing.voidInvoices,
     invoicing.recordPayments,
     invoicing.manageSettings,

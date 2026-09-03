@@ -2,10 +2,12 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import { OpenApi } from "@effect/platform"
+import { Schema } from "effect"
 
 import { makeApiDocsResponse } from "./api-docs.ts"
 import { applicationRoutes, matchApplicationRoute } from "./api-route-adapter.ts"
 import { applicationHttpApi, operationNames } from "./http-api.ts"
+import * as S from "./http-schemas.ts"
 
 const inventory = [
   "GET /api/issuer", "PUT /api/issuer", "GET /api/document-series", "POST /api/document-series",
@@ -15,14 +17,17 @@ const inventory = [
   "POST /api/drafts/:draftId/issue", "GET /api/invoices/:invoiceId/payments", "POST /api/invoices/:invoiceId/payments",
   "POST /api/invoices/:invoiceId/corrections", "GET /api/invoices/:invoiceId/corrections", "GET /api/corrections/:id",
   "GET /api/invoices", "GET /api/invoices/:id", "POST /api/invoices/:invoiceId/pdf", "GET /api/invoices/:invoiceId/pdf",
+  "POST /api/invoices",
+  "POST /api/drafts/:draftId/proformas", "GET /api/proformas", "GET /api/proformas/:id",
+  "POST /api/proformas", "POST /api/proformas/:id/invoice", "POST /api/proformas/:proformaId/pdf", "GET /api/proformas/:proformaId/pdf",
   "GET /api/session", "POST /api/session", "DELETE /api/session",
 ].sort()
 
-void test("the contract exposes exactly the current 29 operations", () => {
-  assert.equal(operationNames.length, 29)
-  assert.equal(new Set(operationNames).size, 29)
-  assert.equal(applicationRoutes.length, 29)
-  assert.equal(new Set(applicationRoutes.map((route) => route.operationId)).size, 29)
+void test("the contract exposes exactly the current 37 operations", () => {
+  assert.equal(operationNames.length, 37)
+  assert.equal(new Set(operationNames).size, 37)
+  assert.equal(applicationRoutes.length, 37)
+  assert.equal(new Set(applicationRoutes.map((route) => route.operationId)).size, 37)
   assert.deepEqual(applicationRoutes.map((route) => `${route.method} ${route.path}`).sort(), inventory)
   assert.equal(applicationRoutes.some((route) => route.path === "/api"), false)
 })
@@ -37,9 +42,32 @@ void test("the reflected matcher handles precedence, raw IDs, 405, and 404", () 
   assert.deepEqual(matchApplicationRoute("GET", "/api/invoices/x/pdf"), {
     kind: "matched", operationId: "downloadInvoicePdf", pathParams: { invoiceId: "x" },
   })
+  assert.deepEqual(matchApplicationRoute("POST", "/api/proformas/x/pdf"), {
+    kind: "matched", operationId: "renderProformaPdf", pathParams: { proformaId: "x" },
+  })
   assert.deepEqual(matchApplicationRoute("PATCH", "/api/session"), { kind: "method_not_allowed" })
   assert.deepEqual(matchApplicationRoute("GET", "/api/invoices/x/pdf/extra"), { kind: "not_found" })
   assert.deepEqual(matchApplicationRoute("GET", "/api"), { kind: "not_found" })
+})
+
+void test("dueDate contracts accept absent, null, or string input and encode explicit null responses", () => {
+  const base = { customerId: "customer-1", series: "QWBE", issueDate: "2026-09-01" }
+  assert.doesNotThrow(() => Schema.decodeUnknownSync(S.DraftInput)(base))
+  assert.equal(Schema.decodeUnknownSync(S.DraftInput)({ ...base, dueDate: null }).dueDate, null)
+  assert.equal(Schema.decodeUnknownSync(S.DraftInput)({ ...base, dueDate: "2026-09-15" }).dueDate, "2026-09-15")
+  assert.throws(() => Schema.decodeUnknownSync(S.DraftInput)({ ...base, dueDate: 15 }))
+  const draft = {
+    id: "draft-1", organizationId: "org-1", customer: { partyType: "individual", legalName: "Ion", taxIdentifier: "",
+      address: { countryCode: "RO", city: "Iași", street: "Strada 1" } }, series: "QWBE", issueDate: "2026-09-01",
+    dueDate: null, currency: "RON", status: "proforma_issued", lines: [], taxBreakdown: [], totalExcludingTax: "0.00",
+    taxTotal: "0.00", totalIncludingTax: "0.00",
+  } as const
+  assert.equal(Schema.encodeSync(S.DraftInvoice)(draft).dueDate, null)
+  assert.equal(Schema.encodeSync(S.DraftInvoice)(draft).status, "proforma_issued")
+  assert.equal(Schema.encodeSync(S.Proforma)({ ...draft, id: "proforma-1", sourceDraftId: "draft-1", invoiceSeries: "QWBE",
+    convertedDraftId: null, convertedInvoiceId: null,
+    number: 1, issuedAt: "2026-09-01T00:00:00.000Z", issuer: { legalName: "Furnizor", taxIdentifier: "RO12345674",
+      address: { countryCode: "RO", city: "Iași", street: "Strada 2" } } }).convertedDraftId, null)
 })
 
 void test("OpenAPI 3.1 mirrors paths, PDF encoding, and authentication metadata", () => {
@@ -53,6 +81,11 @@ void test("OpenAPI 3.1 mirrors paths, PDF encoding, and authentication metadata"
   assert.deepEqual(spec.paths["/api/customers"]?.get?.security, [{ bearerAuth: [] }, { sessionCookie: [] }])
   assert.deepEqual(spec.paths["/api/session"]?.post?.security, [])
   assert.deepEqual(spec.paths["/api/session"].get?.security, [{ sessionCookie: [] }])
+  const draftResponse = spec.paths["/api/drafts/{id}"]?.get?.responses[200]
+  const draftContent = draftResponse?.content as
+    | Readonly<Record<string, { readonly schema?: { readonly properties?: { readonly status?: { readonly enum?: unknown } } } }>>
+    | undefined
+  assert.deepEqual(draftContent?.["application/json"]?.schema?.properties?.status?.enum, ["draft", "issued", "proforma_issued"])
   assert.ok(spec.paths["/api/customers"].post?.parameters.some((parameter) => parameter.name === "x-csrf-token"))
   assert.ok(spec.paths["/api/session"].delete?.parameters.some((parameter) => parameter.name === "x-csrf-token" && parameter.required))
   const pdfPath = spec.paths["/api/invoices/{invoiceId}/pdf"]
@@ -63,6 +96,9 @@ void test("OpenAPI 3.1 mirrors paths, PDF encoding, and authentication metadata"
   assert.deepEqual(pdfContent?.["application/pdf"]?.schema, {
     type: "string", format: "binary",
   })
+  const proformaPdfContent = spec.paths["/api/proformas/{proformaId}/pdf"]?.get?.responses[200]?.content as
+    | Readonly<Record<string, { readonly schema: unknown }>> | undefined
+  assert.deepEqual(proformaPdfContent?.["application/pdf"]?.schema, { type: "string", format: "binary" })
 
   const common = ["200", "400", "401", "403", "500", "503"]
   const expectStatuses = (
@@ -77,10 +113,10 @@ void test("OpenAPI 3.1 mirrors paths, PDF encoding, and authentication metadata"
     assert.ok(operation, `${method.toUpperCase()} ${path} is absent`)
     assert.deepEqual(Object.keys(operation.responses).sort(), [...new Set([...base, ...extras])].sort())
   }
-  for (const path of ["/api/document-series", "/api/customers", "/api/drafts", "/api/invoices/{invoiceId}/corrections", "/api/invoices"]) {
+  for (const path of ["/api/document-series", "/api/customers", "/api/drafts", "/api/invoices/{invoiceId}/corrections", "/api/invoices", "/api/proformas"]) {
     expectStatuses("get", path)
   }
-  for (const path of ["/api/issuer", "/api/customers/{id}", "/api/drafts/{id}", "/api/invoices/{invoiceId}/payments", "/api/corrections/{id}", "/api/invoices/{id}", "/api/invoices/{invoiceId}/pdf"]) {
+  for (const path of ["/api/issuer", "/api/customers/{id}", "/api/drafts/{id}", "/api/invoices/{invoiceId}/payments", "/api/corrections/{id}", "/api/invoices/{id}", "/api/invoices/{invoiceId}/pdf", "/api/proformas/{id}", "/api/proformas/{proformaId}/pdf"]) {
     expectStatuses("get", path, ["404"])
   }
   for (const [method, path] of [["put", "/api/issuer"], ["post", "/api/customers"]] as const) {
@@ -90,11 +126,14 @@ void test("OpenAPI 3.1 mirrors paths, PDF encoding, and authentication metadata"
   for (const [method, path] of [["post", "/api/drafts"], ["post", "/api/invoices/{invoiceId}/payments"]] as const) {
     expectStatuses(method, path, ["404", "413"])
   }
+  for (const path of ["/api/invoices", "/api/proformas"]) expectStatuses("post", path, ["404", "409", "413"])
   for (const [method, path] of [
     ["delete", "/api/customers/{id}"], ["put", "/api/drafts/{id}"], ["delete", "/api/drafts/{id}"],
     ["post", "/api/drafts/{draftId}/lines"], ["put", "/api/drafts/{draftId}/lines/{lineId}"],
     ["delete", "/api/drafts/{draftId}/lines/{lineId}"], ["post", "/api/drafts/{draftId}/issue"],
     ["post", "/api/invoices/{invoiceId}/corrections"], ["post", "/api/invoices/{invoiceId}/pdf"],
+    ["post", "/api/drafts/{draftId}/proformas"], ["post", "/api/proformas/{id}/invoice"],
+    ["post", "/api/proformas/{proformaId}/pdf"],
   ] as const) expectStatuses(method, path, ["404", "409", "413"])
   expectStatuses("get", "/api/session", [], ["200", "400", "401", "500", "503"])
   expectStatuses("post", "/api/session", ["413"])

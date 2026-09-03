@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { createDraftPayload, draftLinesForEditing, formFromDraft, headerMatchesDraft, initialBuyerSelection, linesMatchDraft, pendingLineOperations, switchBuyerMode, switchPartyType, type InvoiceAuthoringForm } from "./invoice-authoring-state.ts"
+import { authoringAccess, authoringDocumentPayload, authoringPayloadMatchesDraft, authoringReadiness, authoringSeriesOptions, createDraftPayload, draftLinesForEditing, formFromDraft, headerMatchesDraft, initialBuyerSelection, linesMatchDraft, pendingLineOperations, switchBuyerMode, switchPartyType, updateDraftPayload, type InvoiceAuthoringForm } from "./invoice-authoring-state.ts"
 import type { DraftInvoice } from "./models.ts"
 
 const manualForm: InvoiceAuthoringForm = {
@@ -34,6 +34,13 @@ void test("requires explicit saved-customer selection and falls back to one-time
   assert.deepEqual(initialBuyerSelection(false), { buyerMode: "one-time", customerId: "" })
 })
 
+void test("prepares invoice and proforma series independently for authoring", () => {
+  assert.deepEqual(authoringSeriesOptions([
+    { organizationId: "org-1", documentType: "proforma", series: "PRO" },
+    { organizationId: "org-1", documentType: "invoice", series: "QWBE" },
+  ]), { invoice: ["QWBE"], proforma: ["PRO"] })
+})
+
 void test("switching PJ/PF preserves distinct typed identifiers", () => {
   const company = { ...manualForm, partyType: "company" as const, companyTaxIdentifier: "RO123", individualTaxIdentifier: "1960523420018" }
   const individual = switchPartyType(company, "individual")
@@ -50,11 +57,48 @@ void test("rehydrates inline buyer drafts and detects unsaved header changes", (
   assert.equal(headerMatchesDraft({ ...form, city: "Cluj-Napoca" }, draft), false)
 })
 
+void test("encodes a cleared due date as null and rehydrates null as a blank control", () => {
+  const blank = { ...manualForm, dueDate: "" }
+  assert.equal(createDraftPayload(blank).dueDate, null)
+  assert.equal(updateDraftPayload(blank).dueDate, null)
+  const withoutDueDate = { ...draft, dueDate: null }
+  assert.equal(formFromDraft(withoutDueDate).dueDate, "")
+  assert.equal(headerMatchesDraft(blank, withoutDueDate), true)
+})
+
 void test("detects edited and queued lines before issue", () => {
   const withLine: DraftInvoice = { ...draft, lines: [{ id: "line-1", description: "Serviciu", quantity: "1.0000", unitPrice: "100.00", taxCode: "RO_STANDARD", taxCategory: "standard", taxRate: "21.00", totalExcludingTax: "100.00", taxAmount: "21.00", totalIncludingTax: "121.00" }] }
   const lines = draftLinesForEditing(withLine)
   assert.equal(linesMatchDraft(lines, withLine), true)
   assert.equal(linesMatchDraft([{ ...lines[0] as NonNullable<typeof lines[0]>, quantity: "2" }], withLine), false)
+  assert.deepEqual(authoringReadiness(formFromDraft(withLine), lines, withLine, false), { editable: true, synchronized: true, hasLines: true, canIssue: true })
+  assert.equal(authoringReadiness(formFromDraft(withLine), lines, withLine, true).canIssue, false)
+  assert.equal(authoringReadiness(manualForm, lines, undefined, false).canIssue, true)
+  assert.deepEqual(authoringDocumentPayload(manualForm, lines).lines, [{
+    description: "Serviciu", quantity: "1.0000", unitPrice: "100.00", taxCode: "RO_STANDARD",
+  }])
+  const payload = authoringDocumentPayload(manualForm, lines)
+  assert.equal(authoringPayloadMatchesDraft(payload, withLine), true)
+  assert.equal(authoringPayloadMatchesDraft(payload, { ...withLine, issueDate: "2026-09-03" }), false)
+  assert.equal(authoringPayloadMatchesDraft(payload, { ...withLine, lines: [{ ...withLine.lines[0] as NonNullable<typeof withLine.lines[0]>, quantity: "2.0000" }] }), false)
+})
+
+void test("locks issued and proforma-issued draft routes while keeping new and draft authoring editable", () => {
+  assert.deepEqual(authoringAccess("draft"), { editable: true })
+  assert.deepEqual(authoringAccess("issued"), {
+    editable: false,
+    notice: "Acest draft a fost deja emis ca factură și este blocat. Nu mai poate fi modificat, șters sau emis din nou.",
+    registryHref: "/invoices",
+    registryLabel: "Deschide registrul de facturi",
+  })
+  const proformaAccess = authoringAccess("proforma_issued")
+  assert.equal(proformaAccess.editable ? undefined : proformaAccess.registryHref, "/proformas")
+  assert.equal(authoringReadiness(manualForm, [], undefined, false).editable, true)
+  for (const status of ["issued", "proforma_issued"] as const) {
+    const sealed = { ...draft, status, lines: [{ id: "line-1", description: "Serviciu", quantity: "1.0000", unitPrice: "100.00", taxCode: "RO_STANDARD", taxCategory: "standard" as const, taxRate: "21.00", totalExcludingTax: "100.00", taxAmount: "21.00", totalIncludingTax: "121.00" }] }
+    const readiness = authoringReadiness(formFromDraft(sealed), draftLinesForEditing(sealed), sealed, false)
+    assert.deepEqual(readiness, { editable: false, synchronized: false, hasLines: true, canIssue: false })
+  }
 })
 
 void test("selects only remaining new or changed lines for a resumed save", () => {

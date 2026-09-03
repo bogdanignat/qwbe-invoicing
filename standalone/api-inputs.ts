@@ -1,6 +1,8 @@
 import {
   ValidationFailure,
   type AddDraftLineInput,
+  type AuthoringDocumentInput,
+  type AuthoringProformaInput,
   type BuyerSnapshot,
   type ConfigureDocumentSeriesInput,
   type ConfigureIssuerInput,
@@ -23,6 +25,8 @@ const text = (value: unknown, field: string): string => {
   return value
 }
 const optionalText = (value: unknown, field: string): string | undefined => value === undefined ? undefined : text(value, field)
+const optionalNullableText = (value: unknown, field: string): string | null | undefined =>
+  value === undefined || value === null ? value : text(value, field)
 const integer = (value: unknown, field: string): number => {
   if (typeof value !== "number" || !Number.isInteger(value)) throw new ValidationFailure({ issues: [`${field} must be an integer`] })
   return value
@@ -84,13 +88,13 @@ export const documentSeriesInput = (value: unknown): ConfigureDocumentSeriesInpu
 export const draftInput = (value: unknown): CreateDraftInput => {
   const input = object(value)
   const currency = optionalText(input.currency, "currency")
-  const dueDate = optionalText(input.dueDate, "dueDate")
+  const dueDate = optionalNullableText(input.dueDate, "dueDate")
   return { ...buyerSource(input), series: text(input.series, "series"), issueDate: text(input.issueDate, "issueDate"),
     ...(currency === undefined ? {} : { currency }), ...(dueDate === undefined ? {} : { dueDate }) }
 }
 export const updateDraftInput = (draftId: string, value: unknown): UpdateDraftInput => {
   const input = object(value)
-  const dueDate = optionalText(input.dueDate, "dueDate")
+  const dueDate = optionalNullableText(input.dueDate, "dueDate")
   return { ...buyerSource(input), draftId, issueDate: text(input.issueDate, "issueDate"),
     ...(dueDate === undefined ? {} : { dueDate }) }
 }
@@ -115,4 +119,33 @@ export const correctionInput = (originalInvoiceId: string, value: unknown) => {
   const input = object(value)
   const issueDate = optionalText(input.issueDate, "issueDate")
   return { originalInvoiceId, reason: text(input.reason, "reason"), ...(issueDate === undefined ? {} : { issueDate }) }
+}
+export const issueProformaInput = (draftId: string, value: unknown) => {
+  const input = object(value)
+  return { draftId, series: text(input.series, "series") }
+}
+const rawLines = (value: unknown): AuthoringDocumentInput["lines"] => {
+  if (!Array.isArray(value)) throw new ValidationFailure({ issues: ["lines must be an array"] })
+  return value.map((value) => {
+    const line = object(value)
+    return { description: text(line.description, "lines.description"), quantity: text(line.quantity, "lines.quantity"),
+      unitPrice: text(line.unitPrice, "lines.unitPrice"), taxCode: text(line.taxCode, "lines.taxCode") }
+  })
+}
+const authoring = (value: unknown): AuthoringDocumentInput => {
+  const input = object(value)
+  const dueDate = optionalNullableText(input.dueDate, "dueDate")
+  const currency = text(input.currency, "currency")
+  if (currency !== "RON") throw new ValidationFailure({ issues: ["currency must be RON"] })
+  return { ...buyerSource(input), series: text(input.series, "series"), issueDate: text(input.issueDate, "issueDate"), currency,
+    ...(dueDate === undefined ? {} : { dueDate }), lines: rawLines(input.lines) }
+}
+export const authoringInvoiceInput = authoring
+export const authoringProformaInput = (value: unknown): AuthoringProformaInput => {
+  const input = object(value)
+  return { ...authoring(input), proformaSeries: text(input.proformaSeries, "proformaSeries") }
+}
+export const emptyInput = (value: unknown): Record<string, never> => {
+  object(value)
+  return {}
 }

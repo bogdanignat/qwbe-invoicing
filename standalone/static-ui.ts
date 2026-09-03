@@ -23,6 +23,7 @@ const uiRoutePatterns = [
   /^\/customers$/,
   /^\/settings$/,
   /^\/invoices(?:\/new|\/[^/]+)?$/,
+  /^\/proformas(?:\/[^/]+)?$/,
   /^\/drafts\/[^/]+$/,
 ] as const
 const cache = new Map<string, StaticAsset>()

@@ -1,11 +1,19 @@
-import type { CreateDraftInput, DraftLineInput, UpdateDraftInput } from "./invoicing-client.ts"
-import type { BuyerSnapshot, DraftInvoice, PartyType } from "./models.ts"
+import type { AuthoringDocumentInput, CreateDraftInput, DraftLineInput, UpdateDraftInput } from "./invoicing-client.ts"
+import { invoiceDocumentSeries, proformaDocumentSeries, type BuyerSnapshot, type DocumentSeries, type DraftInvoice, type PartyType } from "./models.ts"
 
 export type BuyerMode = "saved" | "one-time"
 
 export const initialBuyerSelection = (hasSavedCustomers: boolean): { readonly buyerMode: BuyerMode; readonly customerId: string } => ({
   buyerMode: hasSavedCustomers ? "saved" : "one-time",
   customerId: "",
+})
+
+export const authoringSeriesOptions = (series: ReadonlyArray<DocumentSeries>): {
+  readonly invoice: ReadonlyArray<string>
+  readonly proforma: ReadonlyArray<string>
+} => ({
+  invoice: invoiceDocumentSeries(series).map((item) => item.series),
+  proforma: proformaDocumentSeries(series).map((item) => item.series),
 })
 
 export interface InvoiceAuthoringForm {
@@ -57,17 +65,35 @@ const buyerPayload = (form: InvoiceAuthoringForm): { readonly customerId: string
 
 export const createDraftPayload = (form: InvoiceAuthoringForm): CreateDraftInput => ({
   ...buyerPayload(form), series: form.series, issueDate: form.issueDate, currency: "RON",
-  ...(form.dueDate === "" ? {} : { dueDate: form.dueDate }),
+  dueDate: form.dueDate === "" ? null : form.dueDate,
 })
 
 export const updateDraftPayload = (form: InvoiceAuthoringForm): UpdateDraftInput => ({
   ...buyerPayload(form), issueDate: form.issueDate,
-  ...(form.dueDate === "" ? {} : { dueDate: form.dueDate }),
+  dueDate: form.dueDate === "" ? null : form.dueDate,
 })
 
 export const draftLinePayload = (line: EditableInvoiceLine): DraftLineInput => ({
   description: line.description, quantity: line.quantity, unitPrice: line.unitPrice, taxCode: line.taxCode,
 })
+
+export const authoringDocumentPayload = (
+  form: InvoiceAuthoringForm,
+  lines: ReadonlyArray<EditableInvoiceLine>,
+): AuthoringDocumentInput => ({ ...createDraftPayload(form), currency: "RON", lines: lines.map(draftLinePayload) })
+
+export const authoringPayloadMatchesDraft = (payload: AuthoringDocumentInput, draft: DraftInvoice): boolean => {
+  const sameBuyer = "customerId" in payload
+    ? draft.customerId === payload.customerId
+    : draft.customerId === undefined && JSON.stringify(draft.customer) === JSON.stringify(payload.customer)
+  return sameBuyer && draft.series === payload.series && draft.issueDate === payload.issueDate
+    && draft.dueDate === (payload.dueDate ?? null) && draft.currency === payload.currency
+    && draft.lines.length === payload.lines.length && draft.lines.every((line, index) => {
+      const expected = payload.lines[index]
+      return expected !== undefined && line.description === expected.description && line.quantity === expected.quantity
+        && line.unitPrice === expected.unitPrice && line.taxCode === expected.taxCode
+    })
+}
 
 export const switchBuyerMode = (form: InvoiceAuthoringForm, buyerMode: BuyerMode): InvoiceAuthoringForm => ({
   ...form,
@@ -93,7 +119,7 @@ export const formFromDraft = (draft: DraftInvoice): InvoiceAuthoringForm => ({
   postalCode: draft.customer.address.postalCode ?? "",
   series: draft.series,
   issueDate: draft.issueDate,
-  dueDate: draft.dueDate,
+  dueDate: draft.dueDate ?? "",
 })
 
 export const draftLinesForEditing = (draft: DraftInvoice): ReadonlyArray<EditableInvoiceLine> => draft.lines.map((line) => ({
@@ -113,7 +139,7 @@ export const headerMatchesDraft = (form: InvoiceAuthoringForm, draft: DraftInvoi
       && draft.customer.address.street === form.street
       && (draft.customer.address.county ?? "") === form.county
       && (draft.customer.address.postalCode ?? "") === form.postalCode
-  return sameBuyer && draft.series === form.series && draft.issueDate === form.issueDate && draft.dueDate === form.dueDate
+  return sameBuyer && draft.series === form.series && draft.issueDate === form.issueDate && (draft.dueDate ?? "") === form.dueDate
 }
 
 const lineMatches = (line: EditableInvoiceLine, persisted: DraftInvoice["lines"][number]): boolean =>
@@ -129,5 +155,51 @@ export const pendingLineOperations = (lines: ReadonlyArray<EditableInvoiceLine>,
 
 export const linesMatchDraft = (lines: ReadonlyArray<EditableInvoiceLine>, draft: DraftInvoice): boolean =>
   lines.length === draft.lines.length && pendingLineOperations(lines, draft).length === 0
+
+export interface AuthoringReadiness {
+  readonly editable: boolean
+  readonly synchronized: boolean
+  readonly hasLines: boolean
+  readonly canIssue: boolean
+}
+
+export const authoringReadiness = (
+  form: InvoiceAuthoringForm,
+  lines: ReadonlyArray<EditableInvoiceLine>,
+  draft: DraftInvoice | undefined,
+  pending: boolean,
+): AuthoringReadiness => {
+  const editable = draft === undefined || draft.status === "draft"
+  const synchronized = editable && draft !== undefined && headerMatchesDraft(form, draft) && linesMatchDraft(lines, draft)
+  const hasLines = lines.length > 0 && lines.every((line) =>
+    line.description.trim() !== "" && line.quantity.trim() !== "" && line.unitPrice.trim() !== "" && line.taxCode.trim() !== "")
+  return { editable, synchronized, hasLines,
+    canIssue: editable && hasLines && !pending && (draft === undefined || synchronized) }
+}
+
+export type AuthoringAccess =
+  | { readonly editable: true }
+  | {
+      readonly editable: false
+      readonly notice: string
+      readonly registryHref: "/invoices" | "/proformas"
+      readonly registryLabel: string
+    }
+
+export const authoringAccess = (status: DraftInvoice["status"]): AuthoringAccess => {
+  if (status === "issued") return {
+    editable: false,
+    notice: "Acest draft a fost deja emis ca factură și este blocat. Nu mai poate fi modificat, șters sau emis din nou.",
+    registryHref: "/invoices",
+    registryLabel: "Deschide registrul de facturi",
+  }
+  if (status === "proforma_issued") return {
+    editable: false,
+    notice: "Acest draft a fost deja emis ca proformă și este blocat. Nu mai poate fi modificat, șters sau emis din nou.",
+    registryHref: "/proformas",
+    registryLabel: "Deschide registrul de proforme",
+  }
+  return { editable: true }
+}
 
 export const identifierLabel = (partyType: PartyType): string => partyType === "company" ? "CUI / CIF" : "CNP"

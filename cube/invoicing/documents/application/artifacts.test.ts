@@ -67,6 +67,8 @@ const memoryAdapters = (artifacts: Map<string, InvoiceArtifact>): {
       artifacts.set(artifact.invoiceId, artifact)
       return artifact
     }),
+    findProformaArtifact: () => Effect.succeed(undefined),
+    saveProformaArtifact: (artifact) => Effect.succeed(artifact),
   },
   source: {
     findInvoice: (organizationId, id) => Effect.succeed(
@@ -75,6 +77,8 @@ const memoryAdapters = (artifacts: Map<string, InvoiceArtifact>): {
     listIssuedInvoiceIds: (organizationId) => Effect.succeed(
       organizationId === invoice.organizationId ? [invoice.id] : [],
     ),
+    findProforma: () => Effect.succeed(undefined),
+    listProformaIds: () => Effect.succeed([]),
   },
 })
 
@@ -91,6 +95,7 @@ void test("renders once, persists immutable metadata, and returns verified bytes
         renders += 1
         return { bytes, mediaType: "application/pdf" as const, templateVersion: "invoice-v1" }
       }),
+      renderProforma: () => Effect.fail(new DocumentRenderingFailure({ template: "proforma-v1" })),
     },
     objects: {
       putPdf: () => Effect.succeed({ objectKey: "sha256/abc.pdf", sha256: "abc", byteLength: bytes.length }),
@@ -114,7 +119,10 @@ void test("does not persist metadata when rendering or object storage fails", as
     context,
     clock: Effect.succeed(new Date("2026-09-01T10:05:00.000Z")),
     ...memoryAdapters(artifacts),
-    renderer: { render: () => Effect.fail(new DocumentRenderingFailure({ template: "invoice-v1" })) },
+    renderer: {
+      render: () => Effect.fail(new DocumentRenderingFailure({ template: "invoice-v1" })),
+      renderProforma: () => Effect.fail(new DocumentRenderingFailure({ template: "proforma-v1" })),
+    },
     objects: {
       putPdf: () => Effect.fail(new DocumentPersistenceFailure({ operation: "write pdf" })),
       readPdf: () => Effect.fail(new DocumentPersistenceFailure({ operation: "read pdf" })),
@@ -143,12 +151,19 @@ void test("finds missing invoices after any number of healthy artifacts", async 
     repository: {
       findArtifact: (_organizationId, invoiceId) => Effect.succeed(invoiceId === invoice.id ? healthy : undefined),
       saveArtifact: (artifact) => Effect.succeed(artifact),
+      findProformaArtifact: () => Effect.succeed(undefined),
+      saveProformaArtifact: (artifact) => Effect.succeed(artifact),
     },
     source: {
       findInvoice: () => Effect.succeed(undefined),
       listIssuedInvoiceIds: () => Effect.succeed([invoice.id, "invoice-after-healthy-page"]),
+      findProforma: () => Effect.succeed(undefined),
+      listProformaIds: () => Effect.succeed([]),
     },
-    renderer: { render: () => Effect.fail(new DocumentRenderingFailure({ template: "invoice-v1" })) },
+    renderer: {
+      render: () => Effect.fail(new DocumentRenderingFailure({ template: "invoice-v1" })),
+      renderProforma: () => Effect.fail(new DocumentRenderingFailure({ template: "proforma-v1" })),
+    },
     objects: {
       putPdf: () => Effect.fail(new DocumentPersistenceFailure({ operation: "write pdf" })),
       readPdf: () => Effect.succeed(new Uint8Array([1, 2, 3])),

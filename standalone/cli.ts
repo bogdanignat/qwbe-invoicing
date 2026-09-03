@@ -123,8 +123,8 @@ Usage:
   qwbe-invoicing restore --input <path.tar.gz|dir> [--apply] [--confirm-production] [--json]
 
 migrate is a dry-run by default. --apply writes pending schema migrations.
-artifacts reports issued invoices without PDFs by default. --apply renders at most
---limit invoices; failures are counted and successful items remain committed for a
+artifacts reports invoices and proformas without PDFs by default. --apply renders at most
+--limit documents; failures are counted and successful items remain committed for a
 safe retry. Outside development, either --apply also requires --confirm-production.
 backup copies SQLite databases and artifacts to a .tar.gz archive or directory; it is read-only and idempotent.
 restore is a dry-run by default. --apply writes files to DATA_DIR; outside development it also requires --confirm-production.

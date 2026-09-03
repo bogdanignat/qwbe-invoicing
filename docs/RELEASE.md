@@ -52,16 +52,27 @@ Requirements enforced by the bundle: `read_only: true`, `tmpfs: /tmp`, named vol
 cd /opt/qwbe-invoicing
 # Pin the new version (prefer digest-pinned from image-digests.txt)
 IMAGE_TAG=0.4.0@sha256:<new-digest> docker compose -f compose.prod.yaml pull
+# Back up before startup applies migrations
+docker compose -f compose.prod.yaml exec app node bin/qwbe-invoicing.ts backup --output /data/backup-$(date +%F).tar.gz --json
 IMAGE_TAG=0.4.0@sha256:<new-digest> docker compose -f compose.prod.yaml up -d
 docker compose -f compose.prod.yaml exec app node bin/qwbe-invoicing.ts doctor --json
+docker compose -f compose.prod.yaml exec app node bin/qwbe-invoicing.ts artifacts --limit 50 --json
 docker compose -f compose.prod.yaml logs --tail=100 migrate app
 ```
+
+For T-1069, startup applies `008-proforma-workflow` and the non-destructive
+`009-proforma-direct-invoice` upgrade to `invoicing.sqlite`, plus
+`documents/002-proforma-artifacts` to `documents.sqlite`. `doctor --json` remains the
+readiness gate and reports `pendingMigrations` and `migrationsReady`. `artifacts` is a dry-run by
+default and now reports both invoices and proformas missing PDFs; use `--apply`
+(plus `--confirm-production` outside development) only to reconcile at most
+`--limit` documents, one successful PDF at a time.
 
 Never use `docker compose down -v` as an upgrade step — it deletes the named volume.
 
 ## Backup and restore (drill)
 
-Backup is read-only and idempotent; restore verifies `manifest.json` SHA-256 before each write and is idempotent — safe to retry after partial failure.
+Backup is read-only and idempotent; restore verifies `manifest.json` SHA-256 before each write and is idempotent — safe to retry after partial failure. The existing backup file set contains `invoicing.sqlite`, `documents.sqlite`, and `/data/artifacts`, therefore it includes proforma records/conversion metadata, proforma artifact metadata, and proforma PDF files without a separate backup command or format.
 
 ```bash
 # Backup to a host path (recommended: host-mounted directory, not inside the volume)
@@ -106,5 +117,5 @@ gunzip -c qwbe-invoicing-0.3.0-images.tar.gz | docker load
 ## Security and audit notes
 
 - Secrets are mounted from `${AUTH_TOKEN_PATH}` as a Compose secret (`/run/secrets/api_token`), never baked into the image or printed. `doctor --json` reports only `authTokenReadable`, never the value.
-- `issued_invoices`, `issued_lines`, `issued_tax_breakdown`, `invoice_artifacts` and `invoice_sequences` are append-only / guarded by triggers — verified by `doctor --migrationsReady` and the boundary/size gates (`pnpm verify`). Direct mutation of an issued fiscal snapshot must fail with `issued invoices are immutable`.
-- Keep `invoice_artifacts` immutable: the PDF object key is `sha256/<2>/<64>.pdf` and reads verify key + digest + byte length.
+- `issued_invoices`, `issued_lines`, `issued_tax_breakdown`, `proformas`, `proforma_lines`, `proforma_tax_breakdown`, legacy `proforma_conversions`, direct `proforma_invoice_conversions`, invoice/proforma artifact metadata, and document sequences are append-only or guarded by triggers — verified by current migrations and the boundary/size gates (`pnpm verify`). Direct mutation of an issued fiscal snapshot must fail with `issued invoices are immutable`; sealed proformas and both conversion audit records are likewise immutable.
+- Keep invoice and proforma artifacts immutable: the PDF object key is `sha256/<2>/<64>.pdf` and reads verify key + digest + byte length. Proforma PDFs are marked `DOCUMENT NEFISCAL`; they carry no e-Factura, payment, or correction semantics and delivery means download, not email.

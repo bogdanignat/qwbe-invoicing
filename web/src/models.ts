@@ -46,8 +46,15 @@ export interface DocumentSeries {
   readonly series: string
 }
 
+export const documentSeriesFor = (documentType: DocumentType) =>
+  (series: ReadonlyArray<DocumentSeries>): ReadonlyArray<DocumentSeries> =>
+    series.filter((item) => item.documentType === documentType)
+
 export const invoiceDocumentSeries = (series: ReadonlyArray<DocumentSeries>): ReadonlyArray<DocumentSeries> =>
-  series.filter((item) => item.documentType === "invoice")
+  documentSeriesFor("invoice")(series)
+
+export const proformaDocumentSeries = (series: ReadonlyArray<DocumentSeries>): ReadonlyArray<DocumentSeries> =>
+  documentSeriesFor("proforma")(series)
 
 export interface DraftLine {
   readonly id: string
@@ -69,9 +76,9 @@ export interface DraftInvoice {
   readonly customerId?: string
   readonly series: string
   readonly issueDate: string
-  readonly dueDate: string
+  readonly dueDate: string | null
   readonly currency: string
-  readonly status: "draft" | "issued"
+  readonly status: "draft" | "issued" | "proforma_issued"
   readonly lines: ReadonlyArray<DraftLine>
   readonly taxBreakdown: ReadonlyArray<TaxBreakdown>
   readonly totalExcludingTax: string
@@ -89,10 +96,12 @@ export interface TaxBreakdown {
 
 export interface IssuedInvoice {
   readonly id: string
+  readonly draftId: string | null
+  readonly sourceProformaId: string | null
   readonly series: string
   readonly number: number
   readonly issueDate: string
-  readonly dueDate: string
+  readonly dueDate: string | null
   readonly currency: string
   readonly issuer: Party
   readonly customer: BuyerSnapshot
@@ -102,6 +111,28 @@ export interface IssuedInvoice {
   readonly taxTotal: string
   readonly totalIncludingTax: string
   readonly eFacturaStatus: string
+}
+
+export interface Proforma {
+  readonly id: string
+  readonly sourceDraftId: string | null
+  readonly invoiceSeries: string
+  readonly organizationId: string
+  readonly series: string
+  readonly number: number
+  readonly issueDate: string
+  readonly dueDate: string | null
+  readonly issuedAt: string
+  readonly currency: string
+  readonly issuer: Party
+  readonly customer: BuyerSnapshot
+  readonly lines: ReadonlyArray<DraftLine>
+  readonly taxBreakdown: ReadonlyArray<TaxBreakdown>
+  readonly totalExcludingTax: string
+  readonly taxTotal: string
+  readonly totalIncludingTax: string
+  readonly convertedDraftId: string | null
+  readonly convertedInvoiceId: string | null
 }
 
 export interface Payment {
@@ -149,6 +180,8 @@ const integer = (input: unknown, field: string): number => {
 }
 const optionalText = (input: unknown, field: string): string | undefined =>
   input === undefined || input === null ? undefined : text(input, field)
+const nullableText = (input: unknown, field: string): string | null =>
+  input === null ? null : text(input, field)
 const array = <Value>(input: unknown, decode: Decoder<Value>, field: string): ReadonlyArray<Value> => {
   if (!Array.isArray(input)) throw new Error(`invalid ${field}`)
   return input.map(decode)
@@ -249,13 +282,13 @@ const decodeTaxBreakdown: Decoder<TaxBreakdown> = (input) => {
 export const decodeDraft: Decoder<DraftInvoice> = (input) => {
   const value = object(input)
   const status = text(value.status, "status")
-  if (status !== "draft" && status !== "issued") throw new Error("invalid status")
+  if (status !== "draft" && status !== "issued" && status !== "proforma_issued") throw new Error("invalid status")
   const customerId = optionalText(value.customerId, "customerId")
   return {
     id: text(value.id, "id"), organizationId: text(value.organizationId, "organizationId"),
     customer: decodeBuyer(value.customer), ...(customerId === undefined ? {} : { customerId }),
     series: text(value.series, "series"),
-    issueDate: text(value.issueDate, "issueDate"), dueDate: text(value.dueDate, "dueDate"),
+    issueDate: text(value.issueDate, "issueDate"), dueDate: nullableText(value.dueDate, "dueDate"),
     currency: text(value.currency, "currency"), status,
     lines: array(value.lines, decodeDraftLine, "lines"),
     taxBreakdown: array(value.taxBreakdown, decodeTaxBreakdown, "taxBreakdown"),
@@ -267,14 +300,33 @@ export const decodeDraft: Decoder<DraftInvoice> = (input) => {
 export const decodeInvoice: Decoder<IssuedInvoice> = (input) => {
   const value = object(input)
   return {
-    id: text(value.id, "id"), series: text(value.series, "series"), number: integer(value.number, "number"),
-    issueDate: text(value.issueDate, "issueDate"), dueDate: text(value.dueDate, "dueDate"),
+    id: text(value.id, "id"), draftId: nullableText(value.draftId, "draftId"),
+    sourceProformaId: nullableText(value.sourceProformaId, "sourceProformaId"),
+    series: text(value.series, "series"), number: integer(value.number, "number"),
+    issueDate: text(value.issueDate, "issueDate"), dueDate: nullableText(value.dueDate, "dueDate"),
     currency: text(value.currency, "currency"), issuer: decodeParty(value.issuer), customer: decodeBuyer(value.customer),
     lines: array(value.lines, decodeDraftLine, "lines"),
     taxBreakdown: array(value.taxBreakdown, decodeTaxBreakdown, "taxBreakdown"),
     totalExcludingTax: text(value.totalExcludingTax, "totalExcludingTax"), taxTotal: text(value.taxTotal, "taxTotal"),
     totalIncludingTax: text(value.totalIncludingTax, "totalIncludingTax"),
     eFacturaStatus: text(value.eFacturaStatus, "eFacturaStatus"),
+  }
+}
+
+export const decodeProforma: Decoder<Proforma> = (input) => {
+  const value = object(input)
+  return {
+    id: text(value.id, "id"), sourceDraftId: nullableText(value.sourceDraftId, "sourceDraftId"),
+    invoiceSeries: text(value.invoiceSeries, "invoiceSeries"),
+    organizationId: text(value.organizationId, "organizationId"), series: text(value.series, "series"),
+    number: integer(value.number, "number"), issueDate: text(value.issueDate, "issueDate"),
+    dueDate: nullableText(value.dueDate, "dueDate"), issuedAt: text(value.issuedAt, "issuedAt"),
+    currency: text(value.currency, "currency"), issuer: decodeParty(value.issuer), customer: decodeBuyer(value.customer),
+    lines: array(value.lines, decodeDraftLine, "lines"), taxBreakdown: array(value.taxBreakdown, decodeTaxBreakdown, "taxBreakdown"),
+    totalExcludingTax: text(value.totalExcludingTax, "totalExcludingTax"), taxTotal: text(value.taxTotal, "taxTotal"),
+    totalIncludingTax: text(value.totalIncludingTax, "totalIncludingTax"),
+    convertedDraftId: nullableText(value.convertedDraftId, "convertedDraftId"),
+    convertedInvoiceId: nullableText(value.convertedInvoiceId, "convertedInvoiceId"),
   }
 }
 
@@ -313,6 +365,7 @@ export const decodeCustomers: Decoder<ReadonlyArray<Customer>> = (input) => arra
 export const decodeDocumentSeriesList: Decoder<ReadonlyArray<DocumentSeries>> = (input) => array(input, decodeDocumentSeries, "documentSeries")
 export const decodeInvoices: Decoder<ReadonlyArray<IssuedInvoice>> = (input) => array(input, decodeInvoice, "invoices")
 export const decodeDrafts: Decoder<ReadonlyArray<DraftInvoice>> = (input) => array(input, decodeDraft, "drafts")
+export const decodeProformas: Decoder<ReadonlyArray<Proforma>> = (input) => array(input, decodeProforma, "proformas")
 export const decodeCorrections: Decoder<ReadonlyArray<CorrectionDocument>> = (input) => array(input, decodeCorrection, "corrections")
 export const decodeDeleted: Decoder<{ readonly deleted: true }> = (input) => {
   const value = object(input)

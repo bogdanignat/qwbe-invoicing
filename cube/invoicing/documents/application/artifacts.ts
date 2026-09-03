@@ -10,6 +10,8 @@ import {
   type InvoiceRenderer,
   type InvoiceSource,
   type PdfObjectStore,
+  type ProformaArtifact,
+  type RenderableInvoice,
   type RequestContext,
 } from "./artifact-ports.ts"
 
@@ -30,6 +32,12 @@ export interface ArtifactService {
     readonly bytes: Uint8Array
   }, DocumentsFailure>
   readonly listMissingInvoiceIds: () => Effect.Effect<ReadonlyArray<string>, DocumentsFailure>
+  readonly renderProforma: (proformaId: string) => Effect.Effect<ProformaArtifact, DocumentsFailure>
+  readonly downloadProforma: (proformaId: string) => Effect.Effect<{
+    readonly artifact: ProformaArtifact
+    readonly bytes: Uint8Array
+  }, DocumentsFailure>
+  readonly listMissingProformaIds: () => Effect.Effect<ReadonlyArray<string>, DocumentsFailure>
 }
 
 const missing = (resource: string, id: string) => new DocumentNotFound({ resource, id })
@@ -43,29 +51,36 @@ export const createArtifactService = (dependencies: ArtifactServiceDependencies)
         ? Effect.succeed(context)
         : Effect.fail(new DocumentsPermissionDenied({ permission })))
 
-  const renderInvoice = (invoiceId: string) => Effect.gen(function*() {
+  const render = <Artifact extends InvoiceArtifact | ProformaArtifact, Source extends RenderableInvoice>(options: {
+    readonly kind: "invoice" | "proforma"
+    readonly id: string
+    readonly findArtifact: (organizationId: string, id: string) => Effect.Effect<Artifact | undefined, DocumentsFailure>
+    readonly saveArtifact: (artifact: Artifact) => Effect.Effect<Artifact, DocumentsFailure>
+    readonly findSource: (organizationId: string, id: string) => Effect.Effect<Source | undefined, DocumentsFailure>
+    readonly renderSource: (source: Source) => Effect.Effect<import("./artifact-ports.ts").RenderedDocument, DocumentsFailure>
+    readonly artifact: (common: Omit<InvoiceArtifact, "invoiceId">) => Artifact
+  }) => Effect.gen(function*() {
     const context = yield* authorized(renderPermission)
-    const existing = yield* dependencies.repository.findArtifact(context.organization.id, invoiceId)
+    const existing = yield* options.findArtifact(context.organization.id, options.id)
     if (existing !== undefined) {
       const object = yield* Effect.either(dependencies.objects.readPdf(existing))
       if (Either.isRight(object)) return existing
     }
-    const invoice = yield* dependencies.source.findInvoice(context.organization.id, invoiceId)
-    if (invoice === undefined) return yield* Effect.fail(missing("invoice", invoiceId))
-    const rendered = yield* dependencies.renderer.render(invoice)
+    const source = yield* options.findSource(context.organization.id, options.id)
+    if (source === undefined) return yield* Effect.fail(missing(options.kind, options.id))
+    const rendered = yield* options.renderSource(source)
     const stored = yield* dependencies.objects.putPdf(rendered.bytes)
     if (existing !== undefined) {
       if (stored.objectKey !== existing.objectKey
         || stored.sha256 !== existing.sha256
         || stored.byteLength !== existing.byteLength
         || rendered.templateVersion !== existing.templateVersion) {
-        return yield* Effect.fail(new ArtifactConflict({ invoiceId }))
+        return yield* Effect.fail(new ArtifactConflict({ documentKind: options.kind, documentId: options.id }))
       }
       return existing
     }
     const generatedAt = yield* dependencies.clock
-    return yield* dependencies.repository.saveArtifact({
-      invoiceId,
+    return yield* options.saveArtifact(options.artifact({
       organizationId: context.organization.id,
       objectKey: stored.objectKey,
       sha256: stored.sha256,
@@ -73,34 +88,73 @@ export const createArtifactService = (dependencies: ArtifactServiceDependencies)
       mediaType: rendered.mediaType,
       templateVersion: rendered.templateVersion,
       generatedAt: generatedAt.toISOString(),
-    })
+    }))
   })
 
-  const downloadInvoice = (invoiceId: string) => Effect.gen(function*() {
+  const renderInvoice = (invoiceId: string) => render({
+    kind: "invoice", id: invoiceId,
+    findArtifact: dependencies.repository.findArtifact,
+    saveArtifact: dependencies.repository.saveArtifact,
+    findSource: dependencies.source.findInvoice,
+    renderSource: dependencies.renderer.render,
+    artifact: (common) => ({ invoiceId, ...common }),
+  })
+
+  const renderProforma = (proformaId: string) => render({
+    kind: "proforma", id: proformaId,
+    findArtifact: dependencies.repository.findProformaArtifact,
+    saveArtifact: dependencies.repository.saveProformaArtifact,
+    findSource: dependencies.source.findProforma,
+    renderSource: dependencies.renderer.renderProforma,
+    artifact: (common) => ({ proformaId, ...common }),
+  })
+
+  const download = <Artifact extends InvoiceArtifact | ProformaArtifact>(options: {
+    readonly resource: string
+    readonly id: string
+    readonly findArtifact: (organizationId: string, id: string) => Effect.Effect<Artifact | undefined, DocumentsFailure>
+  }) => Effect.gen(function*() {
     const context = yield* authorized(readPermission)
-    const artifact = yield* dependencies.repository.findArtifact(context.organization.id, invoiceId)
-    if (artifact === undefined) return yield* Effect.fail(missing("invoice artifact", invoiceId))
+    const artifact = yield* options.findArtifact(context.organization.id, options.id)
+    if (artifact === undefined) return yield* Effect.fail(missing(options.resource, options.id))
     const bytes = yield* dependencies.objects.readPdf(artifact)
     return { artifact, bytes }
   })
 
-  const listMissingInvoiceIds = () => Effect.gen(function*() {
+  const downloadInvoice = (invoiceId: string) => download({
+    resource: "invoice artifact", id: invoiceId, findArtifact: dependencies.repository.findArtifact,
+  })
+  const downloadProforma = (proformaId: string) => download({
+    resource: "proforma artifact", id: proformaId, findArtifact: dependencies.repository.findProformaArtifact,
+  })
+
+  const listMissing = <Artifact extends InvoiceArtifact | ProformaArtifact>(options: {
+    readonly listIds: (organizationId: string) => Effect.Effect<ReadonlyArray<string>, DocumentsFailure>
+    readonly findArtifact: (organizationId: string, id: string) => Effect.Effect<Artifact | undefined, DocumentsFailure>
+  }) => Effect.gen(function*() {
     const context = yield* authorized(renderPermission)
-    const invoiceIds = yield* dependencies.source.listIssuedInvoiceIds(context.organization.id)
+    const ids = yield* options.listIds(context.organization.id)
     const missingIds: Array<string> = []
-    for (const invoiceId of invoiceIds) {
-      const artifact = yield* dependencies.repository.findArtifact(context.organization.id, invoiceId)
+    for (const id of ids) {
+      const artifact = yield* options.findArtifact(context.organization.id, id)
       if (artifact === undefined) {
-        missingIds.push(invoiceId)
+        missingIds.push(id)
       } else {
         const object = yield* Effect.either(dependencies.objects.readPdf(artifact))
-        if (Either.isLeft(object)) missingIds.push(invoiceId)
+        if (Either.isLeft(object)) missingIds.push(id)
       }
     }
     return missingIds
   })
 
-  return { renderInvoice, downloadInvoice, listMissingInvoiceIds }
+  const listMissingInvoiceIds = () => listMissing({
+    listIds: dependencies.source.listIssuedInvoiceIds, findArtifact: dependencies.repository.findArtifact,
+  })
+  const listMissingProformaIds = () => listMissing({
+    listIds: dependencies.source.listProformaIds, findArtifact: dependencies.repository.findProformaArtifact,
+  })
+
+  return { renderInvoice, downloadInvoice, listMissingInvoiceIds, renderProforma, downloadProforma, listMissingProformaIds }
 }
 
 export type {
@@ -109,5 +163,7 @@ export type {
   InvoiceRenderer,
   InvoiceSource,
   PdfObjectStore,
+  ProformaArtifact,
   RenderableInvoice,
+  RenderableProforma,
 } from "./artifact-ports.ts"

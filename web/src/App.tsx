@@ -14,6 +14,8 @@ import { DraftView } from "./views/DraftView.tsx"
 import { InvoiceDetailView } from "./views/InvoiceDetailView.tsx"
 import { InvoicesView } from "./views/InvoicesView.tsx"
 import { NewInvoiceView } from "./views/NewInvoiceView.tsx"
+import { ProformaDetailView } from "./views/ProformaDetailView.tsx"
+import { ProformasView } from "./views/ProformasView.tsx"
 import { SettingsView } from "./views/SettingsView.tsx"
 import { UnlockView } from "./views/UnlockView.tsx"
 
@@ -80,6 +82,8 @@ export const App = () => {
     content = <InvoicesView />
   } else if (route === "/invoices/new") {
     content = <NewInvoiceView notify={notify} />
+  } else if (route === "/proformas") {
+    content = <ProformasView />
   } else if (route === "/customers") {
     content = <CustomersView notify={notify} />
   } else if (route === "/settings") {
@@ -87,8 +91,10 @@ export const App = () => {
   } else {
     const draft = /^\/drafts\/([^/]+)$/.exec(route)
     const invoice = /^\/invoices\/([^/]+)$/.exec(route)
+    const proforma = /^\/proformas\/([^/]+)$/.exec(route)
     if (draft?.[1] !== undefined) content = <DraftView id={decodeURIComponent(draft[1])} notify={notify} />
     else if (invoice?.[1] !== undefined) content = <InvoiceDetailView id={decodeURIComponent(invoice[1])} notify={notify} />
+    else if (proforma?.[1] !== undefined) content = <ProformaDetailView id={decodeURIComponent(proforma[1])} />
     else content = <Page title="Pagina nu există" eyebrow="404"><p>Ruta cerută nu este disponibilă.</p><a className="button primary" href="/invoices">Înapoi la facturi</a></Page>
   }
 

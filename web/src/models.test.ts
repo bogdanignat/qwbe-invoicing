@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { decodeCustomer, decodeDocumentSeries, decodeDocumentSeriesList, decodeDraft, decodeDrafts, decodeIssuer, decodePaymentSummary, invoiceDocumentSeries } from "./models.ts"
+import { decodeCustomer, decodeDocumentSeries, decodeDocumentSeriesList, decodeDraft, decodeDrafts, decodeInvoice, decodeIssuer, decodePaymentSummary, decodeProforma, decodeProformas, invoiceDocumentSeries, proformaDocumentSeries } from "./models.ts"
 
 void test("decodes optional address and payment fields without leaking null", () => {
   assert.deepEqual(decodeCustomer({
@@ -47,6 +47,35 @@ void test("decodes document series and requires supported document types", () =>
     { organizationId: "org-1", documentType: "invoice", series: "ONLINE" },
   ])).map((item) => item.series), ["ONLINE"])
   assert.deepEqual(invoiceDocumentSeries([]), [])
+  assert.deepEqual(proformaDocumentSeries(decodeDocumentSeriesList([
+    { organizationId: "org-1", documentType: "invoice", series: "ONLINE" },
+    { organizationId: "org-1", documentType: "proforma", series: "PRO" },
+  ])).map((item) => item.series), ["PRO"])
+})
+
+const commercialDocument = {
+  id: "proforma-1", sourceDraftId: "draft-1", organizationId: "org-1", series: "PRO", number: 7,
+  issueDate: "2026-09-01", dueDate: null, issuedAt: "2026-09-01T10:00:00.000Z", currency: "RON",
+  issuer: { legalName: "QWBE", taxIdentifier: "RO2", address: { countryCode: "RO", city: "Botoșani", street: "Strada 2" } },
+  customer: { partyType: "company", legalName: "Client", taxIdentifier: "RO1", address: { countryCode: "RO", city: "Iași", street: "Strada 1" } },
+  lines: [{ id: "line-1", description: "Serviciu", quantity: "1.0000", unitPrice: "100.00", taxCode: "RO_STANDARD", taxCategory: "standard", taxRate: "21.00", totalExcludingTax: "100.00", taxAmount: "21.00", totalIncludingTax: "121.00" }],
+  taxBreakdown: [{ taxCode: "RO_STANDARD", category: "standard", rate: "21.00", taxableAmount: "100.00", taxAmount: "21.00" }],
+  totalExcludingTax: "100.00", taxTotal: "21.00", totalIncludingTax: "121.00",
+  invoiceSeries: "QWBE", convertedDraftId: null, convertedInvoiceId: null,
+}
+
+void test("strictly decodes nullable commercial dates and proforma conversion state", () => {
+  assert.equal(decodeProforma(commercialDocument).dueDate, null)
+  assert.equal(decodeProformas([{ ...commercialDocument, convertedDraftId: "draft-2" }])[0]?.convertedDraftId, "draft-2")
+  assert.equal(decodeProformas([{ ...commercialDocument, sourceDraftId: null, convertedInvoiceId: "invoice-2" }])[0]?.convertedInvoiceId, "invoice-2")
+  assert.throws(() => decodeProforma({ ...commercialDocument, dueDate: undefined }), /invalid dueDate/)
+  assert.throws(() => decodeProforma({ ...commercialDocument, dueDate: 15 }), /invalid dueDate/)
+  assert.throws(() => decodeProforma({ ...commercialDocument, convertedDraftId: undefined }), /invalid convertedDraftId/)
+  assert.throws(() => decodeProforma({ ...commercialDocument, convertedDraftId: 2 }), /invalid convertedDraftId/)
+  assert.equal(decodeDraft({ ...commercialDocument, status: "draft", customerId: "customer-1" }).dueDate, null)
+  assert.throws(() => decodeDraft({ ...commercialDocument, status: "draft", customerId: "customer-1", dueDate: undefined }), /invalid dueDate/)
+  assert.equal(decodeInvoice({ ...commercialDocument, draftId: null, sourceProformaId: "proforma-1", eFacturaStatus: "not_sent" }).sourceProformaId, "proforma-1")
+  assert.throws(() => decodeInvoice({ ...commercialDocument, draftId: "draft-1", sourceProformaId: null, eFacturaStatus: "not_sent", dueDate: false }), /invalid dueDate/)
 })
 
 void test("requires the series fixed on a draft", () => {

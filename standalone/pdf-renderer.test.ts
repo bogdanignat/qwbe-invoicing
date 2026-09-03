@@ -4,8 +4,8 @@ import test from "node:test"
 import { Effect } from "effect"
 import { PDFDocument } from "pdf-lib"
 
-import type { RenderableInvoice } from "../cube/invoicing/documents/index.ts"
-import { createPdfRenderer, invoiceTemplateVersion, partyIdentifierLine } from "./pdf-renderer.ts"
+import type { RenderableInvoice, RenderableProforma } from "../cube/invoicing/documents/index.ts"
+import { createPdfRenderer, documentDateLine, invoiceTemplateVersion, partyIdentifierLine, proformaTemplateVersion } from "./pdf-renderer.ts"
 
 const invoice: RenderableInvoice = {
   id: "invoice-1",
@@ -82,4 +82,27 @@ void test("paginates long descriptions and unbroken Romanian text", async () => 
   const rendered = await Effect.runPromise(createPdfRenderer().render(longInvoice))
   const parsed = await PDFDocument.load(rendered.bytes, { updateMetadata: false })
   assert.ok(parsed.getPageCount() > 1)
+})
+
+void test("renders deterministic non-fiscal proformas and omits a null due date", async () => {
+  const proforma: RenderableProforma = {
+    ...invoice,
+    id: "proforma-1",
+    sourceDraftId: "draft-1",
+    invoiceSeries: "QWBE",
+    convertedDraftId: null,
+    convertedInvoiceId: null,
+    dueDate: null,
+  }
+  assert.equal(documentDateLine(proforma), "Data emiterii: 2026-09-01")
+  assert.equal(documentDateLine(invoice), "Data emiterii: 2026-09-01   Scadență: 2026-09-16")
+  const renderer = createPdfRenderer()
+  const first = await Effect.runPromise(renderer.renderProforma(proforma))
+  const second = await Effect.runPromise(renderer.renderProforma(proforma))
+  assert.deepEqual(first.bytes, second.bytes)
+  assert.equal(first.templateVersion, proformaTemplateVersion)
+  const parsed = await PDFDocument.load(first.bytes, { updateMetadata: false })
+  assert.equal(parsed.getTitle(), "Proformă QWBE 7")
+  assert.equal(parsed.getSubject(), "PROFORMĂ — DOCUMENT NEFISCAL")
+  assert.equal(parsed.getProducer(), `QWBE Invoicing ${proformaTemplateVersion}`)
 })

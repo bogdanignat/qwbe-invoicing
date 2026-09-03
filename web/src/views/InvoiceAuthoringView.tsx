@@ -7,15 +7,18 @@ import { BuyerEditor } from "../components/BuyerEditor.tsx"
 import { InvoiceLinesEditor } from "../components/InvoiceLinesEditor.tsx"
 import { InvoiceTotals } from "../components/InvoiceTotals.tsx"
 import { Page } from "../components/Page.tsx"
+import { ProformaIssueControl } from "../components/ProformaIssueControl.tsx"
 import { SellerSummary } from "../components/SellerSummary.tsx"
 import { today } from "../format.ts"
 import {
-  createDraftPayload, draftLinePayload, draftLinesForEditing, formFromDraft, headerMatchesDraft, initialBuyerSelection, linesMatchDraft, pendingLineOperations, updateDraftPayload,
+  authoringAccess, authoringDocumentPayload, authoringReadiness, authoringSeriesOptions, createDraftPayload, draftLinePayload, draftLinesForEditing, formFromDraft, headerMatchesDraft, initialBuyerSelection, pendingLineOperations, updateDraftPayload,
   type EditableInvoiceLine, type InvoiceAuthoringForm,
 } from "../invoice-authoring-state.ts"
 import { invoicingClient } from "../invoicing-client.ts"
-import { invoiceDocumentSeries, type Customer, type DraftInvoice, type Issuer } from "../models.ts"
+import { useInvoiceIssuance } from "../invoices-hooks.ts"
+import type { Customer, DraftInvoice, Issuer } from "../models.ts"
 import { navigate } from "../navigation.ts"
+import { useProformaIssuance } from "../proforma-hooks.ts"
 import { hasStaleDraftTax } from "../vat-defaults.ts"
 
 interface InvoiceAuthoringViewProps {
@@ -47,6 +50,7 @@ interface AuthoringSessionProps {
   readonly issuer: Issuer
   readonly customers: ReadonlyArray<Customer>
   readonly invoiceSeries: ReadonlyArray<string>
+  readonly proformaSeries: ReadonlyArray<string>
   readonly backgroundErrors: ReadonlyArray<Error>
   readonly notify: (message: string) => void
 }
@@ -62,7 +66,7 @@ interface SaveResult {
   readonly lines: ReadonlyArray<EditableInvoiceLine>
 }
 
-const AuthoringSession = ({ initialDraft, issuer, customers, invoiceSeries, backgroundErrors, notify }: AuthoringSessionProps) => {
+const AuthoringSession = ({ initialDraft, issuer, customers, invoiceSeries, proformaSeries, backgroundErrors, notify }: AuthoringSessionProps) => {
   const queryClient = useQueryClient()
   const defaultTaxCode = (issueDate: string): string => issuer.taxConfigurations.find((tax) => tax.effectiveFrom <= issueDate && (tax.effectiveTo === undefined || issueDate <= tax.effectiveTo))?.code ?? ""
   const [draft, setDraft] = useState(initialDraft)
@@ -130,20 +134,18 @@ const AuthoringSession = ({ initialDraft, issuer, customers, invoiceSeries, back
       notify("Draftul a fost șters.")
     },
   })
-  const issue = useMutation({
-    mutationFn: () => draft === undefined ? Promise.reject(new Error("Draftul nu este salvat.")) : runUiEffect(invoicingClient.issueDraft(draft.id)),
-    onSuccess: async (invoice) => {
-      navigate(`/invoices/${encodeURIComponent(invoice.id)}`)
-      if (draft !== undefined) window.setTimeout(() => { queryClient.removeQueries({ queryKey: ["draft", draft.id], exact: true }) }, 0)
-      await Promise.all([queryClient.invalidateQueries({ queryKey: ["invoices"] }), queryClient.invalidateQueries({ queryKey: ["drafts"] })])
-    },
-  })
-  const pending = save.isPending || removeLine.isPending || removeDraft.isPending || issue.isPending
-  const unsavedLines = draft === undefined || !linesMatchDraft(lines, draft)
-  const headerSaved = draft !== undefined && headerMatchesDraft(form, draft)
-  const canIssue = draft !== undefined && headerSaved && draft.lines.length > 0 && !unsavedLines && !pending
+  const workflowPending = save.isPending || removeLine.isPending || removeDraft.isPending
+  const readiness = authoringReadiness(form, lines, draft, workflowPending)
+  const payload = authoringDocumentPayload(form, lines)
   const staleTax = draft === undefined ? false : hasStaleDraftTax(draft.issueDate, draft.lines, issuer.taxConfigurations)
-  const mutationError = save.error ?? removeLine.error ?? removeDraft.error ?? issue.error
+  const invoiceIssuance = useInvoiceIssuance({ draftId: draft?.id, payload, canIssue: readiness.canIssue,
+    workflowPending, confirmMessage: staleTax ? "Configurația TVA s-a schimbat. Emiți factura cu totalurile afișate de server? Documentul fiscal devine imuabil." : "Emiți factura? Numărul și documentul fiscal devin imuabile." })
+  const proformaIssuance = useProformaIssuance({ draftId: draft?.id, payload, editable: readiness.editable,
+    series: proformaSeries, synchronized: readiness.synchronized, hasLines: readiness.hasLines,
+    workflowPending: workflowPending || invoiceIssuance.pending })
+  const pending = workflowPending || invoiceIssuance.pending || proformaIssuance.pending
+  const canIssue = invoiceIssuance.canIssue && !proformaIssuance.pending
+  const mutationError = save.error ?? removeLine.error ?? removeDraft.error ?? invoiceIssuance.error
 
   const submit = (event: React.SyntheticEvent<HTMLFormElement, SubmitEvent>): void => {
     event.preventDefault()
@@ -154,7 +156,7 @@ const AuthoringSession = ({ initialDraft, issuer, customers, invoiceSeries, back
     if (line.lineId === undefined) { setLines((current) => current.filter((item) => item.key !== line.key)); return }
     if (window.confirm(`Ștergi linia „${line.description}” din draft?`)) removeLine.mutate(line)
   }
-  return <Page title={draft === undefined ? "Factură nouă" : `Draft ${draft.series}`} eyebrow="Document de lucru" actions={<a className="button ghost" href="/invoices">Înapoi la facturi</a>}>
+  return <Page title={draft === undefined ? "Document nou" : `Draft ${draft.series}`} eyebrow="Document de lucru" actions={<a className="button ghost" href="/invoices">Înapoi la documente</a>}>
     {backgroundErrors.map((error, index) => <ErrorAlert key={`${error.message}-${String(index)}`} error={error} />)}
     {mutationError === null ? null : <ErrorAlert error={mutationError} />}
     {initialDraft === undefined && draft !== undefined && save.error !== null ? <p className="status-note warning" role="status">Draftul a fost creat și păstrat în această pagină. Corectează eroarea și apasă din nou „Salvează draftul”; vor fi retrimise numai liniile rămase sau modificate.</p> : null}
@@ -163,10 +165,10 @@ const AuthoringSession = ({ initialDraft, issuer, customers, invoiceSeries, back
       <div className="authoring-main">
         <SellerSummary issuer={issuer} />
         <BuyerEditor form={form} customers={customers} disabled={pending} onChange={(patch) => { setForm((current) => ({ ...current, ...patch })) }} />
-        <section className="card authoring-section"><div className="section-heading"><div><h2>3. Date document</h2><p>Seria se fixează la crearea draftului. Moneda este RON.</p></div></div><div className="form-grid four"><label>Serie factură<select required disabled={pending || draft !== undefined} value={form.series} onChange={(event) => { setForm((current) => ({ ...current, series: event.currentTarget.value })) }}>{invoiceSeries.map((series) => <option key={series} value={series}>{series}</option>)}</select></label><label>Data emiterii<input required disabled={pending} type="date" value={form.issueDate} onChange={(event) => { setForm((current) => ({ ...current, issueDate: event.currentTarget.value })) }} /></label><label>Data scadenței<input required disabled={pending} type="date" min={form.issueDate} value={form.dueDate} onChange={(event) => { setForm((current) => ({ ...current, dueDate: event.currentTarget.value })) }} /></label><div className="static-field"><span>Monedă</span><span className="fixed-value">RON</span></div></div></section>
+        <section className="card authoring-section"><div className="section-heading"><div><h2>3. Date document</h2><p>Alege seria facturii; poți salva un draft sau emite direct. Moneda este RON.</p></div></div><div className="form-grid four"><label>Serie factură<select required disabled={pending || draft !== undefined} value={form.series} onChange={(event) => { const { value } = event.currentTarget; setForm((current) => ({ ...current, series: value })) }}>{invoiceSeries.map((series) => <option key={series} value={series}>{series}</option>)}</select></label><label>Data emiterii<input required disabled={pending} type="date" value={form.issueDate} onChange={(event) => { const { value } = event.currentTarget; setForm((current) => ({ ...current, issueDate: value })) }} /></label><label>Data scadenței <span className="optional">opțională</span><input disabled={pending} type="date" min={form.issueDate} value={form.dueDate} onChange={(event) => { const { value } = event.currentTarget; setForm((current) => ({ ...current, dueDate: value })) }} /></label><div className="static-field"><span>Monedă</span><span className="fixed-value">RON</span></div></div></section>
         <InvoiceLinesEditor lines={lines} taxConfigurations={issuer.taxConfigurations} issueDate={form.issueDate} pending={pending} onAdd={() => { setLines((current) => [...current, newLine(defaultTaxCode(form.issueDate))]) }} onChange={changeLine} onDelete={deleteLine} />
       </div>
-      <div className="authoring-side"><InvoiceTotals draft={draft} /><section className="card draft-actions"><h2>Acțiuni draft</h2><button className="button secondary wide" type="submit" disabled={pending}>{save.isPending ? "Se salvează toate modificările…" : "Salvează draftul"}</button><p className="hint">Salvarea validează și persistă cumpărătorul, antetul și toate liniile noi sau modificate. O linie suplimentară goală blochează salvarea până este completată sau ștearsă.</p><button className="button primary wide" type="button" disabled={!canIssue} onClick={() => { if (window.confirm(staleTax ? "Configurația TVA s-a schimbat. Emiți factura cu totalurile afișate de server? Documentul fiscal devine imuabil." : "Emiți factura? Numărul și documentul fiscal devin imuabile.")) issue.mutate() }}>{issue.isPending ? "Se emite…" : "Emite factura"}</button>{draft === undefined ? null : <button className="button danger ghost wide" type="button" disabled={pending} onClick={() => { if (window.confirm("Ștergi definitiv acest draft?")) removeDraft.mutate() }}>Șterge draftul</button>}<p className="hint">Emiterea cere antet salvat, cel puțin o linie salvată și nicio modificare în curs.</p></section></div>
+      <div className="authoring-side"><InvoiceTotals draft={draft} /><section className="card draft-actions"><h2>Acțiuni document</h2><button className="button secondary wide" type="submit" disabled={pending}>{save.isPending ? "Se salvează toate modificările…" : "Salvează draftul"}</button><p className="hint">Draftul este opțional și rămâne editabil.</p><ProformaIssueControl state={proformaIssuance} /><h3>Emitere factură</h3><button className="button primary wide" type="button" disabled={!canIssue} onClick={(event) => { if (event.currentTarget.form?.reportValidity() !== false) invoiceIssuance.issue() }}>{invoiceIssuance.pending ? "Se emite…" : "Emite factura"}</button>{draft === undefined ? null : <button className="button danger ghost wide" type="button" disabled={pending} onClick={() => { if (window.confirm("Ștergi definitiv acest draft?")) removeDraft.mutate() }}>Șterge draftul</button>}<p className="hint">Dintr-un document nou poți emite direct. Dacă ai salvat deja draftul, salvează întâi orice modificare nouă.</p></section></div>
     </form>
   </Page>
 }
@@ -176,9 +178,14 @@ export const InvoiceAuthoringView = ({ id, notify }: InvoiceAuthoringViewProps) 
   const issuer = useQuery({ queryKey: ["issuer"], queryFn: ({ signal }) => runUiEffect(invoicingClient.getIssuer(), signal) })
   const series = useQuery({ queryKey: ["document-series"], queryFn: ({ signal }) => runUiEffect(invoicingClient.listDocumentSeries(), signal) })
   const draft = useQuery({ queryKey: ["draft", id], enabled: id !== undefined, queryFn: ({ signal }) => id === undefined ? Promise.reject(new Error("Lipsește identificatorul draftului.")) : runUiEffect(invoicingClient.getDraft(id), signal) })
+  if (id !== undefined && draft.data === undefined && draft.isPending) return <Loading />
+  const loadedDraft = draft.data
+  const access = loadedDraft === undefined ? undefined : authoringAccess(loadedDraft.status)
+  if (loadedDraft !== undefined && access !== undefined && !access.editable) return <Page title={`Draft ${loadedDraft.series}`} eyebrow="Document blocat" actions={<a className="button ghost" href={access.registryHref}>Înapoi la registru</a>}>
+    <section className="card empty" role="status"><strong>Draft blocat</strong><p>{access.notice}</p><a className="button primary" href={access.registryHref}>{access.registryLabel}</a></section>
+  </Page>
   const requiredPending = (issuer.data === undefined && issuer.isPending)
     || (series.data === undefined && series.isPending)
-    || (id !== undefined && draft.data === undefined && draft.isPending)
     || (id === undefined && customers.data === undefined && customers.isPending)
   if (requiredPending) return <Loading />
   const blockingError = issuer.data === undefined
@@ -190,9 +197,11 @@ export const InvoiceAuthoringView = ({ id, notify }: InvoiceAuthoringViewProps) 
         : null
   if (blockingError !== null) return <Page title="Editare factură" eyebrow="Document de lucru"><ErrorAlert error={blockingError} /></Page>
   if (issuer.data === null || issuer.data === undefined) return <Page title="Factură nouă" eyebrow="Configurare necesară"><section className="card empty"><strong>Configurează mai întâi furnizorul.</strong><a className="button primary" href="/settings">Deschide setările</a></section></Page>
-  const invoiceSeries = invoiceDocumentSeries(series.data ?? []).map((item) => item.series)
+  const seriesOptions = authoringSeriesOptions(series.data ?? [])
+  const invoiceSeries = seriesOptions.invoice
+  const proformaSeries = seriesOptions.proforma
   if (invoiceSeries.length === 0) return <Page title="Factură nouă" eyebrow="Configurare necesară"><section className="card empty"><strong>Configurează o serie de factură.</strong><a className="button primary" href="/settings">Deschide setările</a></section></Page>
   if (id !== undefined && draft.data === undefined) return <Page title="Draft indisponibil" eyebrow="Document de lucru"><EmptyState>Draftul nu a putut fi încărcat.</EmptyState></Page>
   const backgroundErrors = [customers.error, issuer.error, series.error, draft.error].filter((error): error is Error => error !== null)
-  return <AuthoringSession key={draft.data?.id ?? "new"} {...(draft.data === undefined ? {} : { initialDraft: draft.data })} issuer={issuer.data} customers={customers.data ?? []} invoiceSeries={invoiceSeries} backgroundErrors={backgroundErrors} notify={notify} />
+  return <AuthoringSession key={draft.data?.id ?? "new"} {...(draft.data === undefined ? {} : { initialDraft: draft.data })} issuer={issuer.data} customers={customers.data ?? []} invoiceSeries={invoiceSeries} proformaSeries={proformaSeries} backgroundErrors={backgroundErrors} notify={notify} />
 }
