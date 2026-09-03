@@ -105,7 +105,7 @@ void test("production Compose confirms the guarded migration apply", () => {
   assert.match(compose, /"migrate", "--apply", "--confirm-production", "--json"/)
 })
 
-void test("serves the UI only from an exact allowlist with restrictive headers", () => {
+void test("serves assets and clean UI routes only from an allowlist with restrictive headers", () => {
   assert.deepEqual(readdirSync(join(process.cwd(), "standalone/ui-dist")).sort(), ["assets", "index.html"])
   assert.deepEqual(readdirSync(join(process.cwd(), "standalone/ui-dist/assets")).sort(), ["app.css", "app.js"])
   const page = staticUiResponse("GET", "/app")
@@ -116,6 +116,12 @@ void test("serves the UI only from an exact allowlist with restrictive headers",
   assert.ok(contentSecurityPolicy)
   assert.match(contentSecurityPolicy, /default-src 'none'/)
   assert.match(Buffer.from(page.body).toString("utf8"), /QWBE Invoicing/)
+  for (const path of ["/unlock", "/invoices", "/invoices/new", "/invoices/invoice-1", "/drafts/draft-1", "/customers", "/settings"]) {
+    assert.equal(staticUiResponse("GET", path)?.headers["content-type"], "text/html; charset=utf-8")
+  }
+  assert.equal(staticUiResponse("GET", "/api/invoices"), undefined)
+  assert.equal(staticUiResponse("GET", "/health/live"), undefined)
+  assert.equal(staticUiResponse("GET", "/unknown"), undefined)
 
   const script = staticUiResponse("HEAD", "/assets/app.js")
   assert.ok(script)

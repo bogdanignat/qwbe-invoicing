@@ -15,6 +15,7 @@ import {
 } from "../invoice-authoring-state.ts"
 import { invoicingClient } from "../invoicing-client.ts"
 import { invoiceDocumentSeries, type Customer, type DraftInvoice, type Issuer } from "../models.ts"
+import { navigate } from "../navigation.ts"
 import { hasStaleDraftTax } from "../vat-defaults.ts"
 
 interface InvoiceAuthoringViewProps {
@@ -107,8 +108,7 @@ const AuthoringSession = ({ initialDraft, issuer, customers, invoiceSeries, back
       recordServerDraft(result.draft)
       setLines(result.lines)
       if (initialDraft === undefined) {
-        window.history.replaceState(null, "", `#/drafts/${encodeURIComponent(result.draft.id)}`)
-        window.dispatchEvent(new HashChangeEvent("hashchange"))
+        navigate(`/drafts/${encodeURIComponent(result.draft.id)}`, { replace: true })
       }
       notify("Toate modificările draftului au fost salvate.")
     },
@@ -124,7 +124,7 @@ const AuthoringSession = ({ initialDraft, issuer, customers, invoiceSeries, back
   const removeDraft = useMutation({
     mutationFn: () => draft === undefined ? Promise.reject(new Error("Draftul nu este salvat.")) : runUiEffect(invoicingClient.deleteDraft(draft.id)),
     onSuccess: async () => {
-      window.location.hash = "#/invoices"
+      navigate("/invoices")
       if (draft !== undefined) window.setTimeout(() => { queryClient.removeQueries({ queryKey: ["draft", draft.id], exact: true }) }, 0)
       await queryClient.invalidateQueries({ queryKey: ["drafts"] })
       notify("Draftul a fost șters.")
@@ -133,7 +133,7 @@ const AuthoringSession = ({ initialDraft, issuer, customers, invoiceSeries, back
   const issue = useMutation({
     mutationFn: () => draft === undefined ? Promise.reject(new Error("Draftul nu este salvat.")) : runUiEffect(invoicingClient.issueDraft(draft.id)),
     onSuccess: async (invoice) => {
-      window.location.hash = `#/invoices/${encodeURIComponent(invoice.id)}`
+      navigate(`/invoices/${encodeURIComponent(invoice.id)}`)
       if (draft !== undefined) window.setTimeout(() => { queryClient.removeQueries({ queryKey: ["draft", draft.id], exact: true }) }, 0)
       await Promise.all([queryClient.invalidateQueries({ queryKey: ["invoices"] }), queryClient.invalidateQueries({ queryKey: ["drafts"] })])
     },
@@ -154,7 +154,7 @@ const AuthoringSession = ({ initialDraft, issuer, customers, invoiceSeries, back
     if (line.lineId === undefined) { setLines((current) => current.filter((item) => item.key !== line.key)); return }
     if (window.confirm(`Ștergi linia „${line.description}” din draft?`)) removeLine.mutate(line)
   }
-  return <Page title={draft === undefined ? "Factură nouă" : `Draft ${draft.series}`} eyebrow="Document de lucru" actions={<a className="button ghost" href="#/invoices">Înapoi la facturi</a>}>
+  return <Page title={draft === undefined ? "Factură nouă" : `Draft ${draft.series}`} eyebrow="Document de lucru" actions={<a className="button ghost" href="/invoices">Înapoi la facturi</a>}>
     {backgroundErrors.map((error, index) => <ErrorAlert key={`${error.message}-${String(index)}`} error={error} />)}
     {mutationError === null ? null : <ErrorAlert error={mutationError} />}
     {initialDraft === undefined && draft !== undefined && save.error !== null ? <p className="status-note warning" role="status">Draftul a fost creat și păstrat în această pagină. Corectează eroarea și apasă din nou „Salvează draftul”; vor fi retrimise numai liniile rămase sau modificate.</p> : null}
@@ -189,9 +189,9 @@ export const InvoiceAuthoringView = ({ id, notify }: InvoiceAuthoringViewProps) 
         ? draft.error
         : null
   if (blockingError !== null) return <Page title="Editare factură" eyebrow="Document de lucru"><ErrorAlert error={blockingError} /></Page>
-  if (issuer.data === null || issuer.data === undefined) return <Page title="Factură nouă" eyebrow="Configurare necesară"><section className="card empty"><strong>Configurează mai întâi furnizorul.</strong><a className="button primary" href="#/settings">Deschide setările</a></section></Page>
+  if (issuer.data === null || issuer.data === undefined) return <Page title="Factură nouă" eyebrow="Configurare necesară"><section className="card empty"><strong>Configurează mai întâi furnizorul.</strong><a className="button primary" href="/settings">Deschide setările</a></section></Page>
   const invoiceSeries = invoiceDocumentSeries(series.data ?? []).map((item) => item.series)
-  if (invoiceSeries.length === 0) return <Page title="Factură nouă" eyebrow="Configurare necesară"><section className="card empty"><strong>Configurează o serie de factură.</strong><a className="button primary" href="#/settings">Deschide setările</a></section></Page>
+  if (invoiceSeries.length === 0) return <Page title="Factură nouă" eyebrow="Configurare necesară"><section className="card empty"><strong>Configurează o serie de factură.</strong><a className="button primary" href="/settings">Deschide setările</a></section></Page>
   if (id !== undefined && draft.data === undefined) return <Page title="Draft indisponibil" eyebrow="Document de lucru"><EmptyState>Draftul nu a putut fi încărcat.</EmptyState></Page>
   const backgroundErrors = [customers.error, issuer.error, series.error, draft.error].filter((error): error is Error => error !== null)
   return <AuthoringSession key={draft.data?.id ?? "new"} {...(draft.data === undefined ? {} : { initialDraft: draft.data })} issuer={issuer.data} customers={customers.data ?? []} invoiceSeries={invoiceSeries} backgroundErrors={backgroundErrors} notify={notify} />

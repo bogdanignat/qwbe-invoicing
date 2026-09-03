@@ -39,7 +39,7 @@ export const CustomersView = ({ notify }: { readonly notify: (message: string) =
   }
   if (customers.isPending) return <Loading />
   if (customers.error !== null) return <Page title="Clienți" eyebrow="Registru"><ErrorAlert error={customers.error} /></Page>
-  return <Page title="Clienți" eyebrow="Registru activ" actions={<a className="button primary" href="#/invoices/new">Factură nouă</a>}>
+  return <Page title="Clienți" eyebrow="Registru activ" actions={<a className="button primary" href="/invoices/new">Factură nouă</a>}>
     <div className="split-layout">
       <section className="card">
         <div className="section-heading"><div><h2>Registru clienți</h2><p>Registrul este opțional; clienții activi pot precompleta rapid un draft nou.</p></div><span className="count">{customers.data.length}</span></div>

@@ -1,5 +1,7 @@
 import type { ReactNode } from "react"
 
+import { handleNavigationClick } from "../navigation.ts"
+
 interface ShellProps {
   readonly unlocked: boolean
   readonly route: string
@@ -9,17 +11,17 @@ interface ShellProps {
 }
 
 const links = [
-  { href: "#/invoices", section: "invoices", label: "Facturi", icon: "▤" },
-  { href: "#/customers", section: "customers", label: "Clienți", icon: "♙" },
-  { href: "#/settings", section: "settings", label: "Setări firmă", icon: "⚙" },
+  { href: "/invoices", section: "invoices", label: "Facturi", icon: "▤" },
+  { href: "/customers", section: "customers", label: "Clienți", icon: "♙" },
+  { href: "/settings", section: "settings", label: "Setări firmă", icon: "⚙" },
 ] as const
 
 export const Shell = ({ unlocked, route, logoutPending, onLogout, children }: ShellProps) => {
   const section = route.split("/")[1] ?? ""
-  return <div className={unlocked ? "shell antialiased" : "shell locked antialiased"}>
+  return <div className={unlocked ? "shell antialiased" : "shell locked antialiased"} onClick={handleNavigationClick}>
     <a className="skip-link" href="#main-content">Sari la conținut</a>
     <aside className="sidebar">
-      <a className="brand" href={unlocked ? "#/invoices" : "#/unlock"}><span className="brand-mark">Q</span><span><strong>QWBE</strong><small>Invoicing</small></span></a>
+      <a className="brand" href={unlocked ? "/invoices" : "/unlock"}><span className="brand-mark">Q</span><span><strong>QWBE</strong><small>Invoicing</small></span></a>
       <nav aria-label="Navigare principală">{links.map((link) => <a key={link.section} href={link.href} aria-current={unlocked && section === link.section ? "page" : undefined}><span aria-hidden="true">{link.icon}</span>{link.label}</a>)}</nav>
       <div className="sidebar-foot"><span className="status-dot" aria-hidden="true" /><span>API conectat</span><button type="button" disabled={logoutPending} onClick={() => { void onLogout() }}>{logoutPending ? "Se închide…" : "Ieșire"}</button></div>
     </aside>
