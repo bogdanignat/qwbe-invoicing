@@ -342,4 +342,4 @@ XML export, and an export in the format accepted by SAGA.
 
 ## License
 
-MIT.
+MIT. Copyright (c) 2026 HINT ONE ZERO SRL. See [`LICENSE`](./LICENSE).
