@@ -139,7 +139,7 @@ export const SettingsView = ({ notify }: { readonly notify: (message: string) =>
         <hr />
         <div className="form-grid two">
           <label>Monedă implicită<select name="defaultCurrency" defaultValue="RON" required><option value="RON">Leu românesc (RON)</option></select></label>
-          <label>Termen de plată (zile)<input name="defaultPaymentTermDays" type="number" min="0" defaultValue={issuer?.defaultPaymentTermDays ?? 15} required /></label>
+          <label>Termen de plată (zile)<input name="defaultPaymentTermDays" type="number" min="0" max="3650" defaultValue={issuer?.defaultPaymentTermDays ?? 15} required /></label>
           <label className="checkbox-label"><input name="vatRegistered" type="checkbox" defaultChecked={vatRegistered} data-manual={issuer === undefined ? undefined : "true"} onChange={(event) => { applyExplicitVatRegistration(event.currentTarget) }} /> Plătitoare de TVA</label>
           <label>Cod TVA<input name="taxCode" defaultValue={displayedVat.code} readOnly={!vatRegistered} aria-describedby="vat-hint" onInput={(event) => { markVatChangeEffectiveToday(event.currentTarget) }} required /></label>
           <label>Cotă TVA (%)<input name="taxRate" inputMode="decimal" defaultValue={displayedVat.rate} readOnly={!vatRegistered} aria-describedby="vat-hint" onInput={(event) => { markVatChangeEffectiveToday(event.currentTarget) }} required /></label>

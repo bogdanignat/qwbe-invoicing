@@ -27,14 +27,6 @@
     ]
   },
   {
-    "name": "002-invoice-payments",
-    "statements": [
-      "CREATE TABLE invoice_payments(id TEXT PRIMARY KEY,invoice_id TEXT NOT NULL,organization_id TEXT NOT NULL,amount TEXT NOT NULL,currency TEXT NOT NULL,payment_date TEXT NOT NULL,method TEXT NOT NULL,external_reference TEXT,note TEXT,actor_id TEXT NOT NULL,created_at TEXT NOT NULL,UNIQUE(organization_id,id),FOREIGN KEY(invoice_id)REFERENCES issued_invoices(id))STRICT",
-      "CREATE INDEX invoice_payments_invoice ON invoice_payments(invoice_id)",
-      "CREATE INDEX invoice_payments_organization ON invoice_payments(organization_id)"
-    ]
-  },
-  {
     "name": "003-invoice-corrections",
     "statements": [
       "CREATE TABLE correction_documents(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,original_invoice_id TEXT NOT NULL,fiscal_year INTEGER NOT NULL,document_type TEXT NOT NULL CHECK(document_type='correction'),series TEXT NOT NULL,number INTEGER NOT NULL CHECK(number>0),issue_date TEXT NOT NULL,issued_at TEXT NOT NULL,reason TEXT NOT NULL,currency TEXT NOT NULL,issuer_legal_name TEXT NOT NULL,issuer_tax_identifier TEXT NOT NULL,issuer_country_code TEXT NOT NULL,issuer_city TEXT NOT NULL,issuer_street TEXT NOT NULL,issuer_county TEXT,issuer_postal_code TEXT,customer_legal_name TEXT NOT NULL,customer_tax_identifier TEXT NOT NULL,customer_country_code TEXT NOT NULL,customer_city TEXT NOT NULL,customer_street TEXT NOT NULL,customer_county TEXT,customer_postal_code TEXT,total_excluding_tax TEXT NOT NULL,tax_total TEXT NOT NULL,total_including_tax TEXT NOT NULL,UNIQUE(organization_id,fiscal_year,document_type,series,number),FOREIGN KEY(original_invoice_id)REFERENCES issued_invoices(id))STRICT",

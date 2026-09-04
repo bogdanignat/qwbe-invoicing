@@ -16,6 +16,7 @@ import { InvoicesView } from "./views/InvoicesView.tsx"
 import { NewInvoiceView } from "./views/NewInvoiceView.tsx"
 import { ProformaDetailView } from "./views/ProformaDetailView.tsx"
 import { ProformasView } from "./views/ProformasView.tsx"
+import { ProductPresetsView } from "./views/ProductPresetsView.tsx"
 import { SettingsView } from "./views/SettingsView.tsx"
 import { UnlockView } from "./views/UnlockView.tsx"
 
@@ -86,6 +87,8 @@ export const App = () => {
     content = <ProformasView />
   } else if (route === "/customers") {
     content = <CustomersView notify={notify} />
+  } else if (route === "/products") {
+    content = <ProductPresetsView notify={notify} />
   } else if (route === "/settings") {
     content = <SettingsView notify={notify} />
   } else {

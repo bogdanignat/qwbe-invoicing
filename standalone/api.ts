@@ -14,6 +14,17 @@ import {
   type InvoicingFailure,
 } from "../cube/invoicing/index.ts"
 import {
+  AuthenticationRequired as PaymentsAuthenticationRequired,
+  DomainConflict as PaymentsDomainConflict,
+  OrganizationContextMissing as PaymentsOrganizationContextMissing,
+  PermissionDenied as PaymentsPermissionDenied,
+  PersistenceFailure as PaymentsPersistenceFailure,
+  ResourceNotFound as PaymentsResourceNotFound,
+  ValidationFailure as PaymentsValidationFailure,
+  createPaymentsService,
+  type PaymentsFailure,
+} from "../cube/payments/index.ts"
+import {
   ArtifactConflict,
   DocumentNotFound,
   DocumentPersistenceFailure,
@@ -22,10 +33,10 @@ import {
   type DocumentsFailure,
 } from "../cube/invoicing/documents/index.ts"
 import { createStandaloneArtifactService } from "./artifact-runtime.ts"
-import { authoringInvoiceInput, authoringProformaInput, correctionInput, customerInput, documentSeriesInput, draftInput, emptyInput, issuerInput, issueProformaInput, lineInput, paymentInput, updateDraftInput, updateLineInput } from "./api-inputs.ts"
+import { authoringInvoiceInput, authoringProformaInput, correctionInput, customerInput, documentSeriesInput, draftInput, emptyInput, issuerInput, issueProformaInput, lineInput, paymentInput, productPresetInput, updateDraftInput, updateLineInput } from "./api-inputs.ts"
 import { matchApplicationRoute } from "./api-route-adapter.ts"
 import type { RequestAuthenticator } from "./auth.ts"
-import { createSqliteStore } from "./sqlite-store.ts"
+import { createSqlitePaymentsStore, createSqliteStore } from "./sqlite-store.ts"
 
 export interface ApiRequest {
   readonly method: string
@@ -45,7 +56,7 @@ export interface ApiRuntime {
   readonly dataDirectory: string
 }
 
-type ApiFailure = InvoicingFailure | DocumentsFailure
+type ApiFailure = InvoicingFailure | PaymentsFailure | DocumentsFailure
 
 const failureResponse = (failure: ApiFailure): ApiResponse => {
   if (failure instanceof AuthenticationRequired) return { status: 401, body: { error: failure._tag } }
@@ -55,6 +66,13 @@ const failureResponse = (failure: ApiFailure): ApiResponse => {
   if (failure instanceof ResourceNotFound) return { status: 404, body: { error: failure._tag } }
   if (failure instanceof DomainConflict) return { status: 409, body: { error: failure._tag, code: failure.code } }
   if (failure instanceof PersistenceFailure) return { status: 500, body: { error: failure._tag } }
+  if (failure instanceof PaymentsAuthenticationRequired) return { status: 401, body: { error: failure._tag } }
+  if (failure instanceof PaymentsOrganizationContextMissing) return { status: 503, body: { error: failure._tag } }
+  if (failure instanceof PaymentsPermissionDenied) return { status: 403, body: { error: failure._tag } }
+  if (failure instanceof PaymentsValidationFailure) return { status: 400, body: { error: failure._tag, issues: failure.issues } }
+  if (failure instanceof PaymentsResourceNotFound) return { status: 404, body: { error: failure._tag } }
+  if (failure instanceof PaymentsDomainConflict) return { status: 409, body: { error: failure._tag, code: failure.code } }
+  if (failure instanceof PaymentsPersistenceFailure) return { status: 500, body: { error: failure._tag } }
   if (failure instanceof DocumentsPermissionDenied) return { status: 403, body: { error: failure._tag } }
   if (failure instanceof DocumentNotFound) return { status: 404, body: { error: failure._tag } }
   if (failure instanceof ArtifactConflict) return { status: 409, body: { error: failure._tag } }
@@ -68,12 +86,21 @@ export const handleApiRequest = async (request: ApiRequest, runtime: ApiRuntime)
   const authenticated = await Effect.runPromise(Effect.either(runtime.authenticate(request.authorization).current))
   if (Either.isLeft(authenticated)) return failureResponse(authenticated.left)
   const authenticatedContext = authenticated.right
+  const store = createSqliteStore(runtime.dataDirectory)
+  const paymentsStore = createSqlitePaymentsStore(runtime.dataDirectory)
   const service = createInvoicingService({
     context: { current: Effect.succeed(authenticatedContext) },
     clock: { now: Effect.sync(() => new Date()) },
     ids: { next: Effect.sync(randomUUID) },
-    store: createSqliteStore(runtime.dataDirectory),
+    store,
     cubeIdentity: "invoicing",
+  })
+  const payments = createPaymentsService({
+    context: { current: Effect.succeed(authenticatedContext) },
+    clock: { now: Effect.sync(() => new Date()) },
+    ids: { next: Effect.sync(randomUUID) },
+    store: paymentsStore,
+    cubeIdentity: "payments",
   })
   const documents = createStandaloneArtifactService(runtime.dataDirectory, Effect.succeed({
     identity: {
@@ -101,7 +128,12 @@ export const handleApiRequest = async (request: ApiRequest, runtime: ApiRuntime)
       case "listCustomers": operation = service.listCustomers(); break
       case "getCustomer": operation = service.getCustomer(pathParam("id")); break
       case "createCustomer": operation = service.createCustomer(customerInput(request.body)); break
+      case "updateCustomer": operation = service.updateCustomer({ id: pathParam("id"), ...customerInput(request.body) }); break
       case "deleteCustomer": operation = Effect.map(service.deleteCustomer(pathParam("id")), () => ({ deleted: true } as const)); break
+      case "listProductPresets": operation = service.listProductPresets(); break
+      case "createProductPreset": operation = service.createProductPreset(productPresetInput(request.body)); break
+      case "updateProductPreset": operation = service.updateProductPreset({ id: pathParam("id"), ...productPresetInput(request.body) }); break
+      case "deleteProductPreset": operation = Effect.map(service.deleteProductPreset(pathParam("id")), () => ({ deleted: true } as const)); break
       case "listDrafts": operation = service.listDrafts(); break
       case "getDraft": operation = service.getDraft(pathParam("id")); break
       case "createDraft": operation = service.createDraft(draftInput(request.body)); break
@@ -112,8 +144,8 @@ export const handleApiRequest = async (request: ApiRequest, runtime: ApiRuntime)
       case "deleteDraftLine": operation = service.deleteDraftLine(pathParam("draftId"), pathParam("lineId")); break
       case "issueDraftInvoice": operation = service.issueInvoice({ draftId: pathParam("draftId") }); break
       case "issueInvoice": operation = service.issueInvoice(authoringInvoiceInput(request.body)); break
-      case "listPayments": operation = service.listPayments(pathParam("invoiceId")); break
-      case "recordPayment": operation = service.recordPayment(paymentInput(pathParam("invoiceId"), request.body)); break
+      case "listPayments": operation = payments.listPayments(pathParam("invoiceId")); break
+      case "recordPayment": operation = payments.recordPayment(paymentInput(pathParam("invoiceId"), request.body)); break
       case "createCorrection": operation = service.createCorrection(correctionInput(pathParam("invoiceId"), request.body)); break
       case "listCorrections": operation = service.listCorrections(pathParam("invoiceId")); break
       case "getCorrection": operation = service.getCorrection(pathParam("id")); break

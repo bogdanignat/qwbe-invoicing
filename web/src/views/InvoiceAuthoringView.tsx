@@ -11,9 +11,11 @@ import { ProformaIssueControl } from "../components/ProformaIssueControl.tsx"
 import { SellerSummary } from "../components/SellerSummary.tsx"
 import { today } from "../format.ts"
 import {
-  authoringAccess, authoringDocumentPayload, authoringReadiness, authoringSeriesOptions, createDraftPayload, draftLinePayload, draftLinesForEditing, formFromDraft, headerMatchesDraft, initialBuyerSelection, pendingLineOperations, updateDraftPayload,
+  authoringAccess, authoringDocumentPayload, authoringReadiness, authoringSeriesOptions, createDraftPayload, draftLinePayload, draftLinesForEditing, formFromDraft, headerMatchesDraft, newAuthoringForm, pendingLineOperations, updateDraftPayload,
   type EditableInvoiceLine, type InvoiceAuthoringForm,
 } from "../invoice-authoring-state.ts"
+import { useInvoiceAuthoringCustomers } from "../invoice-authoring-customers-hooks.ts"
+import { useInvoiceAuthoringPresets } from "../invoice-authoring-presets-hooks.ts"
 import { invoicingClient } from "../invoicing-client.ts"
 import { useInvoiceIssuance } from "../invoices-hooks.ts"
 import type { Customer, DraftInvoice, Issuer } from "../models.ts"
@@ -24,21 +26,6 @@ import { hasStaleDraftTax } from "../vat-defaults.ts"
 interface InvoiceAuthoringViewProps {
   readonly id?: string
   readonly notify: (message: string) => void
-}
-
-const addDays = (date: string, days: number): string => {
-  const value = new Date(`${date}T00:00:00.000Z`)
-  value.setUTCDate(value.getUTCDate() + days)
-  return value.toISOString().slice(0, 10)
-}
-
-const newForm = (issuer: Issuer, series: string, hasSavedCustomers: boolean): InvoiceAuthoringForm => {
-  const issueDate = today()
-  return {
-    ...initialBuyerSelection(hasSavedCustomers), partyType: "company",
-    legalName: "", companyTaxIdentifier: "", individualTaxIdentifier: "", countryCode: "RO", city: "", street: "", county: "", postalCode: "",
-    series, issueDate, dueDate: addDays(issueDate, issuer.defaultPaymentTermDays),
-  }
 }
 
 const newLine = (taxCode: string): EditableInvoiceLine => ({
@@ -70,8 +57,10 @@ const AuthoringSession = ({ initialDraft, issuer, customers, invoiceSeries, prof
   const queryClient = useQueryClient()
   const defaultTaxCode = (issueDate: string): string => issuer.taxConfigurations.find((tax) => tax.effectiveFrom <= issueDate && (tax.effectiveTo === undefined || issueDate <= tax.effectiveTo))?.code ?? ""
   const [draft, setDraft] = useState(initialDraft)
-  const [form, setForm] = useState<InvoiceAuthoringForm>(() => initialDraft === undefined ? newForm(issuer, invoiceSeries[0] ?? "", customers.length > 0) : formFromDraft(initialDraft))
+  const [form, setForm] = useState<InvoiceAuthoringForm>(() => initialDraft === undefined ? newAuthoringForm(issuer, invoiceSeries[0] ?? "", customers.length > 0, today()) : formFromDraft(initialDraft))
   const [lines, setLines] = useState<ReadonlyArray<EditableInvoiceLine>>(() => initialDraft === undefined ? [newLine(defaultTaxCode(today()))] : draftLinesForEditing(initialDraft))
+  const authoringCustomers = useInvoiceAuthoringCustomers({ customers, issuer, deriveDueDate: draft === undefined, setForm })
+  const authoringPresets = useInvoiceAuthoringPresets({ setLines })
 
   const recordServerDraft = (updated: DraftInvoice): void => {
     setDraft(updated)
@@ -157,16 +146,16 @@ const AuthoringSession = ({ initialDraft, issuer, customers, invoiceSeries, prof
     if (window.confirm(`Ștergi linia „${line.description}” din draft?`)) removeLine.mutate(line)
   }
   return <Page title={draft === undefined ? "Document nou" : `Draft ${draft.series}`} eyebrow="Document de lucru" actions={<a className="button ghost" href="/invoices">Înapoi la documente</a>}>
-    {backgroundErrors.map((error, index) => <ErrorAlert key={`${error.message}-${String(index)}`} error={error} />)}
+    {[...backgroundErrors, authoringPresets.error].filter((error): error is Error => error !== null).map((error, index) => <ErrorAlert key={`${error.message}-${String(index)}`} error={error} />)}
     {mutationError === null ? null : <ErrorAlert error={mutationError} />}
     {initialDraft === undefined && draft !== undefined && save.error !== null ? <p className="status-note warning" role="status">Draftul a fost creat și păstrat în această pagină. Corectează eroarea și apasă din nou „Salvează draftul”; vor fi retrimise numai liniile rămase sau modificate.</p> : null}
     {staleTax ? <p className="status-note warning" role="status" aria-live="polite">Configurația TVA s-a schimbat. Salvează antetul sau liniile afectate și verifică totalurile înainte de emitere.</p> : null}
     <form className="authoring-form" onSubmit={submit}>
       <div className="authoring-main">
         <SellerSummary issuer={issuer} />
-        <BuyerEditor form={form} customers={customers} disabled={pending} onChange={(patch) => { setForm((current) => ({ ...current, ...patch })) }} />
-        <section className="card authoring-section"><div className="section-heading"><div><h2>3. Date document</h2><p>Alege seria facturii; poți salva un draft sau emite direct. Moneda este RON.</p></div></div><div className="form-grid four"><label>Serie factură<select required disabled={pending || draft !== undefined} value={form.series} onChange={(event) => { const { value } = event.currentTarget; setForm((current) => ({ ...current, series: value })) }}>{invoiceSeries.map((series) => <option key={series} value={series}>{series}</option>)}</select></label><label>Data emiterii<input required disabled={pending} type="date" value={form.issueDate} onChange={(event) => { const { value } = event.currentTarget; setForm((current) => ({ ...current, issueDate: value })) }} /></label><label>Data scadenței <span className="optional">opțională</span><input disabled={pending} type="date" min={form.issueDate} value={form.dueDate} onChange={(event) => { const { value } = event.currentTarget; setForm((current) => ({ ...current, dueDate: value })) }} /></label><div className="static-field"><span>Monedă</span><span className="fixed-value">RON</span></div></div></section>
-        <InvoiceLinesEditor lines={lines} taxConfigurations={issuer.taxConfigurations} issueDate={form.issueDate} pending={pending} onAdd={() => { setLines((current) => [...current, newLine(defaultTaxCode(form.issueDate))]) }} onChange={changeLine} onDelete={deleteLine} />
+        <BuyerEditor form={form} customers={customers} disabled={pending} onChange={(patch) => { setForm((current) => ({ ...current, ...patch })) }} onBuyerModeChange={authoringCustomers.chooseBuyerMode} onSavedCustomerChange={authoringCustomers.chooseCustomer} />
+        <section className="card authoring-section"><div className="section-heading"><div><h2>3. Date document</h2><p>Alege seria facturii; poți salva un draft sau emite direct. Moneda este RON.</p></div></div><div className="form-grid four"><label>Serie factură<select required disabled={pending || draft !== undefined} value={form.series} onChange={(event) => { const { value } = event.currentTarget; setForm((current) => ({ ...current, series: value })) }}>{invoiceSeries.map((series) => <option key={series} value={series}>{series}</option>)}</select></label><label>Data emiterii<input required disabled={pending} type="date" value={form.issueDate} onChange={(event) => { authoringCustomers.chooseIssueDate(event.currentTarget.value) }} /></label><label>Data scadenței <span className="optional">opțională</span><input disabled={pending} type="date" min={form.issueDate} value={form.dueDate} onChange={(event) => { authoringCustomers.chooseDueDate(event.currentTarget.value) }} /></label><div className="static-field"><span>Monedă</span><span className="fixed-value">RON</span></div></div></section>
+        <InvoiceLinesEditor lines={lines} productPresets={authoringPresets.presets} taxConfigurations={issuer.taxConfigurations} issueDate={form.issueDate} pending={pending} onAdd={() => { setLines((current) => [...current, newLine(defaultTaxCode(form.issueDate))]) }} onChange={changeLine} onApplyPreset={authoringPresets.choosePreset} onDelete={deleteLine} />
       </div>
       <div className="authoring-side"><InvoiceTotals draft={draft} /><section className="card draft-actions"><h2>Acțiuni document</h2><button className="button secondary wide" type="submit" disabled={pending}>{save.isPending ? "Se salvează toate modificările…" : "Salvează draftul"}</button><p className="hint">Draftul este opțional și rămâne editabil.</p><ProformaIssueControl state={proformaIssuance} /><h3>Emitere factură</h3><button className="button primary wide" type="button" disabled={!canIssue} onClick={(event) => { if (event.currentTarget.form?.reportValidity() !== false) invoiceIssuance.issue() }}>{invoiceIssuance.pending ? "Se emite…" : "Emite factura"}</button>{draft === undefined ? null : <button className="button danger ghost wide" type="button" disabled={pending} onClick={() => { if (window.confirm("Ștergi definitiv acest draft?")) removeDraft.mutate() }}>Șterge draftul</button>}<p className="hint">Dintr-un document nou poți emite direct. Dacă ai salvat deja draftul, salvează întâi orice modificare nouă.</p></section></div>
     </form>

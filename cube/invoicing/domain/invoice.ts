@@ -47,7 +47,15 @@ export type ConfigureDocumentSeriesInput = Pick<DocumentSeries, "documentType" |
 export interface Customer extends BuyerSnapshot {
   readonly id: string
   readonly organizationId: string
+  readonly defaultPaymentTermDays?: number
   readonly deletedAt?: string
+}
+
+export interface ProductPreset {
+  readonly id: string
+  readonly organizationId: string
+  readonly description: string
+  readonly unitPrice: string
 }
 
 export interface DraftLine {
@@ -135,7 +143,11 @@ export type ConvertProformaInput = { readonly proformaId: string }
 
 export type ConfigureIssuerInput = Omit<IssuerProfile, "organizationId">
 
-export type CreateCustomerInput = BuyerSnapshot
+export type CustomerInput = BuyerSnapshot & { readonly defaultPaymentTermDays?: number }
+export type CreateCustomerInput = CustomerInput
+export type UpdateCustomerInput = CustomerInput & { readonly id: string }
+export type ProductPresetInput = Pick<ProductPreset, "description" | "unitPrice">
+export type UpdateProductPresetInput = ProductPresetInput & { readonly id: string }
 
 export type BuyerSource =
   | { readonly customerId: string; readonly customer?: never }

@@ -11,7 +11,8 @@ import * as S from "./http-schemas.ts"
 
 const inventory = [
   "GET /api/issuer", "PUT /api/issuer", "GET /api/document-series", "POST /api/document-series",
-  "GET /api/customers", "GET /api/customers/:id", "POST /api/customers", "DELETE /api/customers/:id",
+  "GET /api/customers", "GET /api/customers/:id", "POST /api/customers", "PUT /api/customers/:id", "DELETE /api/customers/:id",
+  "GET /api/product-presets", "POST /api/product-presets", "PUT /api/product-presets/:id", "DELETE /api/product-presets/:id",
   "GET /api/drafts", "GET /api/drafts/:id", "POST /api/drafts", "PUT /api/drafts/:id", "DELETE /api/drafts/:id",
   "POST /api/drafts/:draftId/lines", "PUT /api/drafts/:draftId/lines/:lineId", "DELETE /api/drafts/:draftId/lines/:lineId",
   "POST /api/drafts/:draftId/issue", "GET /api/invoices/:invoiceId/payments", "POST /api/invoices/:invoiceId/payments",
@@ -23,11 +24,11 @@ const inventory = [
   "GET /api/session", "POST /api/session", "DELETE /api/session",
 ].sort()
 
-void test("the contract exposes exactly the current 37 operations", () => {
-  assert.equal(operationNames.length, 37)
-  assert.equal(new Set(operationNames).size, 37)
-  assert.equal(applicationRoutes.length, 37)
-  assert.equal(new Set(applicationRoutes.map((route) => route.operationId)).size, 37)
+void test("the contract exposes exactly the current 42 operations", () => {
+  assert.equal(operationNames.length, 42)
+  assert.equal(new Set(operationNames).size, 42)
+  assert.equal(applicationRoutes.length, 42)
+  assert.equal(new Set(applicationRoutes.map((route) => route.operationId)).size, 42)
   assert.deepEqual(applicationRoutes.map((route) => `${route.method} ${route.path}`).sort(), inventory)
   assert.equal(applicationRoutes.some((route) => route.path === "/api"), false)
 })
@@ -68,6 +69,17 @@ void test("dueDate contracts accept absent, null, or string input and encode exp
     convertedDraftId: null, convertedInvoiceId: null,
     number: 1, issuedAt: "2026-09-01T00:00:00.000Z", issuer: { legalName: "Furnizor", taxIdentifier: "RO12345674",
       address: { countryCode: "RO", city: "Iași", street: "Strada 2" } } }).convertedDraftId, null)
+})
+
+void test("customer payment terms and monetary product presets have explicit wire types", () => {
+  const customer = { partyType: "individual", legalName: "Ion", taxIdentifier: "",
+    address: { countryCode: "RO", city: "Iași", street: "Strada 1" } }
+  assert.doesNotThrow(() => Schema.decodeUnknownSync(S.CustomerInput)(customer))
+  assert.equal(Schema.decodeUnknownSync(S.CustomerInput)({ ...customer, defaultPaymentTermDays: 0 }).defaultPaymentTermDays, 0)
+  assert.throws(() => Schema.decodeUnknownSync(S.CustomerInput)({ ...customer, defaultPaymentTermDays: 1.5 }))
+  assert.deepEqual(Schema.decodeUnknownSync(S.ProductPresetInput)({ description: "Servicii", unitPrice: "10.00" }),
+    { description: "Servicii", unitPrice: "10.00" })
+  assert.throws(() => Schema.decodeUnknownSync(S.ProductPresetInput)({ description: "Servicii", unitPrice: 10 }))
 })
 
 void test("OpenAPI 3.1 mirrors paths, PDF encoding, and authentication metadata", () => {
@@ -113,16 +125,18 @@ void test("OpenAPI 3.1 mirrors paths, PDF encoding, and authentication metadata"
     assert.ok(operation, `${method.toUpperCase()} ${path} is absent`)
     assert.deepEqual(Object.keys(operation.responses).sort(), [...new Set([...base, ...extras])].sort())
   }
-  for (const path of ["/api/document-series", "/api/customers", "/api/drafts", "/api/invoices/{invoiceId}/corrections", "/api/invoices", "/api/proformas"]) {
+  for (const path of ["/api/document-series", "/api/customers", "/api/product-presets", "/api/drafts", "/api/invoices/{invoiceId}/corrections", "/api/invoices", "/api/proformas"]) {
     expectStatuses("get", path)
   }
   for (const path of ["/api/issuer", "/api/customers/{id}", "/api/drafts/{id}", "/api/invoices/{invoiceId}/payments", "/api/corrections/{id}", "/api/invoices/{id}", "/api/invoices/{invoiceId}/pdf", "/api/proformas/{id}", "/api/proformas/{proformaId}/pdf"]) {
     expectStatuses("get", path, ["404"])
   }
-  for (const [method, path] of [["put", "/api/issuer"], ["post", "/api/customers"]] as const) {
+  for (const [method, path] of [["put", "/api/issuer"], ["post", "/api/customers"], ["post", "/api/product-presets"]] as const) {
     expectStatuses(method, path, ["413"])
   }
   expectStatuses("post", "/api/document-series", ["409", "413"])
+  for (const [method, path] of [["put", "/api/customers/{id}"], ["put", "/api/product-presets/{id}"],
+    ["delete", "/api/product-presets/{id}"]] as const) expectStatuses(method, path, ["404", "413"])
   for (const [method, path] of [["post", "/api/drafts"], ["post", "/api/invoices/{invoiceId}/payments"]] as const) {
     expectStatuses(method, path, ["404", "413"])
   }

@@ -12,7 +12,6 @@ import type { AuthoringDocumentInput, AuthoringProformaInput, ConvertProformaInp
 import { createCorrectionOperations, type CorrectionOperations } from "./corrections.ts"
 import { authorDocument } from "./draft-authoring.ts"
 import { createDraftingOperations, type DraftingOperations } from "./drafting.ts"
-import { createPaymentOperations, type PaymentOperations } from "./payments.ts"
 import type { InvoicingTransaction } from "./ports.ts"
 import { copyParty, missing } from "./support.ts"
 
@@ -53,7 +52,7 @@ export interface InvoicingDependencies {
 
 type Operation<Input, Output> = (input: Input) => Effect.Effect<Output, InvoicingFailure>
 type Listing<Output> = () => Effect.Effect<ReadonlyArray<Output>, InvoicingFailure>
-export interface InvoicingService extends DraftingOperations, PaymentOperations, CorrectionOperations {
+export interface InvoicingService extends DraftingOperations, CorrectionOperations {
   readonly issueInvoice: Operation<AuthoringDocumentInput | { readonly draftId: string }, IssuedInvoice>
   readonly getIssuedInvoice: Operation<string, IssuedInvoice>
   readonly listIssuedInvoices: Listing<IssuedInvoice>
@@ -71,7 +70,6 @@ export const createInvoicingService = (dependencies: InvoicingDependencies): Inv
         ? Effect.succeed(context)
         : Effect.fail(new PermissionDenied({ permission })))
   const drafting = createDraftingOperations(dependencies, permissions, authorized)
-  const payments = createPaymentOperations(dependencies, permissions, authorized)
   const corrections = createCorrectionOperations(dependencies, permissions, authorized)
 
   const issueInvoice = (input: AuthoringDocumentInput | { readonly draftId: string }) => Effect.gen(function*() {
@@ -164,7 +162,7 @@ export const createInvoicingService = (dependencies: InvoicingDependencies): Inv
     return structuredClone(yield* dependencies.store.transaction((transaction) => transaction.listProformas(context.organization.id)))
   })
 
-  return { ...drafting, ...payments, ...corrections, issueInvoice, getIssuedInvoice, listIssuedInvoices,
+  return { ...drafting, ...corrections, issueInvoice, getIssuedInvoice, listIssuedInvoices,
     issueProforma, issueInvoiceFromProforma, getProforma, listProformas }
 }
 

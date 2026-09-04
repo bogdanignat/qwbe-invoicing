@@ -46,13 +46,17 @@ a rewrite.
   IBAN and bank, VAT regime, logo, default payment terms and notes.
 - **Customers** (optional register): companies with a valid CUI/CIF, or natural persons with
   an optional CNP. A document can also be issued to a one-time buyer typed directly in the
-  editor, so the register and draft persistence are conveniences, not prerequisites.
+  editor, so the register and draft persistence are conveniences, not prerequisites. A saved
+  customer may define a default payment term which prepopulates, but never locks, the due date.
+- **Products and services** (optional presets): a short reusable list of descriptions and unit
+  prices. Selecting one copies those values into an editable invoice line; there is no stock,
+  SKU, price-list logic, or live relation to the saved preset.
 - **Document series**: separate series for invoices and proformas. Numbers are allocated
   atomically at issue time, are unique within their scope and are never reused. Uniqueness
   is enforced by the database, not only by the UI.
 - **Drafts**: editable, with manual lines (name, quantity, unit, unit price, VAT category and
   rate, allowances and charges), references (contract, order, delivery, preceding document),
-  notes and payment terms. Drafts do not consume numbers. No product catalog is required.
+  notes and payment terms. Drafts do not consume numbers. Product presets are never required.
 - **Issuing**: one atomic operation that validates the authored document, allocates the next number,
   freezes the totals and snapshots issuer, buyer, lines and tax breakdown. From then on the
   invoice is an immutable fiscal document. Later changes to the customer or issuer never
@@ -243,7 +247,8 @@ generated from the same Effect `HttpApi` contract that serves the routes.
 |---|---|
 | Issuer | `GET`, `PUT /api/issuer` |
 | Series | `GET`, `POST /api/document-series` |
-| Customers | `GET`, `POST /api/customers`, `GET`, `DELETE /api/customers/:id` |
+| Customers | `GET`, `POST /api/customers`, `GET`, `PUT`, `DELETE /api/customers/:id` |
+| Product presets | `GET`, `POST /api/product-presets`, `PUT`, `DELETE /api/product-presets/:id` |
 | Drafts | `GET`, `POST /api/drafts`, `GET`, `PUT`, `DELETE /api/drafts/:id`, lines under `/api/drafts/:id/lines` |
 | Issue | `POST /api/invoices`, `POST /api/drafts/:id/issue` |
 | Invoices | `GET /api/invoices`, `GET /api/invoices/:id`, `POST`, `GET /api/invoices/:id/pdf` |
@@ -291,6 +296,7 @@ fails, so it can gate a deployment.
 ```text
 cube/invoicing/            application core: domain, use cases, contracts, migrations
 cube/invoicing/documents/  child cube: rendered PDFs and artifact recovery
+cube/payments/             payment records and derived invoice payment status
 standalone/                host: HTTP, SQLite store, sessions, PDF renderer, CLI, backup
 web/                       browser UI: React 19, TypeScript, Tailwind CSS 4, Vite
 bin/qwbe-invoicing.ts      CLI entry point, also the container command

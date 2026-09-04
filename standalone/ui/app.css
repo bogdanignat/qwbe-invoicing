@@ -121,6 +121,7 @@ input:hover, select:hover, textarea:hover { border-color: #98aa9e; }
 .line-editor-list { display: grid; gap: .9rem; }
 .line-editor { min-width: 0; margin: 0; padding: 1rem; border: 1px solid var(--line); border-radius: .75rem; }
 .line-editor legend { padding: 0 .35rem; color: var(--forest); font-size: .75rem; font-weight: 800; }
+.line-preset { width: min(520px, 100%); margin-bottom: .75rem; }
 .line-fields { display: grid; grid-template-columns: minmax(180px, 2fr) repeat(3, minmax(110px, .75fr)); gap: .75rem; }
 .line-actions { display: flex; justify-content: flex-end; gap: .4rem; margin-top: .75rem; }
 .draft-actions { display: grid; gap: .7rem; }
@@ -137,6 +138,7 @@ th { color: var(--muted); background: #fafbfa; font-size: .67rem; letter-spacing
 td small { display: block; margin-top: .2rem; color: var(--muted); }
 td a { text-decoration-color: #9ab0a1; text-underline-offset: .2em; }
 .row-actions { text-align: right; }
+.table-actions { display: flex; justify-content: flex-end; gap: .35rem; }
 .clickable:hover td { background: #fbfdfb; }
 
 .badge { display: inline-flex; padding: .3rem .55rem; border-radius: 999px; font-size: .68rem; font-weight: 800; text-transform: uppercase; }

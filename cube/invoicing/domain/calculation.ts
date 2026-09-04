@@ -22,6 +22,9 @@ const formatScaled = (value: bigint, scale: number): string => {
   return scale === 0 ? whole.toString() : `${whole.toString()}.${fraction}`
 }
 
+export const normalizeMoney = (value: string, field = "money"): string =>
+  formatScaled(parseScaled(value, 2, field), 2)
+
 export const calculateLine = (input: {
   readonly id: string
   readonly description: string

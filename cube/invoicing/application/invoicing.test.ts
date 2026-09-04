@@ -28,13 +28,13 @@ interface MemoryState {
   issuers: Map<string, Parameters<InvoicingTransaction["saveIssuer"]>[0]>
   documentSeries: Map<string, Parameters<InvoicingTransaction["addDocumentSeries"]>[0]>
   customers: Map<string, Parameters<InvoicingTransaction["saveCustomer"]>[0]>
+  productPresets: Map<string, Parameters<InvoicingTransaction["saveProductPreset"]>[0]>
   drafts: Map<string, DraftInvoice>
   issued: Map<string, IssuedInvoice>
   proformas: Map<string, Proforma>
   conversions: Map<string, ProformaConversion>
   invoiceConversions: Map<string, Parameters<InvoicingTransaction["saveProformaInvoiceConversion"]>[0]>
   sequences: Map<string, number>
-  payments: Map<string, Parameters<InvoicingTransaction["savePayment"]>[0]>
   corrections: Map<string, Parameters<InvoicingTransaction["saveCorrection"]>[0]>
 }
 
@@ -80,6 +80,16 @@ const memoryStore = (state: MemoryState): TransactionalStore<InvoicingTransactio
         [...working.drafts.values()].some((draft) =>
           draft.organizationId === organizationId && draft.customerId === customerId && draft.status === "draft"),
       ),
+      saveProductPreset: (preset) => Effect.sync(() => { working.productPresets.set(preset.id, preset) }),
+      findProductPreset: (organizationId, id) => Effect.succeed(
+        working.productPresets.get(id)?.organizationId === organizationId ? working.productPresets.get(id) : undefined,
+      ),
+      listProductPresets: (organizationId) => Effect.succeed([...working.productPresets.values()]
+        .filter((preset) => preset.organizationId === organizationId)
+        .sort((a, b) => a.description.localeCompare(b.description) || a.id.localeCompare(b.id))),
+      deleteProductPreset: (organizationId, id) => Effect.sync(() => {
+        if (working.productPresets.get(id)?.organizationId === organizationId) working.productPresets.delete(id)
+      }),
       saveDraft: (draft) => Effect.sync(() => { working.drafts.set(draft.id, draft) }),
       findDraft: (organizationId, id) => Effect.succeed(
         working.drafts.get(id)?.organizationId === organizationId ? working.drafts.get(id) : undefined,
@@ -133,12 +143,6 @@ const memoryStore = (state: MemoryState): TransactionalStore<InvoicingTransactio
       saveProformaInvoiceConversion: (conversion) => working.invoiceConversions.has(conversion.proformaId)
         ? Effect.fail(new DomainConflict({ code: "proforma_already_converted", message: "Proforma was already converted" }))
         : Effect.sync(() => { working.invoiceConversions.set(conversion.proformaId, conversion) }),
-      savePayment: (payment) => Effect.sync(() => { working.payments.set(payment.id, payment) }),
-      listPayments: (organizationId, invoiceId) => Effect.succeed(
-        [...working.payments.values()].filter((payment) =>
-          payment.organizationId === organizationId && payment.invoiceId === invoiceId)
-          .sort((a, b) => a.paymentDate.localeCompare(b.paymentDate) || a.createdAt.localeCompare(b.createdAt)),
-      ),
       saveCorrection: (correction) => Effect.sync(() => { working.corrections.set(correction.id, correction) }),
       findCorrection: (organizationId, id) => Effect.succeed(
         working.corrections.get(id)?.organizationId === organizationId ? working.corrections.get(id) : undefined,
@@ -152,13 +156,13 @@ const memoryStore = (state: MemoryState): TransactionalStore<InvoicingTransactio
       state.issuers = working.issuers
       state.documentSeries = working.documentSeries
       state.customers = working.customers
+      state.productPresets = working.productPresets
       state.drafts = working.drafts
       state.issued = working.issued
       state.proformas = working.proformas
       state.conversions = working.conversions
       state.invoiceConversions = working.invoiceConversions
       state.sequences = working.sequences
-      state.payments = working.payments
       state.corrections = working.corrections
     }))
   }),
@@ -175,7 +179,6 @@ const identity = {
     "invoicing:invoice.issue",
     "invoicing:proforma.issue",
     "invoicing:invoice.void",
-    "invoicing:payment.record",
     "invoicing:settings.manage",
   ],
 }
@@ -206,13 +209,13 @@ const emptyState = (): MemoryState => ({
   issuers: new Map(),
   documentSeries: new Map(),
   customers: new Map(),
+  productPresets: new Map(),
   drafts: new Map(),
   issued: new Map(),
   proformas: new Map(),
   conversions: new Map(),
   invoiceConversions: new Map(),
   sequences: new Map(),
-  payments: new Map(),
   corrections: new Map(),
 })
 
@@ -320,6 +323,47 @@ void test("issues deterministic immutable invoice snapshots through the public s
   })))
   assert.equal(newDraft instanceof ResourceNotFound, true)
   assert.equal((await Effect.runPromise(service.getIssuedInvoice(issued.id))).customer.legalName, "Client SRL")
+})
+
+void test("updates tenant customers and manages hard-deleted product presets", async () => {
+  const state = emptyState()
+  const generator = sequentialIds()
+  const service = createInvoicingService({
+    context: contextProvider({ identity, organization: { id: "org-1" } }),
+    clock: fixedClock, ids: generator, store: memoryStore(state), cubeIdentity: "invoicing",
+  })
+  const other = createInvoicingService({
+    context: contextProvider({ identity, organization: { id: "org-2" } }),
+    clock: fixedClock, ids: generator, store: memoryStore(state), cubeIdentity: "invoicing",
+  })
+  const customer = await Effect.runPromise(service.createCustomer({
+    partyType: "individual", legalName: "Ion", taxIdentifier: "",
+    address: { countryCode: "RO", city: "Iași", street: "Strada 1" }, defaultPaymentTermDays: 0,
+  }))
+  assert.equal(customer.defaultPaymentTermDays, 0)
+  const updated = await Effect.runPromise(service.updateCustomer({
+    id: customer.id, partyType: "individual", legalName: "Ion Actualizat", taxIdentifier: "",
+    address: { countryCode: "RO", city: "Cluj", street: "Strada 2" }, defaultPaymentTermDays: 30,
+  }))
+  assert.equal(updated.defaultPaymentTermDays, 30)
+  assert.equal((await Effect.runPromise(service.getCustomer(customer.id))).legalName, "Ion Actualizat")
+  assert.equal(await Effect.runPromise(Effect.flip(other.updateCustomer({ ...updated, legalName: "Intrus" }))) instanceof ResourceNotFound, true)
+  assert.equal(await Effect.runPromise(Effect.flip(service.updateCustomer({ ...updated, defaultPaymentTermDays: -1 }))) instanceof ValidationFailure, true)
+  await Effect.runPromise(service.deleteCustomer(customer.id))
+  assert.equal(await Effect.runPromise(Effect.flip(service.updateCustomer(updated))) instanceof ResourceNotFound, true)
+
+  const preset = await Effect.runPromise(service.createProductPreset({ description: "  Consultanță  ", unitPrice: "12.5" }))
+  assert.deepEqual(preset, { id: "id-2", organizationId: "org-1", description: "Consultanță", unitPrice: "12.50" })
+  assert.deepEqual(await Effect.runPromise(service.listProductPresets()), [preset])
+  assert.deepEqual(await Effect.runPromise(other.listProductPresets()), [])
+  assert.equal(await Effect.runPromise(Effect.flip(other.updateProductPreset({ id: preset.id, description: "X", unitPrice: "1" }))) instanceof ResourceNotFound, true)
+  const changed = await Effect.runPromise(service.updateProductPreset({ id: preset.id, description: "Audit", unitPrice: "20" }))
+  assert.equal(changed.unitPrice, "20.00")
+  assert.equal(await Effect.runPromise(Effect.flip(service.createProductPreset({ description: " ", unitPrice: "1" }))) instanceof ValidationFailure, true)
+  assert.equal(await Effect.runPromise(Effect.flip(service.createProductPreset({ description: "Invalid", unitPrice: "1.001" }))) instanceof ValidationFailure, true)
+  await Effect.runPromise(service.deleteProductPreset(preset.id))
+  assert.deepEqual(await Effect.runPromise(service.listProductPresets()), [])
+  assert.equal(await Effect.runPromise(Effect.flip(service.deleteProductPreset(preset.id))) instanceof ResourceNotFound, true)
 })
 
 void test("failed invoice and proforma issuance rolls back both the document and its number", async () => {
@@ -506,6 +550,14 @@ void test("refuses missing permissions and cross-organization reads", async () =
     taxConfigurations,
   })))
   assert.equal(failure instanceof PermissionDenied, true)
+  assert.equal(await Effect.runPromise(Effect.flip(denied.listProductPresets())) instanceof PermissionDenied, true)
+  assert.equal(await Effect.runPromise(Effect.flip(denied.createProductPreset({
+    description: "Servicii", unitPrice: "1.00",
+  }))) instanceof PermissionDenied, true)
+  assert.equal(await Effect.runPromise(Effect.flip(denied.updateCustomer({
+    id: "missing", partyType: "individual", legalName: "Ion", taxIdentifier: "",
+    address: { countryCode: "RO", city: "Iași", street: "Strada 1" },
+  }))) instanceof PermissionDenied, true)
 })
 
 void test("authors snapshot-owned drafts and recalculates every server-derived amount", async () => {

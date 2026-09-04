@@ -1,4 +1,4 @@
-import type { InvoiceAuthoringForm } from "../invoice-authoring-state.ts"
+import type { BuyerMode, InvoiceAuthoringForm } from "../invoice-authoring-state.ts"
 import { identifierLabel, switchPartyType } from "../invoice-authoring-state.ts"
 import type { Customer, PartyType } from "../models.ts"
 import { normalizeRomanianCui, romanianCuiPattern } from "../vat-defaults.ts"
@@ -8,19 +8,21 @@ interface BuyerEditorProps {
   readonly customers: ReadonlyArray<Customer>
   readonly disabled: boolean
   readonly onChange: (patch: Partial<InvoiceAuthoringForm>) => void
+  readonly onBuyerModeChange: (buyerMode: BuyerMode) => void
+  readonly onSavedCustomerChange: (customerId: string) => void
 }
 
-export const BuyerEditor = ({ form, customers, disabled, onChange }: BuyerEditorProps) => {
+export const BuyerEditor = ({ form, customers, disabled, onChange, onBuyerModeChange, onSavedCustomerChange }: BuyerEditorProps) => {
   const choosePartyType = (partyType: PartyType): void => { onChange(switchPartyType(form, partyType)) }
   const taxIdentifier = form.partyType === "company" ? form.companyTaxIdentifier : form.individualTaxIdentifier
   return <section className="card authoring-section">
     <div className="section-heading"><div><h2>2. Cumpărător</h2><p>Alege un client salvat sau completează un client folosit doar pe această factură.</p></div></div>
     <fieldset className="segmented-fieldset"><legend>Sursa cumpărătorului</legend><div className="segmented-control">
-      <label><input type="radio" name="buyerMode" value="saved" checked={form.buyerMode === "saved"} disabled={disabled || customers.length === 0} onChange={() => { onChange({ buyerMode: "saved" }) }} /><span>Client salvat</span></label>
-      <label><input type="radio" name="buyerMode" value="one-time" checked={form.buyerMode === "one-time"} disabled={disabled} onChange={() => { onChange({ buyerMode: "one-time" }) }} /><span>Client ocazional</span></label>
+      <label><input type="radio" name="buyerMode" value="saved" checked={form.buyerMode === "saved"} disabled={disabled || customers.length === 0} onChange={() => { onBuyerModeChange("saved") }} /><span>Client salvat</span></label>
+      <label><input type="radio" name="buyerMode" value="one-time" checked={form.buyerMode === "one-time"} disabled={disabled} onChange={() => { onBuyerModeChange("one-time") }} /><span>Client ocazional</span></label>
     </div></fieldset>
     {form.buyerMode === "saved" ? <div>
-      {customers.length === 0 ? <p className="status-note">Registrul este gol. Alege „Client ocazional” și continuă fără să salvezi clientul în registru.</p> : <label>Client<select required disabled={disabled} value={form.customerId} onChange={(event) => { onChange({ customerId: event.currentTarget.value }) }}><option value="" disabled>Alege clientul</option>{customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.legalName}{customer.taxIdentifier === "" ? "" : ` — ${identifierLabel(customer.partyType)} ${customer.taxIdentifier}`}</option>)}</select></label>}
+      {customers.length === 0 ? <p className="status-note">Registrul este gol. Alege „Client ocazional” și continuă fără să salvezi clientul în registru.</p> : <label>Client<select required disabled={disabled} value={form.customerId} onChange={(event) => { onSavedCustomerChange(event.currentTarget.value) }}><option value="" disabled>Alege clientul</option>{customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.legalName}{customer.taxIdentifier === "" ? "" : ` — ${identifierLabel(customer.partyType)} ${customer.taxIdentifier}`}</option>)}</select></label>}
       <p className="hint left">Datele clientului ocazional rămân păstrate dacă schimbi temporar modul.</p>
     </div> : <>
       <fieldset className="segmented-fieldset"><legend>Tip persoană</legend><div className="segmented-control compact-segments">

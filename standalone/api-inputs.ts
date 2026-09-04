@@ -8,6 +8,7 @@ import {
   type ConfigureIssuerInput,
   type CreateCustomerInput,
   type CreateDraftInput,
+  type ProductPresetInput,
   type UpdateDraftInput,
   type UpdateDraftLineInput,
 } from "../cube/invoicing/index.ts"
@@ -78,7 +79,17 @@ export const issuerInput = (value: unknown): ConfigureIssuerInput => {
     }),
   }
 }
-export const customerInput = (value: unknown): CreateCustomerInput => buyer(value)
+export const customerInput = (value: unknown): CreateCustomerInput => {
+  const input = object(value)
+  const defaultPaymentTermDays = input.defaultPaymentTermDays === undefined
+    ? undefined
+    : integer(input.defaultPaymentTermDays, "defaultPaymentTermDays")
+  return { ...buyer(input), ...(defaultPaymentTermDays === undefined ? {} : { defaultPaymentTermDays }) }
+}
+export const productPresetInput = (value: unknown): ProductPresetInput => {
+  const input = object(value)
+  return { description: text(input.description, "description"), unitPrice: text(input.unitPrice, "unitPrice") }
+}
 export const documentSeriesInput = (value: unknown): ConfigureDocumentSeriesInput => {
   const input = object(value)
   const documentType = text(input.documentType, "documentType")

@@ -21,6 +21,7 @@ const descriptors = new Map<string, StaticAssetDescriptor>([
 const uiRoutePatterns = [
   /^\/unlock$/,
   /^\/customers$/,
+  /^\/products$/,
   /^\/settings$/,
   /^\/invoices(?:\/new|\/[^/]+)?$/,
   /^\/proformas(?:\/[^/]+)?$/,

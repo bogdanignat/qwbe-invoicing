@@ -114,11 +114,13 @@ void test("requires host authentication and serves the complete invoice-core rou
         legalName: "Ion Popescu",
         taxIdentifier: " ",
         address: { countryCode: "RO", city: "Iași", street: "Strada Mică 2" },
+        defaultPaymentTermDays: 7,
       },
     }, runtime)
     assert.equal(customer.status, 200)
     assert.equal(typeof customer.body, "object")
     assert.equal((customer.body as { taxIdentifier: string }).taxIdentifier, "")
+    assert.equal((customer.body as { defaultPaymentTermDays: number }).defaultPaymentTermDays, 7)
     const companyWithoutCui = await handleApiRequest({
       method: "POST", url: "/api/customers", authorization,
       body: { partyType: "company", legalName: "Fără CUI SRL", taxIdentifier: "", address: { countryCode: "RO", city: "Iași", street: "Strada 2" } },
@@ -131,6 +133,36 @@ void test("requires host authentication and serves the complete invoice-core rou
     }, runtime)
     assert.equal(draftWithoutCui.status, 400)
     const customerId = (customer.body as { id: string }).id
+    const updatedCustomer = await handleApiRequest({
+      method: "PUT", url: `/api/customers/${customerId}`, authorization,
+      body: { partyType: "individual", legalName: "Ion Actualizat", taxIdentifier: "",
+        address: { countryCode: "RO", city: "Iași", street: "Strada Nouă 3" }, defaultPaymentTermDays: 21 },
+    }, runtime)
+    assert.equal(updatedCustomer.status, 200)
+    assert.equal((updatedCustomer.body as { defaultPaymentTermDays: number }).defaultPaymentTermDays, 21)
+    assert.equal((await handleApiRequest({ method: "PUT", url: "/api/customers/missing", authorization,
+      body: customer.body }, runtime)).status, 404)
+
+    const invalidPreset = await handleApiRequest({ method: "POST", url: "/api/product-presets", authorization,
+      body: { description: " ", unitPrice: "1.00" } }, runtime)
+    assert.equal(invalidPreset.status, 400)
+    const preset = await handleApiRequest({ method: "POST", url: "/api/product-presets", authorization,
+      body: { description: "  Consultanță  ", unitPrice: "10.5" } }, runtime)
+    assert.equal(preset.status, 200)
+    assert.equal((preset.body as { description: string }).description, "Consultanță")
+    assert.equal((preset.body as { unitPrice: string }).unitPrice, "10.50")
+    const presetId = (preset.body as { id: string }).id
+    assert.equal((await handleApiRequest({ method: "PUT", url: `/api/product-presets/${presetId}`, authorization,
+      body: { description: "Audit", unitPrice: "1.001" } }, runtime)).status, 400)
+    const updatedPreset = await handleApiRequest({ method: "PUT", url: `/api/product-presets/${presetId}`, authorization,
+      body: { description: "Audit", unitPrice: "20" } }, runtime)
+    assert.equal((updatedPreset.body as { unitPrice: string }).unitPrice, "20.00")
+    assert.deepEqual((await handleApiRequest({ method: "GET", url: "/api/product-presets", authorization,
+      body: undefined }, runtime)).body, [updatedPreset.body])
+    assert.deepEqual(await handleApiRequest({ method: "DELETE", url: `/api/product-presets/${presetId}`, authorization,
+      body: undefined }, runtime), { status: 200, body: { deleted: true } })
+    assert.equal((await handleApiRequest({ method: "DELETE", url: `/api/product-presets/${presetId}`, authorization,
+      body: undefined }, runtime)).status, 404)
 
     const draft = await handleApiRequest({
       method: "POST",

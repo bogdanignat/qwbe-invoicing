@@ -14,7 +14,8 @@ import * as S from "./http-schemas.ts"
 
 export const operationNames = [
   "getIssuer", "configureIssuer", "listDocumentSeries", "addDocumentSeries",
-  "listCustomers", "getCustomer", "createCustomer", "deleteCustomer",
+  "listCustomers", "getCustomer", "createCustomer", "updateCustomer", "deleteCustomer",
+  "listProductPresets", "createProductPreset", "updateProductPreset", "deleteProductPreset",
   "listDrafts", "getDraft", "createDraft", "updateDraft", "deleteDraft",
   "addDraftLine", "updateDraftLine", "deleteDraftLine", "issueDraftInvoice", "issueInvoice",
   "listPayments", "recordPayment", "createCorrection", "listCorrections", "getCorrection",
@@ -92,8 +93,14 @@ const invoicing = HttpApiGroup.make("invoicing")
   .add(invoicingBase(conflict(validation(body(HttpApiEndpoint.post("addDocumentSeries", "/document-series").setPayload(S.DocumentSeriesInput).addSuccess(S.DocumentSeries))))))
   .add(invoicingBase(HttpApiEndpoint.get("listCustomers", "/customers").addSuccess(Schema.Array(S.Customer))))
   .add(invoicingBase(notFound(HttpApiEndpoint.get("getCustomer")`/customers/${id}`.addSuccess(S.Customer))))
-  .add(invoicingBase(validation(body(HttpApiEndpoint.post("createCustomer", "/customers").setPayload(S.Buyer).addSuccess(S.Customer)))))
+  .add(invoicingBase(validation(body(HttpApiEndpoint.post("createCustomer", "/customers").setPayload(S.CustomerInput).addSuccess(S.Customer)))))
+  .add(invoicingBase(notFound(validation(body(HttpApiEndpoint.put("updateCustomer")`/customers/${id}`.setPayload(S.CustomerInput).addSuccess(S.Customer))))))
   .add(invoicingBase(conflict(notFound(body(HttpApiEndpoint.del("deleteCustomer")`/customers/${id}`.addSuccess(S.Deleted))))))
+  .add(invoicingBase(HttpApiEndpoint.get("listProductPresets", "/product-presets").addSuccess(Schema.Array(S.ProductPreset))))
+  .add(invoicingBase(validation(body(HttpApiEndpoint.post("createProductPreset", "/product-presets").setPayload(S.ProductPresetInput).addSuccess(S.ProductPreset)))))
+  .add(invoicingBase(notFound(validation(body(HttpApiEndpoint.put("updateProductPreset")`/product-presets/${id}`
+    .setPayload(S.ProductPresetInput).addSuccess(S.ProductPreset))))))
+  .add(invoicingBase(notFound(body(HttpApiEndpoint.del("deleteProductPreset")`/product-presets/${id}`.addSuccess(S.Deleted)))))
   .add(invoicingBase(HttpApiEndpoint.get("listDrafts", "/drafts").addSuccess(Schema.Array(S.DraftInvoice))))
   .add(invoicingBase(notFound(HttpApiEndpoint.get("getDraft")`/drafts/${id}`.addSuccess(S.DraftInvoice))))
   .add(invoicingBase(notFound(validation(body(HttpApiEndpoint.post("createDraft", "/drafts").setPayload(S.DraftInput).addSuccess(S.DraftInvoice))))))

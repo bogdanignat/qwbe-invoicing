@@ -9,12 +9,13 @@ import { invoicingMigrations } from "./contracts/migrations.ts"
 void test("exports a minimal authenticated QWBE cube definition", () => {
   assert.equal(cube.manifest.name, "invoicing")
   assert.equal(cube.manifest.requiresAuth, true)
-  assert.equal(cube.manifest.permissions.length, 8)
+  assert.equal(cube.manifest.permissions.length, 7)
   assert.deepEqual(cube.manifest.tables, [
     "issuers",
     "issuer_tax_configurations",
     "document_series",
     "customers",
+    "product_presets",
     "invoice_drafts",
     "draft_lines",
     "invoice_sequences",
@@ -26,7 +27,6 @@ void test("exports a minimal authenticated QWBE cube definition", () => {
     "proforma_tax_breakdown",
     "proforma_conversions",
     "proforma_invoice_conversions",
-    "invoice_payments",
     "correction_documents",
     "correction_lines",
     "correction_tax_breakdown",
@@ -35,7 +35,8 @@ void test("exports a minimal authenticated QWBE cube definition", () => {
   const parts = cube.create()
   assert.equal(HttpApiGroup.isHttpApiGroup(parts.group), true)
   assert.deepEqual(parts.handlers, {})
-  assert.equal(invoicingMigrations.at(-1)?.name, "009-proforma-direct-invoice")
+  assert.equal(invoicingMigrations.at(-1)?.name, "010-product-presets-payment-terms")
   assert.equal(invoicingMigrations.filter(({ name }) => name === "008-proforma-workflow").length, 1)
   assert.equal(invoicingMigrations.filter(({ name }) => name === "009-proforma-direct-invoice").length, 1)
+  assert.equal(invoicingMigrations.filter(({ name }) => name === "010-product-presets-payment-terms").length, 1)
 })

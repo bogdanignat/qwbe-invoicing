@@ -26,6 +26,14 @@ export const Buyer = Schema.Struct({
   address: Address,
 })
 
+export const CustomerInput = Schema.Struct({
+  partyType: Schema.Literal("company", "individual"),
+  legalName: Schema.String,
+  taxIdentifier: Schema.String,
+  address: Address,
+  defaultPaymentTermDays: Schema.optional(Schema.Int),
+})
+
 export const TaxConfiguration = Schema.Struct({
   code: Schema.String,
   category: Schema.Literal("standard"),
@@ -79,7 +87,20 @@ export const Customer = Schema.Struct({
   legalName: Schema.String,
   taxIdentifier: Schema.String,
   address: Address,
+  defaultPaymentTermDays: Schema.optional(Schema.Int),
   deletedAt: optionalString,
+})
+
+export const ProductPresetInput = Schema.Struct({
+  description: Schema.String,
+  unitPrice: Schema.String,
+})
+
+export const ProductPreset = Schema.Struct({
+  id: Schema.String,
+  organizationId: Schema.String,
+  description: Schema.String,
+  unitPrice: Schema.String,
 })
 
 export const DraftLine = Schema.Struct({
