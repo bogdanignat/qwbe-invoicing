@@ -6,6 +6,7 @@ import { invoiceActionState } from "../invoice-state.ts"
 import { invoicingClient } from "../invoicing-client.ts"
 import type { CorrectionDocument, PaymentSummary } from "../models.ts"
 import { EmptyState, ErrorAlert } from "./AsyncState.tsx"
+import { Button } from "./ui/Button.tsx"
 
 const labels: Readonly<Record<PaymentSummary["status"], string>> = {
   unpaid: "Neplătită", partially_paid: "Plătită parțial", paid: "Plătită", overpaid: "Plătită în exces", overdue: "Scadentă",
@@ -41,7 +42,7 @@ export const PaymentPanel = ({ invoiceId, currency, summary, corrections, notify
     {record.error === null ? null : <ErrorAlert error={record.error} />}
     {state.canRecordPayment ? <details className="operation-form"><summary>Înregistrează o plată</summary><form key={summary.paidAmount} onSubmit={submit}>
       <div className="form-grid two"><label>Sumă<input name="amount" inputMode="decimal" defaultValue={summary.remainingAmount} required /></label><label>Data plății<input name="paymentDate" type="date" defaultValue={today()} required /></label><label>Metodă<select name="method" required defaultValue="transfer"><option value="transfer">Transfer bancar</option><option value="card">Card</option><option value="cash">Numerar</option><option value="other">Alta</option></select></label><label>Referință <span className="optional">opțional</span><input name="externalReference" /></label><label className="span-two">Notă <span className="optional">opțional</span><textarea name="note" rows={2} /></label></div>
-      <button className="button primary" type="submit" disabled={record.isPending}>{record.isPending ? "Se salvează…" : "Salvează plata"}</button>
+      <Button type="submit" disabled={record.isPending}>{record.isPending ? "Se salvează…" : "Salvează plata"}</Button>
     </form></details> : state.isOverpaid ? null : <p className="status-note">Soldul facturii este închis; nu mai sunt necesare plăți.</p>}
   </section>
 }

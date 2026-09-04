@@ -323,6 +323,28 @@ The gates keep the core inside the QWBE cube contract: no host or infrastructure
 from `cube/`, no cube-to-cube imports, size caps per file and per unit, a test next to every
 cube. A change that breaks a gate is not mergeable.
 
+### UI theme and dependency policy
+
+Tailwind CSS 4 is configured CSS-first in `standalone/ui/app.css`; this setup does not use a
+`tailwind.config` file. Invoice colors, typography, shadows and border radii live in its
+top-level `@theme` block as CSS variables. They generate semantic utilities such as
+`bg-invoice-primary`, `text-invoice-ink`, `border-invoice-border`,
+`rounded-invoice-control` and `rounded-invoice-panel` whenever those classes are used, while
+the existing component classes consume the same variables directly. The explicit
+`@source "../../web"` boundary includes the React tree in Tailwind's class detection;
+moving UI source outside `web/` requires updating that boundary.
+
+Any third-party UI component, icon or font library added to this project must be free to use
+and MIT-licensed. Check the package's published license before adding it and record that check
+in the change or pull-request notes. This is a review requirement; commercial packages,
+non-MIT packages and packages with unclear licensing are not accepted.
+
+The shared button primitives use `tailwind-variants` 3.3.1 (MIT) for typed variants and its
+`cn()` helper for deterministic Tailwind class merging. The configured `tv()` and `cn()`
+exports in `web/src/classnames.ts` are the required class-composition boundary so custom invoice
+utilities merge consistently. `class-variance-authority` is not used because its Apache-2.0
+license does not satisfy this repository's UI dependency policy.
+
 ## Relation to QWBE
 
 QWBE Invoicing is built as an application for the [QWBE](https://github.com/theZenNana/qwbe)

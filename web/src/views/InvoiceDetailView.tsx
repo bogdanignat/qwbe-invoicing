@@ -3,6 +3,7 @@ import { CorrectionPanel } from "../components/CorrectionPanel.tsx"
 import { InvoiceDocument } from "../components/InvoiceDocument.tsx"
 import { Page } from "../components/Page.tsx"
 import { PaymentPanel } from "../components/PaymentPanel.tsx"
+import { Button } from "../components/ui/Button.tsx"
 import { useInvoiceDetail } from "../invoices-hooks.ts"
 
 export const InvoiceDetailView = ({ id, notify }: { readonly id: string; readonly notify: (message: string) => void }) => {
@@ -11,7 +12,7 @@ export const InvoiceDetailView = ({ id, notify }: { readonly id: string; readonl
   if (state.bundle.data === undefined) return <Page title="Factură" eyebrow="Document emis"><ErrorAlert error={state.bundle.error} /></Page>
   const { invoice, paymentSummary, corrections } = state.bundle.data
   return <Page title={`Factura ${invoice.series} ${String(invoice.number)}`} eyebrow={`Emisă la ${invoice.issueDate}`} actions={<>
-    <button className="button secondary" type="button" onClick={() => { state.download.start() }} disabled={state.download.pending}>{state.download.pending ? "Se generează…" : "Descarcă PDF"}</button>
+    <Button variant="secondary" onClick={() => { state.download.start() }} disabled={state.download.pending}>{state.download.pending ? "Se generează…" : "Descarcă PDF"}</Button>
   </>}>
     {state.bundle.error === null ? null : <ErrorAlert error={state.bundle.error} />}
     {state.download.error === null ? null : <ErrorAlert error={state.download.error} />}

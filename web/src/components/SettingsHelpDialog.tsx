@@ -1,9 +1,11 @@
 import { useRef } from "react"
 
+import { Button } from "./ui/Button.tsx"
+
 export const SettingsHelpDialog = () => {
   const dialog = useRef<HTMLDialogElement>(null)
   return <>
-    <button className="button secondary" type="button" aria-haspopup="dialog" onClick={() => { dialog.current?.showModal() }}><span aria-hidden="true">ⓘ</span> Ajutor pentru câmpuri</button>
+    <Button variant="secondary" aria-haspopup="dialog" onClick={() => { dialog.current?.showModal() }}><span aria-hidden="true">ⓘ</span> Ajutor pentru câmpuri</Button>
     <dialog ref={dialog} className="settings-help-dialog" aria-labelledby="settings-help-title">
       <header><div><p className="eyebrow">Ghid de completare</p><h2 id="settings-help-title">Ce înseamnă câmpurile din „Date firmă”</h2></div><form method="dialog"><button className="dialog-close" type="submit" aria-label="Închide ghidul">×</button></form></header>
       <div className="settings-help-body">
@@ -48,7 +50,7 @@ export const SettingsHelpDialog = () => {
           <p className="settings-help-note">Aplicația permite configurarea cotelor speciale, dar nu stabilește automat încadrarea fiscală. Operațiunile scutite nu trebuie tratate automat ca „TVA 0%”. Informațiile au fost verificate la 1 septembrie 2026 din Codul fiscal și materialele ANAF.</p>
         </section>
       </div>
-      <form className="dialog-actions" method="dialog"><button className="button primary" type="submit">Am înțeles</button></form>
+      <form className="dialog-actions" method="dialog"><Button type="submit">Am înțeles</Button></form>
     </dialog>
   </>
 }
