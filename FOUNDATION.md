@@ -128,11 +128,20 @@ invoicing:invoice.draft
 invoicing:invoice.issue
 invoicing:invoice.void
 invoicing:proforma.issue
-invoicing:payment.record
 invoicing:settings.manage
+payments:read
+payments:payment.record
 ```
 
-Names are provisional until use cases are written. In standalone mode the current manifest must use the literal `invoicing:*` prefix. The same static declarations become invalid if the cube is mounted as `<mother>/invoicing`, because current validation requires the full mounted identity as prefix and offers no rebinding hook. No-rewrite mounting therefore requires either a definition/packaging factory that materializes identity-derived permissions, commands, events, routes, stores, and entity references, or a future kernel identity contract. Business logic must not treat `invoicing:*` as permanently canonical.
+Names are provisional until use cases are written. Payments accepts the legacy
+`invoicing:read` and `invoicing:payment.record` grants during upgrades, while new
+hosts declare `payments:*`. In standalone mode each manifest uses its literal cube
+identity prefix. The same static declarations become invalid if a cube is mounted
+under another identity, because current validation requires the full mounted
+identity as prefix and offers no rebinding hook. No-rewrite mounting therefore
+requires either a definition/packaging factory that materializes identity-derived
+permissions, commands, events, routes, stores, and entity references, or a future
+kernel identity contract. Business logic must not treat these prefixes as permanently canonical.
 
 Authentication and authorization remain separate checks:
 
@@ -361,6 +370,12 @@ The scanner must understand recursive cube roots before child cubes are introduc
 Sources: QWBE `qwbe.config.json`, `probes/sizecaps.mjs`, and `probes/size-lib.mjs`.
 
 Status on 2 September 2026: this repository's `qwbe.config.json` was raised in four steps to 11,000 / 65,000 / 20 while the mother still enforces 6,000 / 40,000 / 15 with a recorded baseline and a split-first rule. Measured after complete invoice authoring, `cube/invoicing` holds 63,158 code characters across 19 files, with two files over 6,000 (`application/draft-authoring.ts` 10,192 and `domain/validation.ts` 7,447). That is inherited debt this document said would not exist; the repair is either to split (draft authoring and validation, and a child-cube boundary if one is real) or to record a baseline the mother's way, never a silent raise.
+
+On 4 September 2026, adding customer payment terms and product presets exposed the
+unit cap. The existing payment lifecycle was extracted into the independent
+`cube/payments` bounded context and composed by the standalone host through public
+ports. The cap was not raised; invoice and payment cubes remain independently
+measured and cannot import each other.
 
 ## 11. Tests and verification
 

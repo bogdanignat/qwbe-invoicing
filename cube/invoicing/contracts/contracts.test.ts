@@ -16,7 +16,6 @@ void test("materializes permission names from the mounted cube identity", () => 
     issueInvoices: "mother/invoicing:invoice.issue",
     issueProformas: "mother/invoicing:proforma.issue",
     voidInvoices: "mother/invoicing:invoice.void",
-    recordPayments: "mother/invoicing:payment.record",
     manageSettings: "mother/invoicing:settings.manage",
   })
 })

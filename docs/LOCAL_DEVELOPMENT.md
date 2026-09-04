@@ -41,9 +41,10 @@ Every cube use-case is an `Effect` and has a 1:1 authenticated HTTP endpoint. Au
 
 - `GET /api/issuer` / `PUT /api/issuer` — read / configure issuer (Effect)
 - `GET /api/document-series` / `POST /api/document-series` — list / register invoice or proforma series; exact duplicates return `409 document_series_exists`
-- `POST /api/customers` / `GET /api/customers` / `GET /api/customers/:id` / `DELETE /api/customers/:id` — create / list / read / soft-delete optional customer records; `partyType=company` requires a valid CUI/CIF, while `partyType=individual` accepts an optional valid CNP; deletion hides the customer from new work while preserving issued invoice snapshots
+- `POST /api/customers` / `GET /api/customers` / `GET|PUT|DELETE /api/customers/:id` — create / list / read / edit / soft-delete optional customer records; `partyType=company` requires a valid CUI/CIF, while `partyType=individual` accepts an optional valid CNP; `defaultPaymentTermDays` is optional and prepopulates the due date when that customer is selected for a new document
+- `GET|POST /api/product-presets` / `PUT|DELETE /api/product-presets/:id` — manage optional description-and-unit-price presets; selection copies values into an editable line and never creates a live product-to-invoice relation
 - `POST /api/drafts` / `GET /api/drafts` / `GET|PUT|DELETE /api/drafts/:id` — create / list / read / edit / delete drafts; creation and update require exactly one of `customerId` (saved customer) or `customer` (one-time buyer snapshot), `series` is mandatory and preconfigured as `invoice` on create, and `dueDate` may be omitted or set to `null`
-- `POST /api/drafts/:id/lines` / `PUT|DELETE /api/drafts/:id/lines/:lineId` — add / edit / remove manual invoice lines; no product catalog is required
+- `POST /api/drafts/:id/lines` / `PUT|DELETE /api/drafts/:id/lines/:lineId` — add / edit / remove invoice lines; manual authoring remains available without product presets
 - `POST /api/drafts/:id/issue` — atomically allocate the next number and freeze the immutable invoice snapshot; issued drafts can no longer be edited or deleted
 - `POST /api/invoices` — issue an invoice atomically from complete authoring content without first persisting a draft
 - `GET /api/invoices` / `GET /api/invoices/:id` — latest 100 issued invoices / immutable issued snapshot (Effect)

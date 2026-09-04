@@ -21,6 +21,14 @@ export interface BuyerSnapshot extends Party {
 export interface Customer extends BuyerSnapshot {
   readonly id: string
   readonly organizationId: string
+  readonly defaultPaymentTermDays?: number
+}
+
+export interface ProductPreset {
+  readonly id: string
+  readonly organizationId: string
+  readonly description: string
+  readonly unitPrice: string
 }
 
 export interface TaxConfiguration {
@@ -180,6 +188,8 @@ const integer = (input: unknown, field: string): number => {
 }
 const optionalText = (input: unknown, field: string): string | undefined =>
   input === undefined || input === null ? undefined : text(input, field)
+const optionalInteger = (input: unknown, field: string): number | undefined =>
+  input === undefined || input === null ? undefined : integer(input, field)
 const nullableText = (input: unknown, field: string): string | null =>
   input === null ? null : text(input, field)
 const array = <Value>(input: unknown, decode: Decoder<Value>, field: string): ReadonlyArray<Value> => {
@@ -222,7 +232,20 @@ const decodeBuyer: Decoder<BuyerSnapshot> = (input) => {
 
 export const decodeCustomer: Decoder<Customer> = (input) => {
   const value = object(input)
-  return { ...decodeBuyer(value), id: text(value.id, "id"), organizationId: text(value.organizationId, "organizationId") }
+  const defaultPaymentTermDays = optionalInteger(value.defaultPaymentTermDays, "defaultPaymentTermDays")
+  if (defaultPaymentTermDays !== undefined && defaultPaymentTermDays < 0) throw new Error("invalid defaultPaymentTermDays")
+  return {
+    ...decodeBuyer(value), id: text(value.id, "id"), organizationId: text(value.organizationId, "organizationId"),
+    ...(defaultPaymentTermDays === undefined ? {} : { defaultPaymentTermDays }),
+  }
+}
+
+export const decodeProductPreset: Decoder<ProductPreset> = (input) => {
+  const value = object(input)
+  return {
+    id: text(value.id, "id"), organizationId: text(value.organizationId, "organizationId"),
+    description: text(value.description, "description"), unitPrice: text(value.unitPrice, "unitPrice"),
+  }
 }
 
 const decodeTaxConfiguration: Decoder<TaxConfiguration> = (input) => {
@@ -360,6 +383,8 @@ export const decodeCorrection: Decoder<CorrectionDocument> = (input) => {
     currency: text(value.currency, "currency"), totalIncludingTax: text(value.totalIncludingTax, "totalIncludingTax"),
   }
 }
+
+export const decodeProductPresets: Decoder<ReadonlyArray<ProductPreset>> = (input) => array(input, decodeProductPreset, "productPresets")
 
 export const decodeCustomers: Decoder<ReadonlyArray<Customer>> = (input) => array(input, decodeCustomer, "customers")
 export const decodeDocumentSeriesList: Decoder<ReadonlyArray<DocumentSeries>> = (input) => array(input, decodeDocumentSeries, "documentSeries")

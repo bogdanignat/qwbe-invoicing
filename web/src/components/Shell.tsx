@@ -14,6 +14,7 @@ const links = [
   { href: "/invoices", section: "invoices", label: "Facturi", icon: "▤" },
   { href: "/proformas", section: "proformas", label: "Proforme", icon: "▧" },
   { href: "/customers", section: "customers", label: "Clienți", icon: "♙" },
+  { href: "/products", section: "products", label: "Produse", icon: "◇" },
   { href: "/settings", section: "settings", label: "Setări firmă", icon: "⚙" },
 ] as const
 

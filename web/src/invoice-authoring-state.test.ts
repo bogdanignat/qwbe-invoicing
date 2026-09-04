@@ -1,19 +1,30 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { authoringAccess, authoringDocumentPayload, authoringPayloadMatchesDraft, authoringReadiness, authoringSeriesOptions, createDraftPayload, draftLinesForEditing, formFromDraft, headerMatchesDraft, initialBuyerSelection, linesMatchDraft, pendingLineOperations, switchBuyerMode, switchPartyType, updateDraftPayload, type InvoiceAuthoringForm } from "./invoice-authoring-state.ts"
-import type { DraftInvoice } from "./models.ts"
+import { addCalendarDays, applyProductPreset, authoringAccess, authoringDocumentPayload, authoringPayloadMatchesDraft, authoringReadiness, authoringSeriesOptions, createDraftPayload, draftLinePayload, draftLinesForEditing, editDueDate, formFromDraft, headerMatchesDraft, initialBuyerSelection, linesMatchDraft, newAuthoringForm, pendingLineOperations, selectBuyerMode, selectIssueDate, selectedSavedCustomer, selectSavedCustomer, switchBuyerMode, switchPartyType, updateDraftPayload, type InvoiceAuthoringForm } from "./invoice-authoring-state.ts"
+import type { Customer, DraftInvoice, Issuer, ProductPreset } from "./models.ts"
 
 const manualForm: InvoiceAuthoringForm = {
   buyerMode: "one-time", customerId: "", partyType: "individual", legalName: "Ana Pop", companyTaxIdentifier: "RO123", individualTaxIdentifier: "",
   countryCode: "RO", city: "Iași", street: "Strada 1", county: "", postalCode: "", series: "QWBE",
-  issueDate: "2026-09-02", dueDate: "2026-09-17",
+  issueDate: "2026-09-02", dueDate: "2026-09-17", dueDateEdited: true,
 }
 
 const draft: DraftInvoice = {
   id: "draft-1", organizationId: "org-1", customer: { partyType: "individual", legalName: "Ana Pop", taxIdentifier: "", address: { countryCode: "RO", city: "Iași", street: "Strada 1" } },
   series: "QWBE", issueDate: "2026-09-02", dueDate: "2026-09-17", currency: "RON", status: "draft", lines: [], taxBreakdown: [],
   totalExcludingTax: "0.00", taxTotal: "0.00", totalIncludingTax: "0.00",
+}
+
+const issuer: Issuer = {
+  organizationId: "org-1", legalName: "QWBE", taxIdentifier: "RO2",
+  address: { countryCode: "RO", city: "Botoșani", street: "Strada 2" },
+  defaultCurrency: "RON", defaultPaymentTermDays: 15, taxConfigurations: [],
+}
+
+const customer: Customer = {
+  id: "customer-1", organizationId: "org-1", partyType: "company", legalName: "Client", taxIdentifier: "RO1",
+  address: { countryCode: "RO", city: "Iași", street: "Strada 1" }, defaultPaymentTermDays: 30,
 }
 
 void test("builds the exact one-time buyer payload and preserves blank optional CNP", () => {
@@ -24,14 +35,64 @@ void test("builds the exact one-time buyer payload and preserves blank optional 
 })
 
 void test("switching buyer modes retains one-time buyer data", () => {
-  const saved = switchBuyerMode(manualForm, "saved")
+  const saved = { ...switchBuyerMode(manualForm, "saved"), customerId: customer.id }
   assert.equal(saved.legalName, "Ana Pop")
-  assert.equal(switchBuyerMode(saved, "one-time").individualTaxIdentifier, "")
+  assert.equal(selectedSavedCustomer(saved, [customer]), customer)
+  const oneTime = { ...switchBuyerMode(saved, "one-time"), dueDateEdited: false }
+  assert.equal(oneTime.individualTaxIdentifier, "")
+  assert.equal(selectedSavedCustomer(oneTime, [customer]), undefined)
+  assert.equal(selectIssueDate(oneTime, "2026-09-05", selectedSavedCustomer(oneTime, [customer]), issuer, true).dueDate, "2026-09-20")
 })
 
 void test("requires explicit saved-customer selection and falls back to one-time mode for an empty registry", () => {
   assert.deepEqual(initialBuyerSelection(true), { buyerMode: "saved", customerId: "" })
   assert.deepEqual(initialBuyerSelection(false), { buyerMode: "one-time", customerId: "" })
+})
+
+void test("derives new-document due dates from the selected customer and falls back to issuer terms", () => {
+  const form = newAuthoringForm(issuer, "QWBE", true, "2026-09-04")
+  const customerWithoutTerm: Customer = { id: "customer-3", organizationId: "org-1", partyType: "company", legalName: "Client", taxIdentifier: "RO1", address: customer.address }
+  assert.equal(form.dueDate, "2026-09-19")
+  assert.equal(selectSavedCustomer(form, customer.id, customer, issuer, true).dueDate, "2026-10-04")
+  assert.equal(selectSavedCustomer(form, "customer-2", { ...customer, id: "customer-2", defaultPaymentTermDays: 0 }, issuer, true).dueDate, "2026-09-04")
+  assert.equal(selectSavedCustomer(form, "customer-3", customerWithoutTerm, issuer, true).dueDate, "2026-09-19")
+  assert.equal(addCalendarDays("2026-12-31", 1), "2027-01-01")
+  assert.equal(addCalendarDays("", 30), "")
+  assert.equal(addCalendarDays("2026-02-30", 30), "")
+  assert.equal(addCalendarDays("9999-12-31", Number.MAX_SAFE_INTEGER), "")
+  assert.equal(selectIssueDate(form, "2026-09-05", customer, issuer, true).dueDate, "2026-10-05")
+  assert.equal(selectIssueDate(form, "", customer, issuer, true).dueDate, "")
+  assert.equal(selectIssueDate({ ...form, dueDate: "2027-01-01", dueDateEdited: true }, "2026-09-05", customer, issuer, true).dueDate, "2027-01-01")
+  assert.equal(selectIssueDate({ ...form, dueDate: "", dueDateEdited: true }, "2026-09-05", customer, issuer, true).dueDate, "")
+})
+
+void test("recalculates automatic terms across buyer modes and preserves manual due dates", () => {
+  const selected = selectSavedCustomer(newAuthoringForm(issuer, "QWBE", true, "2026-09-04"), customer.id, customer, issuer, true)
+  const oneTime = selectBuyerMode(selected, "one-time", [customer], issuer, true)
+  assert.equal(oneTime.dueDate, "2026-09-19")
+  assert.equal(selectBuyerMode(oneTime, "saved", [customer], issuer, true).dueDate, "2026-10-04")
+
+  const custom = editDueDate(selected, "2027-01-01")
+  assert.equal(selectBuyerMode(custom, "one-time", [customer], issuer, true).dueDate, "2027-01-01")
+  const blank = editDueDate(selected, "")
+  assert.equal(selectBuyerMode(blank, "one-time", [customer], issuer, true).dueDate, "")
+})
+
+void test("does not recalculate a draft due date when its saved customer changes", () => {
+  const existing = { ...manualForm, buyerMode: "saved" as const, dueDate: "2026-09-10" }
+  assert.equal(selectSavedCustomer(existing, customer.id, customer, issuer, false).dueDate, "2026-09-10")
+  assert.equal(selectIssueDate(existing, "2026-09-05", customer, issuer, false).dueDate, "2026-09-10")
+})
+
+void test("copies a product preset into an editable line without retaining a live relation", () => {
+  const line = { key: "local-1", lineId: "line-1", description: "Vechi", quantity: "3", unitPrice: "2.00", taxCode: "RO_STANDARD" }
+  const preset: ProductPreset = { id: "preset-1", organizationId: "org-1", description: "Consultanță", unitPrice: "100.00" }
+  assert.deepEqual(applyProductPreset(line, preset), {
+    key: "local-1", lineId: "line-1", description: "Consultanță", quantity: "1", unitPrice: "100.00", taxCode: "RO_STANDARD",
+  })
+  assert.deepEqual(draftLinePayload(applyProductPreset(line, preset)), {
+    description: "Consultanță", quantity: "1", unitPrice: "100.00", taxCode: "RO_STANDARD",
+  })
 })
 
 void test("prepares invoice and proforma series independently for authoring", () => {

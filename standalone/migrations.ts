@@ -4,6 +4,7 @@ import { DatabaseSync } from "node:sqlite"
 
 import { invoicingMigrations, type InvoicingMigration } from "../cube/invoicing/index.ts"
 import { documentsMigrations } from "../cube/invoicing/documents/index.ts"
+import { paymentsMigrations } from "../cube/payments/index.ts"
 
 const foundationMigration: InvoicingMigration = { name: "000-foundation", statements: [] }
 const browserSessionsMigration: InvoicingMigration = {
@@ -19,7 +20,9 @@ const browserSessionsMigration: InvoicingMigration = {
     "CREATE INDEX browser_sessions_expiry ON browser_sessions (expires_at)",
   ],
 }
-const invoicingPlan = { label: "", file: "invoicing.sqlite", migrations: [foundationMigration, ...invoicingMigrations] }
+const applicationMigrations: ReadonlyArray<InvoicingMigration> = [...invoicingMigrations, ...paymentsMigrations]
+  .sort((left, right) => left.name.localeCompare(right.name))
+const invoicingPlan = { label: "", file: "invoicing.sqlite", migrations: [foundationMigration, ...applicationMigrations] }
 const documentsPlan = { label: "documents/", file: "documents.sqlite", migrations: [foundationMigration, ...documentsMigrations] }
 const sessionsPlan = { label: "sessions/", file: "sessions.sqlite", migrations: [browserSessionsMigration] }
 const plans = [invoicingPlan, documentsPlan, sessionsPlan] as const

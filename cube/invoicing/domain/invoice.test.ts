@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import { ValidationFailure } from "../contracts/failures.ts"
-import { resolveTaxConfiguration, validateBuyer, validateDate, validateDocumentSeries, validateIssuer, validateParty } from "./validation.ts"
+import { resolveTaxConfiguration, validateBuyer, validateCustomer, validateDate, validateDocumentSeries, validateIssuer, validateParty } from "./validation.ts"
 
 void test("validates supported document types and fiscal series format", () => {
   assert.doesNotThrow(() => { validateDocumentSeries({ organizationId: "org-1", documentType: "invoice", series: "QWBE_01" }) })
@@ -121,6 +121,16 @@ void test("resolves exactly one effective-dated issuer tax configuration", () =>
     () => resolveTaxConfiguration(issuer, "UNKNOWN", "2026-01-01"),
     (error: unknown) => error instanceof ValidationFailure,
   )
+})
+
+void test("bounds customer payment terms to a practical calendar range", () => {
+  const customer = { partyType: "individual" as const, legalName: "Ana Pop", taxIdentifier: "", address: {
+    countryCode: "RO", city: "Botoșani", street: "Strada 1",
+  } }
+  assert.doesNotThrow(() => { validateCustomer({ ...customer, defaultPaymentTermDays: 3650 }) })
+  assert.throws(() => { validateCustomer({ ...customer, defaultPaymentTermDays: 3651 }) },
+    (error: unknown) => error instanceof ValidationFailure
+      && error.issues.includes("defaultPaymentTermDays must be an integer between 0 and 3650"))
 })
 
 void test("rejects overlapping effective ranges for the same tax code", () => {

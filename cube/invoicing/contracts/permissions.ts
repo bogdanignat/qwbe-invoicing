@@ -5,7 +5,6 @@ export interface InvoicingPermissions {
   readonly issueInvoices: string
   readonly issueProformas: string
   readonly voidInvoices: string
-  readonly recordPayments: string
   readonly manageSettings: string
 }
 
@@ -16,6 +15,5 @@ export const invoicingPermissions = (cubeIdentity: string): InvoicingPermissions
   issueInvoices: `${cubeIdentity}:invoice.issue`,
   issueProformas: `${cubeIdentity}:proforma.issue`,
   voidInvoices: `${cubeIdentity}:invoice.void`,
-  recordPayments: `${cubeIdentity}:payment.record`,
   manageSettings: `${cubeIdentity}:settings.manage`,
 })

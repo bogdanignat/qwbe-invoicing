@@ -15,8 +15,9 @@ import {
   type IdGenerator,
   type RequestContextProvider,
 } from "../cube/invoicing/index.ts"
+import { PersistenceFailure as PaymentsPersistenceFailure } from "../cube/payments/index.ts"
 import { applyMigrations, databasePath } from "./migrations.ts"
-import { createSqliteStore } from "./sqlite-store.ts"
+import { createSqlitePaymentsStore, createSqliteStore } from "./sqlite-store.ts"
 
 const permissions = [
   "invoicing:read",
@@ -77,7 +78,16 @@ void test("persists an issued snapshot across store recreation and isolates orga
       legalName: "Client SRL",
       taxIdentifier: "RO87654329",
       address: { countryCode: "RO", city: "Iași", street: "Strada Mică 2" },
+      defaultPaymentTermDays: 14,
     }))
+    const updatedCustomer = await Effect.runPromise(service.updateCustomer({
+      id: customer.id, partyType: "company", legalName: "Client Actualizat SRL", taxIdentifier: "RO87654329",
+      address: { countryCode: "RO", city: "Iași", street: "Strada Nouă 3" }, defaultPaymentTermDays: 30,
+    }))
+    assert.equal(updatedCustomer.defaultPaymentTermDays, 30)
+    const preset = await Effect.runPromise(service.createProductPreset({ description: "  Servicii software  ", unitPrice: "125.5" }))
+    assert.equal(preset.unitPrice, "125.50")
+    assert.deepEqual(await Effect.runPromise(service.listProductPresets()), [preset])
     const draft = await Effect.runPromise(service.createDraft({
       customerId: customer.id,
       issueDate: "2026-09-01",
@@ -140,6 +150,8 @@ void test("persists an issued snapshot across store recreation and isolates orga
     assert.deepEqual((await Effect.runPromise(restarted.listProformas())).find(({ id }) => id === proforma.id),
       { ...proforma, convertedInvoiceId: converted.id })
     assert.equal((await Effect.runPromise(restarted.getDraft(proformaSource.id))).status, "proforma_issued")
+    assert.equal((await Effect.runPromise(restarted.getCustomer(customer.id))).defaultPaymentTermDays, 30)
+    assert.deepEqual(await Effect.runPromise(restarted.listProductPresets()), [preset])
     const persistedDraft = await Effect.runPromise(restarted.getDraft(draft.id))
     assert.equal(persistedDraft.series, "QWBE")
     assert.equal(persistedDraft.customer.partyType, "company")
@@ -154,6 +166,7 @@ void test("persists an issued snapshot across store recreation and isolates orga
     assert.deepEqual(await Effect.runPromise(restarted.listCustomers()), [])
     const deletedCustomer = await Effect.runPromise(Effect.flip(restarted.getCustomer(customer.id)))
     assert.equal(deletedCustomer instanceof ResourceNotFound, true)
+    assert.equal(await Effect.runPromise(Effect.flip(restarted.updateCustomer(updatedCustomer))) instanceof ResourceNotFound, true)
     assert.deepEqual(await Effect.runPromise(restarted.getIssuedInvoice(issued.id)), issued)
 
     const database = new DatabaseSync(databasePath(directory))
@@ -212,6 +225,19 @@ void test("persists an issued snapshot across store recreation and isolates orga
     const failure = await Effect.runPromise(Effect.flip(otherOrganization.getIssuedInvoice(issued.id)))
     assert.equal(failure instanceof ResourceNotFound, true)
     assert.equal(await Effect.runPromise(Effect.flip(otherOrganization.getProforma(proforma.id))) instanceof ResourceNotFound, true)
+    assert.deepEqual(await Effect.runPromise(otherOrganization.listProductPresets()), [])
+    assert.equal(await Effect.runPromise(Effect.flip(otherOrganization.updateProductPreset({
+      id: preset.id, description: "Intrus", unitPrice: "1.00",
+    }))) instanceof ResourceNotFound, true)
+    assert.equal(await Effect.runPromise(Effect.flip(otherOrganization.deleteProductPreset(preset.id))) instanceof ResourceNotFound, true)
+    await Effect.runPromise(restarted.deleteProductPreset(preset.id))
+    assert.deepEqual(await Effect.runPromise(restarted.listProductPresets()), [])
+    const databaseAfterDelete = new DatabaseSync(databasePath(directory), { readOnly: true })
+    try {
+      assert.equal(databaseAfterDelete.prepare("SELECT 1 FROM product_presets WHERE id=?").get(preset.id), undefined)
+    } finally {
+      databaseAfterDelete.close()
+    }
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
@@ -247,6 +273,18 @@ void test("rolls sequence allocation back with the surrounding transaction", asy
     const proforma = await Effect.runPromise(store.transaction((transaction) =>
       transaction.allocateDocumentNumber("org-1", 2026, "proforma", "QWBE")))
     assert.equal(proforma, 1)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+void test("exposes payment-owned persistence failures from the payment store adapter", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "qwbe-payments-failure-"))
+  try {
+    const store = createSqlitePaymentsStore(directory)
+    const failure = await Effect.runPromise(Effect.flip(store.transaction((transaction) =>
+      transaction.listPayments("org-1", "invoice-1"))))
+    assert.equal(failure instanceof PaymentsPersistenceFailure, true)
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }

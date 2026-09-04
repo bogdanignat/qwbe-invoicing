@@ -1,0 +1,5 @@
+{
+  "name": "payments",
+  "kind": "cube",
+  "summary": "Tenant-scoped invoice payment recording and settlement status"
+}

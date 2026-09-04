@@ -1,5 +1,8 @@
 import { ValidationFailure } from "../contracts/failures.ts"
-import type { BuyerSnapshot, DocumentSeries, IssuerProfile, PartySnapshot, TaxConfiguration } from "./invoice.ts"
+import type { BuyerSnapshot, CustomerInput, DocumentSeries, IssuerProfile, PartySnapshot, ProductPresetInput, TaxConfiguration } from "./invoice.ts"
+import { normalizeMoney } from "./calculation.ts"
+
+const maximumPaymentTermDays = 3650
 
 const required = (value: string, field: string, issues: Array<string>) => {
   if (value.trim().length === 0) issues.push(`${field} is required`)
@@ -52,6 +55,21 @@ export const validateBuyer = (buyer: BuyerSnapshot): void => {
     issues.push("taxIdentifier must be a valid Romanian CNP")
   }
   if (issues.length > 0) throw new ValidationFailure({ issues })
+}
+
+export const validateCustomer = (customer: CustomerInput): void => {
+  validateBuyer(customer)
+  if (customer.defaultPaymentTermDays !== undefined
+    && (!Number.isInteger(customer.defaultPaymentTermDays) || customer.defaultPaymentTermDays < 0
+      || customer.defaultPaymentTermDays > maximumPaymentTermDays)) {
+    throw new ValidationFailure({ issues: [`defaultPaymentTermDays must be an integer between 0 and ${String(maximumPaymentTermDays)}`] })
+  }
+}
+
+export const normalizeProductPreset = (input: ProductPresetInput): ProductPresetInput => {
+  const description = input.description.trim()
+  if (description.length === 0) throw new ValidationFailure({ issues: ["description is required"] })
+  return { description, unitPrice: normalizeMoney(input.unitPrice, "unitPrice") }
 }
 
 export const validateDate = (value: string, field: string): void => {
@@ -108,8 +126,9 @@ export const validateIssuer = (issuer: IssuerProfile): void => {
   const issues: Array<string> = []
   if (!isValidRomanianCui(issuer.taxIdentifier)) issues.push("taxIdentifier must be a valid Romanian CUI")
   if (issuer.defaultCurrency !== "RON") issues.push("defaultCurrency must be RON")
-  if (!Number.isInteger(issuer.defaultPaymentTermDays) || issuer.defaultPaymentTermDays < 0) {
-    issues.push("defaultPaymentTermDays must be a non-negative integer")
+  if (!Number.isInteger(issuer.defaultPaymentTermDays) || issuer.defaultPaymentTermDays < 0
+    || issuer.defaultPaymentTermDays > maximumPaymentTermDays) {
+    issues.push(`defaultPaymentTermDays must be an integer between 0 and ${String(maximumPaymentTermDays)}`)
   }
   try { validateTaxConfigurations(issuer.taxConfigurations) } catch (error) {
     if (error instanceof ValidationFailure) issues.push(...error.issues)

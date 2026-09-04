@@ -4,8 +4,8 @@ import { apiBlob, apiRequest, type ApiFailure } from "./api.ts"
 import {
   decodeCorrection, decodeCorrections, decodeCustomer, decodeCustomers, decodeDeleted, decodeDraft, decodeDrafts,
   decodeDocumentSeries, decodeDocumentSeriesList, decodeInvoice, decodeInvoices, decodeIssuer, decodePaymentSummary,
-  decodeProforma, decodeProformas,
-  type BuyerSnapshot, type CorrectionDocument, type Customer, type DocumentSeries, type DocumentType, type DraftInvoice, type IssuedInvoice, type Issuer, type PaymentSummary, type Proforma,
+  decodeProductPreset, decodeProductPresets, decodeProforma, decodeProformas,
+  type BuyerSnapshot, type CorrectionDocument, type Customer, type DocumentSeries, type DocumentType, type DraftInvoice, type IssuedInvoice, type Issuer, type PaymentSummary, type ProductPreset, type Proforma,
 } from "./models.ts"
 
 const ignored = (): undefined => undefined
@@ -21,6 +21,9 @@ export type CreateDocumentSeriesInput = {
   readonly documentType: DocumentType
   readonly series: string
 }
+
+export type CustomerInput = BuyerSnapshot & { readonly defaultPaymentTermDays?: number }
+export type ProductPresetInput = Pick<ProductPreset, "description" | "unitPrice">
 
 type BuyerSource =
   | { readonly customerId: string; readonly customer?: never }
@@ -54,8 +57,13 @@ export type AuthoringProformaInput = AuthoringDocumentInput & { readonly proform
 
 export const invoicingClient = {
   listCustomers: () => apiRequest("/api/customers", decodeCustomers),
-  createCustomer: (body: Readonly<Record<string, unknown>>) => apiRequest("/api/customers", decodeCustomer, { method: "POST", body }),
+  createCustomer: (body: CustomerInput) => apiRequest("/api/customers", decodeCustomer, { method: "POST", body }),
+  updateCustomer: (id: string, body: CustomerInput) => apiRequest(`/api/customers/${encoded(id)}`, decodeCustomer, { method: "PUT", body }),
   deleteCustomer: (id: string) => apiRequest(`/api/customers/${encoded(id)}`, decodeDeleted, { method: "DELETE" }),
+  listProductPresets: () => apiRequest("/api/product-presets", decodeProductPresets),
+  createProductPreset: (body: ProductPresetInput) => apiRequest("/api/product-presets", decodeProductPreset, { method: "POST", body }),
+  updateProductPreset: (id: string, body: ProductPresetInput) => apiRequest(`/api/product-presets/${encoded(id)}`, decodeProductPreset, { method: "PUT", body }),
+  deleteProductPreset: (id: string) => apiRequest(`/api/product-presets/${encoded(id)}`, decodeDeleted, { method: "DELETE" }),
   listInvoices: () => apiRequest("/api/invoices", decodeInvoices),
   getIssuer: () => apiRequest("/api/issuer", decodeIssuer).pipe(
     Effect.catchAll((failure) => failure.status === 404 ? Effect.succeed(null) : Effect.fail(failure)),
@@ -93,4 +101,4 @@ export const invoicingClient = {
   createCorrection: (id: string, body: Readonly<Record<string, unknown>>) => apiRequest(`/api/invoices/${encoded(id)}/corrections`, decodeCorrection, { method: "POST", body }),
 } as const
 
-export type { Customer, DocumentSeries, DraftInvoice, IssuedInvoice, Issuer, Proforma }
+export type { Customer, DocumentSeries, DraftInvoice, IssuedInvoice, Issuer, ProductPreset, Proforma }

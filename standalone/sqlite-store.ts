@@ -15,11 +15,19 @@ import {
   type InvoicingTransaction,
   type IssuedInvoice,
   type PartySnapshot,
+  type ProductPreset,
   type Proforma,
   type TaxBreakdown,
   type TaxConfiguration,
   type TransactionalStore,
 } from "../cube/invoicing/index.ts"
+import {
+  DomainConflict as PaymentsDomainConflict,
+  PersistenceFailure as PaymentsPersistenceFailure,
+  type Payment,
+  type PaymentsTransaction,
+  type TransactionalStore as PaymentsStore,
+} from "../cube/payments/index.ts"
 import { databasePath } from "./migrations.ts"
 
 type WriteFailure = DomainConflict | PersistenceFailure
@@ -28,6 +36,7 @@ type Row = Readonly<Record<string, unknown>>
 interface TransactionHandle {
   readonly database: DatabaseSync
   open: boolean
+  closed: boolean
 }
 
 const persistence = (operation: string) => new PersistenceFailure({ operation })
@@ -49,6 +58,20 @@ const write = <Value>(operation: string, run: () => Value): Effect.Effect<Value,
 const read = <Value>(operation: string, run: () => Value): Effect.Effect<Value, PersistenceFailure> =>
   Effect.try({ try: run, catch: () => persistence(operation) })
 
+const paymentsPersistence = (operation: string) => new PaymentsPersistenceFailure({ operation })
+const paymentWrite = <Value>(operation: string, run: () => Value): Effect.Effect<
+  Value,
+  PaymentsDomainConflict | PaymentsPersistenceFailure
+> => Effect.try({
+  try: run,
+  catch: (error) => typeof error === "object" && error !== null && "code" in error
+      && typeof error.code === "string" && error.code.startsWith("SQLITE_CONSTRAINT")
+    ? new PaymentsDomainConflict({ code: "persistence_conflict", message: `Conflict while performing ${operation}` })
+    : paymentsPersistence(operation),
+})
+const paymentRead = <Value>(operation: string, run: () => Value): Effect.Effect<Value, PaymentsPersistenceFailure> =>
+  Effect.try({ try: run, catch: () => paymentsPersistence(operation) })
+
 const row = (value: unknown): Row | undefined =>
   typeof value === "object" && value !== null ? value as Row : undefined
 
@@ -69,6 +92,13 @@ const nullableText = (value: Row, field: string): string | null => optionalText(
 
 const integer = (value: Row, field: string): number => {
   const result = value[field]
+  if (typeof result !== "number" || !Number.isInteger(result)) throw new Error(`invalid ${field}`)
+  return result
+}
+
+const optionalInteger = (value: Row, field: string): number | undefined => {
+  const result = value[field]
+  if (result === null || result === undefined) return undefined
   if (typeof result !== "number" || !Number.isInteger(result)) throw new Error(`invalid ${field}`)
   return result
 }
@@ -98,13 +128,22 @@ const buyerFrom = (value: Row, prefix: string): BuyerSnapshot => ({
 
 const customerFrom = (value: Row): Customer => {
   const deletedAt = optionalText(value, "deleted_at")
+  const defaultPaymentTermDays = optionalInteger(value, "default_payment_term_days")
   return {
     ...buyerFrom(value, ""),
     id: text(value, "id"),
     organizationId: text(value, "organization_id"),
+    ...(defaultPaymentTermDays === undefined ? {} : { defaultPaymentTermDays }),
     ...(deletedAt === undefined ? {} : { deletedAt }),
   }
 }
+
+const productPresetFrom = (value: Row): ProductPreset => ({
+  id: text(value, "id"),
+  organizationId: text(value, "organization_id"),
+  description: text(value, "description"),
+  unitPrice: text(value, "unit_price"),
+})
 
 const documentSeriesFrom = (value: Row): DocumentSeries => ({
   organizationId: text(value, "organization_id"),
@@ -120,7 +159,7 @@ const addressValues = (address: Address): ReadonlyArray<string | null> => [
   address.postalCode ?? null,
 ]
 
-const paymentFrom = (value: Row) => {
+const paymentFrom = (value: Row): Payment => {
   const externalReference = optionalText(value, "external_reference")
   const note = optionalText(value, "note")
   return {
@@ -294,13 +333,14 @@ const transactionAdapter = (database: DatabaseSync): InvoicingTransaction => ({
       ORDER BY document_type, series`).all(organizationId).map((value) => documentSeriesFrom(value as Row))),
   saveCustomer: (customer) => write("save customer", () => {
     const result = database.prepare(`INSERT INTO customers
-      (id, organization_id, party_type, legal_name, tax_identifier, country_code, city, street, county, postal_code)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      (id, organization_id, party_type, legal_name, tax_identifier, country_code, city, street, county, postal_code, default_payment_term_days)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT (id) DO UPDATE SET party_type=excluded.party_type, legal_name=excluded.legal_name, tax_identifier=excluded.tax_identifier,
-       country_code=excluded.country_code, city=excluded.city, street=excluded.street,
-       county=excluded.county, postal_code=excluded.postal_code
+      country_code=excluded.country_code, city=excluded.city, street=excluded.street,
+       county=excluded.county, postal_code=excluded.postal_code, default_payment_term_days=excluded.default_payment_term_days
       WHERE customers.organization_id=excluded.organization_id`)
-      .run(customer.id, customer.organizationId, customer.partyType, customer.legalName, customer.taxIdentifier, ...addressValues(customer.address))
+      .run(customer.id, customer.organizationId, customer.partyType, customer.legalName, customer.taxIdentifier,
+        ...addressValues(customer.address), customer.defaultPaymentTermDays ?? null)
     if (result.changes === 0) throw new DomainConflict({ code: "customer_id_taken", message: "Customer id belongs to another organization" })
   }),
   findCustomer: (organizationId, id) => read("find customer", () => {
@@ -322,6 +362,23 @@ const transactionAdapter = (database: DatabaseSync): InvoicingTransaction => ({
   hasOpenDraftsForCustomer: (organizationId, customerId) => read("check customer drafts", () =>
     database.prepare(`SELECT 1 FROM invoice_drafts
       WHERE organization_id = ? AND customer_id = ? AND status = 'draft' LIMIT 1`).get(organizationId, customerId) !== undefined),
+  saveProductPreset: (preset) => write("save product preset", () => {
+    const result = database.prepare(`INSERT INTO product_presets(id,organization_id,description,unit_price) VALUES(?,?,?,?)
+      ON CONFLICT(id) DO UPDATE SET description=excluded.description,unit_price=excluded.unit_price
+      WHERE product_presets.organization_id=excluded.organization_id`)
+      .run(preset.id, preset.organizationId, preset.description, preset.unitPrice)
+    if (result.changes === 0) throw new DomainConflict({ code: "product_preset_id_taken", message: "Product preset id belongs to another organization" })
+  }),
+  findProductPreset: (organizationId, id) => read("find product preset", () => {
+    const value = row(database.prepare("SELECT * FROM product_presets WHERE organization_id=? AND id=?").get(organizationId, id))
+    return value === undefined ? undefined : productPresetFrom(value)
+  }),
+  listProductPresets: (organizationId) => read("list product presets", () =>
+    database.prepare(`SELECT * FROM product_presets WHERE organization_id=?
+      ORDER BY description COLLATE NOCASE,id LIMIT 100`).all(organizationId).map((value) => productPresetFrom(value as Row))),
+  deleteProductPreset: (organizationId, id) => write("delete product preset", () => {
+    database.prepare("DELETE FROM product_presets WHERE organization_id=? AND id=?").run(organizationId, id)
+  }),
   saveDraft: (draft) => write("save draft", () => {
     const result = database.prepare(`INSERT INTO invoice_drafts
       (id, organization_id, customer_id, customer_party_type, customer_legal_name, customer_tax_identifier,
@@ -458,18 +515,6 @@ const transactionAdapter = (database: DatabaseSync): InvoicingTransaction => ({
       VALUES(?,?,?,?,?)`).run(conversion.proformaId, conversion.organizationId, conversion.resultingInvoiceId,
         conversion.actorId, conversion.convertedAt)
   }),
-  savePayment: (payment) => write("save payment", () => {
-    const result = database.prepare(`INSERT INTO invoice_payments
-      (id, invoice_id, organization_id, amount, currency, payment_date, method, external_reference, note, actor_id, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .run(payment.id, payment.invoiceId, payment.organizationId, payment.amount, payment.currency,
-        payment.paymentDate, payment.method, payment.externalReference ?? null, payment.note ?? null,
-        payment.actorId, payment.createdAt)
-    if (result.changes === 0) throw new DomainConflict({ code: "payment_not_saved", message: "Payment could not be saved" })
-  }),
-  listPayments: (organizationId, invoiceId) => read("list payments", () =>
-    database.prepare("SELECT * FROM invoice_payments WHERE organization_id = ? AND invoice_id = ? ORDER BY payment_date, created_at, id")
-      .all(organizationId, invoiceId).map((value) => paymentFrom(value as Row))),
   saveCorrection: (correction) => write("save correction", () => {
     database.prepare(`INSERT INTO correction_documents
       (id, organization_id, original_invoice_id, fiscal_year, document_type, series, number, issue_date, issued_at, reason, currency,
@@ -524,30 +569,81 @@ const transactionAdapter = (database: DatabaseSync): InvoicingTransaction => ({
   }),
 })
 
+const paymentsTransactionAdapter = (database: DatabaseSync): PaymentsTransaction => ({
+  findInvoiceSnapshot: (organizationId, id) => paymentRead("find issued invoice", () => {
+    const value = row(database.prepare("SELECT * FROM issued_invoices WHERE organization_id = ? AND id = ?").get(organizationId, id))
+    return value === undefined ? undefined : {
+      id: text(value, "id"), organizationId: text(value, "organization_id"), currency: text(value, "currency"),
+      dueDate: nullableText(value, "due_date"), totalIncludingTax: text(value, "total_including_tax"),
+    }
+  }),
+  savePayment: (payment) => paymentWrite("save payment", () => {
+    const result = database.prepare(`INSERT INTO invoice_payments
+      (id, invoice_id, organization_id, amount, currency, payment_date, method, external_reference, note, actor_id, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(payment.id, payment.invoiceId, payment.organizationId, payment.amount, payment.currency,
+        payment.paymentDate, payment.method, payment.externalReference ?? null, payment.note ?? null,
+        payment.actorId, payment.createdAt)
+    if (result.changes === 0) throw new PaymentsDomainConflict({ code: "payment_not_saved", message: "Payment could not be saved" })
+  }),
+  listPayments: (organizationId, invoiceId) => paymentRead("list payments", () =>
+    database.prepare("SELECT * FROM invoice_payments WHERE organization_id = ? AND invoice_id = ? ORDER BY payment_date, created_at, id")
+      .all(organizationId, invoiceId).map((value) => paymentFrom(value as Row))),
+})
+
+const openTransaction = (dataDirectory: string): TransactionHandle => {
+  let database: DatabaseSync | undefined
+  try {
+    database = new DatabaseSync(databasePath(dataDirectory))
+    database.exec("PRAGMA foreign_keys = ON")
+    database.exec("BEGIN IMMEDIATE")
+    return { database, open: true, closed: false }
+  } catch (error) {
+    try { database?.close() } catch { /* acquisition failure wins */ }
+    throw error
+  }
+}
+
+const commitAndClose = (handle: TransactionHandle): void => {
+  handle.database.exec("COMMIT")
+  handle.open = false
+  handle.database.close()
+  handle.closed = true
+}
+
+const releaseTransaction = (handle: TransactionHandle): void => {
+  if (handle.open) {
+    try { handle.database.exec("ROLLBACK") } catch { /* original failure wins */ }
+  }
+  if (!handle.closed) {
+    try { handle.database.close(); handle.closed = true } catch { /* original failure wins */ }
+  }
+}
+
 export const createSqliteStore = (dataDirectory: string): TransactionalStore<InvoicingTransaction> => ({
   transaction: (use) => Effect.acquireUseRelease(
     Effect.try({
-      try: () => {
-        const database = new DatabaseSync(databasePath(dataDirectory))
-        database.exec("PRAGMA foreign_keys = ON")
-        database.exec("BEGIN IMMEDIATE")
-        const handle: TransactionHandle = { database, open: true }
-        return handle
-      },
+      try: () => openTransaction(dataDirectory),
       catch: () => persistence("begin transaction"),
     }),
     (handle) => Effect.tap(use(transactionAdapter(handle.database)), () => Effect.try({
-      try: () => {
-        handle.database.exec("COMMIT")
-        handle.open = false
-      },
+      try: () => { commitAndClose(handle) },
       catch: () => persistence("commit transaction"),
     })),
-    (handle) => Effect.sync(() => {
-      if (handle.open) {
-        try { handle.database.exec("ROLLBACK") } catch { /* original failure wins */ }
-      }
-      handle.database.close()
+    (handle) => Effect.sync(() => { releaseTransaction(handle) }),
+  ),
+})
+
+export const createSqlitePaymentsStore = (dataDirectory: string): PaymentsStore<PaymentsTransaction> => ({
+  transaction: (use) => Effect.acquireUseRelease(
+    Effect.try({
+      try: () => openTransaction(dataDirectory),
+      catch: () => paymentsPersistence("begin transaction"),
     }),
+    (handle) => Effect.tap(use(paymentsTransactionAdapter(handle.database)), () => Effect.try({
+      try: () => { commitAndClose(handle) },
+      catch: () => paymentsPersistence("commit transaction"),
+    })),
+    (handle) => Effect.sync(() => { releaseTransaction(handle) }),
   ),
 })

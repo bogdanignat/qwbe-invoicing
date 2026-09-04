@@ -13,4 +13,5 @@ void test("preserves clean application routes", () => {
   assert.equal(routeFromPathname("/drafts/draft-1"), "/drafts/draft-1")
   assert.equal(routeFromPathname("/proformas"), "/proformas")
   assert.equal(routeFromPathname("/proformas/proforma-1"), "/proformas/proforma-1")
+  assert.equal(routeFromPathname("/products"), "/products")
 })

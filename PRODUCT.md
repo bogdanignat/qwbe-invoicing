@@ -125,8 +125,10 @@ Each line supports:
 - tax exemption or reverse-charge reason and legal basis where applicable;
 - tax amount and line total.
 
-Invoice lines can always be entered and edited manually. A product or service
-catalog may prefill line data later, but it is never required for authoring.
+Invoice lines can always be entered and edited manually. The optional product or
+service preset list stores only a description and unit price; selecting a preset
+copies those values into an editable line. It has no stock, SKU, price-list, or live
+product-to-document relation and is never required for authoring.
 
 VAT is modeled per line and summarized per tax category/rate. Tax rates are
 effective-dated configuration, not hardcoded constants.

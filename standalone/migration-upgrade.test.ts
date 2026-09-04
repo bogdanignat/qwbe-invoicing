@@ -7,6 +7,7 @@ import test from "node:test"
 
 import { invoicingMigrations } from "../cube/invoicing/index.ts"
 import { documentsMigrations } from "../cube/invoicing/documents/index.ts"
+import { paymentsMigrations } from "../cube/payments/index.ts"
 import { applyMigrations, databasePath, documentsDatabasePath } from "./migrations.ts"
 
 const seedVersionSix = (directory: string) => {
@@ -15,7 +16,9 @@ const seedVersionSix = (directory: string) => {
     database.exec("PRAGMA foreign_keys = ON")
     database.exec("CREATE TABLE schema_migrations(name TEXT PRIMARY KEY,applied_at TEXT NOT NULL)STRICT")
     database.prepare("INSERT INTO schema_migrations(name,applied_at)VALUES('000-foundation','2026-01-01')").run()
-    for (const migration of invoicingMigrations.filter(({ name }) => name <= "006-customer-soft-delete")) {
+    const applicationMigrations = [...invoicingMigrations, ...paymentsMigrations]
+      .sort((left, right) => left.name.localeCompare(right.name))
+    for (const migration of applicationMigrations.filter(({ name }) => name <= "006-customer-soft-delete")) {
       for (const statement of migration.statements) database.exec(statement)
       database.prepare("INSERT INTO schema_migrations(name,applied_at)VALUES(?,?)").run(migration.name, "2026-01-01")
     }
@@ -57,7 +60,7 @@ void test("upgrades a populated version-six database without rewriting migration
   const directory = mkdtempSync(join(tmpdir(), "qwbe-upgrade-"))
   try {
     seedVersionSix(directory)
-    assert.equal(applyMigrations(directory).changed, 7)
+    assert.equal(applyMigrations(directory).changed, 8)
     const database = new DatabaseSync(databasePath(directory))
     try {
       database.exec("PRAGMA foreign_keys = ON")
@@ -66,7 +69,7 @@ void test("upgrades a populated version-six database without rewriting migration
         .map((row) => row.name)
       assert.deepEqual(migrations, ["000-foundation", "001-invoice-core", "002-invoice-payments", "003-invoice-corrections",
         "004-invoice-delete-last", "005-allow-e-factura-status-update", "006-customer-soft-delete", "007-complete-invoice-authoring",
-         "008-proforma-workflow", "009-proforma-direct-invoice"])
+         "008-proforma-workflow", "009-proforma-direct-invoice", "010-product-presets-payment-terms"])
       const columns = database.prepare("PRAGMA table_info(invoice_drafts)").all()
       assert.equal(columns.some((row) => row.name === "customer_id" && row.notnull === 0), true)
       assert.equal(columns.some((row) => row.name === "due_date" && row.notnull === 0), true)
@@ -76,6 +79,15 @@ void test("upgrades a populated version-six database without rewriting migration
         .some((row) => row.name === "draft_id" && row.notnull === 0), true)
       assert.equal(database.prepare("PRAGMA table_info(proformas)").all()
         .some((row) => row.name === "source_draft_id" && row.notnull === 0), true)
+      assert.equal(database.prepare("PRAGMA table_info(customers)").all()
+        .some((row) => row.name === "default_payment_term_days" && row.notnull === 0), true)
+      assert.equal(database.prepare("SELECT default_payment_term_days FROM customers WHERE id='company'").get()?.default_payment_term_days, null)
+      assert.ok(database.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='product_presets'").get())
+      assert.ok(database.prepare("SELECT 1 FROM sqlite_master WHERE type='index' AND name='product_presets_organization'").get())
+      assert.equal(String(database.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='product_presets'").get()?.sql)
+        .endsWith("STRICT"), true)
+      assert.throws(() => database.prepare("UPDATE customers SET default_payment_term_days=-1 WHERE id='company'").run())
+      assert.throws(() => database.prepare(`INSERT INTO product_presets VALUES('bad','org-1','Bad','1.001')`).run())
       assert.ok(database.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='proforma_invoice_conversions'").get())
       assert.equal(database.prepare("PRAGMA foreign_key_list(invoice_drafts)").all().some((row) => row.table === "customers"), true)
       assert.equal(database.prepare("PRAGMA foreign_key_list(draft_lines)").all().some((row) => row.table === "invoice_drafts"), true)

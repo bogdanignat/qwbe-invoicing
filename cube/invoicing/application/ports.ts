@@ -1,9 +1,8 @@
 import type { Effect } from "effect"
 
 import type { DomainConflict, PersistenceFailure } from "../contracts/failures.ts"
-import type { Customer, DocumentSeries, DocumentType, DraftInvoice, IssuedInvoice, IssuerProfile, NumberedDocumentType, Proforma, ProformaConversion, ProformaInvoiceConversion } from "../domain/invoice.ts"
+import type { Customer, DocumentSeries, DocumentType, DraftInvoice, IssuedInvoice, IssuerProfile, NumberedDocumentType, ProductPreset, Proforma, ProformaConversion, ProformaInvoiceConversion } from "../domain/invoice.ts"
 import type { CorrectionDocument } from "../domain/corrections.ts"
-import type { Payment } from "../domain/payments.ts"
 
 export type TransactionFailure = DomainConflict | PersistenceFailure
 type Read<Value> = Effect.Effect<Value, PersistenceFailure>
@@ -33,6 +32,10 @@ export interface InvoicingTransaction {
     deletedAt: string,
   ) => Write
   readonly hasOpenDraftsForCustomer: (organizationId: string, customerId: string) => Read<boolean>
+  readonly saveProductPreset: Save<ProductPreset>
+  readonly findProductPreset: Find<ProductPreset>
+  readonly listProductPresets: List<ProductPreset>
+  readonly deleteProductPreset: Remove
   readonly saveDraft: Save<DraftInvoice>
   readonly findDraft: Find<DraftInvoice>
   readonly listDrafts: List<DraftInvoice>
@@ -46,8 +49,6 @@ export interface InvoicingTransaction {
   readonly saveIssuedInvoice: Save<IssuedInvoice>
   readonly findIssuedInvoice: Find<IssuedInvoice>
   readonly listIssuedInvoices: List<IssuedInvoice>
-  readonly savePayment: Save<Payment>
-  readonly listPayments: RelatedList<Payment>
   readonly saveProforma: Save<Proforma>
   readonly findProforma: Find<Proforma>
   readonly listProformas: List<Proforma>

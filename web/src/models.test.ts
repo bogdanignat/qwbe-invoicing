@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { decodeCustomer, decodeDocumentSeries, decodeDocumentSeriesList, decodeDraft, decodeDrafts, decodeInvoice, decodeIssuer, decodePaymentSummary, decodeProforma, decodeProformas, invoiceDocumentSeries, proformaDocumentSeries } from "./models.ts"
+import { decodeCustomer, decodeDocumentSeries, decodeDocumentSeriesList, decodeDraft, decodeDrafts, decodeInvoice, decodeIssuer, decodePaymentSummary, decodeProductPreset, decodeProductPresets, decodeProforma, decodeProformas, invoiceDocumentSeries, proformaDocumentSeries } from "./models.ts"
 
 void test("decodes optional address and payment fields without leaking null", () => {
   assert.deepEqual(decodeCustomer({
@@ -20,6 +20,21 @@ void test("rejects malformed external API values and unknown payment statuses", 
   assert.throws(() => decodeCustomer(null), /expected object/)
   assert.throws(() => decodeCustomer({ id: 1 }), /invalid/)
   assert.throws(() => decodePaymentSummary({ invoiceId: "invoice-1", status: "settled", paidAmount: "0.00", remainingAmount: "1.00", payments: [] }), /invalid payment status/)
+})
+
+void test("decodes customer payment terms and product presets", () => {
+  const baseCustomer = {
+    id: "customer-1", organizationId: "org-1", partyType: "company", legalName: "Client", taxIdentifier: "RO1",
+    address: { countryCode: "RO", city: "Botoșani", street: "Strada 1" },
+  }
+  assert.equal(decodeCustomer({ ...baseCustomer, defaultPaymentTermDays: 0 }).defaultPaymentTermDays, 0)
+  assert.equal(decodeCustomer({ ...baseCustomer, defaultPaymentTermDays: null }).defaultPaymentTermDays, undefined)
+  assert.throws(() => decodeCustomer({ ...baseCustomer, defaultPaymentTermDays: -1 }), /invalid defaultPaymentTermDays/)
+  assert.throws(() => decodeCustomer({ ...baseCustomer, defaultPaymentTermDays: "15" }), /invalid defaultPaymentTermDays/)
+  const preset = { id: "preset-1", organizationId: "org-1", description: "Consultanță", unitPrice: "100.00" }
+  assert.deepEqual(decodeProductPreset(preset), preset)
+  assert.deepEqual(decodeProductPresets([preset]), [preset])
+  assert.throws(() => decodeProductPreset({ ...preset, unitPrice: 100 }), /invalid unitPrice/)
 })
 
 void test("requires integer issuer terms and decodes tax configuration", () => {
