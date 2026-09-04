@@ -3,6 +3,7 @@ import { useEffect, useRef } from "react"
 
 import { ErrorAlert } from "../components/AsyncState.tsx"
 import { Page } from "../components/Page.tsx"
+import { Button } from "../components/ui/Button.tsx"
 import { formField, type FormSubmitEvent } from "../form.ts"
 
 export const UnlockView = ({ onUnlock }: { readonly onUnlock: (token: string) => Promise<void> }) => {
@@ -21,7 +22,7 @@ export const UnlockView = ({ onUnlock }: { readonly onUnlock: (token: string) =>
       <form onSubmit={submit}>
         <label htmlFor="api-token">Token API</label>
         <input ref={tokenInput} id="api-token" name="token" type="password" autoComplete="off" required />
-        <button className="button primary" type="submit" disabled={unlock.isPending}>{unlock.isPending ? "Se verifică…" : "Deblochează aplicația"}</button>
+        <Button type="submit" disabled={unlock.isPending}>{unlock.isPending ? "Se verifică…" : "Deblochează aplicația"}</Button>
       </form>
     </section>
   </Page>

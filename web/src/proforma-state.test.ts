@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { proformaIssuanceAvailability, proformaStatusLabel, type ProformaIssuanceAvailabilityInput } from "./proforma-state.ts"
+import { proformaIssuanceAvailability, proformaStatusPresentation, type ProformaIssuanceAvailabilityInput } from "./proforma-state.ts"
 
 const ready: ProformaIssuanceAvailabilityInput = {
   hasSavedDraft: true,
@@ -30,7 +30,7 @@ void test("explains each safe issuance gate", () => {
 })
 
 void test("distinguishes issued invoices from legacy draft conversions", () => {
-  assert.equal(proformaStatusLabel({ convertedDraftId: null, convertedInvoiceId: null }), "Nefacturată")
-  assert.equal(proformaStatusLabel({ convertedDraftId: "draft-1", convertedInvoiceId: null }), "Draft factură creat")
-  assert.equal(proformaStatusLabel({ convertedDraftId: null, convertedInvoiceId: "invoice-1" }), "Facturată")
+  assert.deepEqual(proformaStatusPresentation({ convertedDraftId: null, convertedInvoiceId: null }), { label: "Nefacturată", tone: "muted" })
+  assert.deepEqual(proformaStatusPresentation({ convertedDraftId: "draft-1", convertedInvoiceId: null }), { label: "Draft factură creat", tone: "info" })
+  assert.deepEqual(proformaStatusPresentation({ convertedDraftId: null, convertedInvoiceId: "invoice-1" }), { label: "Facturată", tone: "positive" })
 })

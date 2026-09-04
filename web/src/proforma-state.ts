@@ -14,8 +14,16 @@ export interface ProformaIssuanceAvailability {
   readonly disabledReason: string | null
 }
 
-export const proformaStatusLabel = (value: { readonly convertedDraftId: string | null; readonly convertedInvoiceId: string | null }): string =>
-  value.convertedInvoiceId !== null ? "Facturată" : value.convertedDraftId !== null ? "Draft factură creat" : "Nefacturată"
+export interface ProformaStatusPresentation {
+  readonly label: "Nefacturată" | "Draft factură creat" | "Facturată"
+  readonly tone: "muted" | "info" | "positive"
+}
+
+export const proformaStatusPresentation = (value: { readonly convertedDraftId: string | null; readonly convertedInvoiceId: string | null }): ProformaStatusPresentation => {
+  if (value.convertedInvoiceId !== null) return { label: "Facturată", tone: "positive" }
+  if (value.convertedDraftId !== null) return { label: "Draft factură creat", tone: "info" }
+  return { label: "Nefacturată", tone: "muted" }
+}
 
 export const proformaIssuanceAvailability = (input: ProformaIssuanceAvailabilityInput): ProformaIssuanceAvailability => {
   const visible = input.editable

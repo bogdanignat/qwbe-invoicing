@@ -9,6 +9,8 @@ import { InvoiceTotals } from "../components/InvoiceTotals.tsx"
 import { Page } from "../components/Page.tsx"
 import { ProformaIssueControl } from "../components/ProformaIssueControl.tsx"
 import { SellerSummary } from "../components/SellerSummary.tsx"
+import { Button } from "../components/ui/Button.tsx"
+import { ButtonLink } from "../components/ui/ButtonLink.tsx"
 import { today } from "../format.ts"
 import {
   authoringAccess, authoringDocumentPayload, authoringReadiness, authoringSeriesOptions, createDraftPayload, draftLinePayload, draftLinesForEditing, formFromDraft, headerMatchesDraft, newAuthoringForm, pendingLineOperations, updateDraftPayload,
@@ -145,7 +147,7 @@ const AuthoringSession = ({ initialDraft, issuer, customers, invoiceSeries, prof
     if (line.lineId === undefined) { setLines((current) => current.filter((item) => item.key !== line.key)); return }
     if (window.confirm(`Ștergi linia „${line.description}” din draft?`)) removeLine.mutate(line)
   }
-  return <Page title={draft === undefined ? "Document nou" : `Draft ${draft.series}`} eyebrow="Document de lucru" actions={<a className="button ghost" href="/invoices">Înapoi la documente</a>}>
+  return <Page title={draft === undefined ? "Document nou" : `Draft ${draft.series}`} eyebrow="Document de lucru" actions={<ButtonLink variant="ghost" href="/invoices">Înapoi la documente</ButtonLink>}>
     {[...backgroundErrors, authoringPresets.error].filter((error): error is Error => error !== null).map((error, index) => <ErrorAlert key={`${error.message}-${String(index)}`} error={error} />)}
     {mutationError === null ? null : <ErrorAlert error={mutationError} />}
     {initialDraft === undefined && draft !== undefined && save.error !== null ? <p className="status-note warning" role="status">Draftul a fost creat și păstrat în această pagină. Corectează eroarea și apasă din nou „Salvează draftul”; vor fi retrimise numai liniile rămase sau modificate.</p> : null}
@@ -157,7 +159,7 @@ const AuthoringSession = ({ initialDraft, issuer, customers, invoiceSeries, prof
         <section className="card authoring-section"><div className="section-heading"><div><h2>3. Date document</h2><p>Alege seria facturii; poți salva un draft sau emite direct. Moneda este RON.</p></div></div><div className="form-grid four"><label>Serie factură<select required disabled={pending || draft !== undefined} value={form.series} onChange={(event) => { const { value } = event.currentTarget; setForm((current) => ({ ...current, series: value })) }}>{invoiceSeries.map((series) => <option key={series} value={series}>{series}</option>)}</select></label><label>Data emiterii<input required disabled={pending} type="date" value={form.issueDate} onChange={(event) => { authoringCustomers.chooseIssueDate(event.currentTarget.value) }} /></label><label>Data scadenței <span className="optional">opțională</span><input disabled={pending} type="date" min={form.issueDate} value={form.dueDate} onChange={(event) => { authoringCustomers.chooseDueDate(event.currentTarget.value) }} /></label><div className="static-field"><span>Monedă</span><span className="fixed-value">RON</span></div></div></section>
         <InvoiceLinesEditor lines={lines} productPresets={authoringPresets.presets} taxConfigurations={issuer.taxConfigurations} issueDate={form.issueDate} pending={pending} onAdd={() => { setLines((current) => [...current, newLine(defaultTaxCode(form.issueDate))]) }} onChange={changeLine} onApplyPreset={authoringPresets.choosePreset} onDelete={deleteLine} />
       </div>
-      <div className="authoring-side"><InvoiceTotals draft={draft} /><section className="card draft-actions"><h2>Acțiuni document</h2><button className="button secondary wide" type="submit" disabled={pending}>{save.isPending ? "Se salvează toate modificările…" : "Salvează draftul"}</button><p className="hint">Draftul este opțional și rămâne editabil.</p><ProformaIssueControl state={proformaIssuance} /><h3>Emitere factură</h3><button className="button primary wide" type="button" disabled={!canIssue} onClick={(event) => { if (event.currentTarget.form?.reportValidity() !== false) invoiceIssuance.issue() }}>{invoiceIssuance.pending ? "Se emite…" : "Emite factura"}</button>{draft === undefined ? null : <button className="button danger ghost wide" type="button" disabled={pending} onClick={() => { if (window.confirm("Ștergi definitiv acest draft?")) removeDraft.mutate() }}>Șterge draftul</button>}<p className="hint">Dintr-un document nou poți emite direct. Dacă ai salvat deja draftul, salvează întâi orice modificare nouă.</p></section></div>
+      <div className="authoring-side"><InvoiceTotals draft={draft} /><section className="card draft-actions"><h2>Acțiuni document</h2><Button variant="secondary" fullWidth type="submit" disabled={pending}>{save.isPending ? "Se salvează toate modificările…" : "Salvează draftul"}</Button><p className="hint">Draftul este opțional și rămâne editabil.</p><ProformaIssueControl state={proformaIssuance} /><h3>Emitere factură</h3><Button fullWidth disabled={!canIssue} onClick={(event) => { if (event.currentTarget.form?.reportValidity() !== false) invoiceIssuance.issue() }}>{invoiceIssuance.pending ? "Se emite…" : "Emite factura"}</Button>{draft === undefined ? null : <Button variant="danger" fullWidth disabled={pending} onClick={() => { if (window.confirm("Ștergi definitiv acest draft?")) removeDraft.mutate() }}>Șterge draftul</Button>}<p className="hint">Dintr-un document nou poți emite direct. Dacă ai salvat deja draftul, salvează întâi orice modificare nouă.</p></section></div>
     </form>
   </Page>
 }
@@ -170,8 +172,8 @@ export const InvoiceAuthoringView = ({ id, notify }: InvoiceAuthoringViewProps) 
   if (id !== undefined && draft.data === undefined && draft.isPending) return <Loading />
   const loadedDraft = draft.data
   const access = loadedDraft === undefined ? undefined : authoringAccess(loadedDraft.status)
-  if (loadedDraft !== undefined && access !== undefined && !access.editable) return <Page title={`Draft ${loadedDraft.series}`} eyebrow="Document blocat" actions={<a className="button ghost" href={access.registryHref}>Înapoi la registru</a>}>
-    <section className="card empty" role="status"><strong>Draft blocat</strong><p>{access.notice}</p><a className="button primary" href={access.registryHref}>{access.registryLabel}</a></section>
+  if (loadedDraft !== undefined && access !== undefined && !access.editable) return <Page title={`Draft ${loadedDraft.series}`} eyebrow="Document blocat" actions={<ButtonLink variant="ghost" href={access.registryHref}>Înapoi la registru</ButtonLink>}>
+    <section className="card empty" role="status"><strong>Draft blocat</strong><p>{access.notice}</p><ButtonLink href={access.registryHref}>{access.registryLabel}</ButtonLink></section>
   </Page>
   const requiredPending = (issuer.data === undefined && issuer.isPending)
     || (series.data === undefined && series.isPending)
@@ -185,11 +187,11 @@ export const InvoiceAuthoringView = ({ id, notify }: InvoiceAuthoringViewProps) 
         ? draft.error
         : null
   if (blockingError !== null) return <Page title="Editare factură" eyebrow="Document de lucru"><ErrorAlert error={blockingError} /></Page>
-  if (issuer.data === null || issuer.data === undefined) return <Page title="Factură nouă" eyebrow="Configurare necesară"><section className="card empty"><strong>Configurează mai întâi furnizorul.</strong><a className="button primary" href="/settings">Deschide setările</a></section></Page>
+  if (issuer.data === null || issuer.data === undefined) return <Page title="Factură nouă" eyebrow="Configurare necesară"><section className="card empty"><strong>Configurează mai întâi furnizorul.</strong><ButtonLink href="/settings">Deschide setările</ButtonLink></section></Page>
   const seriesOptions = authoringSeriesOptions(series.data ?? [])
   const invoiceSeries = seriesOptions.invoice
   const proformaSeries = seriesOptions.proforma
-  if (invoiceSeries.length === 0) return <Page title="Factură nouă" eyebrow="Configurare necesară"><section className="card empty"><strong>Configurează o serie de factură.</strong><a className="button primary" href="/settings">Deschide setările</a></section></Page>
+  if (invoiceSeries.length === 0) return <Page title="Factură nouă" eyebrow="Configurare necesară"><section className="card empty"><strong>Configurează o serie de factură.</strong><ButtonLink href="/settings">Deschide setările</ButtonLink></section></Page>
   if (id !== undefined && draft.data === undefined) return <Page title="Draft indisponibil" eyebrow="Document de lucru"><EmptyState>Draftul nu a putut fi încărcat.</EmptyState></Page>
   const backgroundErrors = [customers.error, issuer.error, series.error, draft.error].filter((error): error is Error => error !== null)
   return <AuthoringSession key={draft.data?.id ?? "new"} {...(draft.data === undefined ? {} : { initialDraft: draft.data })} issuer={issuer.data} customers={customers.data ?? []} invoiceSeries={invoiceSeries} proformaSeries={proformaSeries} backgroundErrors={backgroundErrors} notify={notify} />

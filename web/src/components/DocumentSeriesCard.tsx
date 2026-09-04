@@ -5,6 +5,7 @@ import { formField, type FormSubmitEvent } from "../form.ts"
 import { invoicingClient, type DocumentSeries } from "../invoicing-client.ts"
 import type { DocumentType } from "../models.ts"
 import { EmptyState, ErrorAlert, Loading } from "./AsyncState.tsx"
+import { Button } from "./ui/Button.tsx"
 
 const documentTypeLabels: Readonly<Record<DocumentType, string>> = {
   invoice: "Factură",
@@ -42,7 +43,7 @@ export const DocumentSeriesCard = ({ notify }: { readonly notify: (message: stri
         <label>Serie<input name="series" maxLength={20} pattern="[A-Z0-9][A-Z0-9_\-]{0,19}" title="1–20 caractere: litere mari, cifre, underscore sau cratimă" autoCapitalize="characters" aria-describedby="document-series-hint" onInput={(event) => { event.currentTarget.value = event.currentTarget.value.toUpperCase() }} required /></label>
       </div>
       <p className="hint" id="document-series-hint">Folosește 1–20 de caractere: litere mari, cifre, „_” sau „-”. Operația este doar de adăugare.</p>
-      <div className="form-actions"><button className="button secondary" type="submit" disabled={addSeries.isPending}>{addSeries.isPending ? "Se adaugă…" : "Adaugă seria"}</button></div>
+      <div className="form-actions"><Button variant="secondary" type="submit" disabled={addSeries.isPending}>{addSeries.isPending ? "Se adaugă…" : "Adaugă seria"}</Button></div>
     </form>
   </section>
 }
