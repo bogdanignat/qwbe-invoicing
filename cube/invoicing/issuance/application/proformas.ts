@@ -1,12 +1,16 @@
 import { Effect } from "effect"
 
 import { findIdempotencyReplay, idempotencyRecord, missingIdempotencyResult } from "../../application/idempotency.ts"
-import { checked, documentPageQuery, missing, pageOf, type Authorize, type OperationDependencies, type Page, type PageRequest } from "../../application/support.ts"
+import { checked, documentPageQuery, ensureChronology, missing, pageOf, type Authorize, type OperationDependencies, type Page, type PageRequest } from "../../application/support.ts"
 import { DomainConflict, type InvoicingFailure } from "../../contracts/failures.ts"
 import type { InvoicingPermissions } from "../../contracts/permissions.ts"
 import type { AuthoringProformaInput, ConvertProformaInput, DocumentSource, Idempotent, IssueProformaInput, IssuedInvoice, Proforma } from "../../domain/invoice.ts"
-import { validateDocumentSource } from "../../domain/validation.ts"
+import { calendarDate, validateDocumentSource } from "../../domain/validation.ts"
 import { fiscalYear, issuanceSource, numberedSnapshot } from "./snapshot.ts"
+
+const dayMs = 86_400_000
+const daysBetween = (from: string, to: string): number => Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / dayMs)
+const shiftDate = (date: string, days: number): string => new Date(Date.parse(`${date}T00:00:00Z`) + days * dayMs).toISOString().slice(0, 10)
 
 export interface ProformaOperations {
   readonly issueProforma: (input: Idempotent<AuthoringProformaInput | IssueProformaInput>) => Effect.Effect<Proforma, InvoicingFailure>
@@ -35,6 +39,7 @@ export const createProformaOperations = (
       const proformaSeries = "draftId" in input ? input.series : input.proformaSeries
       const series = yield* transaction.findDocumentSeries(context.organization.id, "proforma", proformaSeries)
       if (series === undefined) return yield* Effect.fail(missing("document_series", proformaSeries))
+      yield* ensureChronology(transaction, context.organization.id, "proforma", series.series, document.issueDate, calendarDate(issuedAt))
       const proforma: Proforma = {
         sourceDraftId: draft?.id ?? null, invoiceSeries: document.series, convertedDraftId: null, convertedInvoiceId: null,
         ...numberedSnapshot(document, issuer, { id, series: series.series,
@@ -67,10 +72,15 @@ export const createProformaOperations = (
       }
       const id = yield* dependencies.ids.next
       const convertedAt = yield* dependencies.clock.now
+      // The invoice is dated the day it is issued (Codul fiscal art. 319 (20) b), not the day the proforma was;
+      // the payment term negotiated on the proforma is carried over as the same number of days.
+      const issueDate = calendarDate(convertedAt)
+      const dueDate = proforma.dueDate === null ? null : shiftDate(issueDate, daysBetween(proforma.issueDate, proforma.dueDate))
+      yield* ensureChronology(transaction, context.organization.id, "invoice", proforma.invoiceSeries, issueDate, issueDate)
       const invoice: IssuedInvoice = {
         draftId: null, sourceProformaId: proforma.id, eFacturaStatus: "not_sent",
-        ...numberedSnapshot(proforma, proforma.issuer, { id, series: proforma.invoiceSeries,
-          number: yield* transaction.allocateDocumentNumber(context.organization.id, fiscalYear(proforma.issueDate), "invoice", proforma.invoiceSeries),
+        ...numberedSnapshot({ ...proforma, issueDate, dueDate }, proforma.issuer, { id, series: proforma.invoiceSeries,
+          number: yield* transaction.allocateDocumentNumber(context.organization.id, fiscalYear(issueDate), "invoice", proforma.invoiceSeries),
           issuedAt: convertedAt }),
       }
       yield* transaction.saveIssuedInvoice(invoice)

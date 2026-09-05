@@ -108,7 +108,7 @@ export const useProformaDetail = (id: string) => {
   const issueInvoice = (): void => {
     const value = proforma.data
     if (value === undefined || value.convertedDraftId !== null || value.convertedInvoiceId !== null) return
-    if (window.confirm("Emiți factura din această proformă? Datele și totalurile sunt copiate exact, iar factura primește număr fiscal.")) issuance.mutate()
+    if (window.confirm("Emiți factura din această proformă? Liniile și totalurile sunt copiate exact; factura primește data de azi, scadența cu același termen și următorul număr din serie.")) issuance.mutate()
   }
   return {
     proforma,
