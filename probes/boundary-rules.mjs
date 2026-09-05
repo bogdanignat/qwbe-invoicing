@@ -13,9 +13,18 @@ const ownerSelector = (unit, units) => {
   }
 }
 
+// The isolation unit is a top-level cube together with its child cubes, exactly as the
+// mother's `no-cube-to-cube` rule captures only the first path segment under `cubes/`
+// (QWBE `core/.dependency-cruiser.cjs`; its example plugin has `booktags/bookmarks`
+// importing `../events.ts` from the parent). Parent and children share code freely;
+// two different top-level cubes never import each other.
+const treeRoot = (unit, units) => units
+  .filter((candidate) => candidate.id === unit.id || unit.id.startsWith(`${candidate.id}/`))
+  .sort((left, right) => left.id.length - right.id.length)[0]
+
 export const cubeIsolationRules = (units) => units.flatMap((source) =>
   units
-    .filter((target) => target.id !== source.id)
+    .filter((target) => target.id !== source.id && treeRoot(target, units).id !== treeRoot(source, units).id)
     .map((target) => ({
       name: `no-cube-import-${ruleName(source.id)}-to-${ruleName(target.id)}`,
       severity: "error",

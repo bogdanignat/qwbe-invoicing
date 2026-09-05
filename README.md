@@ -98,13 +98,16 @@ API client ──> /api (Bearer) ───┘        │                        
                                           └──> PDF renderer ──> /data/artifacts/<sha256>
 ```
 
-- **The core** (`cube/invoicing`) holds the domain and the use cases: drafting, issuing,
-  proformas, payments, corrections, validation and VAT arithmetic. It knows nothing about
-  HTTP, SQLite or the browser. It depends only on a small set of host contracts
-  (`cube/invoicing/contracts/host.ts`): who is calling and for which organization, a clock,
-  an id generator, a transactional store and a renderer.
-- **The child cube** (`cube/invoicing/documents`) owns the rendered representations: PDF
-  artifacts for invoices and proformas, their hashes and recovery.
+- **The core** (`cube/invoicing`) holds the domain model, VAT arithmetic, party and date
+  validation, the store ports and the idempotency rules, and composes the service from its
+  components. It knows nothing about HTTP, SQLite or the browser. It depends only on a small
+  set of host contracts (`cube/invoicing/contracts/host.ts`): who is calling and for which
+  organization, a clock, an id generator, a transactional store and a renderer.
+- **The component cubes** under `cube/invoicing/` each own one piece of the logic and share
+  the parent's domain: `registry` (issuer, VAT configurations, document series, customers,
+  product presets), `drafts` (authoring a document, draft and line editing), `issuance`
+  (numbered invoices and proformas, conversion, idempotent replay), `corrections` (storno)
+  and `documents` (rendered PDF artifacts, their hashes and recovery).
 - **The standalone host** (`standalone/`) is the composition root. It authenticates the
   request, provides the contracts above, exposes every use case as an HTTP endpoint, serves
   the UI, runs migrations and implements the CLI.
@@ -294,8 +297,12 @@ fails, so it can gate a deployment.
 ## Repository layout
 
 ```text
-cube/invoicing/            application core: domain, use cases, contracts, migrations
-cube/invoicing/documents/  child cube: rendered PDFs and artifact recovery
+cube/invoicing/            core: domain model, VAT arithmetic, ports, contracts, migrations, service composition
+cube/invoicing/registry/   component: issuer, VAT configurations, document series, customers, product presets
+cube/invoicing/drafts/     component: document authoring, draft and line editing
+cube/invoicing/issuance/   component: numbered invoices and proformas, conversion, idempotent replay
+cube/invoicing/corrections/ component: correction documents (storno)
+cube/invoicing/documents/  component: rendered PDFs and artifact recovery
 cube/payments/             payment records and derived invoice payment status
 standalone/                host: HTTP, SQLite store, sessions, PDF renderer, CLI, backup
 web/                       browser UI: React 19, TypeScript, Tailwind CSS 4, Vite

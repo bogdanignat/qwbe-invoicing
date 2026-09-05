@@ -1,5 +1,5 @@
-import { ValidationFailure } from "../contracts/failures.ts"
-import type { BuyerSnapshot, DocumentSource, DraftLine, PartySnapshot, VatBreakdown } from "./invoice.ts"
+import { ValidationFailure } from "../../contracts/failures.ts"
+import type { BuyerSnapshot, DocumentSource, DraftLine, PartySnapshot, VatBreakdown } from "../../domain/invoice.ts"
 export interface CreateCorrectionInput {
   readonly originalInvoiceId: string
   readonly reason: string

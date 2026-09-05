@@ -1,17 +1,13 @@
 import { Effect } from "effect"
-import { DomainConflict, type InvoicingFailure } from "../contracts/failures.ts"
-import type { Clock, IdGenerator, RequestContext, TransactionalStore } from "../contracts/host.ts"
-import type { InvoicingPermissions } from "../contracts/permissions.ts"
+import { DomainConflict, type InvoicingFailure } from "../../contracts/failures.ts"
+import type { InvoicingPermissions } from "../../contracts/permissions.ts"
 import { negateMoney, validateCreateCorrectionInput, type CorrectionDocument, type CreateCorrectionInput } from "../domain/corrections.ts"
-import type { DocumentSource, Idempotent } from "../domain/invoice.ts"
-import { validateDocumentSource } from "../domain/validation.ts"
-import { findIdempotencyReplay, idempotencyRecord, missingIdempotencyResult } from "./idempotency.ts"
-import { checked, copyBuyer, copyParty, copySource, missing } from "./support.ts"
-import type { InvoicingTransaction } from "./ports.ts"
-type CorrectionDependencies = { readonly clock: Clock; readonly ids: IdGenerator; readonly store: TransactionalStore<InvoicingTransaction> }
+import type { DocumentSource, Idempotent } from "../../domain/invoice.ts"
+import { validateDocumentSource } from "../../domain/validation.ts"
+import { findIdempotencyReplay, idempotencyRecord, missingIdempotencyResult } from "../../application/idempotency.ts"
+import { checked, copyBuyer, copyParty, copySource, missing, type Authorize, type OperationDependencies } from "../../application/support.ts"
 const fy = (d: string): number => Number(d.slice(0, 4))
-type Authorize = (permission: string) => Effect.Effect<RequestContext, InvoicingFailure>
-export const createCorrectionOperations = (d: CorrectionDependencies, perms: InvoicingPermissions, auth: Authorize) => {
+export const createCorrectionOperations = (d: OperationDependencies, perms: InvoicingPermissions, auth: Authorize) => {
   const createCorrection = ({ request: input, idempotency }: Idempotent<CreateCorrectionInput>): Effect.Effect<CorrectionDocument, InvoicingFailure> => Effect.gen(function*() {
     yield* checked(() => {
       validateCreateCorrectionInput(input)

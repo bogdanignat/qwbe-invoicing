@@ -2,7 +2,7 @@ import { existsSync, lstatSync, readdirSync } from "node:fs"
 import { join, relative, sep } from "node:path"
 
 const SOURCE_FILE = /\.(?:c|m)?(?:j|t)sx?$/
-const TEST_FILE = /\.(?:test|spec)\.(?:c|m)?(?:j|t)sx?$/
+const TEST_FILE = /\.(?:test|spec|test-support)\.(?:c|m)?(?:j|t)sx?$/
 const SKIPPED_DIRECTORIES = new Set(["node_modules", "dist", "build", "coverage", ".git"])
 
 export const toPosix = (path) => path.split(sep).join("/")

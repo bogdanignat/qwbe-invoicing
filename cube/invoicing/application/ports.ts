@@ -2,7 +2,7 @@ import type { Effect } from "effect"
 
 import type { DomainConflict, PersistenceFailure } from "../contracts/failures.ts"
 import type { Customer, DocumentSeries, DocumentSource, DocumentType, DraftInvoice, IdempotencyRecord, IssuedInvoice, IssuerProfile, NumberedDocumentType, ProductPreset, Proforma, ProformaConversion, ProformaInvoiceConversion } from "../domain/invoice.ts"
-import type { CorrectionDocument } from "../domain/corrections.ts"
+import type { CorrectionDocument } from "../corrections/domain/corrections.ts"
 
 export type TransactionFailure = DomainConflict | PersistenceFailure
 type Read<Value> = Effect.Effect<Value, PersistenceFailure>
