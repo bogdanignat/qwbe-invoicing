@@ -4,6 +4,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { spawnSync } from "node:child_process"
 import test from "node:test"
+import { DatabaseSync } from "node:sqlite"
 
 import { parseCommand } from "./cli.ts"
 import { route } from "./http.ts"
@@ -34,6 +35,25 @@ void test("migration apply is idempotent", () => {
     assert.equal(applyMigrations(directory).changed, 16)
     assert.equal(applyMigrations(directory).changed, 0)
     assert.equal(databaseReady(directory), true)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+void test("readiness stays true while another connection holds a write lock", () => {
+  const directory = mkdtempSync(join(tmpdir(), "qwbe-readiness-lock-"))
+  try {
+    applyMigrations(directory)
+    const writer = new DatabaseSync(join(directory, "invoicing.sqlite"))
+    try {
+      writer.exec("BEGIN IMMEDIATE")
+      const started = performance.now()
+      assert.equal(databaseReady(directory), true)
+      assert.ok(performance.now() - started < 1_000, "readiness must not wait on the writer")
+    } finally {
+      writer.exec("ROLLBACK")
+      writer.close()
+    }
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
