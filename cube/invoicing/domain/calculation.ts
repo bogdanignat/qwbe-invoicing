@@ -1,5 +1,6 @@
 import { ValidationFailure } from "../contracts/failures.ts"
 import type { DraftLine, TaxBreakdown, TaxConfiguration } from "./invoice.ts"
+import { normalizeUnitOfMeasure, type UnitOfMeasure } from "./unit-of-measures.ts"
 
 const parseScaled = (value: string, scale: number, field: string): bigint => {
   const match = /^(\d+)(?:\.(\d+))?$/.exec(value.trim())
@@ -30,6 +31,7 @@ export const calculateLine = (input: {
   readonly description: string
   readonly quantity: string
   readonly unitPrice: string
+  readonly unitOfMeasure: UnitOfMeasure
   readonly tax: TaxConfiguration
 }): DraftLine => {
   if (input.description.trim().length === 0) throw new ValidationFailure({ issues: ["description is required"] })
@@ -46,6 +48,7 @@ export const calculateLine = (input: {
     description: input.description.trim(),
     quantity: formatScaled(quantity, 4),
     unitPrice: formatScaled(unitPrice, 2),
+    unitOfMeasure: normalizeUnitOfMeasure(input.unitOfMeasure),
     taxCode: input.tax.code,
     taxCategory: input.tax.category,
     taxRate: formatScaled(taxRate, 2),

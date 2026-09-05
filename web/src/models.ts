@@ -29,6 +29,18 @@ export interface ProductPreset {
   readonly organizationId: string
   readonly description: string
   readonly unitPrice: string
+  readonly unitOfMeasure: UnitOfMeasure
+}
+
+export interface UnitOfMeasure {
+  readonly code: string
+  readonly name: string
+}
+
+export interface DocumentSource {
+  readonly app: string
+  readonly kind: string
+  readonly id: string
 }
 
 export interface TaxConfiguration {
@@ -69,6 +81,7 @@ export interface DraftLine {
   readonly description: string
   readonly quantity: string
   readonly unitPrice: string
+  readonly unitOfMeasure: UnitOfMeasure
   readonly taxCode: string
   readonly taxCategory: "standard"
   readonly taxRate: string
@@ -82,6 +95,7 @@ export interface DraftInvoice {
   readonly organizationId: string
   readonly customer: BuyerSnapshot
   readonly customerId?: string
+  readonly source?: DocumentSource
   readonly series: string
   readonly issueDate: string
   readonly dueDate: string | null
@@ -106,6 +120,7 @@ export interface IssuedInvoice {
   readonly id: string
   readonly draftId: string | null
   readonly sourceProformaId: string | null
+  readonly source?: DocumentSource
   readonly series: string
   readonly number: number
   readonly issueDate: string
@@ -124,6 +139,7 @@ export interface IssuedInvoice {
 export interface Proforma {
   readonly id: string
   readonly sourceDraftId: string | null
+  readonly source?: DocumentSource
   readonly invoiceSeries: string
   readonly organizationId: string
   readonly series: string
@@ -163,6 +179,7 @@ export interface PaymentSummary {
 
 export interface CorrectionDocument {
   readonly id: string
+  readonly source?: DocumentSource
   readonly series: string
   readonly number: number
   readonly issueDate: string
@@ -230,6 +247,19 @@ const decodeBuyer: Decoder<BuyerSnapshot> = (input) => {
   return { ...decodeParty(value), partyType: decodePartyType(value.partyType) }
 }
 
+export const decodeUnitOfMeasure: Decoder<UnitOfMeasure> = (input) => {
+  const value = object(input)
+  return { code: text(value.code, "code"), name: text(value.name, "name") }
+}
+
+const decodeDocumentSource: Decoder<DocumentSource> = (input) => {
+  const value = object(input)
+  return { app: text(value.app, "app"), kind: text(value.kind, "kind"), id: text(value.id, "id") }
+}
+
+const optionalDocumentSource = (input: unknown): DocumentSource | undefined =>
+  input === undefined || input === null ? undefined : decodeDocumentSource(input)
+
 export const decodeCustomer: Decoder<Customer> = (input) => {
   const value = object(input)
   const defaultPaymentTermDays = optionalInteger(value.defaultPaymentTermDays, "defaultPaymentTermDays")
@@ -245,6 +275,7 @@ export const decodeProductPreset: Decoder<ProductPreset> = (input) => {
   return {
     id: text(value.id, "id"), organizationId: text(value.organizationId, "organizationId"),
     description: text(value.description, "description"), unitPrice: text(value.unitPrice, "unitPrice"),
+    unitOfMeasure: decodeUnitOfMeasure(value.unitOfMeasure),
   }
 }
 
@@ -286,6 +317,7 @@ const decodeDraftLine: Decoder<DraftLine> = (input) => {
   return {
     id: text(value.id, "id"), description: text(value.description, "description"),
     quantity: text(value.quantity, "quantity"), unitPrice: text(value.unitPrice, "unitPrice"),
+    unitOfMeasure: decodeUnitOfMeasure(value.unitOfMeasure),
     taxCode: text(value.taxCode, "taxCode"), taxCategory, taxRate: text(value.taxRate, "taxRate"),
     totalExcludingTax: text(value.totalExcludingTax, "totalExcludingTax"),
     taxAmount: text(value.taxAmount, "taxAmount"), totalIncludingTax: text(value.totalIncludingTax, "totalIncludingTax"),
@@ -307,9 +339,11 @@ export const decodeDraft: Decoder<DraftInvoice> = (input) => {
   const status = text(value.status, "status")
   if (status !== "draft" && status !== "issued" && status !== "proforma_issued") throw new Error("invalid status")
   const customerId = optionalText(value.customerId, "customerId")
+  const source = optionalDocumentSource(value.source)
   return {
     id: text(value.id, "id"), organizationId: text(value.organizationId, "organizationId"),
     customer: decodeBuyer(value.customer), ...(customerId === undefined ? {} : { customerId }),
+    ...(source === undefined ? {} : { source }),
     series: text(value.series, "series"),
     issueDate: text(value.issueDate, "issueDate"), dueDate: nullableText(value.dueDate, "dueDate"),
     currency: text(value.currency, "currency"), status,
@@ -322,9 +356,11 @@ export const decodeDraft: Decoder<DraftInvoice> = (input) => {
 
 export const decodeInvoice: Decoder<IssuedInvoice> = (input) => {
   const value = object(input)
+  const source = optionalDocumentSource(value.source)
   return {
     id: text(value.id, "id"), draftId: nullableText(value.draftId, "draftId"),
     sourceProformaId: nullableText(value.sourceProformaId, "sourceProformaId"),
+    ...(source === undefined ? {} : { source }),
     series: text(value.series, "series"), number: integer(value.number, "number"),
     issueDate: text(value.issueDate, "issueDate"), dueDate: nullableText(value.dueDate, "dueDate"),
     currency: text(value.currency, "currency"), issuer: decodeParty(value.issuer), customer: decodeBuyer(value.customer),
@@ -338,8 +374,10 @@ export const decodeInvoice: Decoder<IssuedInvoice> = (input) => {
 
 export const decodeProforma: Decoder<Proforma> = (input) => {
   const value = object(input)
+  const source = optionalDocumentSource(value.source)
   return {
     id: text(value.id, "id"), sourceDraftId: nullableText(value.sourceDraftId, "sourceDraftId"),
+    ...(source === undefined ? {} : { source }),
     invoiceSeries: text(value.invoiceSeries, "invoiceSeries"),
     organizationId: text(value.organizationId, "organizationId"), series: text(value.series, "series"),
     number: integer(value.number, "number"), issueDate: text(value.issueDate, "issueDate"),
@@ -377,14 +415,17 @@ export const decodePaymentSummary: Decoder<PaymentSummary> = (input) => {
 
 export const decodeCorrection: Decoder<CorrectionDocument> = (input) => {
   const value = object(input)
+  const source = optionalDocumentSource(value.source)
   return {
-    id: text(value.id, "id"), series: text(value.series, "series"), number: integer(value.number, "number"),
+    id: text(value.id, "id"), ...(source === undefined ? {} : { source }),
+    series: text(value.series, "series"), number: integer(value.number, "number"),
     issueDate: text(value.issueDate, "issueDate"), reason: text(value.reason, "reason"),
     currency: text(value.currency, "currency"), totalIncludingTax: text(value.totalIncludingTax, "totalIncludingTax"),
   }
 }
 
 export const decodeProductPresets: Decoder<ReadonlyArray<ProductPreset>> = (input) => array(input, decodeProductPreset, "productPresets")
+export const decodeUnitOfMeasures: Decoder<ReadonlyArray<UnitOfMeasure>> = (input) => array(input, decodeUnitOfMeasure, "unitOfMeasures")
 
 export const decodeCustomers: Decoder<ReadonlyArray<Customer>> = (input) => array(input, decodeCustomer, "customers")
 export const decodeDocumentSeriesList: Decoder<ReadonlyArray<DocumentSeries>> = (input) => array(input, decodeDocumentSeries, "documentSeries")

@@ -149,7 +149,7 @@ const renderPdf = async (
   invoice.lines.forEach((line, index) => {
     draw(layout, `${String(index + 1)}. ${line.description}`, { bold: true })
     draw(layout,
-      `${line.quantity} × ${line.unitPrice} | bază ${line.totalExcludingTax} | TVA ${line.taxRate}%: ${line.taxAmount} | total ${line.totalIncludingTax}`,
+      `${line.quantity} ${line.unitOfMeasure.name} (${line.unitOfMeasure.code}) × ${line.unitPrice} | bază ${line.totalExcludingTax} | TVA ${line.taxRate}%: ${line.taxAmount} | total ${line.totalIncludingTax}`,
       { size: 9 },
     )
     space(layout, 6)

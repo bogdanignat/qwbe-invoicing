@@ -128,6 +128,7 @@ export const applyProductPreset = (line: EditableInvoiceLine, preset: ProductPre
   description: preset.description,
   quantity: "1",
   unitPrice: preset.unitPrice,
+  unitOfMeasure: preset.unitOfMeasure,
 })
 
 export type LineSaveOperation =
@@ -166,7 +167,8 @@ export const updateDraftPayload = (form: InvoiceAuthoringForm): UpdateDraftInput
 })
 
 export const draftLinePayload = (line: EditableInvoiceLine): DraftLineInput => ({
-  description: line.description, quantity: line.quantity, unitPrice: line.unitPrice, taxCode: line.taxCode,
+  description: line.description, quantity: line.quantity, unitPrice: line.unitPrice,
+  unitOfMeasure: line.unitOfMeasure, taxCode: line.taxCode,
 })
 
 export const authoringDocumentPayload = (
@@ -183,7 +185,8 @@ export const authoringPayloadMatchesDraft = (payload: AuthoringDocumentInput, dr
     && draft.lines.length === payload.lines.length && draft.lines.every((line, index) => {
       const expected = payload.lines[index]
       return expected !== undefined && line.description === expected.description && line.quantity === expected.quantity
-        && line.unitPrice === expected.unitPrice && line.taxCode === expected.taxCode
+        && line.unitPrice === expected.unitPrice && line.unitOfMeasure.code === expected.unitOfMeasure.code
+        && line.unitOfMeasure.name === expected.unitOfMeasure.name && line.taxCode === expected.taxCode
     })
 }
 
@@ -217,7 +220,7 @@ export const formFromDraft = (draft: DraftInvoice): InvoiceAuthoringForm => ({
 
 export const draftLinesForEditing = (draft: DraftInvoice): ReadonlyArray<EditableInvoiceLine> => draft.lines.map((line) => ({
   key: line.id, lineId: line.id, description: line.description, quantity: line.quantity,
-  unitPrice: line.unitPrice, taxCode: line.taxCode,
+  unitPrice: line.unitPrice, unitOfMeasure: line.unitOfMeasure, taxCode: line.taxCode,
 }))
 
 export const headerMatchesDraft = (form: InvoiceAuthoringForm, draft: DraftInvoice): boolean => {
@@ -237,7 +240,8 @@ export const headerMatchesDraft = (form: InvoiceAuthoringForm, draft: DraftInvoi
 
 const lineMatches = (line: EditableInvoiceLine, persisted: DraftInvoice["lines"][number]): boolean =>
   line.description === persisted.description && line.quantity === persisted.quantity
-  && line.unitPrice === persisted.unitPrice && line.taxCode === persisted.taxCode
+  && line.unitPrice === persisted.unitPrice && line.unitOfMeasure.code === persisted.unitOfMeasure.code
+  && line.unitOfMeasure.name === persisted.unitOfMeasure.name && line.taxCode === persisted.taxCode
 
 export const pendingLineOperations = (lines: ReadonlyArray<EditableInvoiceLine>, draft: DraftInvoice): ReadonlyArray<LineSaveOperation> =>
   lines.flatMap((line): ReadonlyArray<LineSaveOperation> => {
@@ -265,7 +269,8 @@ export const authoringReadiness = (
   const editable = draft === undefined || draft.status === "draft"
   const synchronized = editable && draft !== undefined && headerMatchesDraft(form, draft) && linesMatchDraft(lines, draft)
   const hasLines = lines.length > 0 && lines.every((line) =>
-    line.description.trim() !== "" && line.quantity.trim() !== "" && line.unitPrice.trim() !== "" && line.taxCode.trim() !== "")
+    line.description.trim() !== "" && line.quantity.trim() !== "" && line.unitPrice.trim() !== ""
+    && line.unitOfMeasure.code.trim() !== "" && line.unitOfMeasure.name.trim() !== "" && line.taxCode.trim() !== "")
   return { editable, synchronized, hasLines,
     canIssue: editable && hasLines && !pending && (draft === undefined || synchronized) }
 }

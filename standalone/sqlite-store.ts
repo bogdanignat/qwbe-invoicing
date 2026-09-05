@@ -12,6 +12,8 @@ import {
   type DraftInvoice,
   type DraftLine,
   type DocumentSeries,
+  type DocumentSource,
+  type IdempotencyRecord,
   type InvoicingTransaction,
   type IssuedInvoice,
   type PartySnapshot,
@@ -126,6 +128,22 @@ const buyerFrom = (value: Row, prefix: string): BuyerSnapshot => ({
   partyType: text(value, `${prefix}party_type`) as BuyerSnapshot["partyType"],
 })
 
+const sourceFrom = (value: Row) => {
+  const app = optionalText(value, "source_app")
+  const kind = optionalText(value, "source_kind")
+  const id = optionalText(value, "source_id")
+  if (app === undefined && kind === undefined && id === undefined) return undefined
+  if (app === undefined || kind === undefined || id === undefined) throw new Error("invalid document source")
+  return { app, kind, id }
+}
+
+const sourceValues = (source: DocumentSource | undefined): ReadonlyArray<string | null> =>
+  source === undefined ? [null, null, null] : [source.app, source.kind, source.id]
+
+const sourceFilter = (source: DocumentSource | undefined, prefix = "") => source === undefined
+  ? { sql: "", values: [] as ReadonlyArray<string> }
+  : { sql: ` AND ${prefix}source_app=? AND ${prefix}source_kind=? AND ${prefix}source_id=?`, values: [source.app, source.kind, source.id] }
+
 const customerFrom = (value: Row): Customer => {
   const deletedAt = optionalText(value, "deleted_at")
   const defaultPaymentTermDays = optionalInteger(value, "default_payment_term_days")
@@ -143,6 +161,7 @@ const productPresetFrom = (value: Row): ProductPreset => ({
   organizationId: text(value, "organization_id"),
   description: text(value, "description"),
   unitPrice: text(value, "unit_price"),
+  unitOfMeasure: { code: text(value, "unit_code"), name: text(value, "unit_name") },
 })
 
 const documentSeriesFrom = (value: Row): DocumentSeries => ({
@@ -182,6 +201,7 @@ const lineFrom = (value: Row): DraftLine => ({
   description: text(value, "description"),
   quantity: text(value, "quantity"),
   unitPrice: text(value, "unit_price"),
+  unitOfMeasure: { code: text(value, "unit_code"), name: text(value, "unit_name") },
   taxCode: text(value, "tax_code"),
   taxCategory: "standard",
   taxRate: text(value, "tax_rate"),
@@ -201,11 +221,12 @@ const saveLines = (database: DatabaseSync, target: LineTarget, parentId: string,
   const idColumns = `id, ${parentColumn}${scoped ? ", organization_id" : ""}`
   database.prepare(`DELETE FROM ${table} WHERE ${parentColumn} = ?`).run(parentId)
   const statement = database.prepare(`INSERT INTO ${table}
-    (${idColumns}, line_position, description, quantity, unit_price, tax_code, tax_category,
+    (${idColumns}, line_position, description, quantity, unit_price, unit_code, unit_name, tax_code, tax_category,
       tax_rate, total_excluding_tax, tax_amount, total_including_tax)
-    VALUES (?, ?, ${scoped ? "?, " : ""}?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    VALUES (?, ?, ${scoped ? "?, " : ""}?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
   lines.forEach((line, position) => statement.run(
     line.id, parentId, ...(target.table === "proforma_lines" ? [target.organizationId] : []), position, line.description, line.quantity, line.unitPrice,
+    line.unitOfMeasure.code, line.unitOfMeasure.name,
     line.taxCode, line.taxCategory, line.taxRate, line.totalExcludingTax,
     line.taxAmount, line.totalIncludingTax,
   ))
@@ -219,6 +240,7 @@ const loadLines = (database: DatabaseSync, table: LineTable, parentId: string): 
 
 const issuedInvoiceFrom = (database: DatabaseSync, value: Row): IssuedInvoice => {
   const id = text(value, "id")
+  const source = sourceFrom(value)
   const taxBreakdown: ReadonlyArray<TaxBreakdown> = database.prepare(
     "SELECT * FROM issued_tax_breakdown WHERE invoice_id = ? ORDER BY line_position",
   ).all(id).map((item) => {
@@ -231,6 +253,7 @@ const issuedInvoiceFrom = (database: DatabaseSync, value: Row): IssuedInvoice =>
   return {
     id, draftId: nullableText(value, "draft_id"), sourceProformaId: nullableText(value, "source_proforma_id"),
     organizationId: text(value, "organization_id"),
+    ...(source === undefined ? {} : { source }),
     series: text(value, "series"), number: integer(value, "number"),
     issueDate: text(value, "issue_date"), dueDate: nullableText(value, "due_date"),
     issuedAt: text(value, "issued_at"), currency: text(value, "currency"),
@@ -251,8 +274,10 @@ const taxFrom = (database: DatabaseSync, table: "proforma_tax_breakdown", parent
 
 const proformaFrom = (database: DatabaseSync, value: Row): Proforma => {
   const id = text(value, "id")
+  const source = sourceFrom(value)
   return {
     id, sourceDraftId: nullableText(value, "source_draft_id"), organizationId: text(value, "organization_id"),
+    ...(source === undefined ? {} : { source }),
     invoiceSeries: text(value, "invoice_series"),
     convertedDraftId: nullableText(value, "converted_draft_id"),
     convertedInvoiceId: nullableText(value, "converted_invoice_id"),
@@ -363,10 +388,12 @@ const transactionAdapter = (database: DatabaseSync): InvoicingTransaction => ({
     database.prepare(`SELECT 1 FROM invoice_drafts
       WHERE organization_id = ? AND customer_id = ? AND status = 'draft' LIMIT 1`).get(organizationId, customerId) !== undefined),
   saveProductPreset: (preset) => write("save product preset", () => {
-    const result = database.prepare(`INSERT INTO product_presets(id,organization_id,description,unit_price) VALUES(?,?,?,?)
-      ON CONFLICT(id) DO UPDATE SET description=excluded.description,unit_price=excluded.unit_price
+    const result = database.prepare(`INSERT INTO product_presets(id,organization_id,description,unit_price,unit_code,unit_name) VALUES(?,?,?,?,?,?)
+      ON CONFLICT(id) DO UPDATE SET description=excluded.description,unit_price=excluded.unit_price,
+       unit_code=excluded.unit_code,unit_name=excluded.unit_name
       WHERE product_presets.organization_id=excluded.organization_id`)
-      .run(preset.id, preset.organizationId, preset.description, preset.unitPrice)
+      .run(preset.id, preset.organizationId, preset.description, preset.unitPrice,
+        preset.unitOfMeasure.code, preset.unitOfMeasure.name)
     if (result.changes === 0) throw new DomainConflict({ code: "product_preset_id_taken", message: "Product preset id belongs to another organization" })
   }),
   findProductPreset: (organizationId, id) => read("find product preset", () => {
@@ -381,17 +408,18 @@ const transactionAdapter = (database: DatabaseSync): InvoicingTransaction => ({
   }),
   saveDraft: (draft) => write("save draft", () => {
     const result = database.prepare(`INSERT INTO invoice_drafts
-      (id, organization_id, customer_id, customer_party_type, customer_legal_name, customer_tax_identifier,
+      (id, organization_id, source_app, source_kind, source_id, customer_id, customer_party_type, customer_legal_name, customer_tax_identifier,
        customer_country_code, customer_city, customer_street, customer_county, customer_postal_code,
-       series, issue_date, due_date, currency, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT (id) DO UPDATE SET customer_id=excluded.customer_id, customer_party_type=excluded.customer_party_type,
+        series, issue_date, due_date, currency, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT (id) DO UPDATE SET source_app=excluded.source_app,source_kind=excluded.source_kind,source_id=excluded.source_id,
+       customer_id=excluded.customer_id, customer_party_type=excluded.customer_party_type,
        customer_legal_name=excluded.customer_legal_name, customer_tax_identifier=excluded.customer_tax_identifier,
        customer_country_code=excluded.customer_country_code, customer_city=excluded.customer_city,
        customer_street=excluded.customer_street, customer_county=excluded.customer_county,
        customer_postal_code=excluded.customer_postal_code, issue_date=excluded.issue_date,
        due_date=excluded.due_date, currency=excluded.currency, status=excluded.status
        WHERE invoice_drafts.organization_id=excluded.organization_id`)
-      .run(draft.id, draft.organizationId, draft.customerId ?? null, draft.customer.partyType,
+      .run(draft.id, draft.organizationId, ...sourceValues(draft.source), draft.customerId ?? null, draft.customer.partyType,
         draft.customer.legalName, draft.customer.taxIdentifier, ...addressValues(draft.customer.address),
         draft.series, draft.issueDate, draft.dueDate, draft.currency, draft.status)
     if (result.changes === 0) throw new DomainConflict({ code: "draft_id_taken", message: "Draft id belongs to another organization" })
@@ -401,22 +429,27 @@ const transactionAdapter = (database: DatabaseSync): InvoicingTransaction => ({
     const value = row(database.prepare("SELECT * FROM invoice_drafts WHERE organization_id = ? AND id = ?").get(organizationId, id))
     if (value === undefined) return undefined
     const customerId = optionalText(value, "customer_id")
+    const documentSource = sourceFrom(value)
     const lines = loadLines(database, "draft_lines", id)
     return {
-      id, organizationId, ...(customerId === undefined ? {} : { customerId }), customer: buyerFrom(value, "customer_"),
+      id, organizationId, ...(documentSource === undefined ? {} : { source: documentSource }),
+      ...(customerId === undefined ? {} : { customerId }), customer: buyerFrom(value, "customer_"),
       series: text(value, "series"), issueDate: text(value, "issue_date"),
       dueDate: nullableText(value, "due_date"), currency: text(value, "currency"),
       status: draftStatus(value), lines, ...calculateTotals(lines),
     }
   }),
-  listDrafts: (organizationId) => read("list drafts", () => {
-    const values = database.prepare(`SELECT * FROM invoice_drafts WHERE organization_id = ? AND status = 'draft'
-      ORDER BY issue_date DESC, id LIMIT 100`).all(organizationId) as ReadonlyArray<Row>
+  listDrafts: (organizationId, source) => read("list drafts", () => {
+    const filter = sourceFilter(source)
+    const values = database.prepare(`SELECT * FROM invoice_drafts WHERE organization_id = ? AND status = 'draft'${filter.sql}
+      ORDER BY issue_date DESC, id LIMIT 100`).all(organizationId, ...filter.values) as ReadonlyArray<Row>
     return values.map((value) => {
       const id = text(value, "id")
       const customerId = optionalText(value, "customer_id")
       const lines = loadLines(database, "draft_lines", id)
-      return { id, organizationId, ...(customerId === undefined ? {} : { customerId }), customer: buyerFrom(value, "customer_"),
+      const documentSource = sourceFrom(value)
+      return { id, organizationId, ...(documentSource === undefined ? {} : { source: documentSource }),
+        ...(customerId === undefined ? {} : { customerId }), customer: buyerFrom(value, "customer_"),
         series: text(value, "series"), issueDate: text(value, "issue_date"), dueDate: nullableText(value, "due_date"),
         currency: text(value, "currency"), status: "draft" as const, lines, ...calculateTotals(lines) }
     })
@@ -436,13 +469,13 @@ const transactionAdapter = (database: DatabaseSync): InvoicingTransaction => ({
   }),
   saveIssuedInvoice: (invoice) => write("save issued invoice", () => {
     database.prepare(`INSERT INTO issued_invoices
-      (id, draft_id, source_proforma_id, organization_id, fiscal_year, document_type, series, number, issue_date, due_date,
+      (id, draft_id, source_proforma_id, organization_id, source_app, source_kind, source_id, fiscal_year, document_type, series, number, issue_date, due_date,
        issued_at, currency, issuer_legal_name, issuer_tax_identifier, issuer_country_code, issuer_city,
         issuer_street, issuer_county, issuer_postal_code, customer_legal_name, customer_tax_identifier, customer_party_type,
        customer_country_code, customer_city, customer_street, customer_county, customer_postal_code,
        total_excluding_tax, tax_total, total_including_tax, e_factura_status)
-       VALUES (?, ?, ?, ?, ?, 'invoice', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .run(invoice.id, invoice.draftId, invoice.sourceProformaId, invoice.organizationId, Number(invoice.issueDate.slice(0, 4)),
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'invoice', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(invoice.id, invoice.draftId, invoice.sourceProformaId, invoice.organizationId, ...sourceValues(invoice.source), Number(invoice.issueDate.slice(0, 4)),
         invoice.series, invoice.number, invoice.issueDate, invoice.dueDate, invoice.issuedAt, invoice.currency,
         invoice.issuer.legalName, invoice.issuer.taxIdentifier, ...addressValues(invoice.issuer.address),
         invoice.customer.legalName, invoice.customer.taxIdentifier, invoice.customer.partyType, ...addressValues(invoice.customer.address),
@@ -458,17 +491,19 @@ const transactionAdapter = (database: DatabaseSync): InvoicingTransaction => ({
     const value = row(database.prepare("SELECT * FROM issued_invoices WHERE organization_id = ? AND id = ?").get(organizationId, id))
     return value === undefined ? undefined : issuedInvoiceFrom(database, value)
   }),
-  listIssuedInvoices: (organizationId) => read("list issued invoices", () =>
-    database.prepare(`SELECT * FROM issued_invoices WHERE organization_id = ?
-      ORDER BY issue_date DESC, number DESC, id LIMIT 100`).all(organizationId)
-      .map((value) => issuedInvoiceFrom(database, value as Row))),
+  listIssuedInvoices: (organizationId, source) => read("list issued invoices", () => {
+    const filter = sourceFilter(source)
+    return database.prepare(`SELECT * FROM issued_invoices WHERE organization_id = ?${filter.sql}
+      ORDER BY issue_date DESC, number DESC, id LIMIT 100`).all(organizationId, ...filter.values)
+      .map((value) => issuedInvoiceFrom(database, value as Row))
+  }),
   saveProforma: (proforma) => write("save proforma", () => {
     database.prepare(`INSERT INTO proformas
-      (id,source_draft_id,organization_id,fiscal_year,document_type,series,invoice_series,number,issue_date,due_date,issued_at,currency,
+      (id,source_draft_id,organization_id,source_app,source_kind,source_id,fiscal_year,document_type,series,invoice_series,number,issue_date,due_date,issued_at,currency,
        issuer_legal_name,issuer_tax_identifier,issuer_country_code,issuer_city,issuer_street,issuer_county,issuer_postal_code,
        customer_party_type,customer_legal_name,customer_tax_identifier,customer_country_code,customer_city,customer_street,customer_county,customer_postal_code,
-        total_excluding_tax,tax_total,total_including_tax) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
-      .run(proforma.id, proforma.sourceDraftId, proforma.organizationId, Number(proforma.issueDate.slice(0, 4)), "proforma",
+         total_excluding_tax,tax_total,total_including_tax) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+      .run(proforma.id, proforma.sourceDraftId, proforma.organizationId, ...sourceValues(proforma.source), Number(proforma.issueDate.slice(0, 4)), "proforma",
         proforma.series, proforma.invoiceSeries, proforma.number, proforma.issueDate, proforma.dueDate, proforma.issuedAt, proforma.currency,
         proforma.issuer.legalName, proforma.issuer.taxIdentifier, ...addressValues(proforma.issuer.address), proforma.customer.partyType,
         proforma.customer.legalName, proforma.customer.taxIdentifier, ...addressValues(proforma.customer.address),
@@ -489,12 +524,14 @@ const transactionAdapter = (database: DatabaseSync): InvoicingTransaction => ({
       WHERE p.organization_id=? AND p.id=? AND p.sealed=1`).get(organizationId, id))
     return value === undefined ? undefined : proformaFrom(database, value)
   }),
-  listProformas: (organizationId) => read("list proformas", () =>
-    database.prepare(`SELECT p.*,c.resulting_draft_id AS converted_draft_id,i.resulting_invoice_id AS converted_invoice_id FROM proformas p
+  listProformas: (organizationId, source) => read("list proformas", () => {
+    const filter = sourceFilter(source, "p.")
+    return database.prepare(`SELECT p.*,c.resulting_draft_id AS converted_draft_id,i.resulting_invoice_id AS converted_invoice_id FROM proformas p
       LEFT JOIN proforma_conversions c ON c.organization_id=p.organization_id AND c.proforma_id=p.id
       LEFT JOIN proforma_invoice_conversions i ON i.organization_id=p.organization_id AND i.proforma_id=p.id
-      WHERE p.organization_id=? AND p.sealed=1 ORDER BY p.issue_date DESC,p.number DESC,p.id LIMIT 100`)
-      .all(organizationId).map((value) => proformaFrom(database, value as Row))),
+      WHERE p.organization_id=? AND p.sealed=1${filter.sql} ORDER BY p.issue_date DESC,p.number DESC,p.id LIMIT 100`)
+      .all(organizationId, ...filter.values).map((value) => proformaFrom(database, value as Row))
+  }),
   findProformaConversion: (organizationId, proformaId) => read("find proforma conversion", () => {
     const value = row(database.prepare("SELECT * FROM proforma_conversions WHERE organization_id=? AND proforma_id=?")
       .get(organizationId, proformaId))
@@ -517,20 +554,22 @@ const transactionAdapter = (database: DatabaseSync): InvoicingTransaction => ({
   }),
   saveCorrection: (correction) => write("save correction", () => {
     database.prepare(`INSERT INTO correction_documents
-      (id, organization_id, original_invoice_id, fiscal_year, document_type, series, number, issue_date, issued_at, reason, currency,
+      (id, organization_id, source_app, source_kind, source_id, original_invoice_id, fiscal_year, document_type, series, number, issue_date, issued_at, reason, currency,
        issuer_legal_name, issuer_tax_identifier, issuer_country_code, issuer_city, issuer_street, issuer_county, issuer_postal_code,
         customer_legal_name, customer_tax_identifier, customer_party_type, customer_country_code, customer_city, customer_street, customer_county, customer_postal_code,
        total_excluding_tax, tax_total, total_including_tax)
-       VALUES (?, ?, ?, ?, 'correction', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .run(correction.id, correction.organizationId, correction.originalInvoiceId, correction.fiscalYear,
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'correction', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(correction.id, correction.organizationId, ...sourceValues(correction.source), correction.originalInvoiceId, correction.fiscalYear,
         correction.series, correction.number, correction.issueDate, correction.issuedAt, correction.reason, correction.currency,
         correction.issuer.legalName, correction.issuer.taxIdentifier, ...addressValues(correction.issuer.address),
         correction.customer.legalName, correction.customer.taxIdentifier, correction.customer.partyType, ...addressValues(correction.customer.address),
         correction.totalExcludingTax, correction.taxTotal, correction.totalIncludingTax)
     const lineStmt = database.prepare(`INSERT INTO correction_lines
-      (id, correction_id, line_position, description, quantity, unit_price, tax_code, tax_category, tax_rate, total_excluding_tax, tax_amount, total_including_tax)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-    correction.lines.forEach((line, pos) => lineStmt.run(line.id, correction.id, pos, line.description, line.quantity, line.unitPrice, line.taxCode, line.taxCategory, line.taxRate, line.totalExcludingTax, line.taxAmount, line.totalIncludingTax))
+      (id, correction_id, line_position, description, quantity, unit_price, unit_code, unit_name, tax_code, tax_category, tax_rate, total_excluding_tax, tax_amount, total_including_tax)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+    correction.lines.forEach((line, pos) => lineStmt.run(line.id, correction.id, pos, line.description, line.quantity, line.unitPrice,
+      line.unitOfMeasure.code, line.unitOfMeasure.name, line.taxCode, line.taxCategory, line.taxRate,
+      line.totalExcludingTax, line.taxAmount, line.totalIncludingTax))
     const taxStmt = database.prepare(`INSERT INTO correction_tax_breakdown
       (correction_id, line_position, tax_code, category, rate, taxable_amount, tax_amount) VALUES (?, ?, ?, ?, ?, ?, ?)`)
     correction.taxBreakdown.forEach((tax, pos) => taxStmt.run(correction.id, pos, tax.taxCode, tax.category, tax.rate, tax.taxableAmount, tax.taxAmount))
@@ -538,6 +577,7 @@ const transactionAdapter = (database: DatabaseSync): InvoicingTransaction => ({
   findCorrection: (organizationId, id) => read("find correction", () => {
     const value = row(database.prepare("SELECT * FROM correction_documents WHERE organization_id = ? AND id = ?").get(organizationId, id))
     if (value === undefined) return undefined
+    const documentSource = sourceFrom(value)
     const lines: ReadonlyArray<DraftLine> = database.prepare("SELECT * FROM correction_lines WHERE correction_id = ? ORDER BY line_position").all(id).map((v) => lineFrom(v as Row))
     const taxBreakdown: ReadonlyArray<TaxBreakdown> = database.prepare("SELECT * FROM correction_tax_breakdown WHERE correction_id = ? ORDER BY line_position").all(id).map((item) => {
       const tax = item as Row
@@ -545,15 +585,19 @@ const transactionAdapter = (database: DatabaseSync): InvoicingTransaction => ({
     })
     return {
       id, organizationId, originalInvoiceId: text(value, "original_invoice_id"), fiscalYear: integer(value, "fiscal_year"), series: text(value, "series"), number: integer(value, "number"),
+      ...(documentSource === undefined ? {} : { source: documentSource }),
       issueDate: text(value, "issue_date"), issuedAt: text(value, "issued_at"), reason: text(value, "reason"), currency: text(value, "currency"),
       issuer: partyFrom(value, "issuer_"), customer: buyerFrom(value, "customer_"), lines, taxBreakdown,
       totalExcludingTax: text(value, "total_excluding_tax"), taxTotal: text(value, "tax_total"), totalIncludingTax: text(value, "total_including_tax"),
     }
   }),
-  listCorrections: (organizationId, originalInvoiceId) => read("list corrections", () => {
-    const rows = database.prepare("SELECT * FROM correction_documents WHERE organization_id = ? AND original_invoice_id = ? ORDER BY issued_at, number, id").all(organizationId, originalInvoiceId) as ReadonlyArray<Row>
+  listCorrections: (organizationId, originalInvoiceId, source) => read("list corrections", () => {
+    const filter = sourceFilter(source)
+    const rows = database.prepare(`SELECT * FROM correction_documents WHERE organization_id = ? AND original_invoice_id = ?${filter.sql}
+      ORDER BY issued_at, number, id`).all(organizationId, originalInvoiceId, ...filter.values) as ReadonlyArray<Row>
     return rows.map((value) => {
       const id = text(value, "id")
+      const documentSource = sourceFrom(value)
       const lines: ReadonlyArray<DraftLine> = database.prepare("SELECT * FROM correction_lines WHERE correction_id = ? ORDER BY line_position").all(id).map((v) => lineFrom(v as Row))
       const taxBreakdown: ReadonlyArray<TaxBreakdown> = database.prepare("SELECT * FROM correction_tax_breakdown WHERE correction_id = ? ORDER BY line_position").all(id).map((item) => {
         const tax = item as Row
@@ -561,11 +605,27 @@ const transactionAdapter = (database: DatabaseSync): InvoicingTransaction => ({
       })
       return {
         id, organizationId, originalInvoiceId: text(value, "original_invoice_id"), fiscalYear: integer(value, "fiscal_year"), series: text(value, "series"), number: integer(value, "number"),
+        ...(documentSource === undefined ? {} : { source: documentSource }),
         issueDate: text(value, "issue_date"), issuedAt: text(value, "issued_at"), reason: text(value, "reason"), currency: text(value, "currency"),
         issuer: partyFrom(value, "issuer_"), customer: buyerFrom(value, "customer_"), lines, taxBreakdown,
         totalExcludingTax: text(value, "total_excluding_tax"), taxTotal: text(value, "tax_total"), totalIncludingTax: text(value, "total_including_tax"),
       }
     })
+  }),
+  findIdempotencyRecord: (organizationId, key) => read("find idempotency record", () => {
+    const value = row(database.prepare("SELECT * FROM idempotency_records WHERE organization_id=? AND idempotency_key=?")
+      .get(organizationId, key))
+    return value === undefined ? undefined : {
+      organizationId: text(value, "organization_id"), key: text(value, "idempotency_key"),
+      operation: text(value, "operation") as IdempotencyRecord["operation"],
+      fingerprint: text(value, "fingerprint"), resultKind: text(value, "result_kind") as IdempotencyRecord["resultKind"],
+      resultId: text(value, "result_id"), createdAt: text(value, "created_at"),
+    }
+  }),
+  saveIdempotencyRecord: (record) => write("save idempotency record", () => {
+    database.prepare(`INSERT INTO idempotency_records
+      (organization_id,idempotency_key,operation,fingerprint,result_kind,result_id,created_at) VALUES(?,?,?,?,?,?,?)`)
+      .run(record.organizationId, record.key, record.operation, record.fingerprint, record.resultKind, record.resultId, record.createdAt)
   }),
 })
 
@@ -596,6 +656,7 @@ const openTransaction = (dataDirectory: string): TransactionHandle => {
   try {
     database = new DatabaseSync(databasePath(dataDirectory))
     database.exec("PRAGMA foreign_keys = ON")
+    database.exec("PRAGMA busy_timeout = 5000")
     database.exec("BEGIN IMMEDIATE")
     return { database, open: true, closed: false }
   } catch (error) {

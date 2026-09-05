@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 
 import { ResourceNotFound, ValidationFailure } from "../contracts/failures.ts"
-import type { BuyerSnapshot, PartySnapshot } from "../domain/invoice.ts"
+import type { BuyerSnapshot, DocumentSource, PartySnapshot } from "../domain/invoice.ts"
 
 export const checked = <Value>(operation: () => Value): Effect.Effect<Value, ValidationFailure> => Effect.try({
   try: operation,
@@ -21,4 +21,10 @@ export const copyParty = (party: PartySnapshot): PartySnapshot => ({
 export const copyBuyer = (buyer: BuyerSnapshot): BuyerSnapshot => ({
   ...copyParty(buyer),
   partyType: buyer.partyType,
+})
+
+export const copySource = (source: DocumentSource): DocumentSource => ({
+  app: source.app,
+  kind: source.kind,
+  id: source.id,
 })

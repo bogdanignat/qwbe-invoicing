@@ -247,7 +247,8 @@ void test("calls customer edit and product preset CRUD routes", async () => {
     id: "customer/1", organizationId: "org-1", partyType: "company" as const, legalName: "Client", taxIdentifier: "RO1",
     address: { countryCode: "RO", city: "Iași", street: "Strada 1" }, defaultPaymentTermDays: 30,
   }
-  const preset = { id: "preset/1", organizationId: "org-1", description: "Consultanță", unitPrice: "100.00" }
+  const preset = { id: "preset/1", organizationId: "org-1", description: "Consultanță", unitPrice: "100.00",
+    unitOfMeasure: { code: "HUR", name: "oră" } }
   try {
     globalThis.fetch = (input, init) => {
       const path = requestPath(input)
@@ -267,8 +268,10 @@ void test("calls customer edit and product preset CRUD routes", async () => {
       address: customer.address, defaultPaymentTermDays: customer.defaultPaymentTermDays,
     }))
     await runUiEffect(invoicingClient.listProductPresets())
-    await runUiEffect(invoicingClient.createProductPreset({ description: preset.description, unitPrice: preset.unitPrice }))
-    await runUiEffect(invoicingClient.updateProductPreset(preset.id, { description: preset.description, unitPrice: "120.00" }))
+    await runUiEffect(invoicingClient.createProductPreset({ description: preset.description, unitPrice: preset.unitPrice,
+      unitOfMeasure: preset.unitOfMeasure }))
+    await runUiEffect(invoicingClient.updateProductPreset(preset.id, { description: preset.description, unitPrice: "120.00",
+      unitOfMeasure: preset.unitOfMeasure }))
     await runUiEffect(invoicingClient.deleteProductPreset(preset.id))
     assert.deepEqual(calls.slice(1).map(({ path, init }) => [init.method, path]), [
       ["PUT", "/api/customers/customer%2F1"],
@@ -285,7 +288,8 @@ void test("calls customer edit and product preset CRUD routes", async () => {
       partyType: "company", legalName: "Client", taxIdentifier: "RO1",
       address: { countryCode: "RO", city: "Iași", street: "Strada 1" }, defaultPaymentTermDays: 30,
     })
-    assert.deepEqual(JSON.parse(updatePresetBody as string), { description: "Consultanță", unitPrice: "120.00" })
+    assert.deepEqual(JSON.parse(updatePresetBody as string), { description: "Consultanță", unitPrice: "120.00",
+      unitOfMeasure: preset.unitOfMeasure })
   } finally {
     await runUiEffect(clearApiSession)
     globalThis.fetch = originalFetch
@@ -308,7 +312,8 @@ void test("calls direct and draft issuance, proforma invoice, registry, detail, 
   }
   const invoice = { ...proforma, id: "invoice-1", draftId: null, sourceProformaId: "proforma-1", series: "QWBE", number: 8, eFacturaStatus: "not_sent" }
   const authoring = { customerId: "customer-1", series: "QWBE", issueDate: "2026-09-01", dueDate: null,
-    currency: "RON" as const, lines: [{ description: "Serviciu", quantity: "1", unitPrice: "100", taxCode: "RO_STANDARD" }] }
+    currency: "RON" as const, lines: [{ description: "Serviciu", quantity: "1", unitPrice: "100",
+      unitOfMeasure: { code: "HUR", name: "oră" }, taxCode: "RO_STANDARD" }] }
   try {
     globalThis.fetch = (input, init) => {
       const path = requestPath(input)
@@ -321,12 +326,12 @@ void test("calls direct and draft issuance, proforma invoice, registry, detail, 
       return Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } }))
     }
     await runUiEffect(loginApiSession("secret-token"))
-    await runUiEffect(invoicingClient.issueDraftProforma("draft/1", "PRO"))
-    await runUiEffect(invoicingClient.issueProforma({ ...authoring, proformaSeries: "PRO" }))
-    await runUiEffect(invoicingClient.issueInvoice(authoring))
+    await runUiEffect(invoicingClient.issueDraftProforma("draft/1", "PRO", "key-draft-proforma"))
+    await runUiEffect(invoicingClient.issueProforma({ ...authoring, proformaSeries: "PRO" }, "key-direct-proforma"))
+    await runUiEffect(invoicingClient.issueInvoice(authoring, "key-direct-invoice"))
     await runUiEffect(invoicingClient.listProformas())
     await runUiEffect(invoicingClient.getProforma("proforma/1"))
-    await runUiEffect(invoicingClient.issueInvoiceFromProforma("proforma/1"))
+    await runUiEffect(invoicingClient.issueInvoiceFromProforma("proforma/1", "key-conversion"))
     assert.equal((await runUiEffect(invoicingClient.downloadProformaPdf("proforma/1"))).size, 3)
     assert.deepEqual(calls.slice(1).map(({ path, init }) => [init.method, path]), [
       ["POST", "/api/drafts/draft%2F1/proformas"],
@@ -344,6 +349,9 @@ void test("calls direct and draft issuance, proforma invoice, registry, detail, 
     const directProformaBody = calls[2]?.init.body
     if (typeof directProformaBody !== "string") throw new Error("Expected direct proforma body")
     assert.deepEqual(JSON.parse(directProformaBody), { ...authoring, proformaSeries: "PRO" })
+    assert.deepEqual(calls.slice(1, 4).map(({ init }) => new Headers(init.headers).get("idempotency-key")),
+      ["key-draft-proforma", "key-direct-proforma", "key-direct-invoice"])
+    assert.equal(new Headers(calls[6]?.init.headers).get("idempotency-key"), "key-conversion")
   } finally {
     await runUiEffect(clearApiSession)
     globalThis.fetch = originalFetch

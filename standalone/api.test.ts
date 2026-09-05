@@ -7,6 +7,7 @@ import test from "node:test"
 import { handleApiRequest } from "./api.ts"
 import { createRequestAuthenticator } from "./auth.ts"
 import { applyMigrations } from "./migrations.ts"
+const each = { code: "C62", name: "unitate" } as const
 
 void test("requires host authentication and serves the complete invoice-core route sequence", async () => {
   const directory = mkdtempSync(join(tmpdir(), "qwbe-api-"))
@@ -91,6 +92,9 @@ void test("requires host authentication and serves the complete invoice-core rou
       { organizationId: "org-1", documentType: "invoice", series: "QWBE" },
       { organizationId: "org-1", documentType: "proforma", series: "PRO" },
     ])
+    const unitOfMeasures = await handleApiRequest({ method: "GET", url: "/api/unit-of-measures", authorization, body: undefined }, runtime)
+    assert.equal(unitOfMeasures.status, 200)
+    assert.equal((unitOfMeasures.body as ReadonlyArray<{ code: string }>).some(({ code }) => code === "HUR"), true)
     const duplicateSeries = await handleApiRequest({
       method: "POST", url: "/api/document-series", authorization,
       body: { documentType: "invoice", series: "QWBE" },
@@ -144,18 +148,18 @@ void test("requires host authentication and serves the complete invoice-core rou
       body: customer.body }, runtime)).status, 404)
 
     const invalidPreset = await handleApiRequest({ method: "POST", url: "/api/product-presets", authorization,
-      body: { description: " ", unitPrice: "1.00" } }, runtime)
+      body: { description: " ", unitPrice: "1.00", unitOfMeasure: each } }, runtime)
     assert.equal(invalidPreset.status, 400)
     const preset = await handleApiRequest({ method: "POST", url: "/api/product-presets", authorization,
-      body: { description: "  Consultanță  ", unitPrice: "10.5" } }, runtime)
+      body: { description: "  Consultanță  ", unitPrice: "10.5", unitOfMeasure: each } }, runtime)
     assert.equal(preset.status, 200)
     assert.equal((preset.body as { description: string }).description, "Consultanță")
     assert.equal((preset.body as { unitPrice: string }).unitPrice, "10.50")
     const presetId = (preset.body as { id: string }).id
     assert.equal((await handleApiRequest({ method: "PUT", url: `/api/product-presets/${presetId}`, authorization,
-      body: { description: "Audit", unitPrice: "1.001" } }, runtime)).status, 400)
+      body: { description: "Audit", unitPrice: "1.001", unitOfMeasure: each } }, runtime)).status, 400)
     const updatedPreset = await handleApiRequest({ method: "PUT", url: `/api/product-presets/${presetId}`, authorization,
-      body: { description: "Audit", unitPrice: "20" } }, runtime)
+      body: { description: "Audit", unitPrice: "20", unitOfMeasure: each } }, runtime)
     assert.equal((updatedPreset.body as { unitPrice: string }).unitPrice, "20.00")
     assert.deepEqual((await handleApiRequest({ method: "GET", url: "/api/product-presets", authorization,
       body: undefined }, runtime)).body, [updatedPreset.body])
@@ -204,13 +208,13 @@ void test("requires host authentication and serves the complete invoice-core rou
       method: "POST",
       url: `/api/drafts/${draftId}/lines`,
       authorization,
-      body: { description: "Servicii", quantity: "1", unitPrice: "100", taxCode: "RO_STANDARD" },
+      body: { description: "Servicii", quantity: "1", unitPrice: "100", unitOfMeasure: each, taxCode: "RO_STANDARD" },
     }, runtime)
     assert.equal(line.status, 200)
     const lineId = (line.body as { lines: ReadonlyArray<{ id: string }> }).lines[0]?.id as string
     const editedLine = await handleApiRequest({
       method: "PUT", url: `/api/drafts/${draftId}/lines/${lineId}`, authorization,
-      body: { description: "Servicii extinse", quantity: "2", unitPrice: "100", taxCode: "RO_STANDARD" },
+      body: { description: "Servicii extinse", quantity: "2", unitPrice: "100", unitOfMeasure: each, taxCode: "RO_STANDARD" },
     }, runtime)
     assert.equal((editedLine.body as { totalIncludingTax: string }).totalIncludingTax, "242.00")
     const cleared = await handleApiRequest({
@@ -219,12 +223,13 @@ void test("requires host authentication and serves the complete invoice-core rou
     assert.equal((cleared.body as { totalIncludingTax: string }).totalIncludingTax, "0.00")
     await handleApiRequest({
       method: "POST", url: `/api/drafts/${draftId}/lines`, authorization,
-      body: { description: "Servicii", quantity: "1", unitPrice: "100", taxCode: "RO_STANDARD" },
+      body: { description: "Servicii", quantity: "1", unitPrice: "100", unitOfMeasure: each, taxCode: "RO_STANDARD" },
     }, runtime)
     const issued = await handleApiRequest({
       method: "POST",
       url: `/api/drafts/${draftId}/issue`,
       authorization,
+      idempotencyKey: "draft-invoice-1",
       body: {},
     }, runtime)
     assert.equal(issued.status, 200)
@@ -273,25 +278,30 @@ void test("requires host authentication and serves the complete invoice-core rou
     }, { status: "partially_paid", paidAmount: "50.00", remainingAmount: "71.00", count: 1 })
     const proformaDraft = await handleApiRequest({
       method: "POST", url: "/api/drafts", authorization,
-      body: { customerId, issueDate: "2026-09-05", dueDate: null, series: "QWBE" },
+      body: { customerId, issueDate: "2026-09-05", dueDate: null, series: "QWBE",
+        source: { app: "crm", kind: "offer", id: "offer-1" } },
     }, runtime)
     const proformaDraftId = (proformaDraft.body as { id: string }).id
+    assert.deepEqual((await handleApiRequest({ method: "GET",
+      url: "/api/drafts?sourceApp=crm&sourceKind=offer&sourceId=offer-1", authorization, body: undefined }, runtime)).body,
+    [proformaDraft.body])
     await handleApiRequest({
       method: "POST", url: `/api/drafts/${proformaDraftId}/lines`, authorization,
-      body: { description: "Avans", quantity: "1", unitPrice: "50", taxCode: "RO_STANDARD" },
+      body: { description: "Avans", quantity: "1", unitPrice: "50", unitOfMeasure: each, taxCode: "RO_STANDARD" },
     }, runtime)
     assert.equal((await handleApiRequest({
       method: "POST", url: `/api/drafts/${proformaDraftId}/proformas`, authorization, body: { series: 7 },
     }, runtime)).status, 400)
     const proforma = await handleApiRequest({
-      method: "POST", url: `/api/drafts/${proformaDraftId}/proformas`, authorization, body: { series: "PRO" },
+      method: "POST", url: `/api/drafts/${proformaDraftId}/proformas`, authorization, idempotencyKey: "draft-proforma-1", body: { series: "PRO" },
     }, runtime)
     assert.equal(proforma.status, 200)
+    assert.deepEqual((proforma.body as { source?: unknown }).source, { app: "crm", kind: "offer", id: "offer-1" })
     assert.equal((proforma.body as { dueDate: string | null }).dueDate, null)
     assert.equal((proforma.body as { convertedDraftId: string | null }).convertedDraftId, null)
     const proformaId = (proforma.body as { id: string }).id
     assert.deepEqual(await handleApiRequest({
-      method: "POST", url: `/api/drafts/${proformaDraftId}/proformas`, authorization, body: { series: "PRO" },
+      method: "POST", url: `/api/drafts/${proformaDraftId}/proformas`, authorization, idempotencyKey: "draft-proforma-2", body: { series: "PRO" },
     }, runtime), { status: 409, body: { error: "DomainConflict", code: "draft_already_issued" } })
     const sealedSource = await handleApiRequest({
       method: "GET", url: `/api/drafts/${proformaDraftId}`, authorization, body: undefined,
@@ -302,9 +312,12 @@ void test("requires host authentication and serves the complete invoice-core rou
       method: "DELETE", url: `/api/drafts/${proformaDraftId}`, authorization, body: undefined,
     }, runtime), { status: 409, body: { error: "DomainConflict", code: "draft_already_issued" } })
     assert.deepEqual((await handleApiRequest({ method: "GET", url: "/api/proformas", authorization, body: undefined }, runtime)).body, [proforma.body])
+    assert.deepEqual((await handleApiRequest({ method: "GET",
+      url: "/api/proformas?sourceApp=crm&sourceKind=offer&sourceId=offer-1", authorization, body: undefined }, runtime)).body,
+    [proforma.body])
     assert.deepEqual((await handleApiRequest({ method: "GET", url: `/api/proformas/${proformaId}`, authorization, body: undefined }, runtime)).body, proforma.body)
     assert.equal((await handleApiRequest({ method: "GET", url: "/api/proformas/missing", authorization, body: undefined }, runtime)).status, 404)
-    assert.equal((await handleApiRequest({ method: "POST", url: "/api/proformas/missing/invoice", authorization, body: {} }, runtime)).status, 404)
+    assert.equal((await handleApiRequest({ method: "POST", url: "/api/proformas/missing/invoice", authorization, idempotencyKey: "missing-proforma", body: {} }, runtime)).status, 404)
     assert.equal((await handleApiRequest({ method: "POST", url: `/api/proformas/${proformaId}/invoice`, authorization, body: [] }, runtime)).status, 400)
     assert.equal((await handleApiRequest({ method: "POST", url: "/api/proformas/missing/pdf", authorization, body: {} }, runtime)).status, 404)
     assert.equal((await handleApiRequest({ method: "GET", url: "/api/proformas/missing/pdf", authorization, body: undefined }, runtime)).status, 404)
@@ -327,40 +340,69 @@ void test("requires host authentication and serves the complete invoice-core rou
     assert.equal(proformaPdf.headers["content-type"], "application/pdf")
     assert.equal(Buffer.from((proformaPdf.body as Uint8Array).subarray(0, 5)).toString("ascii"), "%PDF-")
     const converted = await handleApiRequest({
-      method: "POST", url: `/api/proformas/${proformaId}/invoice`, authorization, body: {},
+      method: "POST", url: `/api/proformas/${proformaId}/invoice`, authorization, idempotencyKey: "convert-proforma-1", body: {},
     }, runtime)
     assert.equal(converted.status, 200)
     assert.equal((converted.body as { dueDate: string | null }).dueDate, null)
     assert.equal((converted.body as { draftId: string | null }).draftId, null)
     assert.equal((converted.body as { sourceProformaId: string | null }).sourceProformaId, proformaId)
+    assert.deepEqual((converted.body as { source?: unknown }).source, { app: "crm", kind: "offer", id: "offer-1" })
     assert.deepEqual(await handleApiRequest({
-      method: "POST", url: `/api/proformas/${proformaId}/invoice`, authorization, body: {},
+      method: "POST", url: `/api/proformas/${proformaId}/invoice`, authorization, idempotencyKey: "convert-proforma-2", body: {},
     }, runtime), { status: 409, body: { error: "DomainConflict", code: "proforma_already_converted" } })
     assert.equal(typeof ((await handleApiRequest({
       method: "GET", url: `/api/proformas/${proformaId}`, authorization, body: undefined,
     }, runtime)).body as { convertedInvoiceId: string | null }).convertedInvoiceId, "string")
-    const authoredBody = { customerId, series: "QWBE", issueDate: "2026-09-06", dueDate: null, currency: "RON",
-      lines: [{ description: "Direct", quantity: "1", unitPrice: "25", taxCode: "RO_STANDARD" }] }
+    const authoredBody = {
+      customer: { partyType: "company", legalName: "Client CRM SRL", taxIdentifier: "RO87654329",
+        address: { countryCode: "RO", city: "Iași", street: "Strada CRM 5" } },
+      source: { app: "crm", kind: "contract", id: "contract-123" },
+      series: "QWBE", issueDate: "2026-09-06", dueDate: null, currency: "RON",
+      lines: [{ description: "Direct din CRM", quantity: "1", unitPrice: "25", unitOfMeasure: { code: "HUR", name: "oră" }, taxCode: "RO_STANDARD" }],
+    }
     assert.equal((await handleApiRequest({ method: "POST", url: "/api/invoices", authorization,
       body: { ...authoredBody, lines: { description: "bad" } } }, runtime)).status, 400)
-    const directInvoice = await handleApiRequest({ method: "POST", url: "/api/invoices", authorization, body: authoredBody }, runtime)
+    assert.equal((await handleApiRequest({ method: "POST", url: "/api/invoices", authorization,
+      body: authoredBody }, runtime)).status, 400)
+    assert.equal((await handleApiRequest({ method: "POST", url: "/api/invoices", authorization,
+      idempotencyKey: "invalid-unit", body: { ...authoredBody, lines: [{ ...authoredBody.lines[0], unitOfMeasure: { code: "NOPE", name: "inventată" } }] } }, runtime)).status, 400)
+    const directInvoice = await handleApiRequest({ method: "POST", url: "/api/invoices", authorization, idempotencyKey: "direct-invoice-1", body: authoredBody }, runtime)
     assert.equal(directInvoice.status, 200)
     assert.equal((directInvoice.body as { draftId: string | null }).draftId, null)
+    assert.deepEqual((directInvoice.body as { source?: unknown }).source, authoredBody.source)
+    assert.deepEqual((await handleApiRequest({ method: "POST", url: "/api/invoices", authorization,
+      idempotencyKey: "direct-invoice-1", body: authoredBody }, runtime)).body, directInvoice.body)
+    assert.deepEqual(await handleApiRequest({ method: "POST", url: "/api/invoices", authorization,
+      idempotencyKey: "direct-invoice-1", body: { ...authoredBody, dueDate: "2026-09-30" } }, runtime),
+    { status: 409, body: { error: "DomainConflict", code: "idempotency_key_reused" } })
+    assert.deepEqual((await handleApiRequest({ method: "GET",
+      url: "/api/invoices?sourceApp=crm&sourceKind=contract&sourceId=contract-123", authorization, body: undefined }, runtime)).body,
+    [directInvoice.body])
+    assert.deepEqual((await handleApiRequest({ method: "GET",
+      url: "/api/invoices?sourceApp=crm&sourceKind=contract&sourceId=missing", authorization, body: undefined }, runtime)).body, [])
+    assert.equal((await handleApiRequest({ method: "GET", url: "/api/invoices?sourceApp=crm", authorization, body: undefined }, runtime)).status, 400)
+    assert.deepEqual(await handleApiRequest({ method: "POST", url: "/api/proformas", authorization,
+      idempotencyKey: "direct-invoice-1", body: { ...authoredBody, issueDate: "2026-09-07", proformaSeries: "PRO" } }, runtime),
+    { status: 409, body: { error: "DomainConflict", code: "idempotency_key_reused" } })
     const directProforma = await handleApiRequest({ method: "POST", url: "/api/proformas", authorization,
-      body: { ...authoredBody, issueDate: "2026-09-07", proformaSeries: "PRO" } }, runtime)
+      idempotencyKey: "direct-proforma-1", body: { ...authoredBody, issueDate: "2026-09-07", proformaSeries: "PRO" } }, runtime)
     assert.equal(directProforma.status, 200)
     assert.equal((directProforma.body as { sourceDraftId: string | null }).sourceDraftId, null)
     const directProformaId = (directProforma.body as { id: string }).id
-    assert.equal((await handleApiRequest({ method: "POST", url: `/api/proformas/${directProformaId}/invoice`, authorization, body: {} }, runtime)).status, 200)
+    assert.equal((await handleApiRequest({ method: "POST", url: `/api/proformas/${directProformaId}/invoice`, authorization,
+      idempotencyKey: "direct-proforma-conversion", body: {} }, runtime)).status, 200)
     assert.deepEqual((await handleApiRequest({ method: "GET", url: "/api/drafts", authorization, body: undefined }, runtime)).body, [])
     const correction = await handleApiRequest({
       method: "POST",
       url: `/api/invoices/${invoiceId}/corrections`,
       authorization,
-      body: { reason: "Corecție integrală de test", issueDate: "2026-09-03" },
+      idempotencyKey: "correction-1",
+      body: { reason: "Corecție integrală de test", issueDate: "2026-09-03",
+        source: { app: "erp", kind: "return", id: "return-1" } },
     }, runtime)
     assert.equal(correction.status, 200)
     assert.equal((correction.body as { totalIncludingTax: string }).totalIncludingTax, "-121.00")
+    assert.deepEqual((correction.body as { source?: unknown }).source, { app: "erp", kind: "return", id: "return-1" })
     const corrections = await handleApiRequest({
       method: "GET",
       url: `/api/invoices/${invoiceId}/corrections`,
@@ -368,10 +410,14 @@ void test("requires host authentication and serves the complete invoice-core rou
       body: undefined,
     }, runtime)
     assert.equal((corrections.body as ReadonlyArray<unknown>).length, 1)
+    assert.deepEqual((await handleApiRequest({ method: "GET",
+      url: `/api/invoices/${invoiceId}/corrections?sourceApp=erp&sourceKind=return&sourceId=return-1`, authorization,
+      body: undefined }, runtime)).body, [correction.body])
     const duplicateCorrection = await handleApiRequest({
       method: "POST",
       url: `/api/invoices/${invoiceId}/corrections`,
       authorization,
+      idempotencyKey: "correction-2",
       body: { reason: "Corecție duplicată", issueDate: "2026-09-04" },
     }, runtime)
     assert.deepEqual(duplicateCorrection, {

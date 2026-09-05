@@ -1,7 +1,7 @@
 import type { Effect } from "effect"
 
 import type { DomainConflict, PersistenceFailure } from "../contracts/failures.ts"
-import type { Customer, DocumentSeries, DocumentType, DraftInvoice, IssuedInvoice, IssuerProfile, NumberedDocumentType, ProductPreset, Proforma, ProformaConversion, ProformaInvoiceConversion } from "../domain/invoice.ts"
+import type { Customer, DocumentSeries, DocumentSource, DocumentType, DraftInvoice, IdempotencyRecord, IssuedInvoice, IssuerProfile, NumberedDocumentType, ProductPreset, Proforma, ProformaConversion, ProformaInvoiceConversion } from "../domain/invoice.ts"
 import type { CorrectionDocument } from "../domain/corrections.ts"
 
 export type TransactionFailure = DomainConflict | PersistenceFailure
@@ -9,8 +9,8 @@ type Read<Value> = Effect.Effect<Value, PersistenceFailure>
 type Write<Value = void> = Effect.Effect<Value, TransactionFailure>
 type Save<Value> = (value: Value) => Write
 type Find<Value> = (organizationId: string, id: string) => Read<Value | undefined>
-type List<Value> = (organizationId: string) => Read<ReadonlyArray<Value>>
-type RelatedList<Value> = (organizationId: string, parentId: string) => Read<ReadonlyArray<Value>>
+type List<Value> = (organizationId: string, source?: DocumentSource) => Read<ReadonlyArray<Value>>
+type RelatedList<Value> = (organizationId: string, parentId: string, source?: DocumentSource) => Read<ReadonlyArray<Value>>
 type Remove = (organizationId: string, id: string) => Write
 
 export interface InvoicingTransaction {
@@ -58,4 +58,6 @@ export interface InvoicingTransaction {
   readonly saveCorrection: Save<CorrectionDocument>
   readonly findCorrection: Find<CorrectionDocument>
   readonly listCorrections: RelatedList<CorrectionDocument>
+  readonly findIdempotencyRecord: Find<IdempotencyRecord>
+  readonly saveIdempotencyRecord: Save<IdempotencyRecord>
 }

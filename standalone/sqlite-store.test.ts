@@ -36,6 +36,12 @@ const context = (organizationId: string): RequestContextProvider => ({
 })
 
 const clock: Clock = { now: Effect.succeed(new Date("2026-09-01T10:00:00.000Z")) }
+const each = { code: "C62", name: "unitate" } as const
+let idempotencyCounter = 0
+const idempotent = <Input>(request: Input) => ({
+  request,
+  idempotency: { key: `sqlite-${String(++idempotencyCounter)}`, fingerprint: `sha256:${"0".repeat(64)}` },
+})
 
 const ids = (): IdGenerator => {
   let value = 0
@@ -85,13 +91,14 @@ void test("persists an issued snapshot across store recreation and isolates orga
       address: { countryCode: "RO", city: "Iași", street: "Strada Nouă 3" }, defaultPaymentTermDays: 30,
     }))
     assert.equal(updatedCustomer.defaultPaymentTermDays, 30)
-    const preset = await Effect.runPromise(service.createProductPreset({ description: "  Servicii software  ", unitPrice: "125.5" }))
+    const preset = await Effect.runPromise(service.createProductPreset({ description: "  Servicii software  ", unitPrice: "125.5", unitOfMeasure: each }))
     assert.equal(preset.unitPrice, "125.50")
     assert.deepEqual(await Effect.runPromise(service.listProductPresets()), [preset])
     const draft = await Effect.runPromise(service.createDraft({
       customerId: customer.id,
       issueDate: "2026-09-01",
       series: "QWBE",
+      source: { app: "crm", kind: "contract", id: "contract-1" },
     }))
     const databaseBeforeIssue = new DatabaseSync(databasePath(directory))
     try {
@@ -107,34 +114,36 @@ void test("persists an issued snapshot across store recreation and isolates orga
       description: "Servicii software",
       quantity: "1.25",
       unitPrice: "100.00",
+      unitOfMeasure: each,
       taxCode: "RO_STANDARD",
     }))
-    const issued = await Effect.runPromise(service.issueInvoice({ draftId: draft.id }))
+    const issued = await Effect.runPromise(service.issueInvoice(idempotent({ draftId: draft.id })))
     const proformaSource = await Effect.runPromise(service.createDraft({
       customerId: customer.id, issueDate: "2026-09-01", dueDate: null, series: "QWBE",
+      source: { app: "crm", kind: "offer", id: "offer-1" },
     }))
     const proformaAuthored = await Effect.runPromise(service.addDraftLine({
-      draftId: proformaSource.id, description: "Avans", quantity: "1", unitPrice: "50", taxCode: "RO_STANDARD",
+      draftId: proformaSource.id, description: "Avans", quantity: "1", unitPrice: "50", unitOfMeasure: each, taxCode: "RO_STANDARD",
     }))
-    const proforma = await Effect.runPromise(service.issueProforma({ draftId: proformaSource.id, series: "PRO" }))
+    const proforma = await Effect.runPromise(service.issueProforma(idempotent({ draftId: proformaSource.id, series: "PRO" })))
     assert.equal(proforma.convertedDraftId, null)
     assert.equal((await Effect.runPromise(service.getProforma(proforma.id))).convertedDraftId, null)
     assert.equal((await Effect.runPromise(service.listProformas()))[0]?.convertedDraftId, null)
-    const converted = await Effect.runPromise(service.issueInvoiceFromProforma({ proformaId: proforma.id }))
+    const converted = await Effect.runPromise(service.issueInvoiceFromProforma(idempotent({ proformaId: proforma.id })))
     assert.deepEqual(converted.lines, proformaAuthored.lines)
     assert.equal(converted.series, "QWBE")
     assert.equal(converted.dueDate, null)
     assert.equal((await Effect.runPromise(service.getProforma(proforma.id))).convertedInvoiceId, converted.id)
-    const duplicateConversion = await Effect.runPromise(Effect.flip(service.issueInvoiceFromProforma({ proformaId: proforma.id })))
+    const duplicateConversion = await Effect.runPromise(Effect.flip(service.issueInvoiceFromProforma(idempotent({ proformaId: proforma.id }))))
     assert.equal(duplicateConversion instanceof DomainConflict && duplicateConversion.code === "proforma_already_converted", true)
-    const directProforma = await Effect.runPromise(service.issueProforma({ customerId: customer.id, series: "QWBE",
+    const directProforma = await Effect.runPromise(service.issueProforma(idempotent({ customerId: customer.id, series: "QWBE",
       proformaSeries: "PRO", issueDate: "2026-09-02", currency: "RON",
-      lines: [{ description: "Direct", quantity: "1", unitPrice: "75", taxCode: "RO_STANDARD" }] }))
-    const directInvoice = await Effect.runPromise(service.issueInvoiceFromProforma({ proformaId: directProforma.id }))
+      lines: [{ description: "Direct", quantity: "1", unitPrice: "75", unitOfMeasure: each, taxCode: "RO_STANDARD" }] })))
+    const directInvoice = await Effect.runPromise(service.issueInvoiceFromProforma(idempotent({ proformaId: directProforma.id })))
     assert.equal(directInvoice.sourceProformaId, directProforma.id)
     assert.deepEqual(directInvoice.lines, directProforma.lines)
     assert.equal((await Effect.runPromise(service.getProforma(directProforma.id))).convertedInvoiceId, directInvoice.id)
-    const duplicateDirect = await Effect.runPromise(Effect.flip(service.issueInvoiceFromProforma({ proformaId: directProforma.id })))
+    const duplicateDirect = await Effect.runPromise(Effect.flip(service.issueInvoiceFromProforma(idempotent({ proformaId: directProforma.id }))))
     assert.equal(duplicateDirect instanceof DomainConflict && duplicateDirect.code === "proforma_already_converted", true)
 
     const restarted = createInvoicingService({
@@ -145,10 +154,13 @@ void test("persists an issued snapshot across store recreation and isolates orga
       cubeIdentity: "invoicing",
     })
     assert.deepEqual(await Effect.runPromise(restarted.getIssuedInvoice(issued.id)), issued)
+    assert.deepEqual(await Effect.runPromise(restarted.listIssuedInvoices({ app: "crm", kind: "contract", id: "contract-1" })), [issued])
     assert.deepEqual(await Effect.runPromise(restarted.getIssuedInvoice(directInvoice.id)), directInvoice)
     assert.deepEqual(await Effect.runPromise(restarted.getProforma(proforma.id)), { ...proforma, convertedInvoiceId: converted.id })
     assert.deepEqual((await Effect.runPromise(restarted.listProformas())).find(({ id }) => id === proforma.id),
       { ...proforma, convertedInvoiceId: converted.id })
+    assert.deepEqual(await Effect.runPromise(restarted.listProformas({ app: "crm", kind: "offer", id: "offer-1" })),
+      [{ ...proforma, convertedInvoiceId: converted.id }])
     assert.equal((await Effect.runPromise(restarted.getDraft(proformaSource.id))).status, "proforma_issued")
     assert.equal((await Effect.runPromise(restarted.getCustomer(customer.id))).defaultPaymentTermDays, 30)
     assert.deepEqual(await Effect.runPromise(restarted.listProductPresets()), [preset])
@@ -181,35 +193,51 @@ void test("persists an issued snapshot across store recreation and isolates orga
         .run("BT", issued.id))
       assert.throws(() => database.prepare("UPDATE issued_invoices SET issuer_postal_code = NULL WHERE id = ?")
         .run(issued.id))
+      assert.throws(() => database.prepare("UPDATE issued_invoices SET source_id = 'changed' WHERE id = ?").run(issued.id))
       assert.throws(() => database.prepare("DELETE FROM issued_lines WHERE invoice_id = ?").run(issued.id))
       assert.throws(() => database.prepare("DELETE FROM issued_tax_breakdown WHERE invoice_id = ?").run(issued.id))
       assert.throws(() => database.prepare("DELETE FROM issued_invoices WHERE id = ?").run(issued.id))
       assert.throws(() => database.prepare("DELETE FROM invoice_drafts WHERE id = ?").run(draft.id))
       assert.throws(() => database.prepare("UPDATE proformas SET total_including_tax='0.00' WHERE id=?").run(proforma.id))
+      assert.throws(() => database.prepare("UPDATE proformas SET source_id='changed' WHERE id=?").run(proforma.id))
       assert.equal(database.prepare("SELECT sealed FROM proformas WHERE id=?").get(proforma.id)?.sealed, 1)
       assert.equal(database.prepare("SELECT actor_id FROM proforma_invoice_conversions WHERE proforma_id=?").get(proforma.id)?.actor_id, "user-1")
-      assert.throws(() => database.prepare(`INSERT INTO proforma_lines
+      assert.throws(() => database.prepare(`INSERT INTO proforma_lines(
+        id,proforma_id,organization_id,line_position,description,quantity,unit_price,tax_code,tax_category,
+        tax_rate,total_excluding_tax,tax_amount,total_including_tax,unit_code,unit_name)
         SELECT 'late-line',proforma_id,organization_id,line_position+10,description,quantity,unit_price,tax_code,tax_category,
-        tax_rate,total_excluding_tax,tax_amount,total_including_tax FROM proforma_lines WHERE proforma_id=? LIMIT 1`).run(proforma.id))
+        tax_rate,total_excluding_tax,tax_amount,total_including_tax,unit_code,unit_name FROM proforma_lines WHERE proforma_id=? LIMIT 1`).run(proforma.id))
       assert.throws(() => database.prepare(`INSERT INTO proforma_tax_breakdown
         SELECT proforma_id,organization_id,line_position+10,tax_code,category,rate,taxable_amount,tax_amount
         FROM proforma_tax_breakdown WHERE proforma_id=? LIMIT 1`).run(proforma.id))
       assert.throws(() => database.prepare("DELETE FROM proforma_lines WHERE proforma_id=?").run(proforma.id))
       assert.throws(() => database.prepare("DELETE FROM proforma_tax_breakdown WHERE proforma_id=?").run(proforma.id))
       assert.throws(() => database.prepare("DELETE FROM proforma_invoice_conversions WHERE proforma_id=?").run(proforma.id))
-      database.prepare(`INSERT INTO invoice_drafts SELECT 'wrong-series-source',organization_id,NULL,customer_party_type,
+      database.prepare(`INSERT INTO invoice_drafts(id,organization_id,customer_id,customer_party_type,customer_legal_name,
+        customer_tax_identifier,customer_country_code,customer_city,customer_street,customer_county,customer_postal_code,
+        series,issue_date,due_date,currency,status) SELECT 'wrong-series-source',organization_id,NULL,customer_party_type,
         customer_legal_name,customer_tax_identifier,customer_country_code,customer_city,customer_street,customer_county,
         customer_postal_code,series,issue_date,due_date,currency,'proforma_issued' FROM invoice_drafts WHERE id=?`).run(proformaSource.id)
-      assert.throws(() => database.prepare(`INSERT INTO proformas SELECT 'wrong-series-proforma','wrong-series-source',
+      assert.throws(() => database.prepare(`INSERT INTO proformas(id,source_draft_id,organization_id,fiscal_year,document_type,
+        series,number,issue_date,due_date,issued_at,currency,issuer_legal_name,issuer_tax_identifier,issuer_country_code,
+        issuer_city,issuer_street,issuer_county,issuer_postal_code,customer_party_type,customer_legal_name,
+        customer_tax_identifier,customer_country_code,customer_city,customer_street,customer_county,customer_postal_code,
+        total_excluding_tax,tax_total,total_including_tax,sealed,invoice_series)
+        SELECT 'wrong-series-proforma','wrong-series-source',
         organization_id,fiscal_year,document_type,'QWBE',number+10,issue_date,due_date,issued_at,currency,issuer_legal_name,
         issuer_tax_identifier,issuer_country_code,issuer_city,issuer_street,issuer_county,issuer_postal_code,customer_party_type,
         customer_legal_name,customer_tax_identifier,customer_country_code,customer_city,customer_street,customer_county,
-        customer_postal_code,total_excluding_tax,tax_total,total_including_tax,0 FROM proformas WHERE id=?`).run(proforma.id))
-      assert.throws(() => database.prepare(`INSERT INTO proformas SELECT 'missing-series-proforma','wrong-series-source',
+        customer_postal_code,total_excluding_tax,tax_total,total_including_tax,0,invoice_series FROM proformas WHERE id=?`).run(proforma.id))
+      assert.throws(() => database.prepare(`INSERT INTO proformas(id,source_draft_id,organization_id,fiscal_year,document_type,
+        series,number,issue_date,due_date,issued_at,currency,issuer_legal_name,issuer_tax_identifier,issuer_country_code,
+        issuer_city,issuer_street,issuer_county,issuer_postal_code,customer_party_type,customer_legal_name,
+        customer_tax_identifier,customer_country_code,customer_city,customer_street,customer_county,customer_postal_code,
+        total_excluding_tax,tax_total,total_including_tax,sealed,invoice_series)
+        SELECT 'missing-series-proforma','wrong-series-source',
         organization_id,fiscal_year,document_type,'MISSING',number+11,issue_date,due_date,issued_at,currency,issuer_legal_name,
         issuer_tax_identifier,issuer_country_code,issuer_city,issuer_street,issuer_county,issuer_postal_code,customer_party_type,
         customer_legal_name,customer_tax_identifier,customer_country_code,customer_city,customer_street,customer_county,
-        customer_postal_code,total_excluding_tax,tax_total,total_including_tax,0 FROM proformas WHERE id=?`).run(proforma.id))
+        customer_postal_code,total_excluding_tax,tax_total,total_including_tax,0,invoice_series FROM proformas WHERE id=?`).run(proforma.id))
     } finally {
       database.close()
     }
@@ -227,7 +255,7 @@ void test("persists an issued snapshot across store recreation and isolates orga
     assert.equal(await Effect.runPromise(Effect.flip(otherOrganization.getProforma(proforma.id))) instanceof ResourceNotFound, true)
     assert.deepEqual(await Effect.runPromise(otherOrganization.listProductPresets()), [])
     assert.equal(await Effect.runPromise(Effect.flip(otherOrganization.updateProductPreset({
-      id: preset.id, description: "Intrus", unitPrice: "1.00",
+      id: preset.id, description: "Intrus", unitPrice: "1.00", unitOfMeasure: each,
     }))) instanceof ResourceNotFound, true)
     assert.equal(await Effect.runPromise(Effect.flip(otherOrganization.deleteProductPreset(preset.id))) instanceof ResourceNotFound, true)
     await Effect.runPromise(restarted.deleteProductPreset(preset.id))

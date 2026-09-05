@@ -9,13 +9,14 @@ import {
   type AuthoringDocumentInput,
   type BuyerSnapshot,
   type CreateDraftInput,
+  type DocumentSource,
   type DraftInvoice,
   type UpdateDraftInput,
   type UpdateDraftLineInput,
 } from "../domain/invoice.ts"
-import { resolveTaxConfiguration, validateBuyer, validateDate, validateDocumentSeries } from "../domain/validation.ts"
+import { resolveTaxConfiguration, validateBuyer, validateDate, validateDocumentSeries, validateDocumentSource } from "../domain/validation.ts"
 import type { InvoicingTransaction } from "./ports.ts"
-import { checked, copyBuyer, missing } from "./support.ts"
+import { checked, copyBuyer, copySource, missing } from "./support.ts"
 
 type Dependencies = { ids: IdGenerator; store: TransactionalStore<InvoicingTransaction> }
 type Authorize = (permission: string) => Effect.Effect<RequestContext, InvoicingFailure>
@@ -71,6 +72,12 @@ const dates = (issueDate: string, dueDate: string | null | undefined) => checked
   return { issueDate, dueDate: due }
 })
 
+const documentSource = (source: DocumentSource | undefined) => checked(() => {
+  if (source === undefined) return undefined
+  validateDocumentSource(source)
+  return copySource(source)
+})
+
 export const authorDocument = (
   input: AuthoringDocumentInput | CreateDraftInput,
   organizationId: string,
@@ -88,9 +95,10 @@ export const authorDocument = (
   if (series === undefined) return yield* Effect.fail(missing("document_series", input.series))
   const customer = yield* buyerFrom(input, organizationId, transaction)
   const header = yield* dates(input.issueDate, input.dueDate)
+  const source = yield* documentSource(input.source)
   const lines = yield* Effect.forEach("lines" in input ? input.lines : [], (line) => Effect.flatMap(ids.next, (id) =>
     checked(() => calculateLine({ ...line, id, tax: resolveTaxConfiguration(issuer, line.taxCode, input.issueDate) }))))
-  return { issuer, document: { organizationId, ...customer, series: series.series, ...header, currency: "RON" as const,
+  return { issuer, document: { organizationId, ...customer, ...(source === undefined ? {} : { source }), series: series.series, ...header, currency: "RON" as const,
     lines, ...calculateTotals(lines) } }
 })
 
@@ -114,9 +122,10 @@ export const createDraftAuthoringOperations = (
     const draft = yield* dependencies.store.transaction((transaction) => transaction.findDraft(context.organization.id, id))
     return draft === undefined ? yield* Effect.fail(missing("draft", id)) : structuredClone(draft)
   })
-  const listDrafts = () => Effect.gen(function*() {
+  const listDrafts = (source?: DocumentSource) => Effect.gen(function*() {
+    if (source !== undefined) yield* checked(() => { validateDocumentSource(source) })
     const context = yield* authorize(permissions.read)
-    return structuredClone(yield* dependencies.store.transaction((transaction) => transaction.listDrafts(context.organization.id)))
+    return structuredClone(yield* dependencies.store.transaction((transaction) => transaction.listDrafts(context.organization.id, source)))
   })
   const updateDraft = (input: UpdateDraftInput) => Effect.gen(function*() {
     const context = yield* authorize(permissions.draftInvoices)
@@ -126,13 +135,16 @@ export const createDraftAuthoringOperations = (
       if (issuer === undefined) return yield* Effect.fail(missing("issuer", context.organization.id))
       const buyer = yield* buyerFrom(input, context.organization.id, transaction)
       const header = yield* dates(input.issueDate, input.dueDate)
+      const source = input.source === undefined ? current.source : yield* documentSource(input.source ?? undefined)
       const lines = yield* Effect.forEach(current.lines, (line) => checked(() => calculateLine({
         id: line.id, description: line.description, quantity: line.quantity, unitPrice: line.unitPrice,
+        unitOfMeasure: line.unitOfMeasure,
         tax: resolveTaxConfiguration(issuer, line.taxCode, input.issueDate),
       })))
       const base = { ...current }
       delete base.customerId
-      const updated = withTotals({ ...base, ...buyer, ...header, lines })
+      delete base.source
+      const updated = withTotals({ ...base, ...buyer, ...(source === undefined ? {} : { source }), ...header, lines })
       yield* transaction.saveDraft(updated)
       return structuredClone(updated)
     }))

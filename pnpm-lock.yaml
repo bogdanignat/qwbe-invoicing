@@ -23,6 +23,9 @@ importers:
       pdf-lib:
         specifier: 1.17.1
         version: 1.17.1
+      un-ece-recommendation:
+        specifier: 0.1.1
+        version: 0.1.1
     devDependencies:
       '@eslint/js':
         specifier: 10.0.1
@@ -1429,6 +1432,9 @@ packages:
     engines: {node: '>=14.17'}
     hasBin: true
 
+  un-ece-recommendation@0.1.1:
+    resolution: {integrity: sha512-ExMZH4x0k2bPiJhcs7zy3i7pFsIIqX2je8OiGIuaq/CoJaIHBkA4CVZRgHz/VruxqaP21rvOAecwT/zsJsyWFQ==}
+
   undici-types@7.16.0:
     resolution: {integrity: sha512-Zz+aZWSj8LE6zoxD+xrjh4VfkIG8Ya6LvYkZqtUQGJPZjYl53ypCaUwWqo7eI0x66KBGeRo+mlBEkMSeSZ38Nw==}
 
@@ -2744,6 +2750,8 @@ snapshots:
       - supports-color
 
   typescript@6.0.3: {}
+
+  un-ece-recommendation@0.1.1: {}
 
   undici-types@7.16.0: {}
 

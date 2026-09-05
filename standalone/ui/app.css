@@ -162,7 +162,7 @@ input:hover, select:hover, textarea:hover { border-color: var(--color-invoice-co
 .line-editor { min-width: 0; margin: 0; padding: 1rem; border: 1px solid var(--color-invoice-border); border-radius: var(--radius-invoice-container); }
 .line-editor legend { padding: 0 .35rem; color: var(--color-invoice-primary); font-size: .75rem; font-weight: 800; }
 .line-preset { width: min(520px, 100%); margin-bottom: .75rem; }
-.line-fields { display: grid; grid-template-columns: minmax(180px, 2fr) repeat(3, minmax(110px, .75fr)); gap: .75rem; }
+.line-fields { display: grid; grid-template-columns: minmax(180px, 2fr) repeat(4, minmax(110px, .75fr)); gap: .75rem; }
 .line-actions { display: flex; justify-content: flex-end; gap: .4rem; margin-top: .75rem; }
 .draft-actions { display: grid; gap: .7rem; }
 .authoring-summary > p { margin-bottom: 0; }

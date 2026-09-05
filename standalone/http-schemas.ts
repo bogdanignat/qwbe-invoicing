@@ -80,6 +80,14 @@ export const DocumentSeries = Schema.Struct({
   series: Schema.String,
 })
 
+export const UnitOfMeasure = Schema.Struct({ code: Schema.String, name: Schema.String })
+export const DocumentSource = Schema.Struct({ app: Schema.String, kind: Schema.String, id: Schema.String })
+export const SourceFilter = Schema.Struct({
+  sourceApp: optionalString,
+  sourceKind: optionalString,
+  sourceId: optionalString,
+})
+
 export const Customer = Schema.Struct({
   id: Schema.String,
   organizationId: Schema.String,
@@ -94,6 +102,7 @@ export const Customer = Schema.Struct({
 export const ProductPresetInput = Schema.Struct({
   description: Schema.String,
   unitPrice: Schema.String,
+  unitOfMeasure: UnitOfMeasure,
 })
 
 export const ProductPreset = Schema.Struct({
@@ -101,6 +110,7 @@ export const ProductPreset = Schema.Struct({
   organizationId: Schema.String,
   description: Schema.String,
   unitPrice: Schema.String,
+  unitOfMeasure: UnitOfMeasure,
 })
 
 export const DraftLine = Schema.Struct({
@@ -108,6 +118,7 @@ export const DraftLine = Schema.Struct({
   description: Schema.String,
   quantity: Schema.String,
   unitPrice: Schema.String,
+  unitOfMeasure: UnitOfMeasure,
   taxCode: Schema.String,
   taxCategory: Schema.Literal("standard"),
   taxRate: Schema.String,
@@ -129,6 +140,7 @@ export const DraftInvoice = Schema.Struct({
   organizationId: Schema.String,
   customer: Buyer,
   customerId: optionalString,
+  source: Schema.optional(DocumentSource),
   series: Schema.String,
   issueDate: Schema.String,
   dueDate: nullableString,
@@ -146,6 +158,7 @@ export const IssuedInvoice = Schema.Struct({
   draftId: nullableString,
   sourceProformaId: nullableString,
   organizationId: Schema.String,
+  source: Schema.optional(DocumentSource),
   series: Schema.String,
   number: Schema.Int,
   issueDate: Schema.String,
@@ -165,20 +178,21 @@ export const IssuedInvoice = Schema.Struct({
 const BuyerById = Schema.Struct({ customerId: Schema.String })
 const InlineBuyer = Schema.Struct({ customer: Buyer })
 export const DraftInput = Schema.Union(
-  Schema.Struct({ customerId: Schema.String, series: Schema.String, issueDate: Schema.String, currency: optionalString, dueDate: optionalNullableString }),
-  Schema.Struct({ customer: Buyer, series: Schema.String, issueDate: Schema.String, currency: optionalString, dueDate: optionalNullableString }),
+  Schema.Struct({ customerId: Schema.String, source: Schema.optional(DocumentSource), series: Schema.String, issueDate: Schema.String, currency: optionalString, dueDate: optionalNullableString }),
+  Schema.Struct({ customer: Buyer, source: Schema.optional(DocumentSource), series: Schema.String, issueDate: Schema.String, currency: optionalString, dueDate: optionalNullableString }),
 )
 export const UpdateDraftInput = Schema.Union(
-  Schema.Struct({ ...BuyerById.fields, issueDate: Schema.String, dueDate: optionalNullableString }),
-  Schema.Struct({ ...InlineBuyer.fields, issueDate: Schema.String, dueDate: optionalNullableString }),
+  Schema.Struct({ ...BuyerById.fields, source: Schema.optional(Schema.NullOr(DocumentSource)), issueDate: Schema.String, dueDate: optionalNullableString }),
+  Schema.Struct({ ...InlineBuyer.fields, source: Schema.optional(Schema.NullOr(DocumentSource)), issueDate: Schema.String, dueDate: optionalNullableString }),
 )
 export const DraftLineInput = Schema.Struct({
   description: Schema.String,
   quantity: Schema.String,
   unitPrice: Schema.String,
+  unitOfMeasure: UnitOfMeasure,
   taxCode: Schema.String,
 })
-const AuthoringFields = { series: Schema.String, issueDate: Schema.String, dueDate: optionalNullableString,
+const AuthoringFields = { source: Schema.optional(DocumentSource), series: Schema.String, issueDate: Schema.String, dueDate: optionalNullableString,
   currency: Schema.Literal("RON"), lines: Schema.Array(DraftLineInput) }
 export const AuthoringDocumentInput = Schema.Union(
   Schema.Struct({ ...BuyerById.fields, ...AuthoringFields }), Schema.Struct({ ...InlineBuyer.fields, ...AuthoringFields }),
@@ -224,11 +238,12 @@ export const PaymentSummary = Schema.Struct({
   payments: Schema.Array(Payment),
 })
 
-export const CorrectionInput = Schema.Struct({ reason: Schema.String, issueDate: optionalString })
+export const CorrectionInput = Schema.Struct({ reason: Schema.String, issueDate: optionalString, source: Schema.optional(DocumentSource) })
 export const Correction = Schema.Struct({
   id: Schema.String,
   organizationId: Schema.String,
   originalInvoiceId: Schema.String,
+  source: Schema.optional(DocumentSource),
   fiscalYear: Schema.Int,
   series: Schema.String,
   number: Schema.Int,
@@ -262,6 +277,7 @@ export const Proforma = Schema.Struct({
   convertedDraftId: nullableString,
   convertedInvoiceId: nullableString,
   organizationId: Schema.String,
+  source: Schema.optional(DocumentSource),
   series: Schema.String,
   number: Schema.Int,
   issueDate: Schema.String,

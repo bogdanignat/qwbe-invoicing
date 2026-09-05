@@ -11,6 +11,7 @@ import * as S from "./http-schemas.ts"
 
 const inventory = [
   "GET /api/issuer", "PUT /api/issuer", "GET /api/document-series", "POST /api/document-series",
+  "GET /api/unit-of-measures",
   "GET /api/customers", "GET /api/customers/:id", "POST /api/customers", "PUT /api/customers/:id", "DELETE /api/customers/:id",
   "GET /api/product-presets", "POST /api/product-presets", "PUT /api/product-presets/:id", "DELETE /api/product-presets/:id",
   "GET /api/drafts", "GET /api/drafts/:id", "POST /api/drafts", "PUT /api/drafts/:id", "DELETE /api/drafts/:id",
@@ -24,11 +25,11 @@ const inventory = [
   "GET /api/session", "POST /api/session", "DELETE /api/session",
 ].sort()
 
-void test("the contract exposes exactly the current 42 operations", () => {
-  assert.equal(operationNames.length, 42)
-  assert.equal(new Set(operationNames).size, 42)
-  assert.equal(applicationRoutes.length, 42)
-  assert.equal(new Set(applicationRoutes.map((route) => route.operationId)).size, 42)
+void test("the contract exposes exactly the current 43 operations", () => {
+  assert.equal(operationNames.length, 43)
+  assert.equal(new Set(operationNames).size, 43)
+  assert.equal(applicationRoutes.length, 43)
+  assert.equal(new Set(applicationRoutes.map((route) => route.operationId)).size, 43)
   assert.deepEqual(applicationRoutes.map((route) => `${route.method} ${route.path}`).sort(), inventory)
   assert.equal(applicationRoutes.some((route) => route.path === "/api"), false)
 })
@@ -77,9 +78,10 @@ void test("customer payment terms and monetary product presets have explicit wir
   assert.doesNotThrow(() => Schema.decodeUnknownSync(S.CustomerInput)(customer))
   assert.equal(Schema.decodeUnknownSync(S.CustomerInput)({ ...customer, defaultPaymentTermDays: 0 }).defaultPaymentTermDays, 0)
   assert.throws(() => Schema.decodeUnknownSync(S.CustomerInput)({ ...customer, defaultPaymentTermDays: 1.5 }))
-  assert.deepEqual(Schema.decodeUnknownSync(S.ProductPresetInput)({ description: "Servicii", unitPrice: "10.00" }),
-    { description: "Servicii", unitPrice: "10.00" })
-  assert.throws(() => Schema.decodeUnknownSync(S.ProductPresetInput)({ description: "Servicii", unitPrice: 10 }))
+  const unitOfMeasure = { code: "HUR", name: "oră" }
+  assert.deepEqual(Schema.decodeUnknownSync(S.ProductPresetInput)({ description: "Servicii", unitPrice: "10.00", unitOfMeasure }),
+    { description: "Servicii", unitPrice: "10.00", unitOfMeasure })
+  assert.throws(() => Schema.decodeUnknownSync(S.ProductPresetInput)({ description: "Servicii", unitPrice: 10, unitOfMeasure }))
 })
 
 void test("OpenAPI 3.1 mirrors paths, PDF encoding, and authentication metadata", () => {
@@ -100,6 +102,11 @@ void test("OpenAPI 3.1 mirrors paths, PDF encoding, and authentication metadata"
   assert.deepEqual(draftContent?.["application/json"]?.schema?.properties?.status?.enum, ["draft", "issued", "proforma_issued"])
   assert.ok(spec.paths["/api/customers"].post?.parameters.some((parameter) => parameter.name === "x-csrf-token"))
   assert.ok(spec.paths["/api/session"].delete?.parameters.some((parameter) => parameter.name === "x-csrf-token" && parameter.required))
+  for (const path of ["/api/drafts/{draftId}/issue", "/api/invoices", "/api/drafts/{draftId}/proformas",
+    "/api/proformas", "/api/proformas/{id}/invoice", "/api/invoices/{invoiceId}/corrections"]) {
+    assert.ok(spec.paths[path]?.post?.parameters.some((parameter) => parameter.name === "idempotency-key" && parameter.required),
+      `${path} must require Idempotency-Key`)
+  }
   const pdfPath = spec.paths["/api/invoices/{invoiceId}/pdf"]
   assert.ok(pdfPath)
   const pdfContent = pdfPath.get?.responses[200]?.content as
@@ -125,7 +132,7 @@ void test("OpenAPI 3.1 mirrors paths, PDF encoding, and authentication metadata"
     assert.ok(operation, `${method.toUpperCase()} ${path} is absent`)
     assert.deepEqual(Object.keys(operation.responses).sort(), [...new Set([...base, ...extras])].sort())
   }
-  for (const path of ["/api/document-series", "/api/customers", "/api/product-presets", "/api/drafts", "/api/invoices/{invoiceId}/corrections", "/api/invoices", "/api/proformas"]) {
+  for (const path of ["/api/document-series", "/api/unit-of-measures", "/api/customers", "/api/product-presets", "/api/drafts", "/api/invoices/{invoiceId}/corrections", "/api/invoices", "/api/proformas"]) {
     expectStatuses("get", path)
   }
   for (const path of ["/api/issuer", "/api/customers/{id}", "/api/drafts/{id}", "/api/invoices/{invoiceId}/payments", "/api/corrections/{id}", "/api/invoices/{id}", "/api/invoices/{invoiceId}/pdf", "/api/proformas/{id}", "/api/proformas/{proformaId}/pdf"]) {
