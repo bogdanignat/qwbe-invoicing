@@ -1,6 +1,7 @@
 import { ValidationFailure } from "../../contracts/failures.ts"
 import { normalizeMoney } from "../../domain/calculation.ts"
-import type { CustomerInput, IssuerProfile, ProductPresetInput, VatConfiguration } from "../../domain/invoice.ts"
+import type { IssuerProfile, VatConfiguration } from "../../domain/invoice.ts"
+import type { CustomerInput, ProductPresetInput } from "../../domain/inputs.ts"
 import { normalizeUnitOfMeasure } from "../../domain/unit-of-measures.ts"
 import { isValidRomanianCui, maximumPaymentTermDays, validateBuyer, validateDate, validateParty } from "../../domain/validation.ts"
 

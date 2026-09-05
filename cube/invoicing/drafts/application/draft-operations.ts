@@ -4,7 +4,8 @@ import { checked, missing, type Authorize, type OperationDependencies } from "..
 import type { InvoicingFailure } from "../../contracts/failures.ts"
 import type { InvoicingPermissions } from "../../contracts/permissions.ts"
 import { calculateLine } from "../../domain/calculation.ts"
-import type { CreateDraftInput, DocumentSource, DraftInvoice, UpdateDraftInput } from "../../domain/invoice.ts"
+import type { DocumentSource, DraftInvoice } from "../../domain/invoice.ts"
+import type { CreateDraftInput, UpdateDraftInput } from "../../domain/inputs.ts"
 import { resolveVatConfiguration, validateDocumentSource } from "../../domain/validation.ts"
 import { authorDocument, buyerFrom, dates, documentSource, findEditable, withTotals } from "./authoring.ts"
 
