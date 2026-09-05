@@ -7,8 +7,8 @@ export interface Address {
 }
 
 export interface Party {
-  readonly legalName: string
-  readonly taxIdentifier: string
+  readonly name: string
+  readonly fiscalIdentifier: string
   readonly address: Address
 }
 
@@ -43,9 +43,8 @@ export interface DocumentSource {
   readonly id: string
 }
 
-export interface TaxConfiguration {
+export interface VatConfiguration {
   readonly code: string
-  readonly category: "standard"
   readonly rate: string
   readonly effectiveFrom: string
   readonly effectiveTo?: string
@@ -55,7 +54,7 @@ export interface Issuer extends Party {
   readonly organizationId: string
   readonly defaultCurrency: string
   readonly defaultPaymentTermDays: number
-  readonly taxConfigurations: ReadonlyArray<TaxConfiguration>
+  readonly vatConfigurations: ReadonlyArray<VatConfiguration>
 }
 
 export type DocumentType = "invoice" | "proforma"
@@ -82,12 +81,11 @@ export interface DraftLine {
   readonly quantity: string
   readonly unitPrice: string
   readonly unitOfMeasure: UnitOfMeasure
-  readonly taxCode: string
-  readonly taxCategory: "standard"
-  readonly taxRate: string
-  readonly totalExcludingTax: string
-  readonly taxAmount: string
-  readonly totalIncludingTax: string
+  readonly vatRateCode: string
+  readonly vatRate: string
+  readonly totalExcludingVat: string
+  readonly vatAmount: string
+  readonly totalIncludingVat: string
 }
 
 export interface DraftInvoice {
@@ -102,18 +100,17 @@ export interface DraftInvoice {
   readonly currency: string
   readonly status: "draft" | "issued" | "proforma_issued"
   readonly lines: ReadonlyArray<DraftLine>
-  readonly taxBreakdown: ReadonlyArray<TaxBreakdown>
-  readonly totalExcludingTax: string
-  readonly taxTotal: string
-  readonly totalIncludingTax: string
+  readonly vatBreakdown: ReadonlyArray<VatBreakdown>
+  readonly totalExcludingVat: string
+  readonly vatTotal: string
+  readonly totalIncludingVat: string
 }
 
-export interface TaxBreakdown {
-  readonly taxCode: string
-  readonly category: "standard"
+export interface VatBreakdown {
+  readonly code: string
   readonly rate: string
-  readonly taxableAmount: string
-  readonly taxAmount: string
+  readonly vatBaseAmount: string
+  readonly vatAmount: string
 }
 
 export interface IssuedInvoice {
@@ -129,10 +126,10 @@ export interface IssuedInvoice {
   readonly issuer: Party
   readonly customer: BuyerSnapshot
   readonly lines: ReadonlyArray<DraftLine>
-  readonly taxBreakdown: ReadonlyArray<TaxBreakdown>
-  readonly totalExcludingTax: string
-  readonly taxTotal: string
-  readonly totalIncludingTax: string
+  readonly vatBreakdown: ReadonlyArray<VatBreakdown>
+  readonly totalExcludingVat: string
+  readonly vatTotal: string
+  readonly totalIncludingVat: string
   readonly eFacturaStatus: string
 }
 
@@ -151,10 +148,10 @@ export interface Proforma {
   readonly issuer: Party
   readonly customer: BuyerSnapshot
   readonly lines: ReadonlyArray<DraftLine>
-  readonly taxBreakdown: ReadonlyArray<TaxBreakdown>
-  readonly totalExcludingTax: string
-  readonly taxTotal: string
-  readonly totalIncludingTax: string
+  readonly vatBreakdown: ReadonlyArray<VatBreakdown>
+  readonly totalExcludingVat: string
+  readonly vatTotal: string
+  readonly totalIncludingVat: string
   readonly convertedDraftId: string | null
   readonly convertedInvoiceId: string | null
 }
@@ -185,7 +182,7 @@ export interface CorrectionDocument {
   readonly issueDate: string
   readonly reason: string
   readonly currency: string
-  readonly totalIncludingTax: string
+  readonly totalIncludingVat: string
 }
 
 type JsonObject = Readonly<Record<string, unknown>>
@@ -230,8 +227,8 @@ const decodeAddress: Decoder<Address> = (input) => {
 const decodeParty: Decoder<Party> = (input) => {
   const value = object(input)
   return {
-    legalName: text(value.legalName, "legalName"),
-    taxIdentifier: text(value.taxIdentifier, "taxIdentifier"),
+    name: text(value.name, "name"),
+    fiscalIdentifier: text(value.fiscalIdentifier, "fiscalIdentifier"),
     address: decodeAddress(value.address),
   }
 }
@@ -279,11 +276,11 @@ export const decodeProductPreset: Decoder<ProductPreset> = (input) => {
   }
 }
 
-const decodeTaxConfiguration: Decoder<TaxConfiguration> = (input) => {
+const decodeVatConfiguration: Decoder<VatConfiguration> = (input) => {
   const value = object(input)
   const effectiveTo = optionalText(value.effectiveTo, "effectiveTo")
   return {
-    code: text(value.code, "code"), category: "standard", rate: text(value.rate, "rate"),
+    code: text(value.code, "code"), rate: text(value.rate, "rate"),
     effectiveFrom: text(value.effectiveFrom, "effectiveFrom"),
     ...(effectiveTo === undefined ? {} : { effectiveTo }),
   }
@@ -306,31 +303,27 @@ export const decodeIssuer: Decoder<Issuer> = (input) => {
     ...decodeParty(value), organizationId: text(value.organizationId, "organizationId"),
     defaultCurrency: text(value.defaultCurrency, "defaultCurrency"),
     defaultPaymentTermDays: integer(value.defaultPaymentTermDays, "defaultPaymentTermDays"),
-    taxConfigurations: array(value.taxConfigurations, decodeTaxConfiguration, "taxConfigurations"),
+    vatConfigurations: array(value.vatConfigurations, decodeVatConfiguration, "vatConfigurations"),
   }
 }
 
 const decodeDraftLine: Decoder<DraftLine> = (input) => {
   const value = object(input)
-  const taxCategory = text(value.taxCategory, "taxCategory")
-  if (taxCategory !== "standard") throw new Error("invalid taxCategory")
   return {
     id: text(value.id, "id"), description: text(value.description, "description"),
     quantity: text(value.quantity, "quantity"), unitPrice: text(value.unitPrice, "unitPrice"),
     unitOfMeasure: decodeUnitOfMeasure(value.unitOfMeasure),
-    taxCode: text(value.taxCode, "taxCode"), taxCategory, taxRate: text(value.taxRate, "taxRate"),
-    totalExcludingTax: text(value.totalExcludingTax, "totalExcludingTax"),
-    taxAmount: text(value.taxAmount, "taxAmount"), totalIncludingTax: text(value.totalIncludingTax, "totalIncludingTax"),
+    vatRateCode: text(value.vatRateCode, "vatRateCode"), vatRate: text(value.vatRate, "vatRate"),
+    totalExcludingVat: text(value.totalExcludingVat, "totalExcludingVat"),
+    vatAmount: text(value.vatAmount, "vatAmount"), totalIncludingVat: text(value.totalIncludingVat, "totalIncludingVat"),
   }
 }
 
-const decodeTaxBreakdown: Decoder<TaxBreakdown> = (input) => {
+const decodeVatBreakdown: Decoder<VatBreakdown> = (input) => {
   const value = object(input)
-  const category = text(value.category, "category")
-  if (category !== "standard") throw new Error("invalid category")
   return {
-    taxCode: text(value.taxCode, "taxCode"), category, rate: text(value.rate, "rate"),
-    taxableAmount: text(value.taxableAmount, "taxableAmount"), taxAmount: text(value.taxAmount, "taxAmount"),
+    code: text(value.code, "code"), rate: text(value.rate, "rate"),
+    vatBaseAmount: text(value.vatBaseAmount, "vatBaseAmount"), vatAmount: text(value.vatAmount, "vatAmount"),
   }
 }
 
@@ -348,9 +341,9 @@ export const decodeDraft: Decoder<DraftInvoice> = (input) => {
     issueDate: text(value.issueDate, "issueDate"), dueDate: nullableText(value.dueDate, "dueDate"),
     currency: text(value.currency, "currency"), status,
     lines: array(value.lines, decodeDraftLine, "lines"),
-    taxBreakdown: array(value.taxBreakdown, decodeTaxBreakdown, "taxBreakdown"),
-    totalExcludingTax: text(value.totalExcludingTax, "totalExcludingTax"), taxTotal: text(value.taxTotal, "taxTotal"),
-    totalIncludingTax: text(value.totalIncludingTax, "totalIncludingTax"),
+    vatBreakdown: array(value.vatBreakdown, decodeVatBreakdown, "vatBreakdown"),
+    totalExcludingVat: text(value.totalExcludingVat, "totalExcludingVat"), vatTotal: text(value.vatTotal, "vatTotal"),
+    totalIncludingVat: text(value.totalIncludingVat, "totalIncludingVat"),
   }
 }
 
@@ -365,9 +358,9 @@ export const decodeInvoice: Decoder<IssuedInvoice> = (input) => {
     issueDate: text(value.issueDate, "issueDate"), dueDate: nullableText(value.dueDate, "dueDate"),
     currency: text(value.currency, "currency"), issuer: decodeParty(value.issuer), customer: decodeBuyer(value.customer),
     lines: array(value.lines, decodeDraftLine, "lines"),
-    taxBreakdown: array(value.taxBreakdown, decodeTaxBreakdown, "taxBreakdown"),
-    totalExcludingTax: text(value.totalExcludingTax, "totalExcludingTax"), taxTotal: text(value.taxTotal, "taxTotal"),
-    totalIncludingTax: text(value.totalIncludingTax, "totalIncludingTax"),
+    vatBreakdown: array(value.vatBreakdown, decodeVatBreakdown, "vatBreakdown"),
+    totalExcludingVat: text(value.totalExcludingVat, "totalExcludingVat"), vatTotal: text(value.vatTotal, "vatTotal"),
+    totalIncludingVat: text(value.totalIncludingVat, "totalIncludingVat"),
     eFacturaStatus: text(value.eFacturaStatus, "eFacturaStatus"),
   }
 }
@@ -383,9 +376,9 @@ export const decodeProforma: Decoder<Proforma> = (input) => {
     number: integer(value.number, "number"), issueDate: text(value.issueDate, "issueDate"),
     dueDate: nullableText(value.dueDate, "dueDate"), issuedAt: text(value.issuedAt, "issuedAt"),
     currency: text(value.currency, "currency"), issuer: decodeParty(value.issuer), customer: decodeBuyer(value.customer),
-    lines: array(value.lines, decodeDraftLine, "lines"), taxBreakdown: array(value.taxBreakdown, decodeTaxBreakdown, "taxBreakdown"),
-    totalExcludingTax: text(value.totalExcludingTax, "totalExcludingTax"), taxTotal: text(value.taxTotal, "taxTotal"),
-    totalIncludingTax: text(value.totalIncludingTax, "totalIncludingTax"),
+    lines: array(value.lines, decodeDraftLine, "lines"), vatBreakdown: array(value.vatBreakdown, decodeVatBreakdown, "vatBreakdown"),
+    totalExcludingVat: text(value.totalExcludingVat, "totalExcludingVat"), vatTotal: text(value.vatTotal, "vatTotal"),
+    totalIncludingVat: text(value.totalIncludingVat, "totalIncludingVat"),
     convertedDraftId: nullableText(value.convertedDraftId, "convertedDraftId"),
     convertedInvoiceId: nullableText(value.convertedInvoiceId, "convertedInvoiceId"),
   }
@@ -420,7 +413,7 @@ export const decodeCorrection: Decoder<CorrectionDocument> = (input) => {
     id: text(value.id, "id"), ...(source === undefined ? {} : { source }),
     series: text(value.series, "series"), number: integer(value.number, "number"),
     issueDate: text(value.issueDate, "issueDate"), reason: text(value.reason, "reason"),
-    currency: text(value.currency, "currency"), totalIncludingTax: text(value.totalIncludingTax, "totalIncludingTax"),
+    currency: text(value.currency, "currency"), totalIncludingVat: text(value.totalIncludingVat, "totalIncludingVat"),
   }
 }
 

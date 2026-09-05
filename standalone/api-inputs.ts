@@ -51,8 +51,8 @@ const buyer = (value: unknown): BuyerSnapshot => {
     throw new ValidationFailure({ issues: ["partyType must be company or individual"] })
   }
   return {
-    partyType, legalName: text(input.legalName, "legalName"),
-    taxIdentifier: text(input.taxIdentifier, "taxIdentifier").trim().toUpperCase(), address: address(input.address),
+    partyType, name: text(input.name, "name"),
+    fiscalIdentifier: text(input.fiscalIdentifier, "fiscalIdentifier").trim().toUpperCase(), address: address(input.address),
   }
 }
 const unitOfMeasure = (value: unknown): UnitOfMeasure => {
@@ -74,19 +74,15 @@ const buyerSource = (input: JsonObject) => {
 
 export const issuerInput = (value: unknown): ConfigureIssuerInput => {
   const input = object(value)
-  if (!Array.isArray(input.taxConfigurations)) throw new ValidationFailure({ issues: ["taxConfigurations must be an array"] })
+  if (!Array.isArray(input.vatConfigurations)) throw new ValidationFailure({ issues: ["vatConfigurations must be an array"] })
   return {
-    legalName: text(input.legalName, "legalName"), taxIdentifier: text(input.taxIdentifier, "taxIdentifier").trim().toUpperCase(),
+    name: text(input.name, "name"), fiscalIdentifier: text(input.fiscalIdentifier, "fiscalIdentifier").trim().toUpperCase(),
     address: address(input.address), defaultCurrency: text(input.defaultCurrency, "defaultCurrency"),
     defaultPaymentTermDays: integer(input.defaultPaymentTermDays, "defaultPaymentTermDays"),
-    taxConfigurations: input.taxConfigurations.map((item) => {
+    vatConfigurations: input.vatConfigurations.map((item) => {
       const tax = object(item)
-      if (tax.category !== undefined && tax.category !== "standard") {
-        throw new ValidationFailure({ issues: ["taxConfigurations.category must be standard"] })
-      }
-      const effectiveTo = optionalText(tax.effectiveTo, "taxConfigurations.effectiveTo")
-      return { code: text(tax.code, "taxConfigurations.code"), category: "standard" as const,
-        rate: text(tax.rate, "taxConfigurations.rate"), effectiveFrom: text(tax.effectiveFrom, "taxConfigurations.effectiveFrom"),
+      const effectiveTo = optionalText(tax.effectiveTo, "vatConfigurations.effectiveTo")
+      return { code: text(tax.code, "vatConfigurations.code"), rate: text(tax.rate, "vatConfigurations.rate"), effectiveFrom: text(tax.effectiveFrom, "vatConfigurations.effectiveFrom"),
         ...(effectiveTo === undefined ? {} : { effectiveTo }) }
     }),
   }
@@ -128,7 +124,7 @@ const lineFields = (draftId: string, value: unknown): AddDraftLineInput => {
   const input = object(value)
   return { draftId, description: text(input.description, "description"), quantity: text(input.quantity, "quantity"),
     unitPrice: text(input.unitPrice, "unitPrice"), unitOfMeasure: unitOfMeasure(input.unitOfMeasure),
-    taxCode: text(input.taxCode, "taxCode") }
+    vatRateCode: text(input.vatRateCode, "vatRateCode") }
 }
 export const lineInput = lineFields
 export const updateLineInput = (draftId: string, lineId: string, value: unknown): UpdateDraftLineInput => ({
@@ -159,7 +155,7 @@ const rawLines = (value: unknown): AuthoringDocumentInput["lines"] => {
     const line = object(value)
     return { description: text(line.description, "lines.description"), quantity: text(line.quantity, "lines.quantity"),
       unitPrice: text(line.unitPrice, "lines.unitPrice"), unitOfMeasure: unitOfMeasure(line.unitOfMeasure),
-      taxCode: text(line.taxCode, "lines.taxCode") }
+      vatRateCode: text(line.vatRateCode, "lines.vatRateCode") }
   })
 }
 const authoring = (value: unknown): AuthoringDocumentInput => {

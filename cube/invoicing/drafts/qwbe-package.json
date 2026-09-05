@@ -1,0 +1,5 @@
+{
+  "name": "drafts",
+  "kind": "cube",
+  "summary": "Invoice draft authoring: buyer resolution, header dates, lines and totals before issuance"
+}

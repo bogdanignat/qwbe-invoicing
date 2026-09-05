@@ -6,10 +6,10 @@ const each = { code: "C62", name: "unitate" } as const
 
 void test("decodes optional address and payment fields without leaking null", () => {
   assert.deepEqual(decodeCustomer({
-    id: "customer-1", organizationId: "org-1", partyType: "company", legalName: "Client", taxIdentifier: "RO1",
+    id: "customer-1", organizationId: "org-1", partyType: "company", name: "Client", fiscalIdentifier: "RO1",
     address: { countryCode: "RO", city: "Botoșani", street: "Strada 1", county: null, postalCode: undefined },
   }), {
-    id: "customer-1", organizationId: "org-1", partyType: "company", legalName: "Client", taxIdentifier: "RO1",
+    id: "customer-1", organizationId: "org-1", partyType: "company", name: "Client", fiscalIdentifier: "RO1",
     address: { countryCode: "RO", city: "Botoșani", street: "Strada 1" },
   })
   assert.deepEqual(decodePaymentSummary({ invoiceId: "invoice-1", status: "paid", paidAmount: "121.00", remainingAmount: "0.00", payments: [{ id: "payment-1", amount: "121.00", currency: "RON", paymentDate: "2026-08-31", method: "transfer", externalReference: null }] }).payments[0], {
@@ -25,7 +25,7 @@ void test("rejects malformed external API values and unknown payment statuses", 
 
 void test("decodes customer payment terms and product presets", () => {
   const baseCustomer = {
-    id: "customer-1", organizationId: "org-1", partyType: "company", legalName: "Client", taxIdentifier: "RO1",
+    id: "customer-1", organizationId: "org-1", partyType: "company", name: "Client", fiscalIdentifier: "RO1",
     address: { countryCode: "RO", city: "Botoșani", street: "Strada 1" },
   }
   assert.equal(decodeCustomer({ ...baseCustomer, defaultPaymentTermDays: 0 }).defaultPaymentTermDays, 0)
@@ -41,12 +41,12 @@ void test("decodes customer payment terms and product presets", () => {
 
 void test("requires integer issuer terms and decodes tax configuration", () => {
   const input = {
-    organizationId: "org-1", legalName: "QWBE", taxIdentifier: "RO2",
+    organizationId: "org-1", name: "QWBE", fiscalIdentifier: "RO2",
     address: { countryCode: "RO", city: "Botoșani", street: "Strada 2" },
     defaultCurrency: "RON", defaultPaymentTermDays: 15,
-    taxConfigurations: [{ code: "RO_STANDARD", category: "standard", rate: "21.00", effectiveFrom: "2026-01-01", effectiveTo: null }],
+    vatConfigurations: [{ code: "RO_STANDARD", rate: "21.00", effectiveFrom: "2026-01-01", effectiveTo: null }],
   }
-  assert.equal(decodeIssuer(input).taxConfigurations[0]?.effectiveTo, undefined)
+  assert.equal(decodeIssuer(input).vatConfigurations[0]?.effectiveTo, undefined)
   assert.throws(() => decodeIssuer({ ...input, defaultPaymentTermDays: "15" }), /invalid defaultPaymentTermDays/)
 })
 
@@ -73,11 +73,11 @@ void test("decodes document series and requires supported document types", () =>
 const commercialDocument = {
   id: "proforma-1", sourceDraftId: "draft-1", organizationId: "org-1", series: "PRO", number: 7,
   issueDate: "2026-09-01", dueDate: null, issuedAt: "2026-09-01T10:00:00.000Z", currency: "RON",
-  issuer: { legalName: "QWBE", taxIdentifier: "RO2", address: { countryCode: "RO", city: "Botoșani", street: "Strada 2" } },
-  customer: { partyType: "company", legalName: "Client", taxIdentifier: "RO1", address: { countryCode: "RO", city: "Iași", street: "Strada 1" } },
-  lines: [{ id: "line-1", description: "Serviciu", quantity: "1.0000", unitPrice: "100.00", unitOfMeasure: each, taxCode: "RO_STANDARD", taxCategory: "standard", taxRate: "21.00", totalExcludingTax: "100.00", taxAmount: "21.00", totalIncludingTax: "121.00" }],
-  taxBreakdown: [{ taxCode: "RO_STANDARD", category: "standard", rate: "21.00", taxableAmount: "100.00", taxAmount: "21.00" }],
-  totalExcludingTax: "100.00", taxTotal: "21.00", totalIncludingTax: "121.00",
+  issuer: { name: "QWBE", fiscalIdentifier: "RO2", address: { countryCode: "RO", city: "Botoșani", street: "Strada 2" } },
+  customer: { partyType: "company", name: "Client", fiscalIdentifier: "RO1", address: { countryCode: "RO", city: "Iași", street: "Strada 1" } },
+  lines: [{ id: "line-1", description: "Serviciu", quantity: "1.0000", unitPrice: "100.00", unitOfMeasure: each, vatRateCode: "RO_STANDARD", vatRate: "21.00", totalExcludingVat: "100.00", vatAmount: "21.00", totalIncludingVat: "121.00" }],
+  vatBreakdown: [{ code: "RO_STANDARD", rate: "21.00", vatBaseAmount: "100.00", vatAmount: "21.00" }],
+  totalExcludingVat: "100.00", vatTotal: "21.00", totalIncludingVat: "121.00",
   invoiceSeries: "QWBE", convertedDraftId: null, convertedInvoiceId: null,
 }
 
@@ -98,9 +98,9 @@ void test("strictly decodes nullable commercial dates and proforma conversion st
 void test("requires the series fixed on a draft", () => {
   const draft = {
     id: "draft-1", organizationId: "org-1", customerId: "customer-1",
-    customer: { partyType: "company", legalName: "Client", taxIdentifier: "RO1", address: { countryCode: "RO", city: "Iași", street: "Strada 1" } },
+    customer: { partyType: "company", name: "Client", fiscalIdentifier: "RO1", address: { countryCode: "RO", city: "Iași", street: "Strada 1" } },
     series: "QWBE", issueDate: "2026-09-01", dueDate: "2026-09-16", currency: "RON", status: "draft", lines: [],
-    taxBreakdown: [], totalExcludingTax: "0.00", taxTotal: "0.00", totalIncludingTax: "0.00",
+    vatBreakdown: [], totalExcludingVat: "0.00", vatTotal: "0.00", totalIncludingVat: "0.00",
   }
   assert.equal(decodeDraft(draft).series, "QWBE")
   assert.equal(decodeDrafts([draft])[0]?.customer.partyType, "company")
@@ -110,15 +110,15 @@ void test("requires the series fixed on a draft", () => {
 void test("decodes inline individual buyers and complete server totals", () => {
   const decoded = decodeDraft({
     id: "draft-2", organizationId: "org-1",
-    customer: { partyType: "individual", legalName: "Ana Pop", taxIdentifier: "", address: { countryCode: "RO", city: "Iași", street: "Strada 2" } },
+    customer: { partyType: "individual", name: "Ana Pop", fiscalIdentifier: "", address: { countryCode: "RO", city: "Iași", street: "Strada 2" } },
     series: "QWBE", issueDate: "2026-09-01", dueDate: "2026-09-16", currency: "RON", status: "draft",
     source: { app: "crm", kind: "contract", id: "contract-1" },
-    lines: [{ id: "line-1", description: "Serviciu", quantity: "1.0000", unitPrice: "100.00", unitOfMeasure: each, taxCode: "RO_STANDARD", taxCategory: "standard", taxRate: "21.00", totalExcludingTax: "100.00", taxAmount: "21.00", totalIncludingTax: "121.00" }],
-    taxBreakdown: [{ taxCode: "RO_STANDARD", category: "standard", rate: "21.00", taxableAmount: "100.00", taxAmount: "21.00" }],
-    totalExcludingTax: "100.00", taxTotal: "21.00", totalIncludingTax: "121.00",
+    lines: [{ id: "line-1", description: "Serviciu", quantity: "1.0000", unitPrice: "100.00", unitOfMeasure: each, vatRateCode: "RO_STANDARD", vatRate: "21.00", totalExcludingVat: "100.00", vatAmount: "21.00", totalIncludingVat: "121.00" }],
+    vatBreakdown: [{ code: "RO_STANDARD", rate: "21.00", vatBaseAmount: "100.00", vatAmount: "21.00" }],
+    totalExcludingVat: "100.00", vatTotal: "21.00", totalIncludingVat: "121.00",
   })
   assert.equal(decoded.customerId, undefined)
   assert.deepEqual(decoded.source, { app: "crm", kind: "contract", id: "contract-1" })
-  assert.equal(decoded.customer.taxIdentifier, "")
-  assert.equal(decoded.taxBreakdown[0]?.taxableAmount, "100.00")
+  assert.equal(decoded.customer.fiscalIdentifier, "")
+  assert.equal(decoded.vatBreakdown[0]?.vatBaseAmount, "100.00")
 })

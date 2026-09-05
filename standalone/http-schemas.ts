@@ -14,59 +14,57 @@ export const Address = Schema.Struct({
 })
 
 export const Party = Schema.Struct({
-  legalName: Schema.String,
-  taxIdentifier: Schema.String,
+  name: Schema.String,
+  fiscalIdentifier: Schema.String,
   address: Address,
 })
 
 export const Buyer = Schema.Struct({
   partyType: Schema.Literal("company", "individual"),
-  legalName: Schema.String,
-  taxIdentifier: Schema.String,
+  name: Schema.String,
+  fiscalIdentifier: Schema.String,
   address: Address,
 })
 
 export const CustomerInput = Schema.Struct({
   partyType: Schema.Literal("company", "individual"),
-  legalName: Schema.String,
-  taxIdentifier: Schema.String,
+  name: Schema.String,
+  fiscalIdentifier: Schema.String,
   address: Address,
   defaultPaymentTermDays: Schema.optional(Schema.Int),
 })
 
-export const TaxConfiguration = Schema.Struct({
+export const VatConfiguration = Schema.Struct({
   code: Schema.String,
-  category: Schema.Literal("standard"),
   rate: Schema.String,
   effectiveFrom: Schema.String,
   effectiveTo: optionalString,
 })
 
-const TaxConfigurationInput = Schema.Struct({
+const VatConfigurationInput = Schema.Struct({
   code: Schema.String,
-  category: Schema.optional(Schema.Literal("standard")),
   rate: Schema.String,
   effectiveFrom: Schema.String,
   effectiveTo: optionalString,
 })
 
 export const IssuerInput = Schema.Struct({
-  legalName: Schema.String,
-  taxIdentifier: Schema.String,
+  name: Schema.String,
+  fiscalIdentifier: Schema.String,
   address: Address,
   defaultCurrency: Schema.String,
   defaultPaymentTermDays: Schema.Int,
-  taxConfigurations: Schema.Array(TaxConfigurationInput),
+  vatConfigurations: Schema.Array(VatConfigurationInput),
 })
 
 export const Issuer = Schema.Struct({
-  legalName: Schema.String,
-  taxIdentifier: Schema.String,
+  name: Schema.String,
+  fiscalIdentifier: Schema.String,
   address: Address,
   organizationId: Schema.String,
   defaultCurrency: Schema.String,
   defaultPaymentTermDays: Schema.Int,
-  taxConfigurations: Schema.Array(TaxConfiguration),
+  vatConfigurations: Schema.Array(VatConfiguration),
 })
 
 export const DocumentSeriesInput = Schema.Struct({
@@ -92,8 +90,8 @@ export const Customer = Schema.Struct({
   id: Schema.String,
   organizationId: Schema.String,
   partyType: Schema.Literal("company", "individual"),
-  legalName: Schema.String,
-  taxIdentifier: Schema.String,
+  name: Schema.String,
+  fiscalIdentifier: Schema.String,
   address: Address,
   defaultPaymentTermDays: Schema.optional(Schema.Int),
   deletedAt: optionalString,
@@ -119,20 +117,18 @@ export const DraftLine = Schema.Struct({
   quantity: Schema.String,
   unitPrice: Schema.String,
   unitOfMeasure: UnitOfMeasure,
-  taxCode: Schema.String,
-  taxCategory: Schema.Literal("standard"),
-  taxRate: Schema.String,
-  totalExcludingTax: Schema.String,
-  taxAmount: Schema.String,
-  totalIncludingTax: Schema.String,
+  vatRateCode: Schema.String,
+  vatRate: Schema.String,
+  totalExcludingVat: Schema.String,
+  vatAmount: Schema.String,
+  totalIncludingVat: Schema.String,
 })
 
-export const TaxBreakdown = Schema.Struct({
-  taxCode: Schema.String,
-  category: Schema.Literal("standard"),
+export const VatBreakdown = Schema.Struct({
+  code: Schema.String,
   rate: Schema.String,
-  taxableAmount: Schema.String,
-  taxAmount: Schema.String,
+  vatBaseAmount: Schema.String,
+  vatAmount: Schema.String,
 })
 
 export const DraftInvoice = Schema.Struct({
@@ -147,10 +143,10 @@ export const DraftInvoice = Schema.Struct({
   currency: Schema.String,
   status: Schema.Literal("draft", "issued", "proforma_issued"),
   lines: Schema.Array(DraftLine),
-  taxBreakdown: Schema.Array(TaxBreakdown),
-  totalExcludingTax: Schema.String,
-  taxTotal: Schema.String,
-  totalIncludingTax: Schema.String,
+  vatBreakdown: Schema.Array(VatBreakdown),
+  totalExcludingVat: Schema.String,
+  vatTotal: Schema.String,
+  totalIncludingVat: Schema.String,
 })
 
 export const IssuedInvoice = Schema.Struct({
@@ -168,10 +164,10 @@ export const IssuedInvoice = Schema.Struct({
   issuer: Party,
   customer: Buyer,
   lines: Schema.Array(DraftLine),
-  taxBreakdown: Schema.Array(TaxBreakdown),
-  totalExcludingTax: Schema.String,
-  taxTotal: Schema.String,
-  totalIncludingTax: Schema.String,
+  vatBreakdown: Schema.Array(VatBreakdown),
+  totalExcludingVat: Schema.String,
+  vatTotal: Schema.String,
+  totalIncludingVat: Schema.String,
   eFacturaStatus: Schema.Literal("not_sent", "pending", "sent", "accepted", "rejected"),
 })
 
@@ -190,7 +186,7 @@ export const DraftLineInput = Schema.Struct({
   quantity: Schema.String,
   unitPrice: Schema.String,
   unitOfMeasure: UnitOfMeasure,
-  taxCode: Schema.String,
+  vatRateCode: Schema.String,
 })
 const AuthoringFields = { source: Schema.optional(DocumentSource), series: Schema.String, issueDate: Schema.String, dueDate: optionalNullableString,
   currency: Schema.Literal("RON"), lines: Schema.Array(DraftLineInput) }
@@ -254,10 +250,10 @@ export const Correction = Schema.Struct({
   issuer: Party,
   customer: Buyer,
   lines: Schema.Array(DraftLine),
-  taxBreakdown: Schema.Array(TaxBreakdown),
-  totalExcludingTax: Schema.String,
-  taxTotal: Schema.String,
-  totalIncludingTax: Schema.String,
+  vatBreakdown: Schema.Array(VatBreakdown),
+  totalExcludingVat: Schema.String,
+  vatTotal: Schema.String,
+  totalIncludingVat: Schema.String,
 })
 
 export const Artifact = Schema.Struct({
@@ -287,10 +283,10 @@ export const Proforma = Schema.Struct({
   issuer: Party,
   customer: Buyer,
   lines: Schema.Array(DraftLine),
-  taxBreakdown: Schema.Array(TaxBreakdown),
-  totalExcludingTax: Schema.String,
-  taxTotal: Schema.String,
-  totalIncludingTax: Schema.String,
+  vatBreakdown: Schema.Array(VatBreakdown),
+  totalExcludingVat: Schema.String,
+  vatTotal: Schema.String,
+  totalIncludingVat: Schema.String,
 })
 export const IssueProformaInput = Schema.Struct({ series: Schema.String })
 export const EmptyInput = Schema.Struct({})

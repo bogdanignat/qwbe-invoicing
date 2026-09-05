@@ -59,21 +59,21 @@ void test("dueDate contracts accept absent, null, or string input and encode exp
   assert.equal(Schema.decodeUnknownSync(S.DraftInput)({ ...base, dueDate: "2026-09-15" }).dueDate, "2026-09-15")
   assert.throws(() => Schema.decodeUnknownSync(S.DraftInput)({ ...base, dueDate: 15 }))
   const draft = {
-    id: "draft-1", organizationId: "org-1", customer: { partyType: "individual", legalName: "Ion", taxIdentifier: "",
+    id: "draft-1", organizationId: "org-1", customer: { partyType: "individual", name: "Ion", fiscalIdentifier: "",
       address: { countryCode: "RO", city: "Iași", street: "Strada 1" } }, series: "QWBE", issueDate: "2026-09-01",
-    dueDate: null, currency: "RON", status: "proforma_issued", lines: [], taxBreakdown: [], totalExcludingTax: "0.00",
-    taxTotal: "0.00", totalIncludingTax: "0.00",
+    dueDate: null, currency: "RON", status: "proforma_issued", lines: [], vatBreakdown: [], totalExcludingVat: "0.00",
+    vatTotal: "0.00", totalIncludingVat: "0.00",
   } as const
   assert.equal(Schema.encodeSync(S.DraftInvoice)(draft).dueDate, null)
   assert.equal(Schema.encodeSync(S.DraftInvoice)(draft).status, "proforma_issued")
   assert.equal(Schema.encodeSync(S.Proforma)({ ...draft, id: "proforma-1", sourceDraftId: "draft-1", invoiceSeries: "QWBE",
     convertedDraftId: null, convertedInvoiceId: null,
-    number: 1, issuedAt: "2026-09-01T00:00:00.000Z", issuer: { legalName: "Furnizor", taxIdentifier: "RO12345674",
+    number: 1, issuedAt: "2026-09-01T00:00:00.000Z", issuer: { name: "Furnizor", fiscalIdentifier: "RO12345674",
       address: { countryCode: "RO", city: "Iași", street: "Strada 2" } } }).convertedDraftId, null)
 })
 
 void test("customer payment terms and monetary product presets have explicit wire types", () => {
-  const customer = { partyType: "individual", legalName: "Ion", taxIdentifier: "",
+  const customer = { partyType: "individual", name: "Ion", fiscalIdentifier: "",
     address: { countryCode: "RO", city: "Iași", street: "Strada 1" } }
   assert.doesNotThrow(() => Schema.decodeUnknownSync(S.CustomerInput)(customer))
   assert.equal(Schema.decodeUnknownSync(S.CustomerInput)({ ...customer, defaultPaymentTermDays: 0 }).defaultPaymentTermDays, 0)

@@ -62,12 +62,12 @@ export const moneyMinor = (value: string): bigint => {
 export const sumPaymentsMinor = (payments: ReadonlyArray<Payment>): bigint =>
   payments.reduce((total, payment) => total + moneyMinor(payment.amount), 0n)
 export const derivePaymentStatus = (input: {
-  readonly totalIncludingTax: string
+  readonly totalIncludingVat: string
   readonly dueDate: string | null
   readonly payments: ReadonlyArray<Payment>
   readonly now: Date
 }): PaymentStatus => {
-  const total = moneyMinor(input.totalIncludingTax); const paid = sumPaymentsMinor(input.payments)
+  const total = moneyMinor(input.totalIncludingVat); const paid = sumPaymentsMinor(input.payments)
   let status: PaymentStatus = paid === 0n ? "unpaid" : paid < total ? "partially_paid" : paid === total ? "paid" : "overpaid"
   if (input.dueDate !== null && (status === "unpaid" || status === "partially_paid")
     && input.dueDate < input.now.toISOString().slice(0, 10)) status = "overdue"

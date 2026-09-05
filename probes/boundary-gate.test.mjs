@@ -57,19 +57,28 @@ test("rejects imports between top-level cube siblings", () => {
   }
 })
 
-test("rejects imports across arbitrary nested cube ownership", () => {
+test("accepts imports between a parent cube and its child cubes", () => {
+  const root = fixture()
+  try {
+    makeUnit(root, "cube/invoicing", 'import "./reporting/index.ts"\nexport const invoice = 1\n')
+    makeUnit(root, "cube/invoicing/reporting", 'import "../shared.ts"\nexport const reporting = 1\n')
+    write(root, "cube/invoicing/shared.ts", "export const shared = 1\n")
+    const result = cruise(root)
+    assert.equal(result.status, 0, output(result))
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+test("rejects imports from a nested child cube into another top-level cube", () => {
   const root = fixture()
   try {
     makeUnit(root, "cube/invoicing")
-    makeUnit(root, "cube/invoicing/cubes/reporting")
-    makeUnit(
-      root,
-      "cube/invoicing/cubes/reporting/cubes/export",
-      'import "../../index.ts"\nexport const nested = 1\n',
-    )
+    makeUnit(root, "cube/invoicing/cubes/reporting", 'import "../../../payments/index.ts"\nexport const nested = 1\n')
+    makeUnit(root, "cube/payments")
     const result = cruise(root)
     assert.notEqual(result.status, 0)
-    assert.match(output(result), /no-cube-import-cube-invoicing-cubes-reporting-cubes-export-to-cube-invoicing-cubes-reporting/)
+    assert.match(output(result), /no-cube-import-cube-invoicing-cubes-reporting-to-cube-payments/)
   } finally {
     rmSync(root, { recursive: true, force: true })
   }

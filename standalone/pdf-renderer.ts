@@ -89,16 +89,16 @@ const space = (layout: Layout, height: number) => {
   else layout.y -= height
 }
 
-export const partyIdentifierLine = (party: RenderableParty): string | undefined => party.taxIdentifier === ""
+export const partyIdentifierLine = (party: RenderableParty): string | undefined => party.fiscalIdentifier === ""
   ? undefined
-  : `${party.partyType === "individual" ? "CNP" : "CUI"}: ${party.taxIdentifier}`
+  : `${party.partyType === "individual" ? "CNP" : "CUI"}: ${party.fiscalIdentifier}`
 
 export const documentDateLine = (document: Pick<RenderableDocument, "issueDate" | "dueDate">): string =>
   `Data emiterii: ${document.issueDate}${document.dueDate === null ? "" : `   Scadență: ${document.dueDate}`}`
 
 const partyLines = (label: string, party: RenderableParty): ReadonlyArray<string> => {
   const identifier = partyIdentifierLine(party)
-  return [label, party.legalName, ...(identifier === undefined ? [] : [identifier]),
+  return [label, party.name, ...(identifier === undefined ? [] : [identifier]),
     `${party.address.street}, ${party.address.city}`,
     [party.address.county, party.address.postalCode, party.address.countryCode].filter(Boolean).join(", ")]
 }
@@ -118,7 +118,7 @@ const renderPdf = async (
   const label = `${isProforma ? "Proformă" : "Factura"} ${invoice.series} ${String(invoice.number)}`
   const templateVersion = isProforma ? proformaTemplateVersion : invoiceTemplateVersion
   document.setTitle(label)
-  document.setAuthor(invoice.issuer.legalName)
+  document.setAuthor(invoice.issuer.name)
   document.setSubject(isProforma ? "PROFORMĂ — DOCUMENT NEFISCAL" : "Factură")
   document.setCreator("QWBE Invoicing")
   document.setProducer(`QWBE Invoicing ${templateVersion}`)
@@ -149,7 +149,7 @@ const renderPdf = async (
   invoice.lines.forEach((line, index) => {
     draw(layout, `${String(index + 1)}. ${line.description}`, { bold: true })
     draw(layout,
-      `${line.quantity} ${line.unitOfMeasure.name} (${line.unitOfMeasure.code}) × ${line.unitPrice} | bază ${line.totalExcludingTax} | TVA ${line.taxRate}%: ${line.taxAmount} | total ${line.totalIncludingTax}`,
+      `${line.quantity} ${line.unitOfMeasure.name} (${line.unitOfMeasure.code}) × ${line.unitPrice} | bază ${line.totalExcludingVat} | TVA ${line.vatRate}%: ${line.vatAmount} | total ${line.totalIncludingVat}`,
       { size: 9 },
     )
     space(layout, 6)
@@ -157,13 +157,13 @@ const renderPdf = async (
 
   space(layout, 8)
   draw(layout, "SUMAR TVA", { size: 12, bold: true })
-  invoice.taxBreakdown.forEach((tax) => {
-    draw(layout, `TVA ${tax.rate}% | bază ${tax.taxableAmount} | taxă ${tax.taxAmount}`)
+  invoice.vatBreakdown.forEach((vat) => {
+    draw(layout, `TVA ${vat.rate}% | bază ${vat.vatBaseAmount} | taxă ${vat.vatAmount}`)
   })
   space(layout, 8)
-  draw(layout, `TOTAL FĂRĂ TVA: ${invoice.totalExcludingTax} ${invoice.currency}`, { bold: true })
-  draw(layout, `TVA: ${invoice.taxTotal} ${invoice.currency}`, { bold: true })
-  draw(layout, `${isProforma ? "TOTAL PROFORMĂ" : "TOTAL DE PLATĂ"}: ${invoice.totalIncludingTax} ${invoice.currency}`, { size: 14, bold: true })
+  draw(layout, `TOTAL FĂRĂ TVA: ${invoice.totalExcludingVat} ${invoice.currency}`, { bold: true })
+  draw(layout, `TVA: ${invoice.vatTotal} ${invoice.currency}`, { bold: true })
+  draw(layout, `${isProforma ? "TOTAL PROFORMĂ" : "TOTAL DE PLATĂ"}: ${invoice.totalIncludingVat} ${invoice.currency}`, { size: 14, bold: true })
 
   return document.save({ useObjectStreams: false, addDefaultPage: false, updateFieldAppearances: false })
 }

@@ -30,8 +30,8 @@ interface InvoiceAuthoringViewProps {
   readonly notify: (message: string) => void
 }
 
-const newLine = (taxCode: string, unitOfMeasure: UnitOfMeasure): EditableInvoiceLine => ({
-  key: crypto.randomUUID(), description: "", quantity: "1", unitPrice: "", unitOfMeasure, taxCode,
+const newLine = (vatRateCode: string, unitOfMeasure: UnitOfMeasure): EditableInvoiceLine => ({
+  key: crypto.randomUUID(), description: "", quantity: "1", unitPrice: "", unitOfMeasure, vatRateCode,
 })
 const defaultUnitOfMeasure = (units: ReadonlyArray<UnitOfMeasure>): UnitOfMeasure =>
   units.find(({ code }) => code === "C62") ?? units[0] ?? { code: "C62", name: "unitate" }
@@ -60,7 +60,7 @@ interface SaveResult {
 
 const AuthoringSession = ({ initialDraft, issuer, customers, invoiceSeries, proformaSeries, unitOfMeasures, backgroundErrors, notify }: AuthoringSessionProps) => {
   const queryClient = useQueryClient()
-  const defaultTaxCode = (issueDate: string): string => issuer.taxConfigurations.find((tax) => tax.effectiveFrom <= issueDate && (tax.effectiveTo === undefined || issueDate <= tax.effectiveTo))?.code ?? ""
+  const defaultTaxCode = (issueDate: string): string => issuer.vatConfigurations.find((tax) => tax.effectiveFrom <= issueDate && (tax.effectiveTo === undefined || issueDate <= tax.effectiveTo))?.code ?? ""
   const [draft, setDraft] = useState(initialDraft)
   const [form, setForm] = useState<InvoiceAuthoringForm>(() => initialDraft === undefined ? newAuthoringForm(issuer, invoiceSeries[0] ?? "", customers.length > 0, today()) : formFromDraft(initialDraft))
   const [lines, setLines] = useState<ReadonlyArray<EditableInvoiceLine>>(() => initialDraft === undefined
@@ -133,7 +133,7 @@ const AuthoringSession = ({ initialDraft, issuer, customers, invoiceSeries, prof
   const workflowPending = save.isPending || removeLine.isPending || removeDraft.isPending
   const readiness = authoringReadiness(form, lines, draft, workflowPending)
   const payload = authoringDocumentPayload(form, lines)
-  const staleTax = draft === undefined ? false : hasStaleDraftTax(draft.issueDate, draft.lines, issuer.taxConfigurations)
+  const staleTax = draft === undefined ? false : hasStaleDraftTax(draft.issueDate, draft.lines, issuer.vatConfigurations)
   const invoiceIssuance = useInvoiceIssuance({ draftId: draft?.id, payload, canIssue: readiness.canIssue,
     workflowPending, confirmMessage: staleTax ? "Configurația TVA s-a schimbat. Emiți factura cu totalurile afișate de server? Documentul fiscal devine imuabil." : "Emiți factura? Numărul și documentul fiscal devin imuabile." })
   const proformaIssuance = useProformaIssuance({ draftId: draft?.id, payload, editable: readiness.editable,
@@ -162,7 +162,7 @@ const AuthoringSession = ({ initialDraft, issuer, customers, invoiceSeries, prof
         <SellerSummary issuer={issuer} />
         <BuyerEditor form={form} customers={customers} disabled={pending} onChange={(patch) => { setForm((current) => ({ ...current, ...patch })) }} onBuyerModeChange={authoringCustomers.chooseBuyerMode} onSavedCustomerChange={authoringCustomers.chooseCustomer} />
         <section className="card authoring-section"><div className="section-heading"><div><h2>3. Date document</h2><p>Alege seria facturii; poți salva un draft sau emite direct. Moneda este RON.</p></div></div><div className="form-grid four"><label>Serie factură<select required disabled={pending || draft !== undefined} value={form.series} onChange={(event) => { const { value } = event.currentTarget; setForm((current) => ({ ...current, series: value })) }}>{invoiceSeries.map((series) => <option key={series} value={series}>{series}</option>)}</select></label><label>Data emiterii<input required disabled={pending} type="date" value={form.issueDate} onChange={(event) => { authoringCustomers.chooseIssueDate(event.currentTarget.value) }} /></label><label>Data scadenței <span className="optional">opțională</span><input disabled={pending} type="date" min={form.issueDate} value={form.dueDate} onChange={(event) => { authoringCustomers.chooseDueDate(event.currentTarget.value) }} /></label><div className="static-field"><span>Monedă</span><span className="fixed-value">RON</span></div></div></section>
-        <InvoiceLinesEditor lines={lines} productPresets={authoringPresets.presets} taxConfigurations={issuer.taxConfigurations} unitOfMeasures={unitOfMeasures} issueDate={form.issueDate} pending={pending} onAdd={() => { setLines((current) => [...current, newLine(defaultTaxCode(form.issueDate), defaultUnitOfMeasure(unitOfMeasures))]) }} onChange={changeLine} onApplyPreset={authoringPresets.choosePreset} onDelete={deleteLine} />
+        <InvoiceLinesEditor lines={lines} productPresets={authoringPresets.presets} vatConfigurations={issuer.vatConfigurations} unitOfMeasures={unitOfMeasures} issueDate={form.issueDate} pending={pending} onAdd={() => { setLines((current) => [...current, newLine(defaultTaxCode(form.issueDate), defaultUnitOfMeasure(unitOfMeasures))]) }} onChange={changeLine} onApplyPreset={authoringPresets.choosePreset} onDelete={deleteLine} />
       </div>
       <div className="authoring-side"><InvoiceTotals draft={draft} /><section className="card draft-actions"><h2>Acțiuni document</h2><Button variant="secondary" fullWidth type="submit" disabled={pending}>{save.isPending ? "Se salvează toate modificările…" : "Salvează draftul"}</Button><p className="hint">Draftul este opțional și rămâne editabil.</p><ProformaIssueControl state={proformaIssuance} /><h3>Emitere factură</h3><Button fullWidth disabled={!canIssue} onClick={(event) => { if (event.currentTarget.form?.reportValidity() !== false) invoiceIssuance.issue() }}>{invoiceIssuance.pending ? "Se emite…" : "Emite factura"}</Button>{draft === undefined ? null : <Button variant="danger" fullWidth disabled={pending} onClick={() => { if (window.confirm("Ștergi definitiv acest draft?")) removeDraft.mutate() }}>Șterge draftul</Button>}<p className="hint">Dintr-un document nou poți emite direct. Dacă ai salvat deja draftul, salvează întâi orice modificare nouă.</p></section></div>
     </form>

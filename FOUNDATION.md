@@ -3,7 +3,7 @@
 Status: architecture baseline; T-1069 reflected
 Source snapshot: QWBE mother repository at `a98d9ef` (main, 31 August 2026; previous baseline `987e11b`)
 Conformance review against that snapshot: 2 September 2026, section 18
-Package manager: pnpm  
+Package manager: pnpm
 Runtime: Node.js + TypeScript + **Effect 3.x as primary runtime** (`effect`, `@effect/platform`, `@effect/platform-node`) — all cube application logic, host capabilities (Clock, Store, IdGenerator, Auth), and HTTP handling are modelled as `Effect`
 UI: React 19 + TypeScript styled with Tailwind CSS 4, built with Vite and served by the standalone host; Effect owns browser API effects, typed failures, cancellation and concurrency, while TanStack Query integrates server state with React. The boundary remains API-first: every cube use-case has a corresponding authenticated HTTP endpoint, and the UI contains no fiscal business logic
 
@@ -247,6 +247,8 @@ Static boundaries must reject:
 
 This is lint isolation, not a security sandbox. Process-level isolation remains a separate future decision.
 
+The isolation unit is a top-level cube together with its child cubes. The mother's `no-cube-to-cube` rule captures only the first path segment under `cubes/`, and its example plugin has `booktags/bookmarks` importing a helper from the parent `booktags`. `probes/boundary-rules.mjs` mirrors that: `cube/invoicing` and its components (`registry`, `drafts`, `issuance`, `corrections`, `documents`) may import each other, `cube/invoicing` and `cube/payments` may not. Components import the parent's domain, ports and contracts directly; the parent imports only a component's `index.ts`, so the graph stays acyclic.
+
 Source: QWBE `core/.dependency-cruiser.cjs`.
 
 ## 7. Data ownership
@@ -479,9 +481,14 @@ qwbe-invoicing/
 │   └── invoicing/              exact cube/package root
 │       ├── qwbe-package.json
 │       ├── index.ts            named `cube` export
-│       ├── domain/             pure invoicing rules and values
-│       ├── application/        use cases and explicit ports
+│       ├── domain/             shared model, VAT arithmetic, party/date validation
+│       ├── application/        ports, idempotency, service composition
 │       ├── contracts/          schemas and host-facing seams
+│       ├── registry/           component cube: issuer, series, customers, presets
+│       ├── drafts/             component cube: authoring and draft editing
+│       ├── issuance/           component cube: numbered invoices and proformas
+│       ├── corrections/        component cube: storno documents
+│       ├── documents/          component cube: rendered artifacts
 │       └── adapters/qwbe/      thin QWBE adapter
 ├── standalone/                 standalone host and adapters; never packaged
 ├── probes/                     package, persistence, gate, and decoupling checks

@@ -8,7 +8,7 @@ const summary = (status: PaymentSummary["status"], remainingAmount: string, with
   invoiceId: "invoice-1", status, paidAmount: withPayment ? "121.00" : "0.00", remainingAmount,
   payments: withPayment ? [{ id: "payment-1", amount: "121.00", currency: "RON", paymentDate: "2026-08-31", method: "transfer" }] : [],
 })
-const correction: CorrectionDocument = { id: "correction-1", series: "QWBE", number: 1, issueDate: "2026-08-31", reason: "Corecție", currency: "RON", totalIncludingTax: "-121.00" }
+const correction: CorrectionDocument = { id: "correction-1", series: "QWBE", number: 1, issueDate: "2026-08-31", reason: "Corecție", currency: "RON", totalIncludingVat: "-121.00" }
 
 void test("allows payments only while an invoice has a remaining balance", () => {
   assert.equal(invoiceActionState(summary("partially_paid", "1.00", true), []).canRecordPayment, true)

@@ -5,7 +5,7 @@ import { Effect } from "effect"
 
 import { PermissionDenied, ResourceNotFound, createPaymentsService, cube, paymentsMigrations, paymentsPermissions, type Payment, type PaymentsTransaction } from "./index.ts"
 
-const invoice = { id: "invoice-1", organizationId: "org-1", currency: "RON", dueDate: "2026-09-15", totalIncludingTax: "100.00" }
+const invoice = { id: "invoice-1", organizationId: "org-1", currency: "RON", dueDate: "2026-09-15", totalIncludingVat: "100.00" }
 const payments = new Map<string, Payment>()
 const transaction: PaymentsTransaction = {
   findInvoiceSnapshot: (organizationId, id) => Effect.succeed(organizationId === invoice.organizationId && id === invoice.id ? invoice : undefined),

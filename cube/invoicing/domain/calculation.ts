@@ -1,5 +1,5 @@
 import { ValidationFailure } from "../contracts/failures.ts"
-import type { DraftLine, TaxBreakdown, TaxConfiguration } from "./invoice.ts"
+import type { DraftLine, VatBreakdown, VatConfiguration } from "./invoice.ts"
 import { normalizeUnitOfMeasure, type UnitOfMeasure } from "./unit-of-measures.ts"
 
 const parseScaled = (value: string, scale: number, field: string): bigint => {
@@ -32,62 +32,60 @@ export const calculateLine = (input: {
   readonly quantity: string
   readonly unitPrice: string
   readonly unitOfMeasure: UnitOfMeasure
-  readonly tax: TaxConfiguration
+  readonly vat: VatConfiguration
 }): DraftLine => {
   if (input.description.trim().length === 0) throw new ValidationFailure({ issues: ["description is required"] })
   const quantity = parseScaled(input.quantity, 4, "quantity")
   const unitPrice = parseScaled(input.unitPrice, 2, "unitPrice")
-  const taxRate = parseScaled(input.tax.rate, 2, "taxRate")
+  const vatRate = parseScaled(input.vat.rate, 2, "vatRate")
   if (quantity === 0n) throw new ValidationFailure({ issues: ["quantity must be greater than zero"] })
-  if (taxRate > 10_000n) throw new ValidationFailure({ issues: ["taxRate cannot exceed 100.00"] })
+  if (vatRate > 10_000n) throw new ValidationFailure({ issues: ["vatRate cannot exceed 100.00"] })
 
   const net = divideHalfUp(quantity * unitPrice, 10_000n)
-  const tax = divideHalfUp(net * taxRate, 10_000n)
+  const vat = divideHalfUp(net * vatRate, 10_000n)
   return {
     id: input.id,
     description: input.description.trim(),
     quantity: formatScaled(quantity, 4),
     unitPrice: formatScaled(unitPrice, 2),
     unitOfMeasure: normalizeUnitOfMeasure(input.unitOfMeasure),
-    taxCode: input.tax.code,
-    taxCategory: input.tax.category,
-    taxRate: formatScaled(taxRate, 2),
-    totalExcludingTax: formatScaled(net, 2),
-    taxAmount: formatScaled(tax, 2),
-    totalIncludingTax: formatScaled(net + tax, 2),
+    vatRateCode: input.vat.code,
+    vatRate: formatScaled(vatRate, 2),
+    totalExcludingVat: formatScaled(net, 2),
+    vatAmount: formatScaled(vat, 2),
+    totalIncludingVat: formatScaled(net + vat, 2),
   }
 }
 
 const moneyToMinor = (value: string): bigint => parseScaled(value, 2, "money")
 
 export const calculateTotals = (lines: ReadonlyArray<DraftLine>) => {
-  const groups = new Map<string, { line: DraftLine; taxable: bigint; tax: bigint }>()
-  let totalExcludingTax = 0n
-  let taxTotal = 0n
+  const groups = new Map<string, { line: DraftLine; base: bigint; vat: bigint }>()
+  let totalExcludingVat = 0n
+  let vatTotal = 0n
   for (const line of lines) {
-    const taxable = moneyToMinor(line.totalExcludingTax)
-    const tax = moneyToMinor(line.taxAmount)
-    totalExcludingTax += taxable
-    taxTotal += tax
-    const key = `${line.taxCode}:${line.taxCategory}:${line.taxRate}`
+    const base = moneyToMinor(line.totalExcludingVat)
+    const vat = moneyToMinor(line.vatAmount)
+    totalExcludingVat += base
+    vatTotal += vat
+    const key = `${line.vatRateCode}:${line.vatRate}`
     const current = groups.get(key)
     groups.set(key, {
       line,
-      taxable: (current?.taxable ?? 0n) + taxable,
-      tax: (current?.tax ?? 0n) + tax,
+      base: (current?.base ?? 0n) + base,
+      vat: (current?.vat ?? 0n) + vat,
     })
   }
-  const taxBreakdown: ReadonlyArray<TaxBreakdown> = [...groups.values()].map(({ line, taxable, tax }) => ({
-    taxCode: line.taxCode,
-    category: line.taxCategory,
-    rate: line.taxRate,
-    taxableAmount: formatScaled(taxable, 2),
-    taxAmount: formatScaled(tax, 2),
+  const vatBreakdown: ReadonlyArray<VatBreakdown> = [...groups.values()].map(({ line, base, vat }) => ({
+    code: line.vatRateCode,
+    rate: line.vatRate,
+    vatBaseAmount: formatScaled(base, 2),
+    vatAmount: formatScaled(vat, 2),
   }))
   return {
-    totalExcludingTax: formatScaled(totalExcludingTax, 2),
-    taxTotal: formatScaled(taxTotal, 2),
-    totalIncludingTax: formatScaled(totalExcludingTax + taxTotal, 2),
-    taxBreakdown,
+    totalExcludingVat: formatScaled(totalExcludingVat, 2),
+    vatTotal: formatScaled(vatTotal, 2),
+    totalIncludingVat: formatScaled(totalExcludingVat + vatTotal, 2),
+    vatBreakdown,
   }
 }

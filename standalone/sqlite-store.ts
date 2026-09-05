@@ -19,8 +19,8 @@ import {
   type PartySnapshot,
   type ProductPreset,
   type Proforma,
-  type TaxBreakdown,
-  type TaxConfiguration,
+  type VatBreakdown,
+  type VatConfiguration,
   type TransactionalStore,
 } from "../cube/invoicing/index.ts"
 import {
@@ -117,9 +117,15 @@ const addressFrom = (value: Row, prefix = ""): Address => {
   }
 }
 
+// Column names keep the pre-rename vocabulary on purpose (phase 1 of the rename):
+//   name -> legal_name, fiscalIdentifier -> tax_identifier, vatConfigurations -> issuer_tax_configurations,
+//   vatRateCode -> tax_code, vatRate -> tax_rate, totalExcludingVat -> total_excluding_tax,
+//   vatAmount -> tax_amount, totalIncludingVat -> total_including_tax, vatTotal -> tax_total,
+//   vatBreakdown[].code -> tax_code, vatBreakdown[].vatBaseAmount -> taxable_amount,
+//   tax_category / category columns are always written as "standard" and ignored on read.
 const partyFrom = (value: Row, prefix: string): PartySnapshot => ({
-  legalName: text(value, `${prefix}legal_name`),
-  taxIdentifier: text(value, `${prefix}tax_identifier`),
+  name: text(value, `${prefix}legal_name`),
+  fiscalIdentifier: text(value, `${prefix}tax_identifier`),
   address: addressFrom(value, prefix),
 })
 
@@ -202,12 +208,11 @@ const lineFrom = (value: Row): DraftLine => ({
   quantity: text(value, "quantity"),
   unitPrice: text(value, "unit_price"),
   unitOfMeasure: { code: text(value, "unit_code"), name: text(value, "unit_name") },
-  taxCode: text(value, "tax_code"),
-  taxCategory: "standard",
-  taxRate: text(value, "tax_rate"),
-  totalExcludingTax: text(value, "total_excluding_tax"),
-  taxAmount: text(value, "tax_amount"),
-  totalIncludingTax: text(value, "total_including_tax"),
+  vatRateCode: text(value, "tax_code"),
+  vatRate: text(value, "tax_rate"),
+  totalExcludingVat: text(value, "total_excluding_tax"),
+  vatAmount: text(value, "tax_amount"),
+  totalIncludingVat: text(value, "total_including_tax"),
 })
 
 type LineTable = "draft_lines" | "issued_lines" | "proforma_lines"
@@ -227,8 +232,8 @@ const saveLines = (database: DatabaseSync, target: LineTarget, parentId: string,
   lines.forEach((line, position) => statement.run(
     line.id, parentId, ...(target.table === "proforma_lines" ? [target.organizationId] : []), position, line.description, line.quantity, line.unitPrice,
     line.unitOfMeasure.code, line.unitOfMeasure.name,
-    line.taxCode, line.taxCategory, line.taxRate, line.totalExcludingTax,
-    line.taxAmount, line.totalIncludingTax,
+    line.vatRateCode, "standard", line.vatRate, line.totalExcludingVat,
+    line.vatAmount, line.totalIncludingVat,
   ))
 }
 
@@ -241,13 +246,13 @@ const loadLines = (database: DatabaseSync, table: LineTable, parentId: string): 
 const issuedInvoiceFrom = (database: DatabaseSync, value: Row): IssuedInvoice => {
   const id = text(value, "id")
   const source = sourceFrom(value)
-  const taxBreakdown: ReadonlyArray<TaxBreakdown> = database.prepare(
+  const vatBreakdown: ReadonlyArray<VatBreakdown> = database.prepare(
     "SELECT * FROM issued_tax_breakdown WHERE invoice_id = ? ORDER BY line_position",
   ).all(id).map((item) => {
     const tax = item as Row
     return {
-      taxCode: text(tax, "tax_code"), category: "standard", rate: text(tax, "rate"),
-      taxableAmount: text(tax, "taxable_amount"), taxAmount: text(tax, "tax_amount"),
+      code: text(tax, "tax_code"), rate: text(tax, "rate"),
+      vatBaseAmount: text(tax, "taxable_amount"), vatAmount: text(tax, "tax_amount"),
     }
   })
   return {
@@ -258,18 +263,18 @@ const issuedInvoiceFrom = (database: DatabaseSync, value: Row): IssuedInvoice =>
     issueDate: text(value, "issue_date"), dueDate: nullableText(value, "due_date"),
     issuedAt: text(value, "issued_at"), currency: text(value, "currency"),
     issuer: partyFrom(value, "issuer_"), customer: buyerFrom(value, "customer_"),
-    lines: loadLines(database, "issued_lines", id), taxBreakdown,
-    totalExcludingTax: text(value, "total_excluding_tax"), taxTotal: text(value, "tax_total"),
-    totalIncludingTax: text(value, "total_including_tax"),
+    lines: loadLines(database, "issued_lines", id), vatBreakdown,
+    totalExcludingVat: text(value, "total_excluding_tax"), vatTotal: text(value, "tax_total"),
+    totalIncludingVat: text(value, "total_including_tax"),
     eFacturaStatus: (optionalText(value, "e_factura_status") ?? "not_sent") as IssuedInvoice["eFacturaStatus"],
   }
 }
 
-const taxFrom = (database: DatabaseSync, table: "proforma_tax_breakdown", parentColumn: "proforma_id", id: string): ReadonlyArray<TaxBreakdown> =>
+const taxFrom = (database: DatabaseSync, table: "proforma_tax_breakdown", parentColumn: "proforma_id", id: string): ReadonlyArray<VatBreakdown> =>
   database.prepare(`SELECT * FROM ${table} WHERE ${parentColumn} = ? ORDER BY line_position`).all(id).map((item) => {
     const tax = item as Row
-    return { taxCode: text(tax, "tax_code"), category: "standard", rate: text(tax, "rate"),
-      taxableAmount: text(tax, "taxable_amount"), taxAmount: text(tax, "tax_amount") }
+    return { code: text(tax, "tax_code"), rate: text(tax, "rate"),
+      vatBaseAmount: text(tax, "taxable_amount"), vatAmount: text(tax, "tax_amount") }
   })
 
 const proformaFrom = (database: DatabaseSync, value: Row): Proforma => {
@@ -284,9 +289,9 @@ const proformaFrom = (database: DatabaseSync, value: Row): Proforma => {
     series: text(value, "series"), number: integer(value, "number"), issueDate: text(value, "issue_date"),
     dueDate: nullableText(value, "due_date"), issuedAt: text(value, "issued_at"), currency: text(value, "currency"),
     issuer: partyFrom(value, "issuer_"), customer: buyerFrom(value, "customer_"),
-    lines: loadLines(database, "proforma_lines", id), taxBreakdown: taxFrom(database, "proforma_tax_breakdown", "proforma_id", id),
-    totalExcludingTax: text(value, "total_excluding_tax"), taxTotal: text(value, "tax_total"),
-    totalIncludingTax: text(value, "total_including_tax"),
+    lines: loadLines(database, "proforma_lines", id), vatBreakdown: taxFrom(database, "proforma_tax_breakdown", "proforma_id", id),
+    totalExcludingVat: text(value, "total_excluding_tax"), vatTotal: text(value, "tax_total"),
+    totalIncludingVat: text(value, "total_including_tax"),
   }
 }
 
@@ -309,32 +314,32 @@ const transactionAdapter = (database: DatabaseSync): InvoicingTransaction => ({
        tax_identifier=excluded.tax_identifier, country_code=excluded.country_code, city=excluded.city,
        street=excluded.street, county=excluded.county, postal_code=excluded.postal_code,
         default_currency=excluded.default_currency, default_payment_term_days=excluded.default_payment_term_days`)
-      .run(issuer.organizationId, issuer.legalName, issuer.taxIdentifier, ...addressValues(issuer.address),
+      .run(issuer.organizationId, issuer.name, issuer.fiscalIdentifier, ...addressValues(issuer.address),
         issuer.defaultCurrency, issuer.defaultPaymentTermDays)
     database.prepare("DELETE FROM issuer_tax_configurations WHERE organization_id = ?").run(issuer.organizationId)
     const statement = database.prepare(`INSERT INTO issuer_tax_configurations
       (organization_id, code, category, rate, effective_from, effective_to) VALUES (?, ?, ?, ?, ?, ?)`)
-    issuer.taxConfigurations.forEach((tax) => statement.run(
-      issuer.organizationId, tax.code, tax.category, tax.rate, tax.effectiveFrom, tax.effectiveTo ?? null,
+    issuer.vatConfigurations.forEach((tax) => statement.run(
+      issuer.organizationId, tax.code, "standard", tax.rate, tax.effectiveFrom, tax.effectiveTo ?? null,
     ))
   }),
   findIssuer: (organizationId) => read("find issuer", () => {
     const value = row(database.prepare("SELECT * FROM issuers WHERE organization_id = ?").get(organizationId))
     if (value === undefined) return undefined
-    const taxConfigurations: ReadonlyArray<TaxConfiguration> = database.prepare(
+    const vatConfigurations: ReadonlyArray<VatConfiguration> = database.prepare(
       "SELECT * FROM issuer_tax_configurations WHERE organization_id = ? ORDER BY code, effective_from",
     ).all(organizationId).map((item) => {
       const tax = item as Row
       const effectiveTo = optionalText(tax, "effective_to")
       return {
-        code: text(tax, "code"), category: "standard", rate: text(tax, "rate"),
+        code: text(tax, "code"), rate: text(tax, "rate"),
         effectiveFrom: text(tax, "effective_from"),
         ...(effectiveTo === undefined ? {} : { effectiveTo }),
       }
     })
     return {
       ...partyFrom(value, ""), organizationId, defaultCurrency: text(value, "default_currency"),
-      defaultPaymentTermDays: integer(value, "default_payment_term_days"), taxConfigurations,
+      defaultPaymentTermDays: integer(value, "default_payment_term_days"), vatConfigurations,
     }
   }),
   addDocumentSeries: (documentSeries) => write("add document series", () => {
@@ -364,7 +369,7 @@ const transactionAdapter = (database: DatabaseSync): InvoicingTransaction => ({
       country_code=excluded.country_code, city=excluded.city, street=excluded.street,
        county=excluded.county, postal_code=excluded.postal_code, default_payment_term_days=excluded.default_payment_term_days
       WHERE customers.organization_id=excluded.organization_id`)
-      .run(customer.id, customer.organizationId, customer.partyType, customer.legalName, customer.taxIdentifier,
+      .run(customer.id, customer.organizationId, customer.partyType, customer.name, customer.fiscalIdentifier,
         ...addressValues(customer.address), customer.defaultPaymentTermDays ?? null)
     if (result.changes === 0) throw new DomainConflict({ code: "customer_id_taken", message: "Customer id belongs to another organization" })
   }),
@@ -420,7 +425,7 @@ const transactionAdapter = (database: DatabaseSync): InvoicingTransaction => ({
        due_date=excluded.due_date, currency=excluded.currency, status=excluded.status
        WHERE invoice_drafts.organization_id=excluded.organization_id`)
       .run(draft.id, draft.organizationId, ...sourceValues(draft.source), draft.customerId ?? null, draft.customer.partyType,
-        draft.customer.legalName, draft.customer.taxIdentifier, ...addressValues(draft.customer.address),
+        draft.customer.name, draft.customer.fiscalIdentifier, ...addressValues(draft.customer.address),
         draft.series, draft.issueDate, draft.dueDate, draft.currency, draft.status)
     if (result.changes === 0) throw new DomainConflict({ code: "draft_id_taken", message: "Draft id belongs to another organization" })
     saveLines(database, { table: "draft_lines" }, draft.id, draft.lines)
@@ -477,14 +482,14 @@ const transactionAdapter = (database: DatabaseSync): InvoicingTransaction => ({
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'invoice', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .run(invoice.id, invoice.draftId, invoice.sourceProformaId, invoice.organizationId, ...sourceValues(invoice.source), Number(invoice.issueDate.slice(0, 4)),
         invoice.series, invoice.number, invoice.issueDate, invoice.dueDate, invoice.issuedAt, invoice.currency,
-        invoice.issuer.legalName, invoice.issuer.taxIdentifier, ...addressValues(invoice.issuer.address),
-        invoice.customer.legalName, invoice.customer.taxIdentifier, invoice.customer.partyType, ...addressValues(invoice.customer.address),
-        invoice.totalExcludingTax, invoice.taxTotal, invoice.totalIncludingTax, (invoice as unknown as { eFacturaStatus?: string }).eFacturaStatus ?? "not_sent")
+        invoice.issuer.name, invoice.issuer.fiscalIdentifier, ...addressValues(invoice.issuer.address),
+        invoice.customer.name, invoice.customer.fiscalIdentifier, invoice.customer.partyType, ...addressValues(invoice.customer.address),
+        invoice.totalExcludingVat, invoice.vatTotal, invoice.totalIncludingVat, (invoice as unknown as { eFacturaStatus?: string }).eFacturaStatus ?? "not_sent")
     saveLines(database, { table: "issued_lines" }, invoice.id, invoice.lines)
     const statement = database.prepare(`INSERT INTO issued_tax_breakdown
       (invoice_id, line_position, tax_code, category, rate, taxable_amount, tax_amount) VALUES (?, ?, ?, ?, ?, ?, ?)`)
-    invoice.taxBreakdown.forEach((tax, position) => statement.run(
-      invoice.id, position, tax.taxCode, tax.category, tax.rate, tax.taxableAmount, tax.taxAmount,
+    invoice.vatBreakdown.forEach((tax, position) => statement.run(
+      invoice.id, position, tax.code, "standard", tax.rate, tax.vatBaseAmount, tax.vatAmount,
     ))
   }),
   findIssuedInvoice: (organizationId, id) => read("find issued invoice", () => {
@@ -505,14 +510,14 @@ const transactionAdapter = (database: DatabaseSync): InvoicingTransaction => ({
          total_excluding_tax,tax_total,total_including_tax) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
       .run(proforma.id, proforma.sourceDraftId, proforma.organizationId, ...sourceValues(proforma.source), Number(proforma.issueDate.slice(0, 4)), "proforma",
         proforma.series, proforma.invoiceSeries, proforma.number, proforma.issueDate, proforma.dueDate, proforma.issuedAt, proforma.currency,
-        proforma.issuer.legalName, proforma.issuer.taxIdentifier, ...addressValues(proforma.issuer.address), proforma.customer.partyType,
-        proforma.customer.legalName, proforma.customer.taxIdentifier, ...addressValues(proforma.customer.address),
-        proforma.totalExcludingTax, proforma.taxTotal, proforma.totalIncludingTax)
+        proforma.issuer.name, proforma.issuer.fiscalIdentifier, ...addressValues(proforma.issuer.address), proforma.customer.partyType,
+        proforma.customer.name, proforma.customer.fiscalIdentifier, ...addressValues(proforma.customer.address),
+        proforma.totalExcludingVat, proforma.vatTotal, proforma.totalIncludingVat)
     saveLines(database, { table: "proforma_lines", organizationId: proforma.organizationId }, proforma.id, proforma.lines)
     const statement = database.prepare(`INSERT INTO proforma_tax_breakdown
       (proforma_id,organization_id,line_position,tax_code,category,rate,taxable_amount,tax_amount) VALUES(?,?,?,?,?,?,?,?)`)
-    proforma.taxBreakdown.forEach((tax, position) => statement.run(
-      proforma.id, proforma.organizationId, position, tax.taxCode, tax.category, tax.rate, tax.taxableAmount, tax.taxAmount,
+    proforma.vatBreakdown.forEach((tax, position) => statement.run(
+      proforma.id, proforma.organizationId, position, tax.code, "standard", tax.rate, tax.vatBaseAmount, tax.vatAmount,
     ))
     database.prepare("UPDATE proformas SET sealed=1 WHERE id=? AND organization_id=? AND sealed=0")
       .run(proforma.id, proforma.organizationId)
@@ -561,34 +566,34 @@ const transactionAdapter = (database: DatabaseSync): InvoicingTransaction => ({
        VALUES (?, ?, ?, ?, ?, ?, ?, 'correction', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .run(correction.id, correction.organizationId, ...sourceValues(correction.source), correction.originalInvoiceId, correction.fiscalYear,
         correction.series, correction.number, correction.issueDate, correction.issuedAt, correction.reason, correction.currency,
-        correction.issuer.legalName, correction.issuer.taxIdentifier, ...addressValues(correction.issuer.address),
-        correction.customer.legalName, correction.customer.taxIdentifier, correction.customer.partyType, ...addressValues(correction.customer.address),
-        correction.totalExcludingTax, correction.taxTotal, correction.totalIncludingTax)
+        correction.issuer.name, correction.issuer.fiscalIdentifier, ...addressValues(correction.issuer.address),
+        correction.customer.name, correction.customer.fiscalIdentifier, correction.customer.partyType, ...addressValues(correction.customer.address),
+        correction.totalExcludingVat, correction.vatTotal, correction.totalIncludingVat)
     const lineStmt = database.prepare(`INSERT INTO correction_lines
       (id, correction_id, line_position, description, quantity, unit_price, unit_code, unit_name, tax_code, tax_category, tax_rate, total_excluding_tax, tax_amount, total_including_tax)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
     correction.lines.forEach((line, pos) => lineStmt.run(line.id, correction.id, pos, line.description, line.quantity, line.unitPrice,
-      line.unitOfMeasure.code, line.unitOfMeasure.name, line.taxCode, line.taxCategory, line.taxRate,
-      line.totalExcludingTax, line.taxAmount, line.totalIncludingTax))
+      line.unitOfMeasure.code, line.unitOfMeasure.name, line.vatRateCode, "standard", line.vatRate,
+      line.totalExcludingVat, line.vatAmount, line.totalIncludingVat))
     const taxStmt = database.prepare(`INSERT INTO correction_tax_breakdown
       (correction_id, line_position, tax_code, category, rate, taxable_amount, tax_amount) VALUES (?, ?, ?, ?, ?, ?, ?)`)
-    correction.taxBreakdown.forEach((tax, pos) => taxStmt.run(correction.id, pos, tax.taxCode, tax.category, tax.rate, tax.taxableAmount, tax.taxAmount))
+    correction.vatBreakdown.forEach((tax, pos) => taxStmt.run(correction.id, pos, tax.code, "standard", tax.rate, tax.vatBaseAmount, tax.vatAmount))
   }),
   findCorrection: (organizationId, id) => read("find correction", () => {
     const value = row(database.prepare("SELECT * FROM correction_documents WHERE organization_id = ? AND id = ?").get(organizationId, id))
     if (value === undefined) return undefined
     const documentSource = sourceFrom(value)
     const lines: ReadonlyArray<DraftLine> = database.prepare("SELECT * FROM correction_lines WHERE correction_id = ? ORDER BY line_position").all(id).map((v) => lineFrom(v as Row))
-    const taxBreakdown: ReadonlyArray<TaxBreakdown> = database.prepare("SELECT * FROM correction_tax_breakdown WHERE correction_id = ? ORDER BY line_position").all(id).map((item) => {
+    const vatBreakdown: ReadonlyArray<VatBreakdown> = database.prepare("SELECT * FROM correction_tax_breakdown WHERE correction_id = ? ORDER BY line_position").all(id).map((item) => {
       const tax = item as Row
-      return { taxCode: text(tax, "tax_code"), category: "standard", rate: text(tax, "rate"), taxableAmount: text(tax, "taxable_amount"), taxAmount: text(tax, "tax_amount") }
+      return { code: text(tax, "tax_code"), rate: text(tax, "rate"), vatBaseAmount: text(tax, "taxable_amount"), vatAmount: text(tax, "tax_amount") }
     })
     return {
       id, organizationId, originalInvoiceId: text(value, "original_invoice_id"), fiscalYear: integer(value, "fiscal_year"), series: text(value, "series"), number: integer(value, "number"),
       ...(documentSource === undefined ? {} : { source: documentSource }),
       issueDate: text(value, "issue_date"), issuedAt: text(value, "issued_at"), reason: text(value, "reason"), currency: text(value, "currency"),
-      issuer: partyFrom(value, "issuer_"), customer: buyerFrom(value, "customer_"), lines, taxBreakdown,
-      totalExcludingTax: text(value, "total_excluding_tax"), taxTotal: text(value, "tax_total"), totalIncludingTax: text(value, "total_including_tax"),
+      issuer: partyFrom(value, "issuer_"), customer: buyerFrom(value, "customer_"), lines, vatBreakdown,
+      totalExcludingVat: text(value, "total_excluding_tax"), vatTotal: text(value, "tax_total"), totalIncludingVat: text(value, "total_including_tax"),
     }
   }),
   listCorrections: (organizationId, originalInvoiceId, source) => read("list corrections", () => {
@@ -599,16 +604,16 @@ const transactionAdapter = (database: DatabaseSync): InvoicingTransaction => ({
       const id = text(value, "id")
       const documentSource = sourceFrom(value)
       const lines: ReadonlyArray<DraftLine> = database.prepare("SELECT * FROM correction_lines WHERE correction_id = ? ORDER BY line_position").all(id).map((v) => lineFrom(v as Row))
-      const taxBreakdown: ReadonlyArray<TaxBreakdown> = database.prepare("SELECT * FROM correction_tax_breakdown WHERE correction_id = ? ORDER BY line_position").all(id).map((item) => {
+      const vatBreakdown: ReadonlyArray<VatBreakdown> = database.prepare("SELECT * FROM correction_tax_breakdown WHERE correction_id = ? ORDER BY line_position").all(id).map((item) => {
         const tax = item as Row
-        return { taxCode: text(tax, "tax_code"), category: "standard", rate: text(tax, "rate"), taxableAmount: text(tax, "taxable_amount"), taxAmount: text(tax, "tax_amount") }
+        return { code: text(tax, "tax_code"), rate: text(tax, "rate"), vatBaseAmount: text(tax, "taxable_amount"), vatAmount: text(tax, "tax_amount") }
       })
       return {
         id, organizationId, originalInvoiceId: text(value, "original_invoice_id"), fiscalYear: integer(value, "fiscal_year"), series: text(value, "series"), number: integer(value, "number"),
         ...(documentSource === undefined ? {} : { source: documentSource }),
         issueDate: text(value, "issue_date"), issuedAt: text(value, "issued_at"), reason: text(value, "reason"), currency: text(value, "currency"),
-        issuer: partyFrom(value, "issuer_"), customer: buyerFrom(value, "customer_"), lines, taxBreakdown,
-        totalExcludingTax: text(value, "total_excluding_tax"), taxTotal: text(value, "tax_total"), totalIncludingTax: text(value, "total_including_tax"),
+        issuer: partyFrom(value, "issuer_"), customer: buyerFrom(value, "customer_"), lines, vatBreakdown,
+        totalExcludingVat: text(value, "total_excluding_tax"), vatTotal: text(value, "tax_total"), totalIncludingVat: text(value, "total_including_tax"),
       }
     })
   }),
@@ -634,7 +639,7 @@ const paymentsTransactionAdapter = (database: DatabaseSync): PaymentsTransaction
     const value = row(database.prepare("SELECT * FROM issued_invoices WHERE organization_id = ? AND id = ?").get(organizationId, id))
     return value === undefined ? undefined : {
       id: text(value, "id"), organizationId: text(value, "organization_id"), currency: text(value, "currency"),
-      dueDate: nullableText(value, "due_date"), totalIncludingTax: text(value, "total_including_tax"),
+      dueDate: nullableText(value, "due_date"), totalIncludingVat: text(value, "total_including_tax"),
     }
   }),
   savePayment: (payment) => paymentWrite("save payment", () => {
