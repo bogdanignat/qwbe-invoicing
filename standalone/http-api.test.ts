@@ -16,7 +16,7 @@ const inventory = [
   "GET /api/product-presets", "POST /api/product-presets", "PUT /api/product-presets/:id", "DELETE /api/product-presets/:id",
   "GET /api/drafts", "GET /api/drafts/:id", "POST /api/drafts", "PUT /api/drafts/:id", "DELETE /api/drafts/:id",
   "POST /api/drafts/:draftId/lines", "PUT /api/drafts/:draftId/lines/:lineId", "DELETE /api/drafts/:draftId/lines/:lineId",
-  "POST /api/drafts/:draftId/issue", "GET /api/invoices/:invoiceId/payments", "POST /api/invoices/:invoiceId/payments",
+  "POST /api/drafts/:draftId/issue", "GET /api/invoices/:invoiceId/payments", "POST /api/invoices/:invoiceId/payments", "POST /api/invoices/:invoiceId/payments/:paymentId/reversal",
   "POST /api/invoices/:invoiceId/corrections", "GET /api/invoices/:invoiceId/corrections", "GET /api/corrections/:id",
   "GET /api/invoices", "GET /api/invoices/:id", "POST /api/invoices/:invoiceId/pdf", "GET /api/invoices/:invoiceId/pdf",
   "POST /api/invoices",
@@ -25,11 +25,11 @@ const inventory = [
   "GET /api/session", "POST /api/session", "DELETE /api/session",
 ].sort()
 
-void test("the contract exposes exactly the current 43 operations", () => {
-  assert.equal(operationNames.length, 43)
-  assert.equal(new Set(operationNames).size, 43)
-  assert.equal(applicationRoutes.length, 43)
-  assert.equal(new Set(applicationRoutes.map((route) => route.operationId)).size, 43)
+void test("the contract exposes exactly the current 44 operations", () => {
+  assert.equal(operationNames.length, 44)
+  assert.equal(new Set(operationNames).size, 44)
+  assert.equal(applicationRoutes.length, 44)
+  assert.equal(new Set(applicationRoutes.map((route) => route.operationId)).size, 44)
   assert.deepEqual(applicationRoutes.map((route) => `${route.method} ${route.path}`).sort(), inventory)
   assert.equal(applicationRoutes.some((route) => route.path === "/api"), false)
 })
@@ -147,7 +147,7 @@ void test("OpenAPI 3.1 mirrors paths, PDF encoding, and authentication metadata"
   expectStatuses("post", "/api/document-series", ["409", "413"])
   for (const [method, path] of [["put", "/api/customers/{id}"], ["put", "/api/product-presets/{id}"],
     ["delete", "/api/product-presets/{id}"]] as const) expectStatuses(method, path, ["404", "413"])
-  for (const [method, path] of [["post", "/api/drafts"], ["post", "/api/invoices/{invoiceId}/payments"]] as const) {
+  for (const [method, path] of [["post", "/api/drafts"]] as const) {
     expectStatuses(method, path, ["404", "413"])
   }
   for (const path of ["/api/invoices", "/api/proformas"]) expectStatuses("post", path, ["404", "409", "413"])

@@ -49,7 +49,7 @@ Every cube use-case is an `Effect` and has a 1:1 authenticated HTTP endpoint. Au
 - `POST /api/invoices` — issue an invoice atomically from complete authoring content without first persisting a draft
 - `GET /api/invoices` / `GET /api/invoices/:id` — latest 100 issued invoices / immutable issued snapshot (Effect)
 - `POST /api/invoices/:id/pdf` (idempotent render) / `GET /api/invoices/:id/pdf` (download with SHA-256 ETag)
-- `POST /api/invoices/:id/payments` (record payment) / `GET /api/invoices/:id/payments` (list payments with derived status `unpaid`/`partially_paid`/`paid`/`overpaid`/`overdue`, `paidAmount`/`remainingAmount`)
+- `POST /api/invoices/:id/payments` (record payment; requires `Idempotency-Key`) / `POST /api/invoices/:id/payments/:paymentId/reversal` (reverse one payment in full with an immutable counter-row; requires `Idempotency-Key`, optional `reason`) / `GET /api/invoices/:id/payments` (list payments with derived status `unpaid`/`partially_paid`/`paid`/`overpaid`/`overdue`, `paidAmount`/`remainingAmount`)
 - `POST /api/invoices/:id/corrections` (storno fiscal — creează document nou imuabil cu referință la factura originală, motiv obligatoriu, totals negative) / `GET /api/invoices/:id/corrections` / `GET /api/corrections/:id` — după emitere nu se mai editează factura, doar storno
 - Issued invoices have no `DELETE` endpoint and allocated invoice numbers are never reused; mistakes are handled through correction documents
 

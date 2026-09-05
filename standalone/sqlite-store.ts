@@ -204,10 +204,13 @@ const addressValues = (address: Address): ReadonlyArray<string | null> => [
 const paymentFrom = (value: Row): Payment => {
   const externalReference = optionalText(value, "external_reference")
   const note = optionalText(value, "note")
+  const reversesPaymentId = optionalText(value, "reverses_payment_id")
   return {
     id: text(value, "id"),
     invoiceId: text(value, "invoice_id"),
     organizationId: text(value, "organization_id"),
+    kind: text(value, "kind") === "reversal" ? "reversal" : "payment",
+    ...(reversesPaymentId === undefined ? {} : { reversesPaymentId }),
     amount: text(value, "amount"),
     currency: text(value, "currency"),
     paymentDate: text(value, "payment_date"),
@@ -668,9 +671,9 @@ const paymentsTransactionAdapter = (database: DatabaseSync): PaymentsTransaction
   }),
   savePayment: (payment) => paymentWrite("save payment", () => {
     const result = database.prepare(`INSERT INTO invoice_payments
-      (id, invoice_id, organization_id, amount, currency, payment_date, method, external_reference, note, actor_id, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
-      .run(payment.id, payment.invoiceId, payment.organizationId, payment.amount, payment.currency,
+      (id, invoice_id, organization_id, kind, reverses_payment_id, amount, currency, payment_date, method, external_reference, note, actor_id, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+      .run(payment.id, payment.invoiceId, payment.organizationId, payment.kind, payment.reversesPaymentId ?? null, payment.amount, payment.currency,
         payment.paymentDate, payment.method, payment.externalReference ?? null, payment.note ?? null,
         payment.actorId, payment.createdAt)
     if (result.changes === 0) throw new PaymentsDomainConflict({ code: "payment_not_saved", message: "Payment could not be saved" })
@@ -678,6 +681,22 @@ const paymentsTransactionAdapter = (database: DatabaseSync): PaymentsTransaction
   listPayments: (organizationId, invoiceId) => paymentRead("list payments", () =>
     database.prepare("SELECT * FROM invoice_payments WHERE organization_id = ? AND invoice_id = ? ORDER BY payment_date, created_at, id")
       .all(organizationId, invoiceId).map((value) => paymentFrom(value as Row))),
+  findPayment: (organizationId, invoiceId, paymentId) => paymentRead("find payment", () => {
+    const value = row(database.prepare("SELECT * FROM invoice_payments WHERE organization_id = ? AND invoice_id = ? AND id = ?").get(organizationId, invoiceId, paymentId))
+    return value === undefined ? undefined : paymentFrom(value)
+  }),
+  findIdempotencyRecord: (organizationId, key) => paymentRead("find payment idempotency record", () => {
+    const value = row(database.prepare("SELECT * FROM payment_idempotency_records WHERE organization_id = ? AND idempotency_key = ?").get(organizationId, key))
+    return value === undefined ? undefined : {
+      organizationId: text(value, "organization_id"), key: text(value, "idempotency_key"),
+      operation: text(value, "operation") === "reverse_payment" ? "reverse_payment" : "record_payment",
+      fingerprint: text(value, "fingerprint"), resultId: text(value, "result_id"), createdAt: text(value, "created_at"),
+    }
+  }),
+  saveIdempotencyRecord: (record) => paymentWrite("save payment idempotency record", () => {
+    database.prepare(`INSERT INTO payment_idempotency_records (organization_id, idempotency_key, operation, fingerprint, result_id, created_at)
+      VALUES (?, ?, ?, ?, ?, ?)`).run(record.organizationId, record.key, record.operation, record.fingerprint, record.resultId, record.createdAt)
+  }),
 })
 
 const openTransaction = (dataDirectory: string): TransactionHandle => {

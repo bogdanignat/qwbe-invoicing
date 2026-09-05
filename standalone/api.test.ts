@@ -243,14 +243,28 @@ void test("requires host authentication and serves the complete invoice-core rou
     assert.equal((await handleApiRequest({
       method: "DELETE", url: `/api/drafts/${draftId}`, authorization, body: undefined,
     }, runtime)).status, 409)
+    assert.equal((await handleApiRequest({ method: "POST", url: `/api/invoices/${invoiceId}/payments`, authorization,
+      body: { amount: "50.00", currency: "RON", paymentDate: "2026-09-02", method: "transfer" } }, runtime)).status, 400)
     const payment = await handleApiRequest({
       method: "POST",
       url: `/api/invoices/${invoiceId}/payments`,
       authorization,
+      idempotencyKey: "payment-1",
       body: { amount: "50.00", currency: "RON", paymentDate: "2026-09-02", method: "transfer" },
     }, runtime)
     assert.equal(payment.status, 200)
     assert.equal((payment.body as { status: string }).status, "partially_paid")
+    assert.deepEqual(await handleApiRequest({ method: "POST", url: `/api/invoices/${invoiceId}/payments`, authorization, idempotencyKey: "payment-1",
+      body: { amount: "50.00", currency: "RON", paymentDate: "2026-09-02", method: "transfer" } }, runtime), payment)
+    const mistaken = await handleApiRequest({ method: "POST", url: `/api/invoices/${invoiceId}/payments`, authorization, idempotencyKey: "payment-2",
+      body: { amount: "5.00", currency: "RON", paymentDate: "2026-09-02", method: "cash" } }, runtime)
+    const mistakenId = (mistaken.body as { payment: { id: string } }).payment.id
+    const reversal = await handleApiRequest({ method: "POST", url: `/api/invoices/${invoiceId}/payments/${mistakenId}/reversal`, authorization,
+      idempotencyKey: "reversal-1", body: { reason: "Înregistrată de două ori" } }, runtime)
+    assert.equal(reversal.status, 200)
+    assert.equal((reversal.body as { payment: { kind: string; reversesPaymentId: string } }).payment.kind, "reversal")
+    assert.equal((await handleApiRequest({ method: "POST", url: `/api/invoices/${invoiceId}/payments/${mistakenId}/reversal`, authorization,
+      idempotencyKey: "reversal-2", body: {} }, runtime)).status, 409)
     const payments = await handleApiRequest({
       method: "GET",
       url: `/api/invoices/${invoiceId}/payments`,
@@ -262,7 +276,7 @@ void test("requires host authentication and serves the complete invoice-core rou
       paidAmount: (payments.body as { paidAmount: string }).paidAmount,
       remainingAmount: (payments.body as { remainingAmount: string }).remainingAmount,
       count: (payments.body as { payments: ReadonlyArray<unknown> }).payments.length,
-    }, { status: "partially_paid", paidAmount: "50.00", remainingAmount: "71.00", count: 1 })
+    }, { status: "partially_paid", paidAmount: "50.00", remainingAmount: "71.00", count: 3 })
     const proformaDraft = await handleApiRequest({
       method: "POST", url: "/api/drafts", authorization,
       body: { customerId, issueDate: "2026-09-05", dueDate: null, series: "QWBE",

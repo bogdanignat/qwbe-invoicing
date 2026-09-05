@@ -18,7 +18,7 @@ export const operationNames = [
   "listProductPresets", "createProductPreset", "updateProductPreset", "deleteProductPreset",
   "listDrafts", "getDraft", "createDraft", "updateDraft", "deleteDraft",
   "addDraftLine", "updateDraftLine", "deleteDraftLine", "issueDraftInvoice", "issueInvoice",
-  "listPayments", "recordPayment", "createCorrection", "listCorrections", "getCorrection",
+  "listPayments", "recordPayment", "reversePayment", "createCorrection", "listCorrections", "getCorrection",
   "listIssuedInvoices", "getIssuedInvoice", "renderInvoicePdf", "downloadInvoicePdf",
   "issueDraftProforma", "issueProforma", "listProformas", "getProforma", "issueInvoiceFromProforma", "renderProformaPdf", "downloadProformaPdf",
   "getSession", "createSession", "deleteSession",
@@ -45,6 +45,7 @@ const draftId = HttpApiSchema.param("draftId", Schema.String)
 const lineId = HttpApiSchema.param("lineId", Schema.String)
 const invoiceId = HttpApiSchema.param("invoiceId", Schema.String)
 const proformaId = HttpApiSchema.param("proformaId", Schema.String)
+const paymentId = HttpApiSchema.param("paymentId", Schema.String)
 const csrfHeaders = Schema.Struct({
   "x-csrf-token": Schema.optional(Schema.String.annotations({
     description: "Required for unsafe requests authenticated with sessionCookie; ignored for bearerAuth.",
@@ -126,7 +127,8 @@ const invoicing = HttpApiGroup.make("invoicing")
   .add(invoicingBase(conflict(notFound(body(HttpApiEndpoint.del("deleteDraftLine")`/drafts/${draftId}/lines/${lineId}`.addSuccess(S.DraftInvoice))))))
   .add(invoicingBase(conflict(notFound(validation(idempotentBody(HttpApiEndpoint.post("issueDraftInvoice")`/drafts/${draftId}/issue`.addSuccess(S.IssuedInvoice)))))))
   .add(invoicingBase(notFound(HttpApiEndpoint.get("listPayments")`/invoices/${invoiceId}/payments`.addSuccess(S.PaymentSummary))))
-  .add(invoicingBase(notFound(validation(body(HttpApiEndpoint.post("recordPayment")`/invoices/${invoiceId}/payments`.setPayload(S.PaymentInput).addSuccess(S.RecordPaymentResult))))))
+  .add(invoicingBase(conflict(notFound(validation(idempotentBody(HttpApiEndpoint.post("recordPayment")`/invoices/${invoiceId}/payments`.setPayload(S.PaymentInput).addSuccess(S.RecordPaymentResult)))))))
+  .add(invoicingBase(conflict(notFound(validation(idempotentBody(HttpApiEndpoint.post("reversePayment")`/invoices/${invoiceId}/payments/${paymentId}/reversal`.setPayload(S.ReversalInput).addSuccess(S.RecordPaymentResult)))))))
   .add(invoicingBase(conflict(notFound(validation(idempotentBody(HttpApiEndpoint.post("createCorrection")`/invoices/${invoiceId}/corrections`.setPayload(S.CorrectionInput).addSuccess(S.Correction)))))))
   .add(invoicingBase(HttpApiEndpoint.get("listCorrections")`/invoices/${invoiceId}/corrections`.setUrlParams(S.SourceFilter).addSuccess(Schema.Array(S.Correction))))
   .add(invoicingBase(notFound(HttpApiEndpoint.get("getCorrection")`/corrections/${id}`.addSuccess(S.Correction))))

@@ -6,10 +6,14 @@ export const calendarDate = (instant: Date, timeZone: string = organizationTimeZ
   new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(instant)
 
 export type PaymentStatus = "unpaid" | "partially_paid" | "paid" | "overpaid" | "overdue"
+// A reversal is a second immutable row that cancels one payment in full; nothing is ever edited or deleted.
+export type PaymentKind = "payment" | "reversal"
 export interface Payment {
   readonly id: string
   readonly invoiceId: string
   readonly organizationId: string
+  readonly kind: PaymentKind
+  readonly reversesPaymentId?: string
   readonly amount: string
   readonly currency: string
   readonly paymentDate: string
@@ -17,6 +21,20 @@ export interface Payment {
   readonly externalReference?: string
   readonly note?: string
   readonly actorId: string
+  readonly createdAt: string
+}
+export interface ReversePaymentInput {
+  readonly invoiceId: string
+  readonly paymentId: string
+  readonly reason?: string
+}
+export interface IdempotencyAttempt { readonly key: string; readonly fingerprint: string }
+export interface Idempotent<Input> { readonly request: Input; readonly idempotency: IdempotencyAttempt }
+export type PaymentOperation = "record_payment" | "reverse_payment"
+export interface PaymentIdempotencyRecord extends IdempotencyAttempt {
+  readonly organizationId: string
+  readonly operation: PaymentOperation
+  readonly resultId: string
   readonly createdAt: string
 }
 export interface RecordPaymentInput {
@@ -60,12 +78,20 @@ export const validateRecordPaymentInput = (input: RecordPaymentInput): void => {
   }
   if (issues.length > 0) throw new ValidationFailure({ issues })
 }
+export const validateReversePaymentInput = (input: ReversePaymentInput): void => {
+  const issues: Array<string> = []
+  if (input.invoiceId.trim().length === 0) issues.push("invoiceId is required")
+  if (input.paymentId.trim().length === 0) issues.push("paymentId is required")
+  if (input.reason !== undefined && input.reason.trim().length === 0) issues.push("reason must not be empty when provided")
+  if (input.reason !== undefined && input.reason.trim().length > 500) issues.push("reason must be at most 500 characters")
+  if (issues.length > 0) throw new ValidationFailure({ issues })
+}
 export const moneyMinor = (value: string): bigint => {
   const match = /^(\d+)\.(\d{2})$/.exec(value.trim())
   return match === null ? parseMoneyMinor(value, "money") : BigInt(match[1] ?? "0") * 100n + BigInt(match[2] ?? "0")
 }
 export const sumPaymentsMinor = (payments: ReadonlyArray<Payment>): bigint =>
-  payments.reduce((total, payment) => total + moneyMinor(payment.amount), 0n)
+  payments.reduce((total, payment) => total + (payment.kind === "reversal" ? -moneyMinor(payment.amount) : moneyMinor(payment.amount)), 0n)
 export const derivePaymentStatus = (input: {
   readonly totalIncludingVat: string
   readonly dueDate: string | null

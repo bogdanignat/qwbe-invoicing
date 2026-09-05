@@ -12,7 +12,6 @@ import {
   ValidationFailure,
   createInvoicingService,
   type DocumentSource,
-  type IdempotencyOperation,
   type InvoicingFailure,
 } from "../cube/invoicing/index.ts"
 import {
@@ -35,7 +34,7 @@ import {
   type DocumentsFailure,
 } from "../cube/invoicing/documents/index.ts"
 import { createStandaloneArtifactService } from "./artifact-runtime.ts"
-import { authoringInvoiceInput, authoringProformaInput, correctionInput, customerInput, documentSeriesInput, draftInput, emptyInput, issuerInput, issueProformaInput, lineInput, pageRequest, paymentInput, productPresetInput, updateDraftInput, updateLineInput } from "./api-inputs.ts"
+import { authoringInvoiceInput, authoringProformaInput, correctionInput, customerInput, documentSeriesInput, draftInput, emptyInput, issuerInput, issueProformaInput, lineInput, pageRequest, paymentInput, productPresetInput, reversalInput, updateDraftInput, updateLineInput } from "./api-inputs.ts"
 import { matchApplicationRoute } from "./api-route-adapter.ts"
 import type { RequestAuthenticator } from "./auth.ts"
 import { createSqlitePaymentsStore, createSqliteStore } from "./sqlite-store.ts"
@@ -75,7 +74,7 @@ const canonicalJson = (value: unknown): string => {
   throw new ValidationFailure({ issues: ["request cannot be fingerprinted"] })
 }
 
-const idempotentRequest = <Input>(request: ApiRequest, operation: IdempotencyOperation, input: Input) => {
+const idempotentRequest = <Input>(request: ApiRequest, operation: string, input: Input) => {
   const key = request.idempotencyKey
   if (key === undefined || !/^[\x21-\x7e]{1,255}$/.test(key)) {
     throw new ValidationFailure({ issues: ["Idempotency-Key header is required and must contain 1-255 visible ASCII characters"] })
@@ -191,7 +190,8 @@ export const handleApiRequest = async (request: ApiRequest, runtime: ApiRuntime)
         break
       }
       case "listPayments": operation = payments.listPayments(pathParam("invoiceId")); break
-      case "recordPayment": operation = payments.recordPayment(paymentInput(pathParam("invoiceId"), request.body)); break
+      case "recordPayment": operation = payments.recordPayment(idempotentRequest(request, "record_payment", paymentInput(pathParam("invoiceId"), request.body))); break
+      case "reversePayment": operation = payments.reversePayment(idempotentRequest(request, "reverse_payment", reversalInput(pathParam("invoiceId"), pathParam("paymentId"), request.body))); break
       case "createCorrection": {
         const input = correctionInput(pathParam("invoiceId"), request.body)
         operation = service.createCorrection(idempotentRequest(request, "create_correction", input))

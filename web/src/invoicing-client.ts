@@ -108,7 +108,8 @@ export const invoicingClient = {
   downloadProformaPdf: (id: string) => apiRequest(`/api/proformas/${encoded(id)}/pdf`, ignored, { method: "POST", body: {} }).pipe(
     Effect.zipRight(apiBlob(`/api/proformas/${encoded(id)}/pdf`)),
   ),
-  recordPayment: (id: string, body: Readonly<Record<string, unknown>>) => apiRequest(`/api/invoices/${encoded(id)}/payments`, ignored, { method: "POST", body }),
+  recordPayment: (id: string, body: Readonly<Record<string, unknown>>, idempotencyKey: string) => apiRequest(`/api/invoices/${encoded(id)}/payments`, ignored, { method: "POST", body, idempotencyKey }),
+  reversePayment: (id: string, paymentId: string, reason: string | undefined, idempotencyKey: string) => apiRequest(`/api/invoices/${encoded(id)}/payments/${encoded(paymentId)}/reversal`, ignored, { method: "POST", body: reason === undefined ? {} : { reason }, idempotencyKey }),
   createCorrection: (id: string, body: Readonly<Record<string, unknown>>, idempotencyKey: string) => apiRequest(`/api/invoices/${encoded(id)}/corrections`, decodeCorrection, { method: "POST", body, idempotencyKey }),
 } as const
 

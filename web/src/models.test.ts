@@ -12,8 +12,8 @@ void test("decodes optional address and payment fields without leaking null", ()
     id: "customer-1", organizationId: "org-1", partyType: "company", name: "Client", fiscalIdentifier: "RO1",
     address: { countryCode: "RO", city: "Botoșani", street: "Strada 1" },
   })
-  assert.deepEqual(decodePaymentSummary({ invoiceId: "invoice-1", status: "paid", paidAmount: "121.00", remainingAmount: "0.00", payments: [{ id: "payment-1", amount: "121.00", currency: "RON", paymentDate: "2026-08-31", method: "transfer", externalReference: null }] }).payments[0], {
-    id: "payment-1", amount: "121.00", currency: "RON", paymentDate: "2026-08-31", method: "transfer",
+  assert.deepEqual(decodePaymentSummary({ invoiceId: "invoice-1", status: "paid", paidAmount: "121.00", remainingAmount: "0.00", payments: [{ id: "payment-1", kind: "payment", amount: "121.00", currency: "RON", paymentDate: "2026-08-31", method: "transfer", externalReference: null }] }).payments[0], {
+    id: "payment-1", kind: "payment", amount: "121.00", currency: "RON", paymentDate: "2026-08-31", method: "transfer",
   })
 })
 

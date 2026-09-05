@@ -139,6 +139,11 @@ export const paymentInput = (invoiceId: string, value: unknown) => {
     paymentDate: text(input.paymentDate, "paymentDate"), method: text(input.method, "method"),
     ...(externalReference === undefined ? {} : { externalReference }), ...(note === undefined ? {} : { note }) }
 }
+export const reversalInput = (invoiceId: string, paymentId: string, value: unknown) => {
+  const input = object(value)
+  const reason = optionalText(input.reason, "reason")
+  return { invoiceId, paymentId, ...(reason === undefined ? {} : { reason }) }
+}
 export const correctionInput = (originalInvoiceId: string, value: unknown) => {
   const input = object(value)
   const issueDate = optionalText(input.issueDate, "issueDate")

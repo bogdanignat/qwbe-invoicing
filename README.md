@@ -255,7 +255,7 @@ generated from the same Effect `HttpApi` contract that serves the routes.
 | Drafts | `GET`, `POST /api/drafts`, `GET`, `PUT`, `DELETE /api/drafts/:id`, lines under `/api/drafts/:id/lines` |
 | Issue | `POST /api/invoices`, `POST /api/drafts/:id/issue` |
 | Invoices | `GET /api/invoices`, `GET /api/invoices/:id`, `POST`, `GET /api/invoices/:id/pdf` |
-| Payments | `GET`, `POST /api/invoices/:id/payments` |
+| Payments | `GET`, `POST /api/invoices/:id/payments`, `POST /api/invoices/:id/payments/:paymentId/reversal` |
 | Corrections | `GET`, `POST /api/invoices/:id/corrections`, `GET /api/corrections/:id` |
 | Proformas | `POST /api/proformas`, `POST /api/drafts/:id/proformas`, `GET /api/proformas`, `GET /api/proformas/:id`, `POST /api/proformas/:id/invoice`, `POST`, `GET /api/proformas/:id/pdf` |
 | Health | `GET /health/live`, `GET /health/ready` (no auth) |

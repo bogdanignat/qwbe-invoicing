@@ -158,6 +158,8 @@ export interface Proforma {
 
 export interface Payment {
   readonly id: string
+  readonly kind: "payment" | "reversal"
+  readonly reversesPaymentId?: string
   readonly amount: string
   readonly currency: string
   readonly paymentDate: string
@@ -397,8 +399,12 @@ const decodePayment: Decoder<Payment> = (input) => {
   const value = object(input)
   const externalReference = optionalText(value.externalReference, "externalReference")
   const note = optionalText(value.note, "note")
+  const kind = text(value.kind, "kind")
+  if (kind !== "payment" && kind !== "reversal") throw new Error("invalid payment kind")
+  const reversesPaymentId = optionalText(value.reversesPaymentId, "reversesPaymentId")
   return {
-    id: text(value.id, "id"), amount: text(value.amount, "amount"), currency: text(value.currency, "currency"),
+    id: text(value.id, "id"), kind, ...(reversesPaymentId === undefined ? {} : { reversesPaymentId }),
+    amount: text(value.amount, "amount"), currency: text(value.currency, "currency"),
     paymentDate: text(value.paymentDate, "paymentDate"), method: text(value.method, "method"),
     ...(externalReference === undefined ? {} : { externalReference }), ...(note === undefined ? {} : { note }),
   }
