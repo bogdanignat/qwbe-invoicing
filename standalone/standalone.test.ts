@@ -40,6 +40,34 @@ void test("migration apply is idempotent", () => {
   }
 })
 
+void test("migrations leave every database in write-ahead logging mode with the immutability triggers in place", () => {
+  const directory = mkdtempSync(join(tmpdir(), "qwbe-wal-"))
+  try {
+    applyMigrations(directory)
+    for (const file of ["invoicing.sqlite", "documents.sqlite", "sessions.sqlite"]) {
+      const database = new DatabaseSync(join(directory, file), { readOnly: true })
+      try {
+        assert.equal(database.prepare("PRAGMA journal_mode").get()?.journal_mode, "wal", file)
+      } finally {
+        database.close()
+      }
+    }
+    const database = new DatabaseSync(join(directory, "invoicing.sqlite"), { readOnly: true })
+    try {
+      const triggers = new Set(database.prepare("SELECT name FROM sqlite_master WHERE type = 'trigger'").all().map((row) => String(row.name)))
+      for (const expected of ["issued_invoices_no_update", "issued_invoices_no_delete", "issued_lines_no_update", "issued_lines_no_delete",
+        "issued_tax_breakdown_no_update", "issued_tax_breakdown_no_delete", "correction_documents_no_update", "correction_documents_no_delete",
+        "proformas_no_delete", "proformas_no_content_update", "idempotency_records_no_update", "idempotency_records_no_delete"]) {
+        assert.ok(triggers.has(expected), `${expected} must exist after all migrations`)
+      }
+    } finally {
+      database.close()
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
 void test("readiness stays true while another connection holds a write lock", () => {
   const directory = mkdtempSync(join(tmpdir(), "qwbe-readiness-lock-"))
   try {

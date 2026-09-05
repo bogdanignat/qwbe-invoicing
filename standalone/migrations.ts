@@ -72,11 +72,20 @@ export const planMigrations = (dataDirectory: string): MigrationReport => {
   return { scanned, changed: 0, skipped: scanned - pending.length, failed: 0, pending }
 }
 
+// Write-ahead logging lets readers proceed while a transaction writes; the mode is persistent in
+// the file, so setting it here once (outside any transaction) covers every later connection.
+const enableWriteAheadLog = (database: DatabaseSync): void => {
+  const mode = database.prepare("PRAGMA journal_mode = WAL").get()
+  if (mode?.journal_mode !== "wal") throw new Error("could not enable write-ahead logging")
+}
+
 const applyPlan = (dataDirectory: string, plan: typeof plans[number]): number => {
   const database = new DatabaseSync(pathFor(dataDirectory, plan))
   let transactionOpen = false
   try {
+    database.exec("PRAGMA busy_timeout = 5000")
     database.exec("PRAGMA foreign_keys = ON")
+    enableWriteAheadLog(database)
     database.exec("BEGIN IMMEDIATE")
     transactionOpen = true
     database.exec(
