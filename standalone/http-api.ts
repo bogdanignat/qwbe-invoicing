@@ -13,7 +13,7 @@ import { Schema } from "effect"
 import * as S from "./http-schemas.ts"
 
 export const operationNames = [
-  "getIssuer", "configureIssuer", "listDocumentSeries", "addDocumentSeries",
+  "getIssuer", "configureIssuer", "listDocumentSeries", "addDocumentSeries", "listUnitOfMeasures",
   "listCustomers", "getCustomer", "createCustomer", "updateCustomer", "deleteCustomer",
   "listProductPresets", "createProductPreset", "updateProductPreset", "deleteProductPreset",
   "listDrafts", "getDraft", "createDraft", "updateDraft", "deleteDraft",
@@ -53,6 +53,14 @@ const csrfHeaders = Schema.Struct({
 const requiredCsrfHeaders = Schema.Struct({
   "x-csrf-token": Schema.String.annotations({ description: "CSRF token returned by GET or POST /api/session." }),
 })
+const idempotentHeaders = Schema.Struct({
+  "x-csrf-token": Schema.optional(Schema.String.annotations({
+    description: "Required for unsafe requests authenticated with sessionCookie; ignored for bearerAuth.",
+  })),
+  "idempotency-key": Schema.String.annotations({
+    description: "Opaque caller-generated key, unique per organization and logical numbered-document operation.",
+  }),
+})
 
 type Endpoint<N extends string, M extends HttpMethod, P, U, B, H, S, E, R, RE> =
   HttpApiEndpoint.HttpApiEndpoint<N, M, P, U, B, H, S, E, R, RE>
@@ -76,6 +84,12 @@ const body = <N extends string, M extends HttpMethod, P, U, B, H, Success, E, R,
   .addError(S.InvalidJsonError)
   .addError(S.PayloadTooLargeError)
   .addError(S.CsrfError)
+const idempotentBody = <N extends string, M extends HttpMethod, P, U, B, H, Success, E, R, RE>(
+  endpoint: Endpoint<N, M, P, U, B, H, Success, E, R, RE>,
+) => endpoint.setHeaders(idempotentHeaders)
+  .addError(S.InvalidJsonError)
+  .addError(S.PayloadTooLargeError)
+  .addError(S.CsrfError)
 const validation = <N extends string, M extends HttpMethod, P, U, B, H, Success, E, R, RE>(
   endpoint: Endpoint<N, M, P, U, B, H, Success, E, R, RE>,
 ) => endpoint.addError(S.ValidationError)
@@ -91,6 +105,7 @@ const invoicing = HttpApiGroup.make("invoicing")
   .add(invoicingBase(validation(body(HttpApiEndpoint.put("configureIssuer", "/issuer").setPayload(S.IssuerInput).addSuccess(S.Issuer)))))
   .add(invoicingBase(HttpApiEndpoint.get("listDocumentSeries", "/document-series").addSuccess(Schema.Array(S.DocumentSeries))))
   .add(invoicingBase(conflict(validation(body(HttpApiEndpoint.post("addDocumentSeries", "/document-series").setPayload(S.DocumentSeriesInput).addSuccess(S.DocumentSeries))))))
+  .add(invoicingBase(HttpApiEndpoint.get("listUnitOfMeasures", "/unit-of-measures").addSuccess(Schema.Array(S.UnitOfMeasure))))
   .add(invoicingBase(HttpApiEndpoint.get("listCustomers", "/customers").addSuccess(Schema.Array(S.Customer))))
   .add(invoicingBase(notFound(HttpApiEndpoint.get("getCustomer")`/customers/${id}`.addSuccess(S.Customer))))
   .add(invoicingBase(validation(body(HttpApiEndpoint.post("createCustomer", "/customers").setPayload(S.CustomerInput).addSuccess(S.Customer)))))
@@ -101,7 +116,7 @@ const invoicing = HttpApiGroup.make("invoicing")
   .add(invoicingBase(notFound(validation(body(HttpApiEndpoint.put("updateProductPreset")`/product-presets/${id}`
     .setPayload(S.ProductPresetInput).addSuccess(S.ProductPreset))))))
   .add(invoicingBase(notFound(body(HttpApiEndpoint.del("deleteProductPreset")`/product-presets/${id}`.addSuccess(S.Deleted)))))
-  .add(invoicingBase(HttpApiEndpoint.get("listDrafts", "/drafts").addSuccess(Schema.Array(S.DraftInvoice))))
+  .add(invoicingBase(HttpApiEndpoint.get("listDrafts", "/drafts").setUrlParams(S.SourceFilter).addSuccess(Schema.Array(S.DraftInvoice))))
   .add(invoicingBase(notFound(HttpApiEndpoint.get("getDraft")`/drafts/${id}`.addSuccess(S.DraftInvoice))))
   .add(invoicingBase(notFound(validation(body(HttpApiEndpoint.post("createDraft", "/drafts").setPayload(S.DraftInput).addSuccess(S.DraftInvoice))))))
   .add(invoicingBase(conflict(notFound(validation(body(HttpApiEndpoint.put("updateDraft")`/drafts/${id}`.setPayload(S.UpdateDraftInput).addSuccess(S.DraftInvoice)))))))
@@ -109,22 +124,22 @@ const invoicing = HttpApiGroup.make("invoicing")
   .add(invoicingBase(conflict(notFound(validation(body(HttpApiEndpoint.post("addDraftLine")`/drafts/${draftId}/lines`.setPayload(S.DraftLineInput).addSuccess(S.DraftInvoice)))))))
   .add(invoicingBase(conflict(notFound(validation(body(HttpApiEndpoint.put("updateDraftLine")`/drafts/${draftId}/lines/${lineId}`.setPayload(S.DraftLineInput).addSuccess(S.DraftInvoice)))))))
   .add(invoicingBase(conflict(notFound(body(HttpApiEndpoint.del("deleteDraftLine")`/drafts/${draftId}/lines/${lineId}`.addSuccess(S.DraftInvoice))))))
-  .add(invoicingBase(conflict(notFound(validation(body(HttpApiEndpoint.post("issueDraftInvoice")`/drafts/${draftId}/issue`.addSuccess(S.IssuedInvoice)))))))
+  .add(invoicingBase(conflict(notFound(validation(idempotentBody(HttpApiEndpoint.post("issueDraftInvoice")`/drafts/${draftId}/issue`.addSuccess(S.IssuedInvoice)))))))
   .add(invoicingBase(notFound(HttpApiEndpoint.get("listPayments")`/invoices/${invoiceId}/payments`.addSuccess(S.PaymentSummary))))
   .add(invoicingBase(notFound(validation(body(HttpApiEndpoint.post("recordPayment")`/invoices/${invoiceId}/payments`.setPayload(S.PaymentInput).addSuccess(S.RecordPaymentResult))))))
-  .add(invoicingBase(conflict(notFound(validation(body(HttpApiEndpoint.post("createCorrection")`/invoices/${invoiceId}/corrections`.setPayload(S.CorrectionInput).addSuccess(S.Correction)))))))
-  .add(invoicingBase(HttpApiEndpoint.get("listCorrections")`/invoices/${invoiceId}/corrections`.addSuccess(Schema.Array(S.Correction))))
+  .add(invoicingBase(conflict(notFound(validation(idempotentBody(HttpApiEndpoint.post("createCorrection")`/invoices/${invoiceId}/corrections`.setPayload(S.CorrectionInput).addSuccess(S.Correction)))))))
+  .add(invoicingBase(HttpApiEndpoint.get("listCorrections")`/invoices/${invoiceId}/corrections`.setUrlParams(S.SourceFilter).addSuccess(Schema.Array(S.Correction))))
   .add(invoicingBase(notFound(HttpApiEndpoint.get("getCorrection")`/corrections/${id}`.addSuccess(S.Correction))))
-  .add(invoicingBase(HttpApiEndpoint.get("listIssuedInvoices", "/invoices").addSuccess(Schema.Array(S.IssuedInvoice))))
-  .add(invoicingBase(conflict(notFound(validation(body(HttpApiEndpoint.post("issueInvoice", "/invoices").setPayload(S.AuthoringDocumentInput).addSuccess(S.IssuedInvoice)))))))
+  .add(invoicingBase(HttpApiEndpoint.get("listIssuedInvoices", "/invoices").setUrlParams(S.SourceFilter).addSuccess(Schema.Array(S.IssuedInvoice))))
+  .add(invoicingBase(conflict(notFound(validation(idempotentBody(HttpApiEndpoint.post("issueInvoice", "/invoices").setPayload(S.AuthoringDocumentInput).addSuccess(S.IssuedInvoice)))))))
   .add(invoicingBase(notFound(HttpApiEndpoint.get("getIssuedInvoice")`/invoices/${id}`.addSuccess(S.IssuedInvoice))))
-  .add(invoicingBase(conflict(notFound(validation(body(HttpApiEndpoint.post("issueDraftProforma")`/drafts/${draftId}/proformas`
+  .add(invoicingBase(conflict(notFound(validation(idempotentBody(HttpApiEndpoint.post("issueDraftProforma")`/drafts/${draftId}/proformas`
     .setPayload(S.IssueProformaInput).addSuccess(S.Proforma)))))))
-  .add(invoicingBase(HttpApiEndpoint.get("listProformas", "/proformas").addSuccess(Schema.Array(S.Proforma))))
-  .add(invoicingBase(conflict(notFound(validation(body(HttpApiEndpoint.post("issueProforma", "/proformas")
+  .add(invoicingBase(HttpApiEndpoint.get("listProformas", "/proformas").setUrlParams(S.SourceFilter).addSuccess(Schema.Array(S.Proforma))))
+  .add(invoicingBase(conflict(notFound(validation(idempotentBody(HttpApiEndpoint.post("issueProforma", "/proformas")
     .setPayload(S.AuthoringProformaInput).addSuccess(S.Proforma)))))))
   .add(invoicingBase(notFound(HttpApiEndpoint.get("getProforma")`/proformas/${id}`.addSuccess(S.Proforma))))
-  .add(invoicingBase(conflict(notFound(body(HttpApiEndpoint.post("issueInvoiceFromProforma")`/proformas/${id}/invoice`
+  .add(invoicingBase(conflict(notFound(idempotentBody(HttpApiEndpoint.post("issueInvoiceFromProforma")`/proformas/${id}/invoice`
     .setPayload(S.EmptyInput).addSuccess(S.IssuedInvoice))))))
 
 const documents = HttpApiGroup.make("documents")

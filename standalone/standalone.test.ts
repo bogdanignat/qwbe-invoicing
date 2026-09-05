@@ -25,12 +25,13 @@ void test("migration apply is idempotent", () => {
       "008-proforma-workflow",
       "009-proforma-direct-invoice",
       "010-product-presets-payment-terms",
+      "011-external-api-snapshots",
       "documents/000-foundation",
       "documents/001-artifacts",
       "documents/002-proforma-artifacts",
       "sessions/000-browser-sessions",
     ])
-    assert.equal(applyMigrations(directory).changed, 15)
+    assert.equal(applyMigrations(directory).changed, 16)
     assert.equal(applyMigrations(directory).changed, 0)
     assert.equal(databaseReady(directory), true)
   } finally {

@@ -16,6 +16,7 @@ export const useProductPresetsRegistry = (notify: (message: string) => void) => 
   const queryClient = useQueryClient()
   const [editing, setEditing] = useState<ProductPreset | undefined>(undefined)
   const presets = useQuery({ queryKey: ["product-presets"], queryFn: ({ signal }) => runUiEffect(invoicingClient.listProductPresets(), signal) })
+  const unitOfMeasures = useQuery({ queryKey: ["unit-of-measures"], queryFn: ({ signal }) => runUiEffect(invoicingClient.listUnitOfMeasures(), signal) })
   const save = useMutation({
     mutationFn: (request: ProductPresetSaveRequest) => request.id === undefined
       ? runUiEffect(invoicingClient.createProductPreset(request.body))
@@ -38,11 +39,14 @@ export const useProductPresetsRegistry = (notify: (message: string) => void) => 
   const submit = (event: FormSubmitEvent): void => {
     event.preventDefault()
     const form = event.currentTarget
-    const body: ProductPresetInput = { description: formField(form, "description"), unitPrice: formField(form, "unitPrice").replace(",", ".") }
+    const unitOfMeasure = unitOfMeasures.data?.find(({ code }) => code === formField(form, "unitOfMeasure"))
+    if (unitOfMeasure === undefined) return
+    const body: ProductPresetInput = { description: formField(form, "description"),
+      unitPrice: formField(form, "unitPrice").replace(",", "."), unitOfMeasure }
     save.mutate({ ...(editing === undefined ? {} : { id: editing.id }), body, form })
   }
   const remove = (preset: ProductPreset): void => {
     if (window.confirm(`Ștergi produsul „${preset.description}”? Liniile deja completate rămân neschimbate.`)) removal.mutate(preset.id)
   }
-  return { presets, editing, edit: setEditing, cancelEdit: () => { setEditing(undefined) }, submit, save, removal, remove }
+  return { presets, unitOfMeasures, editing, edit: setEditing, cancelEdit: () => { setEditing(undefined) }, submit, save, removal, remove }
 }

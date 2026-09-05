@@ -8,7 +8,9 @@ import {
   type ConfigureIssuerInput,
   type CreateCustomerInput,
   type CreateDraftInput,
+  type DocumentSource,
   type ProductPresetInput,
+  type UnitOfMeasure,
   type UpdateDraftInput,
   type UpdateDraftLineInput,
 } from "../cube/invoicing/index.ts"
@@ -53,6 +55,16 @@ const buyer = (value: unknown): BuyerSnapshot => {
     taxIdentifier: text(input.taxIdentifier, "taxIdentifier").trim().toUpperCase(), address: address(input.address),
   }
 }
+const unitOfMeasure = (value: unknown): UnitOfMeasure => {
+  const input = object(value)
+  return { code: text(input.code, "unitOfMeasure.code"), name: text(input.name, "unitOfMeasure.name") }
+}
+const documentSource = (value: unknown): DocumentSource => {
+  const input = object(value)
+  return { app: text(input.app, "source.app"), kind: text(input.kind, "source.kind"), id: text(input.id, "source.id") }
+}
+const optionalDocumentSource = (value: unknown): DocumentSource | undefined =>
+  value === undefined ? undefined : documentSource(value)
 const buyerSource = (input: JsonObject) => {
   const hasId = input.customerId !== undefined
   const hasInline = input.customer !== undefined
@@ -88,7 +100,8 @@ export const customerInput = (value: unknown): CreateCustomerInput => {
 }
 export const productPresetInput = (value: unknown): ProductPresetInput => {
   const input = object(value)
-  return { description: text(input.description, "description"), unitPrice: text(input.unitPrice, "unitPrice") }
+  return { description: text(input.description, "description"), unitPrice: text(input.unitPrice, "unitPrice"),
+    unitOfMeasure: unitOfMeasure(input.unitOfMeasure) }
 }
 export const documentSeriesInput = (value: unknown): ConfigureDocumentSeriesInput => {
   const input = object(value)
@@ -100,19 +113,22 @@ export const draftInput = (value: unknown): CreateDraftInput => {
   const input = object(value)
   const currency = optionalText(input.currency, "currency")
   const dueDate = optionalNullableText(input.dueDate, "dueDate")
-  return { ...buyerSource(input), series: text(input.series, "series"), issueDate: text(input.issueDate, "issueDate"),
+  const source = optionalDocumentSource(input.source)
+  return { ...buyerSource(input), ...(source === undefined ? {} : { source }), series: text(input.series, "series"), issueDate: text(input.issueDate, "issueDate"),
     ...(currency === undefined ? {} : { currency }), ...(dueDate === undefined ? {} : { dueDate }) }
 }
 export const updateDraftInput = (draftId: string, value: unknown): UpdateDraftInput => {
   const input = object(value)
   const dueDate = optionalNullableText(input.dueDate, "dueDate")
-  return { ...buyerSource(input), draftId, issueDate: text(input.issueDate, "issueDate"),
+  const source = input.source === null ? null : optionalDocumentSource(input.source)
+  return { ...buyerSource(input), draftId, ...(source === undefined ? {} : { source }), issueDate: text(input.issueDate, "issueDate"),
     ...(dueDate === undefined ? {} : { dueDate }) }
 }
 const lineFields = (draftId: string, value: unknown): AddDraftLineInput => {
   const input = object(value)
   return { draftId, description: text(input.description, "description"), quantity: text(input.quantity, "quantity"),
-    unitPrice: text(input.unitPrice, "unitPrice"), taxCode: text(input.taxCode, "taxCode") }
+    unitPrice: text(input.unitPrice, "unitPrice"), unitOfMeasure: unitOfMeasure(input.unitOfMeasure),
+    taxCode: text(input.taxCode, "taxCode") }
 }
 export const lineInput = lineFields
 export const updateLineInput = (draftId: string, lineId: string, value: unknown): UpdateDraftLineInput => ({
@@ -129,7 +145,9 @@ export const paymentInput = (invoiceId: string, value: unknown) => {
 export const correctionInput = (originalInvoiceId: string, value: unknown) => {
   const input = object(value)
   const issueDate = optionalText(input.issueDate, "issueDate")
-  return { originalInvoiceId, reason: text(input.reason, "reason"), ...(issueDate === undefined ? {} : { issueDate }) }
+  const source = optionalDocumentSource(input.source)
+  return { originalInvoiceId, reason: text(input.reason, "reason"),
+    ...(issueDate === undefined ? {} : { issueDate }), ...(source === undefined ? {} : { source }) }
 }
 export const issueProformaInput = (draftId: string, value: unknown) => {
   const input = object(value)
@@ -140,15 +158,17 @@ const rawLines = (value: unknown): AuthoringDocumentInput["lines"] => {
   return value.map((value) => {
     const line = object(value)
     return { description: text(line.description, "lines.description"), quantity: text(line.quantity, "lines.quantity"),
-      unitPrice: text(line.unitPrice, "lines.unitPrice"), taxCode: text(line.taxCode, "lines.taxCode") }
+      unitPrice: text(line.unitPrice, "lines.unitPrice"), unitOfMeasure: unitOfMeasure(line.unitOfMeasure),
+      taxCode: text(line.taxCode, "lines.taxCode") }
   })
 }
 const authoring = (value: unknown): AuthoringDocumentInput => {
   const input = object(value)
   const dueDate = optionalNullableText(input.dueDate, "dueDate")
+  const source = optionalDocumentSource(input.source)
   const currency = text(input.currency, "currency")
   if (currency !== "RON") throw new ValidationFailure({ issues: ["currency must be RON"] })
-  return { ...buyerSource(input), series: text(input.series, "series"), issueDate: text(input.issueDate, "issueDate"), currency,
+  return { ...buyerSource(input), ...(source === undefined ? {} : { source }), series: text(input.series, "series"), issueDate: text(input.issueDate, "issueDate"), currency,
     ...(dueDate === undefined ? {} : { dueDate }), lines: rawLines(input.lines) }
 }
 export const authoringInvoiceInput = authoring

@@ -6,6 +6,7 @@ import { downloadBlob } from "./browser-download.ts"
 import { invoicingClient } from "./invoicing-client.ts"
 import type { AuthoringDocumentInput } from "./invoicing-client.ts"
 import { authoringPayloadMatchesDraft } from "./invoice-authoring-state.ts"
+import { useIdempotencyKey } from "./idempotency-key.ts"
 import { navigate } from "./navigation.ts"
 import { proformaIssuanceAvailability } from "./proforma-state.ts"
 import { evictDraftAfterNavigation } from "./query-cache.ts"
@@ -34,17 +35,19 @@ export interface ProformaIssuanceState {
 
 export const useProformaIssuance = (input: ProformaIssuanceInput): ProformaIssuanceState => {
   const queryClient = useQueryClient()
+  const idempotency = useIdempotencyKey()
   const [selection, setSelection] = useState(input.series[0] ?? "")
   const selectedSeries = input.series.includes(selection) ? selection : input.series[0] ?? ""
   const mutation = useMutation({
     mutationFn: async () => {
       if (selectedSeries === "") return Promise.reject(new Error("Selectează o serie de proformă."))
-      if (input.draftId === undefined) return runUiEffect(invoicingClient.issueProforma({ ...input.payload, proformaSeries: selectedSeries }))
+      if (input.draftId === undefined) return runUiEffect(invoicingClient.issueProforma({ ...input.payload, proformaSeries: selectedSeries }, idempotency.current()))
       const latest = await runUiEffect(invoicingClient.getDraft(input.draftId))
       if (!authoringPayloadMatchesDraft(input.payload, latest)) throw new Error("Draftul s-a schimbat în altă sesiune. Reîncarcă pagina înainte de emitere.")
-      return runUiEffect(invoicingClient.issueDraftProforma(input.draftId, selectedSeries))
+      return runUiEffect(invoicingClient.issueDraftProforma(input.draftId, selectedSeries, idempotency.current()))
     },
     onSuccess: async (proforma) => {
+      idempotency.complete()
       navigate(`/proformas/${encodeURIComponent(proforma.id)}`)
       if (input.draftId !== undefined) evictDraftAfterNavigation(input.draftId, (filter) => { queryClient.removeQueries(filter) })
       await Promise.all([
@@ -52,6 +55,7 @@ export const useProformaIssuance = (input: ProformaIssuanceInput): ProformaIssua
         queryClient.invalidateQueries({ queryKey: ["proformas"] }),
       ])
     },
+    onError: idempotency.fail,
   })
   const availability = proformaIssuanceAvailability({
     hasSavedDraft: input.draftId !== undefined,
@@ -79,13 +83,15 @@ export const useProformas = () => useQuery({
 
 export const useProformaDetail = (id: string) => {
   const queryClient = useQueryClient()
+  const idempotency = useIdempotencyKey()
   const proforma = useQuery({
     queryKey: ["proforma", id],
     queryFn: ({ signal }) => runUiEffect(invoicingClient.getProforma(id), signal),
   })
   const issuance = useMutation({
-    mutationFn: () => runUiEffect(invoicingClient.issueInvoiceFromProforma(id)),
+    mutationFn: () => runUiEffect(invoicingClient.issueInvoiceFromProforma(id, idempotency.current())),
     onSuccess: async (invoice) => {
+      idempotency.complete()
       navigate(`/invoices/${encodeURIComponent(invoice.id)}`)
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["invoices"] }),
@@ -93,6 +99,7 @@ export const useProformaDetail = (id: string) => {
         queryClient.invalidateQueries({ queryKey: ["proforma", id] }),
       ])
     },
+    onError: idempotency.fail,
   })
   const download = useMutation({
     mutationFn: () => runUiEffect(invoicingClient.downloadProformaPdf(id)),

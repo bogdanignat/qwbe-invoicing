@@ -12,6 +12,7 @@ export class ApiFailure extends Data.TaggedError("ApiFailure")<{
 interface RequestOptions {
   readonly method?: "GET" | "POST" | "PUT" | "DELETE"
   readonly body?: object
+  readonly idempotencyKey?: string
 }
 
 const csrfTokenRef = Effect.runSync(Ref.make<string | undefined>(undefined))
@@ -28,6 +29,7 @@ const failureMessages: Readonly<Record<string, string>> = {
   draft_already_issued: "Draftul a fost deja emis și nu mai poate fi folosit pentru un alt document.",
   proforma_already_converted: "Proforma a fost deja transformată într-un draft de factură.",
   invoice_already_issued: "Draftul a fost deja emis ca factură și este blocat.",
+  idempotency_key_reused: "Cheia de siguranță a fost folosită pentru altă cerere. Reîncarcă pagina înainte de a continua.",
 }
 
 export const clearApiSession = Ref.set(csrfTokenRef, undefined)
@@ -66,6 +68,7 @@ const fetchResponse = (path: string, options: RequestOptions): Effect.Effect<Res
     method,
     headers: {
       ...(method === "GET" ? {} : { "x-csrf-token": csrfToken }),
+      ...(options.idempotencyKey === undefined ? {} : { "idempotency-key": options.idempotencyKey }),
       ...(options.body === undefined ? {} : { "content-type": "application/json" }),
     },
     ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),

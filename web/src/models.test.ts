@@ -1,7 +1,8 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { decodeCustomer, decodeDocumentSeries, decodeDocumentSeriesList, decodeDraft, decodeDrafts, decodeInvoice, decodeIssuer, decodePaymentSummary, decodeProductPreset, decodeProductPresets, decodeProforma, decodeProformas, invoiceDocumentSeries, proformaDocumentSeries } from "./models.ts"
+import { decodeCustomer, decodeDocumentSeries, decodeDocumentSeriesList, decodeDraft, decodeDrafts, decodeInvoice, decodeIssuer, decodePaymentSummary, decodeProductPreset, decodeProductPresets, decodeProforma, decodeProformas, decodeUnitOfMeasures, invoiceDocumentSeries, proformaDocumentSeries } from "./models.ts"
+const each = { code: "C62", name: "unitate" } as const
 
 void test("decodes optional address and payment fields without leaking null", () => {
   assert.deepEqual(decodeCustomer({
@@ -31,10 +32,11 @@ void test("decodes customer payment terms and product presets", () => {
   assert.equal(decodeCustomer({ ...baseCustomer, defaultPaymentTermDays: null }).defaultPaymentTermDays, undefined)
   assert.throws(() => decodeCustomer({ ...baseCustomer, defaultPaymentTermDays: -1 }), /invalid defaultPaymentTermDays/)
   assert.throws(() => decodeCustomer({ ...baseCustomer, defaultPaymentTermDays: "15" }), /invalid defaultPaymentTermDays/)
-  const preset = { id: "preset-1", organizationId: "org-1", description: "Consultanță", unitPrice: "100.00" }
+  const preset = { id: "preset-1", organizationId: "org-1", description: "Consultanță", unitPrice: "100.00", unitOfMeasure: each }
   assert.deepEqual(decodeProductPreset(preset), preset)
   assert.deepEqual(decodeProductPresets([preset]), [preset])
   assert.throws(() => decodeProductPreset({ ...preset, unitPrice: 100 }), /invalid unitPrice/)
+  assert.deepEqual(decodeUnitOfMeasures([each]), [each])
 })
 
 void test("requires integer issuer terms and decodes tax configuration", () => {
@@ -73,7 +75,7 @@ const commercialDocument = {
   issueDate: "2026-09-01", dueDate: null, issuedAt: "2026-09-01T10:00:00.000Z", currency: "RON",
   issuer: { legalName: "QWBE", taxIdentifier: "RO2", address: { countryCode: "RO", city: "Botoșani", street: "Strada 2" } },
   customer: { partyType: "company", legalName: "Client", taxIdentifier: "RO1", address: { countryCode: "RO", city: "Iași", street: "Strada 1" } },
-  lines: [{ id: "line-1", description: "Serviciu", quantity: "1.0000", unitPrice: "100.00", taxCode: "RO_STANDARD", taxCategory: "standard", taxRate: "21.00", totalExcludingTax: "100.00", taxAmount: "21.00", totalIncludingTax: "121.00" }],
+  lines: [{ id: "line-1", description: "Serviciu", quantity: "1.0000", unitPrice: "100.00", unitOfMeasure: each, taxCode: "RO_STANDARD", taxCategory: "standard", taxRate: "21.00", totalExcludingTax: "100.00", taxAmount: "21.00", totalIncludingTax: "121.00" }],
   taxBreakdown: [{ taxCode: "RO_STANDARD", category: "standard", rate: "21.00", taxableAmount: "100.00", taxAmount: "21.00" }],
   totalExcludingTax: "100.00", taxTotal: "21.00", totalIncludingTax: "121.00",
   invoiceSeries: "QWBE", convertedDraftId: null, convertedInvoiceId: null,
@@ -110,11 +112,13 @@ void test("decodes inline individual buyers and complete server totals", () => {
     id: "draft-2", organizationId: "org-1",
     customer: { partyType: "individual", legalName: "Ana Pop", taxIdentifier: "", address: { countryCode: "RO", city: "Iași", street: "Strada 2" } },
     series: "QWBE", issueDate: "2026-09-01", dueDate: "2026-09-16", currency: "RON", status: "draft",
-    lines: [{ id: "line-1", description: "Serviciu", quantity: "1.0000", unitPrice: "100.00", taxCode: "RO_STANDARD", taxCategory: "standard", taxRate: "21.00", totalExcludingTax: "100.00", taxAmount: "21.00", totalIncludingTax: "121.00" }],
+    source: { app: "crm", kind: "contract", id: "contract-1" },
+    lines: [{ id: "line-1", description: "Serviciu", quantity: "1.0000", unitPrice: "100.00", unitOfMeasure: each, taxCode: "RO_STANDARD", taxCategory: "standard", taxRate: "21.00", totalExcludingTax: "100.00", taxAmount: "21.00", totalIncludingTax: "121.00" }],
     taxBreakdown: [{ taxCode: "RO_STANDARD", category: "standard", rate: "21.00", taxableAmount: "100.00", taxAmount: "21.00" }],
     totalExcludingTax: "100.00", taxTotal: "21.00", totalIncludingTax: "121.00",
   })
   assert.equal(decoded.customerId, undefined)
+  assert.deepEqual(decoded.source, { app: "crm", kind: "contract", id: "contract-1" })
   assert.equal(decoded.customer.taxIdentifier, "")
   assert.equal(decoded.taxBreakdown[0]?.taxableAmount, "100.00")
 })

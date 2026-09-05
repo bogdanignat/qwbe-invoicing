@@ -20,7 +20,7 @@ export const cube = {
     name: identity,
     tables: `issuers issuer_tax_configurations document_series customers product_presets invoice_drafts draft_lines invoice_sequences
       issued_invoices issued_lines issued_tax_breakdown proformas proforma_lines proforma_tax_breakdown proforma_conversions
-       proforma_invoice_conversions correction_documents correction_lines correction_tax_breakdown`.split(/\s+/),
+       proforma_invoice_conversions correction_documents correction_lines correction_tax_breakdown idempotency_records`.split(/\s+/),
     requiresAuth: true,
     permissions: declaredPermissions.map((name) => ({ name, roles: ["admin"] })),
   },
@@ -32,7 +32,9 @@ export const cube = {
 
 export * from "./contracts/index.ts"
 export { calculateTotals } from "./domain/calculation.ts"
+export { unitOfMeasures } from "./domain/unit-of-measures.ts"
 export { createInvoicingService } from "./application/invoicing.ts"
 export type { InvoicingDependencies, InvoicingService, InvoicingTransaction } from "./application/invoicing.ts"
 export type * from "./domain/invoice.ts"
 export type * from "./domain/corrections.ts"
+export type * from "./domain/unit-of-measures.ts"

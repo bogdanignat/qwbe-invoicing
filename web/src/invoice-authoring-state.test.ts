@@ -3,6 +3,7 @@ import test from "node:test"
 
 import { addCalendarDays, applyProductPreset, authoringAccess, authoringDocumentPayload, authoringPayloadMatchesDraft, authoringReadiness, authoringSeriesOptions, createDraftPayload, draftLinePayload, draftLinesForEditing, editDueDate, formFromDraft, headerMatchesDraft, initialBuyerSelection, linesMatchDraft, newAuthoringForm, pendingLineOperations, selectBuyerMode, selectIssueDate, selectedSavedCustomer, selectSavedCustomer, switchBuyerMode, switchPartyType, updateDraftPayload, type InvoiceAuthoringForm } from "./invoice-authoring-state.ts"
 import type { Customer, DraftInvoice, Issuer, ProductPreset } from "./models.ts"
+const each = { code: "C62", name: "unitate" } as const
 
 const manualForm: InvoiceAuthoringForm = {
   buyerMode: "one-time", customerId: "", partyType: "individual", legalName: "Ana Pop", companyTaxIdentifier: "RO123", individualTaxIdentifier: "",
@@ -85,13 +86,13 @@ void test("does not recalculate a draft due date when its saved customer changes
 })
 
 void test("copies a product preset into an editable line without retaining a live relation", () => {
-  const line = { key: "local-1", lineId: "line-1", description: "Vechi", quantity: "3", unitPrice: "2.00", taxCode: "RO_STANDARD" }
-  const preset: ProductPreset = { id: "preset-1", organizationId: "org-1", description: "Consultanță", unitPrice: "100.00" }
+  const line = { key: "local-1", lineId: "line-1", description: "Vechi", quantity: "3", unitPrice: "2.00", unitOfMeasure: each, taxCode: "RO_STANDARD" }
+  const preset: ProductPreset = { id: "preset-1", organizationId: "org-1", description: "Consultanță", unitPrice: "100.00", unitOfMeasure: { code: "HUR", name: "oră" } }
   assert.deepEqual(applyProductPreset(line, preset), {
-    key: "local-1", lineId: "line-1", description: "Consultanță", quantity: "1", unitPrice: "100.00", taxCode: "RO_STANDARD",
+    key: "local-1", lineId: "line-1", description: "Consultanță", quantity: "1", unitPrice: "100.00", unitOfMeasure: preset.unitOfMeasure, taxCode: "RO_STANDARD",
   })
   assert.deepEqual(draftLinePayload(applyProductPreset(line, preset)), {
-    description: "Consultanță", quantity: "1", unitPrice: "100.00", taxCode: "RO_STANDARD",
+    description: "Consultanță", quantity: "1", unitPrice: "100.00", unitOfMeasure: preset.unitOfMeasure, taxCode: "RO_STANDARD",
   })
 })
 
@@ -128,7 +129,7 @@ void test("encodes a cleared due date as null and rehydrates null as a blank con
 })
 
 void test("detects edited and queued lines before issue", () => {
-  const withLine: DraftInvoice = { ...draft, lines: [{ id: "line-1", description: "Serviciu", quantity: "1.0000", unitPrice: "100.00", taxCode: "RO_STANDARD", taxCategory: "standard", taxRate: "21.00", totalExcludingTax: "100.00", taxAmount: "21.00", totalIncludingTax: "121.00" }] }
+  const withLine: DraftInvoice = { ...draft, lines: [{ id: "line-1", description: "Serviciu", quantity: "1.0000", unitPrice: "100.00", unitOfMeasure: each, taxCode: "RO_STANDARD", taxCategory: "standard", taxRate: "21.00", totalExcludingTax: "100.00", taxAmount: "21.00", totalIncludingTax: "121.00" }] }
   const lines = draftLinesForEditing(withLine)
   assert.equal(linesMatchDraft(lines, withLine), true)
   assert.equal(linesMatchDraft([{ ...lines[0] as NonNullable<typeof lines[0]>, quantity: "2" }], withLine), false)
@@ -136,7 +137,7 @@ void test("detects edited and queued lines before issue", () => {
   assert.equal(authoringReadiness(formFromDraft(withLine), lines, withLine, true).canIssue, false)
   assert.equal(authoringReadiness(manualForm, lines, undefined, false).canIssue, true)
   assert.deepEqual(authoringDocumentPayload(manualForm, lines).lines, [{
-    description: "Serviciu", quantity: "1.0000", unitPrice: "100.00", taxCode: "RO_STANDARD",
+    description: "Serviciu", quantity: "1.0000", unitPrice: "100.00", unitOfMeasure: each, taxCode: "RO_STANDARD",
   }])
   const payload = authoringDocumentPayload(manualForm, lines)
   assert.equal(authoringPayloadMatchesDraft(payload, withLine), true)
@@ -156,17 +157,17 @@ void test("locks issued and proforma-issued draft routes while keeping new and d
   assert.equal(proformaAccess.editable ? undefined : proformaAccess.registryHref, "/proformas")
   assert.equal(authoringReadiness(manualForm, [], undefined, false).editable, true)
   for (const status of ["issued", "proforma_issued"] as const) {
-    const sealed = { ...draft, status, lines: [{ id: "line-1", description: "Serviciu", quantity: "1.0000", unitPrice: "100.00", taxCode: "RO_STANDARD", taxCategory: "standard" as const, taxRate: "21.00", totalExcludingTax: "100.00", taxAmount: "21.00", totalIncludingTax: "121.00" }] }
+    const sealed = { ...draft, status, lines: [{ id: "line-1", description: "Serviciu", quantity: "1.0000", unitPrice: "100.00", unitOfMeasure: each, taxCode: "RO_STANDARD", taxCategory: "standard" as const, taxRate: "21.00", totalExcludingTax: "100.00", taxAmount: "21.00", totalIncludingTax: "121.00" }] }
     const readiness = authoringReadiness(formFromDraft(sealed), draftLinesForEditing(sealed), sealed, false)
     assert.deepEqual(readiness, { editable: false, synchronized: false, hasLines: true, canIssue: false })
   }
 })
 
 void test("selects only remaining new or changed lines for a resumed save", () => {
-  const withLine: DraftInvoice = { ...draft, lines: [{ id: "line-1", description: "Serviciu", quantity: "1.0000", unitPrice: "100.00", taxCode: "RO_STANDARD", taxCategory: "standard", taxRate: "21.00", totalExcludingTax: "100.00", taxAmount: "21.00", totalIncludingTax: "121.00" }] }
+  const withLine: DraftInvoice = { ...draft, lines: [{ id: "line-1", description: "Serviciu", quantity: "1.0000", unitPrice: "100.00", unitOfMeasure: each, taxCode: "RO_STANDARD", taxCategory: "standard", taxRate: "21.00", totalExcludingTax: "100.00", taxAmount: "21.00", totalIncludingTax: "121.00" }] }
   const persisted = draftLinesForEditing(withLine)[0]
   assert.ok(persisted)
-  const queued = { key: "local-2", description: "Transport", quantity: "1", unitPrice: "20", taxCode: "RO_STANDARD" }
+  const queued = { key: "local-2", description: "Transport", quantity: "1", unitPrice: "20", unitOfMeasure: each, taxCode: "RO_STANDARD" }
   assert.deepEqual(pendingLineOperations([persisted, queued], withLine).map((operation) => operation.kind), ["create"])
   assert.deepEqual(pendingLineOperations([{ ...persisted, unitPrice: "110" }, queued], withLine).map((operation) => operation.kind), ["update", "create"])
 })

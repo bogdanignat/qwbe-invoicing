@@ -1,3 +1,5 @@
+import type { UnitOfMeasure } from "./unit-of-measures.ts"
+
 export interface Address {
   readonly countryCode: string
   readonly city: string
@@ -16,6 +18,40 @@ export type PartyType = "company" | "individual"
 
 export interface BuyerSnapshot extends PartySnapshot {
   readonly partyType: PartyType
+}
+
+export interface DocumentSource {
+  readonly app: string
+  readonly kind: string
+  readonly id: string
+}
+
+export interface IdempotencyAttempt {
+  readonly key: string
+  readonly fingerprint: string
+}
+
+export type IdempotencyOperation =
+  | "issue_invoice_direct"
+  | "issue_invoice_from_draft"
+  | "issue_proforma_direct"
+  | "issue_proforma_from_draft"
+  | "issue_invoice_from_proforma"
+  | "create_correction"
+
+export type IdempotencyResultKind = "invoice" | "proforma" | "correction"
+
+export interface IdempotencyRecord extends IdempotencyAttempt {
+  readonly organizationId: string
+  readonly operation: IdempotencyOperation
+  readonly resultKind: IdempotencyResultKind
+  readonly resultId: string
+  readonly createdAt: string
+}
+
+export interface Idempotent<Input> {
+  readonly request: Input
+  readonly idempotency: IdempotencyAttempt
 }
 
 export interface TaxConfiguration {
@@ -56,6 +92,7 @@ export interface ProductPreset {
   readonly organizationId: string
   readonly description: string
   readonly unitPrice: string
+  readonly unitOfMeasure: UnitOfMeasure
 }
 
 export interface DraftLine {
@@ -63,6 +100,7 @@ export interface DraftLine {
   readonly description: string
   readonly quantity: string
   readonly unitPrice: string
+  readonly unitOfMeasure: UnitOfMeasure
   readonly taxCode: string
   readonly taxCategory: "standard"
   readonly taxRate: string
@@ -73,6 +111,7 @@ export interface DraftLine {
 
 interface DocumentContent {
   readonly customer: BuyerSnapshot
+  readonly source?: DocumentSource
   readonly issueDate: string
   readonly dueDate: string | null
   readonly currency: string
@@ -146,7 +185,7 @@ export type ConfigureIssuerInput = Omit<IssuerProfile, "organizationId">
 export type CustomerInput = BuyerSnapshot & { readonly defaultPaymentTermDays?: number }
 export type CreateCustomerInput = CustomerInput
 export type UpdateCustomerInput = CustomerInput & { readonly id: string }
-export type ProductPresetInput = Pick<ProductPreset, "description" | "unitPrice">
+export type ProductPresetInput = Pick<ProductPreset, "description" | "unitPrice" | "unitOfMeasure">
 export type UpdateProductPresetInput = ProductPresetInput & { readonly id: string }
 
 export type BuyerSource =
@@ -157,10 +196,12 @@ export interface RawDocumentLine {
   readonly description: string
   readonly quantity: string
   readonly unitPrice: string
+  readonly unitOfMeasure: UnitOfMeasure
   readonly taxCode: string
 }
 
 export type AuthoringDocumentInput = BuyerSource & {
+  readonly source?: DocumentSource
   readonly series: string
   readonly issueDate: string
   readonly dueDate?: string | null
@@ -171,6 +212,7 @@ export type AuthoringDocumentInput = BuyerSource & {
 export type AuthoringProformaInput = AuthoringDocumentInput & { readonly proformaSeries: string }
 
 export type CreateDraftInput = BuyerSource & {
+  readonly source?: DocumentSource
   readonly series: string
   readonly issueDate: string
   readonly currency?: string
@@ -179,6 +221,7 @@ export type CreateDraftInput = BuyerSource & {
 
 export type UpdateDraftInput = BuyerSource & {
   readonly draftId: string
+  readonly source?: DocumentSource | null
   readonly issueDate: string
   readonly dueDate?: string | null
 }
@@ -188,6 +231,7 @@ export interface AddDraftLineInput {
   readonly description: string
   readonly quantity: string
   readonly unitPrice: string
+  readonly unitOfMeasure: UnitOfMeasure
   readonly taxCode: string
 }
 

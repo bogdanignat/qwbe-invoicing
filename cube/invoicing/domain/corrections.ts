@@ -1,8 +1,14 @@
 import { ValidationFailure } from "../contracts/failures.ts"
-import type { BuyerSnapshot, DraftLine, PartySnapshot, TaxBreakdown } from "./invoice.ts"
-export interface CreateCorrectionInput { readonly originalInvoiceId: string; readonly reason: string; readonly issueDate?: string }
+import type { BuyerSnapshot, DocumentSource, DraftLine, PartySnapshot, TaxBreakdown } from "./invoice.ts"
+export interface CreateCorrectionInput {
+  readonly originalInvoiceId: string
+  readonly reason: string
+  readonly issueDate?: string
+  readonly source?: DocumentSource
+}
 export interface CorrectionDocument {
   readonly id: string; readonly organizationId: string; readonly originalInvoiceId: string
+  readonly source?: DocumentSource
   readonly fiscalYear: number; readonly series: string; readonly number: number
   readonly issueDate: string; readonly issuedAt: string; readonly reason: string
   readonly currency: string

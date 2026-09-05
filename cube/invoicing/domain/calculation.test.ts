@@ -3,6 +3,7 @@ import test from "node:test"
 
 import { ValidationFailure } from "../contracts/failures.ts"
 import { calculateLine, calculateTotals } from "./calculation.ts"
+const each = { code: "C62", name: "unitate" } as const
 
 const tax = (code: string, rate: string) => ({
   code,
@@ -17,6 +18,7 @@ void test("calculates quantity, configured VAT, grouped breakdown, and totals wi
     description: "Servicii",
     quantity: "1.2345",
     unitPrice: "10.01",
+    unitOfMeasure: each,
     tax: tax("RO_STANDARD", "21"),
   })
   const second = calculateLine({
@@ -24,6 +26,7 @@ void test("calculates quantity, configured VAT, grouped breakdown, and totals wi
     description: "Licență",
     quantity: "2",
     unitPrice: "0.05",
+    unitOfMeasure: each,
     tax: tax("RO_REDUCED", "9"),
   })
 
@@ -32,6 +35,7 @@ void test("calculates quantity, configured VAT, grouped breakdown, and totals wi
     description: "Servicii",
     quantity: "1.2345",
     unitPrice: "10.01",
+    unitOfMeasure: each,
     taxCode: "RO_STANDARD",
     taxCategory: "standard",
     taxRate: "21.00",
@@ -57,6 +61,7 @@ void test("rejects excess precision and impossible configured rates instead of r
       description: "Servicii",
       quantity: "1.00001",
       unitPrice: "10.00",
+      unitOfMeasure: each,
       tax: tax("RO_STANDARD", "21.00"),
     }),
     (error: unknown) => error instanceof ValidationFailure,
@@ -67,6 +72,7 @@ void test("rejects excess precision and impossible configured rates instead of r
       description: "Servicii",
       quantity: "1",
       unitPrice: "10.00",
+      unitOfMeasure: each,
       tax: tax("INVALID", "100.01"),
     }),
     (error: unknown) => error instanceof ValidationFailure,

@@ -4,6 +4,7 @@ import { formField, type FormSubmitEvent } from "../form.ts"
 import { money, today } from "../format.ts"
 import { invoiceActionState } from "../invoice-state.ts"
 import { invoicingClient } from "../invoicing-client.ts"
+import { useIdempotencyKey } from "../idempotency-key.ts"
 import type { CorrectionDocument, PaymentSummary } from "../models.ts"
 import { EmptyState, ErrorAlert } from "./AsyncState.tsx"
 import { Button } from "./ui/Button.tsx"
@@ -17,10 +18,12 @@ interface CorrectionPanelProps {
 
 export const CorrectionPanel = ({ invoiceId, corrections, paymentSummary, notify }: CorrectionPanelProps) => {
   const queryClient = useQueryClient()
+  const idempotency = useIdempotencyKey()
   const state = invoiceActionState(paymentSummary, corrections)
   const create = useMutation({
-    mutationFn: (body: Readonly<Record<string, unknown>>) => runUiEffect(invoicingClient.createCorrection(invoiceId, body)),
-    onSuccess: async () => { await queryClient.invalidateQueries({ queryKey: ["invoice", invoiceId] }); notify("Documentul storno a fost emis.") },
+    mutationFn: (body: Readonly<Record<string, unknown>>) => runUiEffect(invoicingClient.createCorrection(invoiceId, body, idempotency.current())),
+    onSuccess: async () => { idempotency.complete(); await queryClient.invalidateQueries({ queryKey: ["invoice", invoiceId] }); notify("Documentul storno a fost emis.") },
+    onError: idempotency.fail,
   })
   const submit = (event: FormSubmitEvent): void => {
     event.preventDefault()

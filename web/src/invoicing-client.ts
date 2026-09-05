@@ -4,8 +4,8 @@ import { apiBlob, apiRequest, type ApiFailure } from "./api.ts"
 import {
   decodeCorrection, decodeCorrections, decodeCustomer, decodeCustomers, decodeDeleted, decodeDraft, decodeDrafts,
   decodeDocumentSeries, decodeDocumentSeriesList, decodeInvoice, decodeInvoices, decodeIssuer, decodePaymentSummary,
-  decodeProductPreset, decodeProductPresets, decodeProforma, decodeProformas,
-  type BuyerSnapshot, type CorrectionDocument, type Customer, type DocumentSeries, type DocumentType, type DraftInvoice, type IssuedInvoice, type Issuer, type PaymentSummary, type ProductPreset, type Proforma,
+  decodeProductPreset, decodeProductPresets, decodeProforma, decodeProformas, decodeUnitOfMeasures,
+  type BuyerSnapshot, type CorrectionDocument, type Customer, type DocumentSeries, type DocumentSource, type DocumentType, type DraftInvoice, type IssuedInvoice, type Issuer, type PaymentSummary, type ProductPreset, type Proforma, type UnitOfMeasure,
 } from "./models.ts"
 
 const ignored = (): undefined => undefined
@@ -23,13 +23,14 @@ export type CreateDocumentSeriesInput = {
 }
 
 export type CustomerInput = BuyerSnapshot & { readonly defaultPaymentTermDays?: number }
-export type ProductPresetInput = Pick<ProductPreset, "description" | "unitPrice">
+export type ProductPresetInput = Pick<ProductPreset, "description" | "unitPrice" | "unitOfMeasure">
 
 type BuyerSource =
   | { readonly customerId: string; readonly customer?: never }
   | { readonly customer: BuyerSnapshot; readonly customerId?: never }
 
 export type CreateDraftInput = BuyerSource & {
+  readonly source?: DocumentSource
   readonly series: string
   readonly issueDate: string
   readonly currency?: "RON"
@@ -37,6 +38,7 @@ export type CreateDraftInput = BuyerSource & {
 }
 
 export type UpdateDraftInput = BuyerSource & {
+  readonly source?: DocumentSource | null
   readonly issueDate: string
   readonly dueDate?: string | null
 }
@@ -45,6 +47,7 @@ export interface DraftLineInput {
   readonly description: string
   readonly quantity: string
   readonly unitPrice: string
+  readonly unitOfMeasure: UnitOfMeasure
   readonly taxCode: string
 }
 
@@ -61,6 +64,7 @@ export const invoicingClient = {
   updateCustomer: (id: string, body: CustomerInput) => apiRequest(`/api/customers/${encoded(id)}`, decodeCustomer, { method: "PUT", body }),
   deleteCustomer: (id: string) => apiRequest(`/api/customers/${encoded(id)}`, decodeDeleted, { method: "DELETE" }),
   listProductPresets: () => apiRequest("/api/product-presets", decodeProductPresets),
+  listUnitOfMeasures: () => apiRequest("/api/unit-of-measures", decodeUnitOfMeasures),
   createProductPreset: (body: ProductPresetInput) => apiRequest("/api/product-presets", decodeProductPreset, { method: "POST", body }),
   updateProductPreset: (id: string, body: ProductPresetInput) => apiRequest(`/api/product-presets/${encoded(id)}`, decodeProductPreset, { method: "PUT", body }),
   deleteProductPreset: (id: string) => apiRequest(`/api/product-presets/${encoded(id)}`, decodeDeleted, { method: "DELETE" }),
@@ -79,13 +83,13 @@ export const invoicingClient = {
   addDraftLine: (id: string, body: DraftLineInput) => apiRequest(`/api/drafts/${encoded(id)}/lines`, decodeDraft, { method: "POST", body }),
   updateDraftLine: (id: string, lineId: string, body: DraftLineInput) => apiRequest(`/api/drafts/${encoded(id)}/lines/${encoded(lineId)}`, decodeDraft, { method: "PUT", body }),
   deleteDraftLine: (id: string, lineId: string) => apiRequest(`/api/drafts/${encoded(id)}/lines/${encoded(lineId)}`, decodeDraft, { method: "DELETE" }),
-  issueDraft: (id: string) => apiRequest(`/api/drafts/${encoded(id)}/issue`, decodeInvoice, { method: "POST", body: {} }),
-  issueInvoice: (body: AuthoringDocumentInput) => apiRequest("/api/invoices", decodeInvoice, { method: "POST", body }),
-  issueDraftProforma: (draftId: string, series: string) => apiRequest(`/api/drafts/${encoded(draftId)}/proformas`, decodeProforma, { method: "POST", body: { series } }),
-  issueProforma: (body: AuthoringProformaInput) => apiRequest("/api/proformas", decodeProforma, { method: "POST", body }),
+  issueDraft: (id: string, idempotencyKey: string) => apiRequest(`/api/drafts/${encoded(id)}/issue`, decodeInvoice, { method: "POST", body: {}, idempotencyKey }),
+  issueInvoice: (body: AuthoringDocumentInput, idempotencyKey: string) => apiRequest("/api/invoices", decodeInvoice, { method: "POST", body, idempotencyKey }),
+  issueDraftProforma: (draftId: string, series: string, idempotencyKey: string) => apiRequest(`/api/drafts/${encoded(draftId)}/proformas`, decodeProforma, { method: "POST", body: { series }, idempotencyKey }),
+  issueProforma: (body: AuthoringProformaInput, idempotencyKey: string) => apiRequest("/api/proformas", decodeProforma, { method: "POST", body, idempotencyKey }),
   listProformas: () => apiRequest("/api/proformas", decodeProformas),
   getProforma: (id: string) => apiRequest(`/api/proformas/${encoded(id)}`, decodeProforma),
-  issueInvoiceFromProforma: (id: string) => apiRequest(`/api/proformas/${encoded(id)}/invoice`, decodeInvoice, { method: "POST", body: {} }),
+  issueInvoiceFromProforma: (id: string, idempotencyKey: string) => apiRequest(`/api/proformas/${encoded(id)}/invoice`, decodeInvoice, { method: "POST", body: {}, idempotencyKey }),
   getInvoiceBundle: (id: string): Effect.Effect<InvoiceBundle, ApiFailure> => Effect.all({
     invoice: apiRequest(`/api/invoices/${encoded(id)}`, decodeInvoice),
     paymentSummary: apiRequest(`/api/invoices/${encoded(id)}/payments`, decodePaymentSummary),
@@ -98,7 +102,7 @@ export const invoicingClient = {
     Effect.zipRight(apiBlob(`/api/proformas/${encoded(id)}/pdf`)),
   ),
   recordPayment: (id: string, body: Readonly<Record<string, unknown>>) => apiRequest(`/api/invoices/${encoded(id)}/payments`, ignored, { method: "POST", body }),
-  createCorrection: (id: string, body: Readonly<Record<string, unknown>>) => apiRequest(`/api/invoices/${encoded(id)}/corrections`, decodeCorrection, { method: "POST", body }),
+  createCorrection: (id: string, body: Readonly<Record<string, unknown>>, idempotencyKey: string) => apiRequest(`/api/invoices/${encoded(id)}/corrections`, decodeCorrection, { method: "POST", body, idempotencyKey }),
 } as const
 
 export type { Customer, DocumentSeries, DraftInvoice, IssuedInvoice, Issuer, ProductPreset, Proforma }

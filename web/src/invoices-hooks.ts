@@ -5,6 +5,7 @@ import { downloadBlob } from "./browser-download.ts"
 import { invoicingClient } from "./invoicing-client.ts"
 import type { AuthoringDocumentInput } from "./invoicing-client.ts"
 import { authoringPayloadMatchesDraft } from "./invoice-authoring-state.ts"
+import { useIdempotencyKey } from "./idempotency-key.ts"
 import { navigate } from "./navigation.ts"
 import { evictDraftAfterNavigation } from "./query-cache.ts"
 
@@ -18,14 +19,16 @@ interface InvoiceIssuanceInput {
 
 export const useInvoiceIssuance = (input: InvoiceIssuanceInput) => {
   const queryClient = useQueryClient()
+  const idempotency = useIdempotencyKey()
   const mutation = useMutation({
     mutationFn: async () => {
-      if (input.draftId === undefined) return runUiEffect(invoicingClient.issueInvoice(input.payload))
+      if (input.draftId === undefined) return runUiEffect(invoicingClient.issueInvoice(input.payload, idempotency.current()))
       const latest = await runUiEffect(invoicingClient.getDraft(input.draftId))
       if (!authoringPayloadMatchesDraft(input.payload, latest)) throw new Error("Draftul s-a schimbat în altă sesiune. Reîncarcă pagina înainte de emitere.")
-      return runUiEffect(invoicingClient.issueDraft(input.draftId))
+      return runUiEffect(invoicingClient.issueDraft(input.draftId, idempotency.current()))
     },
     onSuccess: async (invoice) => {
+      idempotency.complete()
       navigate(`/invoices/${encodeURIComponent(invoice.id)}`)
       if (input.draftId !== undefined) evictDraftAfterNavigation(input.draftId, (filter) => { queryClient.removeQueries(filter) })
       await Promise.all([
@@ -33,6 +36,7 @@ export const useInvoiceIssuance = (input: InvoiceIssuanceInput) => {
         queryClient.invalidateQueries({ queryKey: ["drafts"] }),
       ])
     },
+    onError: idempotency.fail,
   })
   const canIssue = input.canIssue && !input.workflowPending && !mutation.isPending
   const issue = (): void => {

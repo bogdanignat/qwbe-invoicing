@@ -47,6 +47,7 @@ export interface RenderableLine {
   readonly description: string
   readonly quantity: string
   readonly unitPrice: string
+  readonly unitOfMeasure: { readonly code: string; readonly name: string }
   readonly taxRate: string
   readonly totalExcludingTax: string
   readonly taxAmount: string

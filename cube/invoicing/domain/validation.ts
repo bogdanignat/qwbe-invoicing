@@ -1,6 +1,7 @@
 import { ValidationFailure } from "../contracts/failures.ts"
-import type { BuyerSnapshot, CustomerInput, DocumentSeries, IssuerProfile, PartySnapshot, ProductPresetInput, TaxConfiguration } from "./invoice.ts"
+import type { BuyerSnapshot, CustomerInput, DocumentSeries, DocumentSource, IssuerProfile, PartySnapshot, ProductPresetInput, TaxConfiguration } from "./invoice.ts"
 import { normalizeMoney } from "./calculation.ts"
+import { normalizeUnitOfMeasure } from "./unit-of-measures.ts"
 
 const maximumPaymentTermDays = 3650
 
@@ -69,7 +70,7 @@ export const validateCustomer = (customer: CustomerInput): void => {
 export const normalizeProductPreset = (input: ProductPresetInput): ProductPresetInput => {
   const description = input.description.trim()
   if (description.length === 0) throw new ValidationFailure({ issues: ["description is required"] })
-  return { description, unitPrice: normalizeMoney(input.unitPrice, "unitPrice") }
+  return { description, unitPrice: normalizeMoney(input.unitPrice, "unitPrice"), unitOfMeasure: normalizeUnitOfMeasure(input.unitOfMeasure) }
 }
 
 export const validateDate = (value: string, field: string): void => {
@@ -153,6 +154,21 @@ export const validateDocumentSeries = (documentSeries: DocumentSeries): void => 
   const documentType: unknown = documentSeries.documentType
   if (documentType !== "invoice" && documentType !== "proforma") issues.push("documentType must be invoice or proforma")
   if (!/^[A-Z0-9][A-Z0-9_-]{0,19}$/.test(documentSeries.series)) issues.push("series is invalid")
+  if (issues.length > 0) throw new ValidationFailure({ issues })
+}
+
+export const validateDocumentSource = (source: DocumentSource): void => {
+  const issues: Array<string> = []
+  for (const [field, value, maximum] of [
+    ["source.app", source.app, 100],
+    ["source.kind", source.kind, 100],
+    ["source.id", source.id, 255],
+  ] as const) {
+    if (value.trim().length === 0) issues.push(`${field} is required`)
+    if (value !== value.trim()) issues.push(`${field} must not have surrounding whitespace`)
+    if (value.length > maximum) issues.push(`${field} must be at most ${String(maximum)} characters`)
+    if (/\p{Cc}/u.test(value)) issues.push(`${field} must not contain control characters`)
+  }
   if (issues.length > 0) throw new ValidationFailure({ issues })
 }
 

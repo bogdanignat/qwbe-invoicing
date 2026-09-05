@@ -37,6 +37,7 @@ const invoice: RenderableInvoice = {
     description: "Servicii de consultanță",
     quantity: "1.0000",
     unitPrice: "100.00",
+    unitOfMeasure: { code: "C62", name: "unitate" },
     taxRate: "21.00",
     totalExcludingTax: "100.00",
     taxAmount: "21.00",

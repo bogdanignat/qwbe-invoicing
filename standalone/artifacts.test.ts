@@ -15,6 +15,8 @@ import { applyMigrations, documentsDatabasePath } from "./migrations.ts"
 import { createPdfRenderer } from "./pdf-renderer.ts"
 import { createArtifactRepository, createInvoiceSource } from "./sqlite-artifacts.ts"
 import { createSqliteStore } from "./sqlite-store.ts"
+const each = { code: "C62", name: "unitate" } as const
+const idempotent = <Input>(key: string, request: Input) => ({ request, idempotency: { key, fingerprint: `sha256:${"0".repeat(64)}` } })
 
 const issueFixture = async (directory: string): Promise<{ readonly invoiceId: string; readonly proformaId: string }> => {
   let nextId = 0
@@ -55,16 +57,17 @@ const issueFixture = async (directory: string): Promise<{ readonly invoiceId: st
     description: "Servicii de consultanță",
     quantity: "1",
     unitPrice: "100",
+    unitOfMeasure: each,
     taxCode: "RO_STANDARD",
   }))
-  const invoiceId = (await Effect.runPromise(service.issueInvoice({ draftId: draft.id }))).id
+  const invoiceId = (await Effect.runPromise(service.issueInvoice(idempotent("fixture-invoice", { draftId: draft.id })))).id
   const proformaDraft = await Effect.runPromise(service.createDraft({
     customerId: customer.id, issueDate: "2026-09-01", dueDate: null, series: "QWBE",
   }))
   await Effect.runPromise(service.addDraftLine({
-    draftId: proformaDraft.id, description: "Avans", quantity: "1", unitPrice: "50", taxCode: "RO_STANDARD",
+    draftId: proformaDraft.id, description: "Avans", quantity: "1", unitPrice: "50", unitOfMeasure: each, taxCode: "RO_STANDARD",
   }))
-  const proformaId = (await Effect.runPromise(service.issueProforma({ draftId: proformaDraft.id, series: "PRO" }))).id
+  const proformaId = (await Effect.runPromise(service.issueProforma(idempotent("fixture-proforma", { draftId: proformaDraft.id, series: "PRO" })))).id
   return { invoiceId, proformaId }
 }
 

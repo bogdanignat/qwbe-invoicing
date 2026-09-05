@@ -170,10 +170,12 @@ export const startServer = (
             }
             if (sessionAuthorization.kind === "authorized") authorization = sessionAuthorization.authorization
           }
+          const idempotencyKey = header(request.headers["idempotency-key"])
           const result = await handleApiRequest({
             method: request.method ?? "GET",
-            url: path,
+            url: request.url ?? path,
             authorization,
+            ...(idempotencyKey === undefined ? {} : { idempotencyKey }),
             body: await readBody(request),
           }, { authenticate, dataDirectory: config.dataDirectory })
           const responseHeaders = result.status === 401 && authorization === undefined && cookie !== undefined
