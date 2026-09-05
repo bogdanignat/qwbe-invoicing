@@ -3,6 +3,11 @@ import type { BuyerSnapshot, DocumentSeries, DocumentSource, IssuerProfile, Part
 
 export const maximumPaymentTermDays = 3650
 
+// The product serves Romanian issuers only; "today" for fiscal rules is the Romanian calendar day.
+export const organizationTimeZone = "Europe/Bucharest"
+export const calendarDate = (instant: Date, timeZone: string = organizationTimeZone): string =>
+  new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(instant)
+
 const required = (value: string, field: string, issues: Array<string>) => {
   if (value.trim().length === 0) issues.push(`${field} is required`)
 }
