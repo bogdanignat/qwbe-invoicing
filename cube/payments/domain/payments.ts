@@ -1,5 +1,10 @@
 import { ValidationFailure } from "../contracts/failures.ts"
 
+// Same rule as the invoicing cube: the fiscal "today" is the Romanian calendar day, not UTC.
+export const organizationTimeZone = "Europe/Bucharest"
+export const calendarDate = (instant: Date, timeZone: string = organizationTimeZone): string =>
+  new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(instant)
+
 export type PaymentStatus = "unpaid" | "partially_paid" | "paid" | "overpaid" | "overdue"
 export interface Payment {
   readonly id: string
@@ -70,7 +75,7 @@ export const derivePaymentStatus = (input: {
   const total = moneyMinor(input.totalIncludingVat); const paid = sumPaymentsMinor(input.payments)
   let status: PaymentStatus = paid === 0n ? "unpaid" : paid < total ? "partially_paid" : paid === total ? "paid" : "overpaid"
   if (input.dueDate !== null && (status === "unpaid" || status === "partially_paid")
-    && input.dueDate < input.now.toISOString().slice(0, 10)) status = "overdue"
+    && input.dueDate < calendarDate(input.now)) status = "overdue"
   return status
 }
 export const formatMinor = (value: bigint): string =>
