@@ -5,6 +5,7 @@ import { runUiEffect } from "./api.ts"
 import { formField, type FormSubmitEvent } from "./form.ts"
 import { invoicingClient, type ProductPresetInput } from "./invoicing-client.ts"
 import type { ProductPreset } from "./models.ts"
+import { usePagedList } from "./paged-query.ts"
 
 interface ProductPresetSaveRequest {
   readonly id?: string
@@ -15,7 +16,7 @@ interface ProductPresetSaveRequest {
 export const useProductPresetsRegistry = (notify: (message: string) => void) => {
   const queryClient = useQueryClient()
   const [editing, setEditing] = useState<ProductPreset | undefined>(undefined)
-  const presets = useQuery({ queryKey: ["product-presets"], queryFn: ({ signal }) => runUiEffect(invoicingClient.listProductPresets(), signal) })
+  const presets = usePagedList(["product-presets"], (page) => invoicingClient.listProductPresets(page))
   const unitOfMeasures = useQuery({ queryKey: ["unit-of-measures"], queryFn: ({ signal }) => runUiEffect(invoicingClient.listUnitOfMeasures(), signal) })
   const save = useMutation({
     mutationFn: (request: ProductPresetSaveRequest) => request.id === undefined

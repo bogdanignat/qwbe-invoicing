@@ -5,7 +5,7 @@ import { Effect } from "effect"
 
 import { createInvoicingService } from "../../application/invoicing.ts"
 import { contextProvider, each, emptyState, expectConflict, fixedClock, identity, idempotent, memoryStore, sequentialIds, vatConfigurations } from "../../application/memory-store.test-support.ts"
-import { PermissionDenied, ResourceNotFound } from "../../contracts/index.ts"
+import { PermissionDenied, ResourceNotFound, ValidationFailure } from "../../contracts/index.ts"
 
 void test("corrects an issued invoice exactly once with a negated immutable snapshot", async () => {
   const state = emptyState()
@@ -30,11 +30,16 @@ void test("corrects an issued invoice exactly once with a negated immutable snap
   const missing = await Effect.runPromise(Effect.flip(service.createCorrection(idempotent({ originalInvoiceId: "nope", reason: "Storno" }))))
   assert.equal(missing instanceof ResourceNotFound && missing.resource === "invoice", true)
 
+  const before = await Effect.runPromise(Effect.flip(service.createCorrection(idempotent({ originalInvoiceId: invoice.id, reason: "Storno", issueDate: "2026-08-31" }))))
+  assert.equal(before instanceof ValidationFailure && before.issues.includes("issueDate cannot be before the original invoice issueDate"), true)
+  const future = await Effect.runPromise(Effect.flip(service.createCorrection(idempotent({ originalInvoiceId: invoice.id, reason: "Storno", issueDate: "2026-09-02" }))))
+  assert.equal(future instanceof ValidationFailure && future.issues.includes("issueDate cannot be in the future"), true)
+
   const attempt = idempotent({ originalInvoiceId: invoice.id, reason: "  Eroare de cantitate  " })
   const correction = await Effect.runPromise(service.createCorrection(attempt))
   assert.equal(correction.originalInvoiceId, invoice.id)
   assert.equal(correction.series, "QWBE")
-  assert.equal(correction.number, 1)
+  assert.equal(correction.number, 2)
   assert.equal(correction.fiscalYear, 2026)
   assert.equal(correction.issueDate, "2026-09-01")
   assert.equal(correction.reason, "Eroare de cantitate")
@@ -46,7 +51,8 @@ void test("corrects an issued invoice exactly once with a negated immutable snap
   assert.deepEqual(correction.vatBreakdown, [{ code: "RO_STANDARD", rate: "21.00", vatBaseAmount: "-125.00", vatAmount: "-26.25" }])
   assert.deepEqual(correction.issuer, invoice.issuer)
   assert.deepEqual(correction.customer, invoice.customer)
-  assert.equal(state.sequences.get("org-1:2026:correction:QWBE"), 1)
+  assert.equal(state.sequences.get("org-1:2026:invoice:QWBE"), 2)
+  assert.equal(state.sequences.get("org-1:2026:correction:QWBE"), undefined)
 
   const replay = await Effect.runPromise(service.createCorrection(attempt))
   assert.deepEqual(replay, correction)

@@ -4,6 +4,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { spawnSync } from "node:child_process"
 import test from "node:test"
+import { DatabaseSync } from "node:sqlite"
 
 import { parseCommand } from "./cli.ts"
 import { route } from "./http.ts"
@@ -26,14 +27,62 @@ void test("migration apply is idempotent", () => {
       "009-proforma-direct-invoice",
       "010-product-presets-payment-terms",
       "011-external-api-snapshots",
+      "012-payment-idempotency",
       "documents/000-foundation",
       "documents/001-artifacts",
       "documents/002-proforma-artifacts",
       "sessions/000-browser-sessions",
     ])
-    assert.equal(applyMigrations(directory).changed, 16)
+    assert.equal(applyMigrations(directory).changed, 17)
     assert.equal(applyMigrations(directory).changed, 0)
     assert.equal(databaseReady(directory), true)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+void test("migrations leave every database in write-ahead logging mode with the immutability triggers in place", () => {
+  const directory = mkdtempSync(join(tmpdir(), "qwbe-wal-"))
+  try {
+    applyMigrations(directory)
+    for (const file of ["invoicing.sqlite", "documents.sqlite", "sessions.sqlite"]) {
+      const database = new DatabaseSync(join(directory, file), { readOnly: true })
+      try {
+        assert.equal(database.prepare("PRAGMA journal_mode").get()?.journal_mode, "wal", file)
+      } finally {
+        database.close()
+      }
+    }
+    const database = new DatabaseSync(join(directory, "invoicing.sqlite"), { readOnly: true })
+    try {
+      const triggers = new Set(database.prepare("SELECT name FROM sqlite_master WHERE type = 'trigger'").all().map((row) => String(row.name)))
+      for (const expected of ["issued_invoices_no_update", "issued_invoices_no_delete", "issued_lines_no_update", "issued_lines_no_delete",
+        "issued_tax_breakdown_no_update", "issued_tax_breakdown_no_delete", "correction_documents_no_update", "correction_documents_no_delete",
+        "proformas_no_delete", "proformas_no_content_update", "idempotency_records_no_update", "idempotency_records_no_delete"]) {
+        assert.ok(triggers.has(expected), `${expected} must exist after all migrations`)
+      }
+    } finally {
+      database.close()
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+void test("readiness stays true while another connection holds a write lock", () => {
+  const directory = mkdtempSync(join(tmpdir(), "qwbe-readiness-lock-"))
+  try {
+    applyMigrations(directory)
+    const writer = new DatabaseSync(join(directory, "invoicing.sqlite"))
+    try {
+      writer.exec("BEGIN IMMEDIATE")
+      const started = performance.now()
+      assert.equal(databaseReady(directory), true)
+      assert.ok(performance.now() - started < 1_000, "readiness must not wait on the writer")
+    } finally {
+      writer.exec("ROLLBACK")
+      writer.close()
+    }
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }

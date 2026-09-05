@@ -30,6 +30,7 @@ const failureMessages: Readonly<Record<string, string>> = {
   proforma_already_converted: "Proforma a fost deja transformată într-un draft de factură.",
   invoice_already_issued: "Draftul a fost deja emis ca factură și este blocat.",
   idempotency_key_reused: "Cheia de siguranță a fost folosită pentru altă cerere. Reîncarcă pagina înainte de a continua.",
+  payment_already_reversed: "Plata a fost deja anulată.",
 }
 
 export const clearApiSession = Ref.set(csrfTokenRef, undefined)

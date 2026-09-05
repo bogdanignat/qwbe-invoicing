@@ -1,18 +1,18 @@
 import { Effect } from "effect"
 
 import { findIdempotencyReplay, idempotencyRecord, missingIdempotencyResult } from "../../application/idempotency.ts"
-import { checked, missing, type Authorize, type OperationDependencies } from "../../application/support.ts"
+import { checked, documentPageQuery, ensureChronology, missing, pageOf, type Authorize, type OperationDependencies, type Page, type PageRequest } from "../../application/support.ts"
 import type { InvoicingFailure } from "../../contracts/failures.ts"
 import type { InvoicingPermissions } from "../../contracts/permissions.ts"
 import type { DocumentSource, Idempotent, Proforma } from "../../domain/invoice.ts"
 import type { AuthoringProformaInput, IssueProformaInput } from "../../domain/inputs.ts"
-import { validateDocumentSource } from "../../domain/validation.ts"
+import { calendarDate, validateDocumentSource } from "../../domain/validation.ts"
 import { fiscalYear, issuanceSource, numberedSnapshot } from "./snapshot.ts"
 
 export interface ProformaOperations {
   readonly issueProforma: (input: Idempotent<AuthoringProformaInput | IssueProformaInput>) => Effect.Effect<Proforma, InvoicingFailure>
   readonly getProforma: (id: string) => Effect.Effect<Proforma, InvoicingFailure>
-  readonly listProformas: (source?: DocumentSource) => Effect.Effect<ReadonlyArray<Proforma>, InvoicingFailure>
+  readonly listProformas: (source?: DocumentSource, page?: PageRequest) => Effect.Effect<Page<Proforma>, InvoicingFailure>
 }
 
 export const createProformaOperations = (
@@ -35,6 +35,7 @@ export const createProformaOperations = (
       const proformaSeries = "draftId" in input ? input.series : input.proformaSeries
       const series = yield* transaction.findDocumentSeries(context.organization.id, "proforma", proformaSeries)
       if (series === undefined) return yield* Effect.fail(missing("document_series", proformaSeries))
+      yield* ensureChronology(transaction, context.organization.id, "proforma", series.series, document.issueDate, calendarDate(issuedAt))
       const proforma: Proforma = {
         sourceDraftId: draft?.id ?? null, invoiceSeries: document.series, convertedDraftId: null, convertedInvoiceId: null,
         ...numberedSnapshot(document, issuer, { id, series: series.series,
@@ -56,10 +57,12 @@ export const createProformaOperations = (
     return value === undefined ? yield* Effect.fail(missing("proforma", id)) : structuredClone(value)
   })
 
-  const listProformas = (source?: DocumentSource) => Effect.gen(function*() {
+  const listProformas = (source?: DocumentSource, page?: PageRequest) => Effect.gen(function*() {
     if (source !== undefined) yield* checked(() => { validateDocumentSource(source) })
+    const query = yield* checked(() => documentPageQuery(page))
     const context = yield* authorize(permissions.read)
-    return structuredClone(yield* dependencies.store.transaction((transaction) => transaction.listProformas(context.organization.id, source)))
+    const rows = yield* dependencies.store.transaction((transaction) => transaction.listProformas(context.organization.id, query, source))
+    return pageOf(rows, query, (proforma) => ({ issueDate: proforma.issueDate, number: proforma.number, id: proforma.id }))
   })
 
   return { issueProforma, getProforma, listProformas }

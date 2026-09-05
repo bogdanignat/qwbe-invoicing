@@ -6,7 +6,7 @@ import type { CorrectionDocument, PaymentSummary } from "./models.ts"
 
 const summary = (status: PaymentSummary["status"], remainingAmount: string, withPayment: boolean): PaymentSummary => ({
   invoiceId: "invoice-1", status, paidAmount: withPayment ? "121.00" : "0.00", remainingAmount,
-  payments: withPayment ? [{ id: "payment-1", amount: "121.00", currency: "RON", paymentDate: "2026-08-31", method: "transfer" }] : [],
+  payments: withPayment ? [{ id: "payment-1", kind: "payment", amount: "121.00", currency: "RON", paymentDate: "2026-08-31", method: "transfer" }] : [],
 })
 const correction: CorrectionDocument = { id: "correction-1", series: "QWBE", number: 1, issueDate: "2026-08-31", reason: "Corecție", currency: "RON", totalIncludingVat: "-121.00" }
 

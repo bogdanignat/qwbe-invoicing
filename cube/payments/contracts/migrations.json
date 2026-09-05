@@ -6,5 +6,19 @@
       "CREATE INDEX invoice_payments_invoice ON invoice_payments(invoice_id)",
       "CREATE INDEX invoice_payments_organization ON invoice_payments(organization_id)"
     ]
+  },
+  {
+    "name": "012-payment-idempotency",
+    "statements": [
+      "ALTER TABLE invoice_payments ADD COLUMN kind TEXT NOT NULL DEFAULT 'payment' CHECK(kind IN ('payment','reversal'))",
+      "ALTER TABLE invoice_payments ADD COLUMN reverses_payment_id TEXT REFERENCES invoice_payments(id)",
+      "CREATE UNIQUE INDEX invoice_payments_reversal ON invoice_payments(reverses_payment_id) WHERE reverses_payment_id IS NOT NULL",
+      "CREATE TRIGGER invoice_payments_reversal_shape BEFORE INSERT ON invoice_payments WHEN (NEW.kind='reversal') != (NEW.reverses_payment_id IS NOT NULL) BEGIN SELECT RAISE(ABORT,'a reversal references exactly one payment');END",
+      "CREATE TRIGGER invoice_payments_no_update BEFORE UPDATE ON invoice_payments BEGIN SELECT RAISE(ABORT,'payments are immutable');END",
+      "CREATE TRIGGER invoice_payments_no_delete BEFORE DELETE ON invoice_payments BEGIN SELECT RAISE(ABORT,'payments are immutable');END",
+      "CREATE TABLE payment_idempotency_records(organization_id TEXT NOT NULL,idempotency_key TEXT NOT NULL CHECK(length(idempotency_key) BETWEEN 1 AND 255),operation TEXT NOT NULL CHECK(operation IN('record_payment','reverse_payment')),fingerprint TEXT NOT NULL CHECK(length(fingerprint)=71 AND substr(fingerprint,1,7)='sha256:' AND substr(fingerprint,8) NOT GLOB '*[^0-9a-f]*'),result_id TEXT NOT NULL,created_at TEXT NOT NULL,PRIMARY KEY(organization_id,idempotency_key),FOREIGN KEY(result_id)REFERENCES invoice_payments(id))STRICT",
+      "CREATE TRIGGER payment_idempotency_records_no_update BEFORE UPDATE ON payment_idempotency_records BEGIN SELECT RAISE(ABORT,'payment idempotency record is immutable');END",
+      "CREATE TRIGGER payment_idempotency_records_no_delete BEFORE DELETE ON payment_idempotency_records BEGIN SELECT RAISE(ABORT,'payment idempotency record is immutable');END"
+    ]
   }
 ]

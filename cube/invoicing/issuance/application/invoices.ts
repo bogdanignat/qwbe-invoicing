@@ -1,12 +1,12 @@
 import { Effect } from "effect"
 
 import { findIdempotencyReplay, idempotencyRecord, missingIdempotencyResult } from "../../application/idempotency.ts"
-import { checked, missing, type Authorize, type OperationDependencies } from "../../application/support.ts"
+import { checked, documentPageQuery, ensureChronology, missing, pageOf, type Authorize, type OperationDependencies, type Page, type PageRequest } from "../../application/support.ts"
 import type { InvoicingFailure } from "../../contracts/failures.ts"
 import type { InvoicingPermissions } from "../../contracts/permissions.ts"
 import type { DocumentSource, Idempotent, IssuedInvoice } from "../../domain/invoice.ts"
 import type { AuthoringDocumentInput } from "../../domain/inputs.ts"
-import { validateDocumentSource } from "../../domain/validation.ts"
+import { calendarDate, validateDocumentSource } from "../../domain/validation.ts"
 import { fiscalYear, issuanceSource, numberedSnapshot } from "./snapshot.ts"
 
 export type IssueInvoiceInput = Idempotent<AuthoringDocumentInput | { readonly draftId: string }>
@@ -14,7 +14,7 @@ export type IssueInvoiceInput = Idempotent<AuthoringDocumentInput | { readonly d
 export interface InvoiceOperations {
   readonly issueInvoice: (input: IssueInvoiceInput) => Effect.Effect<IssuedInvoice, InvoicingFailure>
   readonly getIssuedInvoice: (id: string) => Effect.Effect<IssuedInvoice, InvoicingFailure>
-  readonly listIssuedInvoices: (source?: DocumentSource) => Effect.Effect<ReadonlyArray<IssuedInvoice>, InvoicingFailure>
+  readonly listIssuedInvoices: (source?: DocumentSource, page?: PageRequest) => Effect.Effect<Page<IssuedInvoice>, InvoicingFailure>
 }
 
 export const createInvoiceOperations = (
@@ -34,6 +34,7 @@ export const createInvoiceOperations = (
       const { document, issuer, draft } = yield* issuanceSource(input, context.organization.id, transaction, dependencies.ids, "invoice")
       const invoiceId = yield* dependencies.ids.next
       const issuedAt = yield* dependencies.clock.now
+      yield* ensureChronology(transaction, context.organization.id, "invoice", document.series, document.issueDate, calendarDate(issuedAt))
       const number = yield* transaction.allocateDocumentNumber(context.organization.id, fiscalYear(document.issueDate), "invoice", document.series)
       const invoice: IssuedInvoice = {
         draftId: draft?.id ?? null, sourceProformaId: null,
@@ -58,12 +59,13 @@ export const createInvoiceOperations = (
     }))
   })
 
-  const listIssuedInvoices = (source?: DocumentSource) => Effect.gen(function*() {
+  const listIssuedInvoices = (source?: DocumentSource, page?: PageRequest) => Effect.gen(function*() {
     if (source !== undefined) yield* checked(() => { validateDocumentSource(source) })
+    const query = yield* checked(() => documentPageQuery(page))
     const context = yield* authorize(permissions.read)
-    const invoices = yield* dependencies.store.transaction((transaction) =>
-      transaction.listIssuedInvoices(context.organization.id, source))
-    return structuredClone(invoices)
+    const rows = yield* dependencies.store.transaction((transaction) =>
+      transaction.listIssuedInvoices(context.organization.id, query, source))
+    return pageOf(rows, query, (invoice) => ({ issueDate: invoice.issueDate, number: invoice.number, id: invoice.id }))
   })
 
   return { issueInvoice, getIssuedInvoice, listIssuedInvoices }

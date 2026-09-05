@@ -255,12 +255,21 @@ generated from the same Effect `HttpApi` contract that serves the routes.
 | Drafts | `GET`, `POST /api/drafts`, `GET`, `PUT`, `DELETE /api/drafts/:id`, lines under `/api/drafts/:id/lines` |
 | Issue | `POST /api/invoices`, `POST /api/drafts/:id/issue` |
 | Invoices | `GET /api/invoices`, `GET /api/invoices/:id`, `POST`, `GET /api/invoices/:id/pdf` |
-| Payments | `GET`, `POST /api/invoices/:id/payments` |
+| Payments | `GET`, `POST /api/invoices/:id/payments`, `POST /api/invoices/:id/payments/:paymentId/reversal` |
 | Corrections | `GET`, `POST /api/invoices/:id/corrections`, `GET /api/corrections/:id` |
 | Proformas | `POST /api/proformas`, `POST /api/drafts/:id/proformas`, `GET /api/proformas`, `GET /api/proformas/:id`, `POST /api/proformas/:id/invoice`, `POST`, `GET /api/proformas/:id/pdf` |
 | Health | `GET /health/live`, `GET /health/ready` (no auth) |
 
-Issued invoices have no `DELETE`. Mistakes are handled through correction documents.
+Registries (`GET /api/customers`, `/api/product-presets`, `/api/drafts`, `/api/invoices`, `/api/proformas`)
+are paged: the response is `{ "items": [...], "nextCursor": "..." | null }`, `?limit=` takes 1 to 200
+(default 100) and `?cursor=` repeats the previous `nextCursor`. Documents are ordered by issue date,
+number and id, registries by name and id, so a cursor stays valid while new records arrive.
+
+Issued invoices have no `DELETE`. Mistakes are handled through correction documents, which are
+numbered in the invoice series like any other invoice (Codul fiscal art. 330). Issue dates cannot be
+in the future or before the last document numbered in the same series and fiscal year, and an invoice
+issued from a proforma is dated on the day of conversion (art. 319 (20) b) with the proforma's payment
+term carried over.
 The complete route inventory with request rules is in
 [`docs/LOCAL_DEVELOPMENT.md`](./docs/LOCAL_DEVELOPMENT.md).
 

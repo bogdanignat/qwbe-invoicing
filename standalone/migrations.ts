@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync } from "node:fs"
+import { accessSync, constants, existsSync, mkdirSync } from "node:fs"
 import { join } from "node:path"
 import { DatabaseSync } from "node:sqlite"
 
@@ -72,11 +72,20 @@ export const planMigrations = (dataDirectory: string): MigrationReport => {
   return { scanned, changed: 0, skipped: scanned - pending.length, failed: 0, pending }
 }
 
+// Write-ahead logging lets readers proceed while a transaction writes; the mode is persistent in
+// the file, so setting it here once (outside any transaction) covers every later connection.
+const enableWriteAheadLog = (database: DatabaseSync): void => {
+  const mode = database.prepare("PRAGMA journal_mode = WAL").get()
+  if (mode?.journal_mode !== "wal") throw new Error("could not enable write-ahead logging")
+}
+
 const applyPlan = (dataDirectory: string, plan: typeof plans[number]): number => {
   const database = new DatabaseSync(pathFor(dataDirectory, plan))
   let transactionOpen = false
   try {
+    database.exec("PRAGMA busy_timeout = 5000")
     database.exec("PRAGMA foreign_keys = ON")
+    enableWriteAheadLog(database)
     database.exec("BEGIN IMMEDIATE")
     transactionOpen = true
     database.exec(
@@ -121,25 +130,23 @@ export const applyMigrations = (dataDirectory: string): MigrationReport => {
   return { scanned, changed, skipped: scanned - changed, failed: 0, pending: [] }
 }
 
+// Readiness = storage writable + migrations current. Deliberately lock-free: an earlier version
+// opened BEGIN IMMEDIATE without a busy timeout and reported "not ready" whenever any other
+// connection was writing, which turned every concurrent API call into a 503.
 const planReady = (dataDirectory: string, plan: typeof plans[number]): boolean => {
   const path = pathFor(dataDirectory, plan)
   if (!existsSync(path)) return false
-  const database = new DatabaseSync(path)
-  let transactionOpen = false
   try {
-    database.exec("PRAGMA foreign_keys = ON")
-    database.exec("BEGIN IMMEDIATE")
-    transactionOpen = true
-    const ready = pendingFor(database, plan).length === 0
-    if (ready) {
-      database.prepare("UPDATE schema_migrations SET applied_at = applied_at WHERE name = ?")
-        .run(plan.migrations.at(-1)?.name ?? foundationMigration.name)
-    }
-    database.exec("ROLLBACK")
-    transactionOpen = false
-    return ready
+    accessSync(path, constants.W_OK)
+    accessSync(dataDirectory, constants.W_OK)
   } catch {
-    if (transactionOpen) database.exec("ROLLBACK")
+    return false
+  }
+  const database = new DatabaseSync(path, { readOnly: true })
+  try {
+    database.exec("PRAGMA busy_timeout = 5000")
+    return pendingFor(database, plan).length === 0
+  } catch {
     return false
   } finally {
     database.close()

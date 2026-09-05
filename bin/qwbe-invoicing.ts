@@ -11,6 +11,7 @@ import { CliInputError, helpText, parseCommand, type Command } from "../standalo
 import { runtimeConfig } from "../standalone/config.ts"
 import { startServer } from "../standalone/http.ts"
 import { applyMigrations, databaseReady, planMigrations } from "../standalone/migrations.ts"
+import { cachedReadiness, readinessIntervalMs } from "../standalone/readiness.ts"
 
 const print = (value: unknown, json: boolean) => {
   console.log(json ? JSON.stringify(value) : value)
@@ -31,7 +32,8 @@ if (command !== undefined) {
     if (command.name === "help") print(helpText, false)
     if (command.name === "serve") {
       let acceptingTraffic = true
-      const server = startServer(config, () => acceptingTraffic && databaseReady(config.dataDirectory))
+      const storageReady = cachedReadiness(() => databaseReady(config.dataDirectory), readinessIntervalMs)
+      const server = startServer(config, () => acceptingTraffic && storageReady())
       const close = () => {
         if (!acceptingTraffic) return
         acceptingTraffic = false

@@ -6,6 +6,7 @@ import { createRequestAuthenticator } from "./auth.ts"
 import { createBrowserSession } from "./browser-session.ts"
 import type { RuntimeConfig } from "./config.ts"
 import { databaseReady } from "./migrations.ts"
+import { cachedReadiness, readinessIntervalMs } from "./readiness.ts"
 import { staticUiResponse } from "./static-ui.ts"
 
 interface HttpResponse {
@@ -74,7 +75,7 @@ const loginToken = (body: unknown): string | undefined => {
 
 export const startServer = (
   config: RuntimeConfig,
-  isReady: () => boolean = () => databaseReady(config.dataDirectory),
+  isReady: () => boolean = cachedReadiness(() => databaseReady(config.dataDirectory), readinessIntervalMs),
   renderApiDocs: () => Promise<Awaited<ReturnType<typeof apiDocsResponse>>> = apiDocsResponse,
 ): Server => {
   const authenticate = createRequestAuthenticator(config)

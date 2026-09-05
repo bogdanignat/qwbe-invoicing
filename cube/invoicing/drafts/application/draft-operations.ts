@@ -1,6 +1,6 @@
 import { Effect } from "effect"
 
-import { checked, missing, type Authorize, type OperationDependencies } from "../../application/support.ts"
+import { checked, draftPageQuery, missing, pageOf, type Authorize, type OperationDependencies, type Page, type PageRequest } from "../../application/support.ts"
 import type { InvoicingFailure } from "../../contracts/failures.ts"
 import type { InvoicingPermissions } from "../../contracts/permissions.ts"
 import { calculateLine } from "../../domain/calculation.ts"
@@ -12,7 +12,7 @@ import { authorDocument, buyerFrom, dates, documentSource, findEditable, withTot
 export interface DraftDocumentOperations {
   readonly createDraft: (input: CreateDraftInput) => Effect.Effect<DraftInvoice, InvoicingFailure>
   readonly getDraft: (id: string) => Effect.Effect<DraftInvoice, InvoicingFailure>
-  readonly listDrafts: (source?: DocumentSource) => Effect.Effect<ReadonlyArray<DraftInvoice>, InvoicingFailure>
+  readonly listDrafts: (source?: DocumentSource, page?: PageRequest) => Effect.Effect<Page<DraftInvoice>, InvoicingFailure>
   readonly updateDraft: (input: UpdateDraftInput) => Effect.Effect<DraftInvoice, InvoicingFailure>
   readonly deleteDraft: (id: string) => Effect.Effect<void, InvoicingFailure>
 }
@@ -37,10 +37,12 @@ export const createDraftDocumentOperations = (
     const draft = yield* dependencies.store.transaction((transaction) => transaction.findDraft(context.organization.id, id))
     return draft === undefined ? yield* Effect.fail(missing("draft", id)) : structuredClone(draft)
   })
-  const listDrafts = (source?: DocumentSource) => Effect.gen(function*() {
+  const listDrafts = (source?: DocumentSource, page?: PageRequest) => Effect.gen(function*() {
     if (source !== undefined) yield* checked(() => { validateDocumentSource(source) })
+    const query = yield* checked(() => draftPageQuery(page))
     const context = yield* authorize(permissions.read)
-    return structuredClone(yield* dependencies.store.transaction((transaction) => transaction.listDrafts(context.organization.id, source)))
+    const rows = yield* dependencies.store.transaction((transaction) => transaction.listDrafts(context.organization.id, query, source))
+    return pageOf(rows, query, (draft) => ({ issueDate: draft.issueDate, id: draft.id }))
   })
   const updateDraft = (input: UpdateDraftInput) => Effect.gen(function*() {
     const context = yield* authorize(permissions.draftInvoices)

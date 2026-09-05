@@ -60,7 +60,7 @@ void test("upgrades a populated version-six database without rewriting migration
   const directory = mkdtempSync(join(tmpdir(), "qwbe-upgrade-"))
   try {
     seedVersionSix(directory)
-    assert.equal(applyMigrations(directory).changed, 9)
+    assert.equal(applyMigrations(directory).changed, 10)
     const database = new DatabaseSync(databasePath(directory))
     try {
       database.exec("PRAGMA foreign_keys = ON")
@@ -70,7 +70,7 @@ void test("upgrades a populated version-six database without rewriting migration
       assert.deepEqual(migrations, ["000-foundation", "001-invoice-core", "002-invoice-payments", "003-invoice-corrections",
         "004-invoice-delete-last", "005-allow-e-factura-status-update", "006-customer-soft-delete", "007-complete-invoice-authoring",
          "008-proforma-workflow", "009-proforma-direct-invoice", "010-product-presets-payment-terms",
-         "011-external-api-snapshots"])
+         "011-external-api-snapshots", "012-payment-idempotency"])
       const columns = database.prepare("PRAGMA table_info(invoice_drafts)").all()
       assert.equal(columns.some((row) => row.name === "customer_id" && row.notnull === 0), true)
       assert.equal(columns.some((row) => row.name === "due_date" && row.notnull === 0), true)

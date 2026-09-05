@@ -8,6 +8,7 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
+  renameSync,
   rmSync,
   statSync,
   writeFileSync,
@@ -227,6 +228,35 @@ export const planRestore = (_dataDirectory: string, input: string): { readonly p
   }
 }
 
+const sqliteSidecars = ["-wal", "-shm", "-journal"] as const
+
+const assertNotInUse = (target: string): void => {
+  if (!existsSync(target)) return
+  const database = new DatabaseSync(target)
+  try {
+    database.exec("BEGIN IMMEDIATE")
+    database.exec("ROLLBACK")
+  } catch {
+    throw new Error(`database is in use, stop the application before restoring: ${basename(target)}`)
+  } finally {
+    database.close()
+  }
+}
+
+// Each file lands under its final name through rename(2) in the same directory, so a failure
+// in the middle leaves either the old file or the new one, never nothing.
+const replaceFile = (source: string, target: string, expectedSha256: string | undefined): void => {
+  const staged = `${target}.restore-${String(process.pid)}.tmp`
+  try {
+    copyFileSync(source, staged)
+    const actual = sha256File(staged)
+    if (expectedSha256 !== undefined && actual !== expectedSha256) throw new Error(`restore integrity mismatch for ${basename(target)}`)
+    renameSync(staged, target)
+  } finally {
+    rmSync(staged, { force: true })
+  }
+}
+
 export const executeRestore = (dataDirectory: string, input: string): RestoreReport => {
   if (!existsSync(input)) throw new Error(`backup input does not exist: ${input}`)
   const staging = mkdtempSync(join(tmpdir(), "qwbe-restore-"))
@@ -240,45 +270,21 @@ export const executeRestore = (dataDirectory: string, input: string): RestoreRep
     const manifest = verifyManifest(staging)
     const files = collectStagedFiles(manifest)
     mkdirSync(dataDirectory, { recursive: true })
+    for (const rel of files) {
+      if (sqliteFileSet.has(rel)) assertNotInUse(safeDataPath(dataDirectory, rel))
+    }
     let restored = 0
     for (const rel of files) {
       const source = safeDataPath(staging, rel)
       const target = safeDataPath(dataDirectory, rel)
       ensureParentDirectory(target)
-      // Atomic copy via temp + rename when possible
-      const tempTarget = `${target}.${String(Date.now())}.tmp`
-      copyFileSync(source, tempTarget)
-      // Verify before move
-      const actual = sha256File(tempTarget)
-      const expected = manifest.files.find((entry) => entry.path === rel)?.sha256
-      if (expected !== undefined && actual !== expected) {
-        rmSync(tempTarget, { force: true })
-        throw new Error(`restore integrity mismatch for ${rel}`)
+      replaceFile(source, target, manifest.files.find((entry) => entry.path === rel)?.sha256)
+      if (sqliteFileSet.has(rel)) {
+        for (const suffix of sqliteSidecars) rmSync(`${target}${suffix}`, { force: true })
       }
-      // Overwrite atomically
-      try {
-        // Use rename if same filesystem, fallback to copy
-        const renamed = (() => {
-          try {
-            // Ensure target not locked by SQLite WAL: remove temp then rename
-            if (existsSync(target)) rmSync(target, { force: true })
-            copyFileSync(tempTarget, target)
-            rmSync(tempTarget, { force: true })
-            return true
-          } catch {
-            return false
-          }
-        })()
-        if (!renamed) throw new Error(`failed to restore ${rel}`)
-      } finally {
-        rmSync(tempTarget, { force: true })
-      }
-      // Copy basename for logging clarity
-      void basename(target)
       restored += 1
     }
     clearBrowserSessions(join(dataDirectory, "sessions.sqlite"))
-    // Preserve manifest copy next to data for audit (optional)
     return {
       dataDirectory,
       input,

@@ -149,7 +149,7 @@ void test("requires host authentication and serves the complete invoice-core rou
       body: { description: "Audit", unitPrice: "20", unitOfMeasure: each } }, runtime)
     assert.equal((updatedPreset.body as { unitPrice: string }).unitPrice, "20.00")
     assert.deepEqual((await handleApiRequest({ method: "GET", url: "/api/product-presets", authorization,
-      body: undefined }, runtime)).body, [updatedPreset.body])
+      body: undefined }, runtime)).body, { items: [updatedPreset.body], nextCursor: null })
     assert.deepEqual(await handleApiRequest({ method: "DELETE", url: `/api/product-presets/${presetId}`, authorization,
       body: undefined }, runtime), { status: 200, body: { deleted: true } })
     assert.equal((await handleApiRequest({ method: "DELETE", url: `/api/product-presets/${presetId}`, authorization,
@@ -182,7 +182,7 @@ void test("requires host authentication and serves the complete invoice-core rou
     }, runtime)
     const disposableId = (disposable.body as { id: string }).id
     const drafts = await handleApiRequest({ method: "GET", url: "/api/drafts", authorization, body: undefined }, runtime)
-    assert.equal((drafts.body as ReadonlyArray<unknown>).length, 2)
+    assert.equal((drafts.body as { items: ReadonlyArray<unknown> }).items.length, 2)
     assert.deepEqual(await handleApiRequest({ method: "DELETE", url: `/api/drafts/${disposableId}`, authorization, body: undefined }, runtime), {
       status: 200, body: { deleted: true },
     })
@@ -236,21 +236,35 @@ void test("requires host authentication and serves the complete invoice-core rou
       authorization,
       body: undefined,
     }, runtime)
-    assert.deepEqual(invoices.body, [issued.body])
+    assert.deepEqual(invoices.body, { items: [issued.body], nextCursor: null })
     assert.deepEqual(await handleApiRequest({
       method: "DELETE", url: `/api/invoices/${invoiceId}`, authorization, body: undefined,
     }, runtime), { status: 405, body: { error: "method_not_allowed" } })
     assert.equal((await handleApiRequest({
       method: "DELETE", url: `/api/drafts/${draftId}`, authorization, body: undefined,
     }, runtime)).status, 409)
+    assert.equal((await handleApiRequest({ method: "POST", url: `/api/invoices/${invoiceId}/payments`, authorization,
+      body: { amount: "50.00", currency: "RON", paymentDate: "2026-09-02", method: "transfer" } }, runtime)).status, 400)
     const payment = await handleApiRequest({
       method: "POST",
       url: `/api/invoices/${invoiceId}/payments`,
       authorization,
+      idempotencyKey: "payment-1",
       body: { amount: "50.00", currency: "RON", paymentDate: "2026-09-02", method: "transfer" },
     }, runtime)
     assert.equal(payment.status, 200)
     assert.equal((payment.body as { status: string }).status, "partially_paid")
+    assert.deepEqual(await handleApiRequest({ method: "POST", url: `/api/invoices/${invoiceId}/payments`, authorization, idempotencyKey: "payment-1",
+      body: { amount: "50.00", currency: "RON", paymentDate: "2026-09-02", method: "transfer" } }, runtime), payment)
+    const mistaken = await handleApiRequest({ method: "POST", url: `/api/invoices/${invoiceId}/payments`, authorization, idempotencyKey: "payment-2",
+      body: { amount: "5.00", currency: "RON", paymentDate: "2026-09-02", method: "cash" } }, runtime)
+    const mistakenId = (mistaken.body as { payment: { id: string } }).payment.id
+    const reversal = await handleApiRequest({ method: "POST", url: `/api/invoices/${invoiceId}/payments/${mistakenId}/reversal`, authorization,
+      idempotencyKey: "reversal-1", body: { reason: "Înregistrată de două ori" } }, runtime)
+    assert.equal(reversal.status, 200)
+    assert.equal((reversal.body as { payment: { kind: string; reversesPaymentId: string } }).payment.kind, "reversal")
+    assert.equal((await handleApiRequest({ method: "POST", url: `/api/invoices/${invoiceId}/payments/${mistakenId}/reversal`, authorization,
+      idempotencyKey: "reversal-2", body: {} }, runtime)).status, 409)
     const payments = await handleApiRequest({
       method: "GET",
       url: `/api/invoices/${invoiceId}/payments`,
@@ -262,7 +276,7 @@ void test("requires host authentication and serves the complete invoice-core rou
       paidAmount: (payments.body as { paidAmount: string }).paidAmount,
       remainingAmount: (payments.body as { remainingAmount: string }).remainingAmount,
       count: (payments.body as { payments: ReadonlyArray<unknown> }).payments.length,
-    }, { status: "partially_paid", paidAmount: "50.00", remainingAmount: "71.00", count: 1 })
+    }, { status: "partially_paid", paidAmount: "50.00", remainingAmount: "71.00", count: 3 })
     const proformaDraft = await handleApiRequest({
       method: "POST", url: "/api/drafts", authorization,
       body: { customerId, issueDate: "2026-09-05", dueDate: null, series: "QWBE",
@@ -271,7 +285,7 @@ void test("requires host authentication and serves the complete invoice-core rou
     const proformaDraftId = (proformaDraft.body as { id: string }).id
     assert.deepEqual((await handleApiRequest({ method: "GET",
       url: "/api/drafts?sourceApp=crm&sourceKind=offer&sourceId=offer-1", authorization, body: undefined }, runtime)).body,
-    [proformaDraft.body])
+    { items: [proformaDraft.body], nextCursor: null })
     await handleApiRequest({
       method: "POST", url: `/api/drafts/${proformaDraftId}/lines`, authorization,
       body: { description: "Avans", quantity: "1", unitPrice: "50", unitOfMeasure: each, vatRateCode: "RO_STANDARD" },
@@ -298,10 +312,10 @@ void test("requires host authentication and serves the complete invoice-core rou
     assert.deepEqual(await handleApiRequest({
       method: "DELETE", url: `/api/drafts/${proformaDraftId}`, authorization, body: undefined,
     }, runtime), { status: 409, body: { error: "DomainConflict", code: "draft_already_issued" } })
-    assert.deepEqual((await handleApiRequest({ method: "GET", url: "/api/proformas", authorization, body: undefined }, runtime)).body, [proforma.body])
+    assert.deepEqual((await handleApiRequest({ method: "GET", url: "/api/proformas", authorization, body: undefined }, runtime)).body, { items: [proforma.body], nextCursor: null })
     assert.deepEqual((await handleApiRequest({ method: "GET",
       url: "/api/proformas?sourceApp=crm&sourceKind=offer&sourceId=offer-1", authorization, body: undefined }, runtime)).body,
-    [proforma.body])
+    { items: [proforma.body], nextCursor: null })
     assert.deepEqual((await handleApiRequest({ method: "GET", url: `/api/proformas/${proformaId}`, authorization, body: undefined }, runtime)).body, proforma.body)
     assert.equal((await handleApiRequest({ method: "GET", url: "/api/proformas/missing", authorization, body: undefined }, runtime)).status, 404)
     assert.equal((await handleApiRequest({ method: "POST", url: "/api/proformas/missing/invoice", authorization, idempotencyKey: "missing-proforma", body: {} }, runtime)).status, 404)
@@ -344,7 +358,7 @@ void test("requires host authentication and serves the complete invoice-core rou
       customer: { partyType: "company", name: "Client CRM SRL", fiscalIdentifier: "RO87654329",
         address: { countryCode: "RO", city: "Iași", street: "Strada CRM 5" } },
       source: { app: "crm", kind: "contract", id: "contract-123" },
-      series: "QWBE", issueDate: "2026-09-06", dueDate: null, currency: "RON",
+      series: "QWBE", issueDate: "2026-09-05", dueDate: null, currency: "RON",
       lines: [{ description: "Direct din CRM", quantity: "1", unitPrice: "25", unitOfMeasure: { code: "HUR", name: "oră" }, vatRateCode: "RO_STANDARD" }],
     }
     assert.equal((await handleApiRequest({ method: "POST", url: "/api/invoices", authorization,
@@ -364,27 +378,29 @@ void test("requires host authentication and serves the complete invoice-core rou
     { status: 409, body: { error: "DomainConflict", code: "idempotency_key_reused" } })
     assert.deepEqual((await handleApiRequest({ method: "GET",
       url: "/api/invoices?sourceApp=crm&sourceKind=contract&sourceId=contract-123", authorization, body: undefined }, runtime)).body,
-    [directInvoice.body])
+    { items: [directInvoice.body], nextCursor: null })
     assert.deepEqual((await handleApiRequest({ method: "GET",
-      url: "/api/invoices?sourceApp=crm&sourceKind=contract&sourceId=missing", authorization, body: undefined }, runtime)).body, [])
+      url: "/api/invoices?sourceApp=crm&sourceKind=contract&sourceId=missing", authorization, body: undefined }, runtime)).body, { items: [], nextCursor: null })
+    assert.equal((await handleApiRequest({ method: "GET", url: "/api/invoices?limit=0", authorization, body: undefined }, runtime)).status, 400)
+    assert.equal((await handleApiRequest({ method: "GET", url: "/api/invoices?cursor=%%%", authorization, body: undefined }, runtime)).status, 400)
     assert.equal((await handleApiRequest({ method: "GET", url: "/api/invoices?sourceApp=crm", authorization, body: undefined }, runtime)).status, 400)
     assert.deepEqual(await handleApiRequest({ method: "POST", url: "/api/proformas", authorization,
-      idempotencyKey: "direct-invoice-1", body: { ...authoredBody, issueDate: "2026-09-07", proformaSeries: "PRO" } }, runtime),
+      idempotencyKey: "direct-invoice-1", body: { ...authoredBody, issueDate: "2026-09-05", proformaSeries: "PRO" } }, runtime),
     { status: 409, body: { error: "DomainConflict", code: "idempotency_key_reused" } })
     const directProforma = await handleApiRequest({ method: "POST", url: "/api/proformas", authorization,
-      idempotencyKey: "direct-proforma-1", body: { ...authoredBody, issueDate: "2026-09-07", proformaSeries: "PRO" } }, runtime)
+      idempotencyKey: "direct-proforma-1", body: { ...authoredBody, issueDate: "2026-09-05", proformaSeries: "PRO" } }, runtime)
     assert.equal(directProforma.status, 200)
     assert.equal((directProforma.body as { sourceDraftId: string | null }).sourceDraftId, null)
     const directProformaId = (directProforma.body as { id: string }).id
     assert.equal((await handleApiRequest({ method: "POST", url: `/api/proformas/${directProformaId}/invoice`, authorization,
       idempotencyKey: "direct-proforma-conversion", body: {} }, runtime)).status, 200)
-    assert.deepEqual((await handleApiRequest({ method: "GET", url: "/api/drafts", authorization, body: undefined }, runtime)).body, [])
+    assert.deepEqual((await handleApiRequest({ method: "GET", url: "/api/drafts", authorization, body: undefined }, runtime)).body, { items: [], nextCursor: null })
     const correction = await handleApiRequest({
       method: "POST",
       url: `/api/invoices/${invoiceId}/corrections`,
       authorization,
       idempotencyKey: "correction-1",
-      body: { reason: "Corecție integrală de test", issueDate: "2026-09-03",
+      body: { reason: "Corecție integrală de test", issueDate: "2026-09-05",
         source: { app: "erp", kind: "return", id: "return-1" } },
     }, runtime)
     assert.equal(correction.status, 200)
@@ -405,7 +421,7 @@ void test("requires host authentication and serves the complete invoice-core rou
       url: `/api/invoices/${invoiceId}/corrections`,
       authorization,
       idempotencyKey: "correction-2",
-      body: { reason: "Corecție duplicată", issueDate: "2026-09-04" },
+      body: { reason: "Corecție duplicată", issueDate: "2026-09-05" },
     }, runtime)
     assert.deepEqual(duplicateCorrection, {
       status: 409,
@@ -418,7 +434,7 @@ void test("requires host authentication and serves the complete invoice-core rou
       body: undefined,
     }, runtime)
     assert.equal(customers.status, 200)
-    assert.equal((customers.body as ReadonlyArray<unknown>).length, 1)
+    assert.equal((customers.body as { items: ReadonlyArray<unknown> }).items.length, 1)
     const deletedCustomer = await handleApiRequest({
       method: "DELETE",
       url: `/api/customers/${customerId}`,
@@ -432,7 +448,7 @@ void test("requires host authentication and serves the complete invoice-core rou
       authorization,
       body: undefined,
     }, runtime)
-    assert.deepEqual(customersAfterDelete.body, [])
+    assert.deepEqual(customersAfterDelete.body, { items: [], nextCursor: null })
     const preservedInvoice = await handleApiRequest({
       method: "GET",
       url: `/api/invoices/${invoiceId}`,

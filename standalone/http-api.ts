@@ -18,7 +18,7 @@ export const operationNames = [
   "listProductPresets", "createProductPreset", "updateProductPreset", "deleteProductPreset",
   "listDrafts", "getDraft", "createDraft", "updateDraft", "deleteDraft",
   "addDraftLine", "updateDraftLine", "deleteDraftLine", "issueDraftInvoice", "issueInvoice",
-  "listPayments", "recordPayment", "createCorrection", "listCorrections", "getCorrection",
+  "listPayments", "recordPayment", "reversePayment", "createCorrection", "listCorrections", "getCorrection",
   "listIssuedInvoices", "getIssuedInvoice", "renderInvoicePdf", "downloadInvoicePdf",
   "issueDraftProforma", "issueProforma", "listProformas", "getProforma", "issueInvoiceFromProforma", "renderProformaPdf", "downloadProformaPdf",
   "getSession", "createSession", "deleteSession",
@@ -45,6 +45,7 @@ const draftId = HttpApiSchema.param("draftId", Schema.String)
 const lineId = HttpApiSchema.param("lineId", Schema.String)
 const invoiceId = HttpApiSchema.param("invoiceId", Schema.String)
 const proformaId = HttpApiSchema.param("proformaId", Schema.String)
+const paymentId = HttpApiSchema.param("paymentId", Schema.String)
 const csrfHeaders = Schema.Struct({
   "x-csrf-token": Schema.optional(Schema.String.annotations({
     description: "Required for unsafe requests authenticated with sessionCookie; ignored for bearerAuth.",
@@ -106,17 +107,17 @@ const invoicing = HttpApiGroup.make("invoicing")
   .add(invoicingBase(HttpApiEndpoint.get("listDocumentSeries", "/document-series").addSuccess(Schema.Array(S.DocumentSeries))))
   .add(invoicingBase(conflict(validation(body(HttpApiEndpoint.post("addDocumentSeries", "/document-series").setPayload(S.DocumentSeriesInput).addSuccess(S.DocumentSeries))))))
   .add(invoicingBase(HttpApiEndpoint.get("listUnitOfMeasures", "/unit-of-measures").addSuccess(Schema.Array(S.UnitOfMeasure))))
-  .add(invoicingBase(HttpApiEndpoint.get("listCustomers", "/customers").addSuccess(Schema.Array(S.Customer))))
+  .add(invoicingBase(validation(HttpApiEndpoint.get("listCustomers", "/customers").setUrlParams(S.PageQuery).addSuccess(S.CustomerPage))))
   .add(invoicingBase(notFound(HttpApiEndpoint.get("getCustomer")`/customers/${id}`.addSuccess(S.Customer))))
   .add(invoicingBase(validation(body(HttpApiEndpoint.post("createCustomer", "/customers").setPayload(S.CustomerInput).addSuccess(S.Customer)))))
   .add(invoicingBase(notFound(validation(body(HttpApiEndpoint.put("updateCustomer")`/customers/${id}`.setPayload(S.CustomerInput).addSuccess(S.Customer))))))
   .add(invoicingBase(conflict(notFound(body(HttpApiEndpoint.del("deleteCustomer")`/customers/${id}`.addSuccess(S.Deleted))))))
-  .add(invoicingBase(HttpApiEndpoint.get("listProductPresets", "/product-presets").addSuccess(Schema.Array(S.ProductPreset))))
+  .add(invoicingBase(validation(HttpApiEndpoint.get("listProductPresets", "/product-presets").setUrlParams(S.PageQuery).addSuccess(S.ProductPresetPage))))
   .add(invoicingBase(validation(body(HttpApiEndpoint.post("createProductPreset", "/product-presets").setPayload(S.ProductPresetInput).addSuccess(S.ProductPreset)))))
   .add(invoicingBase(notFound(validation(body(HttpApiEndpoint.put("updateProductPreset")`/product-presets/${id}`
     .setPayload(S.ProductPresetInput).addSuccess(S.ProductPreset))))))
   .add(invoicingBase(notFound(body(HttpApiEndpoint.del("deleteProductPreset")`/product-presets/${id}`.addSuccess(S.Deleted)))))
-  .add(invoicingBase(HttpApiEndpoint.get("listDrafts", "/drafts").setUrlParams(S.SourceFilter).addSuccess(Schema.Array(S.DraftInvoice))))
+  .add(invoicingBase(validation(HttpApiEndpoint.get("listDrafts", "/drafts").setUrlParams(S.ListQuery).addSuccess(S.DraftInvoicePage))))
   .add(invoicingBase(notFound(HttpApiEndpoint.get("getDraft")`/drafts/${id}`.addSuccess(S.DraftInvoice))))
   .add(invoicingBase(notFound(validation(body(HttpApiEndpoint.post("createDraft", "/drafts").setPayload(S.DraftInput).addSuccess(S.DraftInvoice))))))
   .add(invoicingBase(conflict(notFound(validation(body(HttpApiEndpoint.put("updateDraft")`/drafts/${id}`.setPayload(S.UpdateDraftInput).addSuccess(S.DraftInvoice)))))))
@@ -126,16 +127,17 @@ const invoicing = HttpApiGroup.make("invoicing")
   .add(invoicingBase(conflict(notFound(body(HttpApiEndpoint.del("deleteDraftLine")`/drafts/${draftId}/lines/${lineId}`.addSuccess(S.DraftInvoice))))))
   .add(invoicingBase(conflict(notFound(validation(idempotentBody(HttpApiEndpoint.post("issueDraftInvoice")`/drafts/${draftId}/issue`.addSuccess(S.IssuedInvoice)))))))
   .add(invoicingBase(notFound(HttpApiEndpoint.get("listPayments")`/invoices/${invoiceId}/payments`.addSuccess(S.PaymentSummary))))
-  .add(invoicingBase(notFound(validation(body(HttpApiEndpoint.post("recordPayment")`/invoices/${invoiceId}/payments`.setPayload(S.PaymentInput).addSuccess(S.RecordPaymentResult))))))
+  .add(invoicingBase(conflict(notFound(validation(idempotentBody(HttpApiEndpoint.post("recordPayment")`/invoices/${invoiceId}/payments`.setPayload(S.PaymentInput).addSuccess(S.RecordPaymentResult)))))))
+  .add(invoicingBase(conflict(notFound(validation(idempotentBody(HttpApiEndpoint.post("reversePayment")`/invoices/${invoiceId}/payments/${paymentId}/reversal`.setPayload(S.ReversalInput).addSuccess(S.RecordPaymentResult)))))))
   .add(invoicingBase(conflict(notFound(validation(idempotentBody(HttpApiEndpoint.post("createCorrection")`/invoices/${invoiceId}/corrections`.setPayload(S.CorrectionInput).addSuccess(S.Correction)))))))
   .add(invoicingBase(HttpApiEndpoint.get("listCorrections")`/invoices/${invoiceId}/corrections`.setUrlParams(S.SourceFilter).addSuccess(Schema.Array(S.Correction))))
   .add(invoicingBase(notFound(HttpApiEndpoint.get("getCorrection")`/corrections/${id}`.addSuccess(S.Correction))))
-  .add(invoicingBase(HttpApiEndpoint.get("listIssuedInvoices", "/invoices").setUrlParams(S.SourceFilter).addSuccess(Schema.Array(S.IssuedInvoice))))
+  .add(invoicingBase(validation(HttpApiEndpoint.get("listIssuedInvoices", "/invoices").setUrlParams(S.ListQuery).addSuccess(S.IssuedInvoicePage))))
   .add(invoicingBase(conflict(notFound(validation(idempotentBody(HttpApiEndpoint.post("issueInvoice", "/invoices").setPayload(S.AuthoringDocumentInput).addSuccess(S.IssuedInvoice)))))))
   .add(invoicingBase(notFound(HttpApiEndpoint.get("getIssuedInvoice")`/invoices/${id}`.addSuccess(S.IssuedInvoice))))
   .add(invoicingBase(conflict(notFound(validation(idempotentBody(HttpApiEndpoint.post("issueDraftProforma")`/drafts/${draftId}/proformas`
     .setPayload(S.IssueProformaInput).addSuccess(S.Proforma)))))))
-  .add(invoicingBase(HttpApiEndpoint.get("listProformas", "/proformas").setUrlParams(S.SourceFilter).addSuccess(Schema.Array(S.Proforma))))
+  .add(invoicingBase(validation(HttpApiEndpoint.get("listProformas", "/proformas").setUrlParams(S.ListQuery).addSuccess(S.ProformaPage))))
   .add(invoicingBase(conflict(notFound(validation(idempotentBody(HttpApiEndpoint.post("issueProforma", "/proformas")
     .setPayload(S.AuthoringProformaInput).addSuccess(S.Proforma)))))))
   .add(invoicingBase(notFound(HttpApiEndpoint.get("getProforma")`/proformas/${id}`.addSuccess(S.Proforma))))

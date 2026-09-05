@@ -1,11 +1,11 @@
 import { Effect } from "effect"
-import { DomainConflict, type InvoicingFailure } from "../../contracts/failures.ts"
+import { DomainConflict, ValidationFailure, type InvoicingFailure } from "../../contracts/failures.ts"
 import type { InvoicingPermissions } from "../../contracts/permissions.ts"
 import { negateMoney, validateCreateCorrectionInput, type CorrectionDocument, type CreateCorrectionInput } from "../domain/corrections.ts"
 import type { DocumentSource, Idempotent } from "../../domain/invoice.ts"
-import { validateDocumentSource } from "../../domain/validation.ts"
+import { calendarDate, validateDocumentSource } from "../../domain/validation.ts"
 import { findIdempotencyReplay, idempotencyRecord, missingIdempotencyResult } from "../../application/idempotency.ts"
-import { checked, copyBuyer, copyParty, copySource, missing, type Authorize, type OperationDependencies } from "../../application/support.ts"
+import { checked, copyBuyer, copyParty, copySource, ensureChronology, missing, type Authorize, type OperationDependencies } from "../../application/support.ts"
 const fy = (d: string): number => Number(d.slice(0, 4))
 export const createCorrectionOperations = (d: OperationDependencies, perms: InvoicingPermissions, auth: Authorize) => {
   const createCorrection = ({ request: input, idempotency }: Idempotent<CreateCorrectionInput>): Effect.Effect<CorrectionDocument, InvoicingFailure> => Effect.gen(function*() {
@@ -32,8 +32,16 @@ export const createCorrectionOperations = (d: OperationDependencies, perms: Invo
       }
       const id = yield* d.ids.next
       const now = yield* d.clock.now
-      const issueDate = input.issueDate ?? now.toISOString().slice(0, 10)
-      const number = yield* tx.allocateDocumentNumber(ctx.organization.id, fy(issueDate), "correction", orig.series)
+      const today = calendarDate(now)
+      const issueDate = input.issueDate ?? today
+      const dateIssues = [
+        ...(issueDate < orig.issueDate ? ["issueDate cannot be before the original invoice issueDate"] : []),
+        ...(issueDate > today ? ["issueDate cannot be in the future"] : []),
+      ]
+      if (dateIssues.length > 0) return yield* Effect.fail(new ValidationFailure({ issues: dateIssues }))
+      // A storno is a new invoice with negative values (Codul fiscal art. 330): it takes the next number of the invoice series.
+      yield* ensureChronology(tx, ctx.organization.id, "invoice", orig.series, issueDate, today)
+      const number = yield* tx.allocateDocumentNumber(ctx.organization.id, fy(issueDate), "invoice", orig.series)
       const issuedAt = now.toISOString()
       const source = input.source ?? orig.source
       const negLines = orig.lines.map((l) => ({ ...l, totalExcludingVat: negateMoney(l.totalExcludingVat), vatAmount: negateMoney(l.vatAmount), totalIncludingVat: negateMoney(l.totalIncludingVat) }))

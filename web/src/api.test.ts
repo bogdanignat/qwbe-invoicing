@@ -256,7 +256,7 @@ void test("calls customer edit and product preset CRUD routes", async () => {
       const body = path === "/api/session"
         ? { authenticated: true, csrfToken: "csrf-token" }
         : path === "/api/product-presets" && (init?.method ?? "GET") === "GET"
-          ? [preset]
+          ? { items: [preset], nextCursor: null }
           : init?.method === "DELETE"
             ? { deleted: true }
             : path.startsWith("/api/customers/") ? customer : preset
@@ -320,7 +320,7 @@ void test("calls direct and draft issuance, proforma invoice, registry, detail, 
       calls.push({ path, init: init ?? {} })
       if (path === "/api/session") return Promise.resolve(new Response(JSON.stringify({ authenticated: true, csrfToken: "csrf-token" }), { status: 200, headers: { "content-type": "application/json" } }))
       if (path.endsWith("/pdf") && init?.method === "GET") return Promise.resolve(new Response("pdf", { status: 200, headers: { "content-type": "application/pdf" } }))
-      const body = path === "/api/proformas" && init?.method === "GET" ? [proforma]
+      const body = path === "/api/proformas" && init?.method === "GET" ? { items: [proforma], nextCursor: null }
         : path === "/api/invoices" || path.endsWith("/invoice") ? invoice
           : path.endsWith("/pdf") ? {} : proforma
       return Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } }))

@@ -158,6 +158,8 @@ export interface Proforma {
 
 export interface Payment {
   readonly id: string
+  readonly kind: "payment" | "reversal"
+  readonly reversesPaymentId?: string
   readonly amount: string
   readonly currency: string
   readonly paymentDate: string
@@ -183,6 +185,15 @@ export interface CorrectionDocument {
   readonly reason: string
   readonly currency: string
   readonly totalIncludingVat: string
+}
+
+export interface Page<Item> {
+  readonly items: ReadonlyArray<Item>
+  readonly nextCursor: string | null
+}
+export interface PageRequest {
+  readonly limit?: number
+  readonly cursor?: string
 }
 
 type JsonObject = Readonly<Record<string, unknown>>
@@ -388,8 +399,12 @@ const decodePayment: Decoder<Payment> = (input) => {
   const value = object(input)
   const externalReference = optionalText(value.externalReference, "externalReference")
   const note = optionalText(value.note, "note")
+  const kind = text(value.kind, "kind")
+  if (kind !== "payment" && kind !== "reversal") throw new Error("invalid payment kind")
+  const reversesPaymentId = optionalText(value.reversesPaymentId, "reversesPaymentId")
   return {
-    id: text(value.id, "id"), amount: text(value.amount, "amount"), currency: text(value.currency, "currency"),
+    id: text(value.id, "id"), kind, ...(reversesPaymentId === undefined ? {} : { reversesPaymentId }),
+    amount: text(value.amount, "amount"), currency: text(value.currency, "currency"),
     paymentDate: text(value.paymentDate, "paymentDate"), method: text(value.method, "method"),
     ...(externalReference === undefined ? {} : { externalReference }), ...(note === undefined ? {} : { note }),
   }
@@ -416,6 +431,16 @@ export const decodeCorrection: Decoder<CorrectionDocument> = (input) => {
     currency: text(value.currency, "currency"), totalIncludingVat: text(value.totalIncludingVat, "totalIncludingVat"),
   }
 }
+
+export const decodePage = <Item>(decodeItem: Decoder<Item>): Decoder<Page<Item>> => (input) => {
+  const value = object(input)
+  return { items: array(value.items, decodeItem, "items"), nextCursor: nullableText(value.nextCursor, "nextCursor") }
+}
+export const decodeCustomerPage = decodePage(decodeCustomer)
+export const decodeProductPresetPage = decodePage(decodeProductPreset)
+export const decodeDraftPage = decodePage(decodeDraft)
+export const decodeInvoicePage = decodePage(decodeInvoice)
+export const decodeProformaPage = decodePage(decodeProforma)
 
 export const decodeProductPresets: Decoder<ReadonlyArray<ProductPreset>> = (input) => array(input, decodeProductPreset, "productPresets")
 export const decodeUnitOfMeasures: Decoder<ReadonlyArray<UnitOfMeasure>> = (input) => array(input, decodeUnitOfMeasure, "unitOfMeasures")

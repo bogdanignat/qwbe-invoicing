@@ -170,7 +170,7 @@ const AuthoringSession = ({ initialDraft, issuer, customers, invoiceSeries, prof
 }
 
 export const InvoiceAuthoringView = ({ id, notify }: InvoiceAuthoringViewProps) => {
-  const customers = useQuery({ queryKey: ["customers"], queryFn: ({ signal }) => runUiEffect(invoicingClient.listCustomers(), signal) })
+  const customers = useQuery({ queryKey: ["customers", "authoring"], queryFn: ({ signal }) => runUiEffect(invoicingClient.listCustomers({ limit: 200 }), signal) })
   const issuer = useQuery({ queryKey: ["issuer"], queryFn: ({ signal }) => runUiEffect(invoicingClient.getIssuer(), signal) })
   const series = useQuery({ queryKey: ["document-series"], queryFn: ({ signal }) => runUiEffect(invoicingClient.listDocumentSeries(), signal) })
   const unitOfMeasures = useQuery({ queryKey: ["unit-of-measures"], queryFn: ({ signal }) => runUiEffect(invoicingClient.listUnitOfMeasures(), signal) })
@@ -204,5 +204,5 @@ export const InvoiceAuthoringView = ({ id, notify }: InvoiceAuthoringViewProps) 
   if ((unitOfMeasures.data ?? []).length === 0) return <Page title="Factură nouă" eyebrow="Catalog indisponibil"><EmptyState>Catalogul unităților de măsură este gol.</EmptyState></Page>
   if (id !== undefined && draft.data === undefined) return <Page title="Draft indisponibil" eyebrow="Document de lucru"><EmptyState>Draftul nu a putut fi încărcat.</EmptyState></Page>
   const backgroundErrors = [customers.error, issuer.error, series.error, unitOfMeasures.error, draft.error].filter((error): error is Error => error !== null)
-  return <AuthoringSession key={draft.data?.id ?? "new"} {...(draft.data === undefined ? {} : { initialDraft: draft.data })} issuer={issuer.data} customers={customers.data ?? []} invoiceSeries={invoiceSeries} proformaSeries={proformaSeries} unitOfMeasures={unitOfMeasures.data ?? []} backgroundErrors={backgroundErrors} notify={notify} />
+  return <AuthoringSession key={draft.data?.id ?? "new"} {...(draft.data === undefined ? {} : { initialDraft: draft.data })} issuer={issuer.data} customers={customers.data?.items ?? []} invoiceSeries={invoiceSeries} proformaSeries={proformaSeries} unitOfMeasures={unitOfMeasures.data ?? []} backgroundErrors={backgroundErrors} notify={notify} />
 }

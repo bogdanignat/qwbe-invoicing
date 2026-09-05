@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { decodeCustomer, decodeDocumentSeries, decodeDocumentSeriesList, decodeDraft, decodeDrafts, decodeInvoice, decodeIssuer, decodePaymentSummary, decodeProductPreset, decodeProductPresets, decodeProforma, decodeProformas, decodeUnitOfMeasures, invoiceDocumentSeries, proformaDocumentSeries } from "./models.ts"
+import { decodeCustomer, decodeDocumentSeries, decodeDocumentSeriesList, decodeDraft, decodeDrafts, decodeInvoice, decodeIssuer, decodePaymentSummary, decodeProductPreset, decodeProductPresetPage, decodeProductPresets, decodeProforma, decodeProformas, decodeUnitOfMeasures, invoiceDocumentSeries, proformaDocumentSeries } from "./models.ts"
 const each = { code: "C62", name: "unitate" } as const
 
 void test("decodes optional address and payment fields without leaking null", () => {
@@ -12,8 +12,8 @@ void test("decodes optional address and payment fields without leaking null", ()
     id: "customer-1", organizationId: "org-1", partyType: "company", name: "Client", fiscalIdentifier: "RO1",
     address: { countryCode: "RO", city: "Botoșani", street: "Strada 1" },
   })
-  assert.deepEqual(decodePaymentSummary({ invoiceId: "invoice-1", status: "paid", paidAmount: "121.00", remainingAmount: "0.00", payments: [{ id: "payment-1", amount: "121.00", currency: "RON", paymentDate: "2026-08-31", method: "transfer", externalReference: null }] }).payments[0], {
-    id: "payment-1", amount: "121.00", currency: "RON", paymentDate: "2026-08-31", method: "transfer",
+  assert.deepEqual(decodePaymentSummary({ invoiceId: "invoice-1", status: "paid", paidAmount: "121.00", remainingAmount: "0.00", payments: [{ id: "payment-1", kind: "payment", amount: "121.00", currency: "RON", paymentDate: "2026-08-31", method: "transfer", externalReference: null }] }).payments[0], {
+    id: "payment-1", kind: "payment", amount: "121.00", currency: "RON", paymentDate: "2026-08-31", method: "transfer",
   })
 })
 
@@ -35,6 +35,9 @@ void test("decodes customer payment terms and product presets", () => {
   const preset = { id: "preset-1", organizationId: "org-1", description: "Consultanță", unitPrice: "100.00", unitOfMeasure: each }
   assert.deepEqual(decodeProductPreset(preset), preset)
   assert.deepEqual(decodeProductPresets([preset]), [preset])
+  assert.deepEqual(decodeProductPresetPage({ items: [preset], nextCursor: "abc" }), { items: [preset], nextCursor: "abc" })
+  assert.deepEqual(decodeProductPresetPage({ items: [], nextCursor: null }), { items: [], nextCursor: null })
+  assert.throws(() => decodeProductPresetPage([preset]))
   assert.throws(() => decodeProductPreset({ ...preset, unitPrice: 100 }), /invalid unitPrice/)
   assert.deepEqual(decodeUnitOfMeasures([each]), [each])
 })

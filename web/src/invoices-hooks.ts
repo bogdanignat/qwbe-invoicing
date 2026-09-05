@@ -7,6 +7,7 @@ import type { AuthoringDocumentInput } from "./invoicing-client.ts"
 import { authoringPayloadMatchesDraft } from "./invoice-authoring-state.ts"
 import { useIdempotencyKey } from "./idempotency-key.ts"
 import { navigate } from "./navigation.ts"
+import { usePagedList } from "./paged-query.ts"
 import { evictDraftAfterNavigation } from "./query-cache.ts"
 
 interface InvoiceIssuanceInput {
@@ -48,8 +49,8 @@ export const useInvoiceIssuance = (input: InvoiceIssuanceInput) => {
 
 export const useInvoicesRegistry = () => {
   const queryClient = useQueryClient()
-  const invoices = useQuery({ queryKey: ["invoices"], queryFn: ({ signal }) => runUiEffect(invoicingClient.listInvoices(), signal) })
-  const drafts = useQuery({ queryKey: ["drafts"], queryFn: ({ signal }) => runUiEffect(invoicingClient.listDrafts(), signal) })
+  const invoices = usePagedList(["invoices"], (page) => invoicingClient.listInvoices(page))
+  const drafts = usePagedList(["drafts"], (page) => invoicingClient.listDrafts(page))
   const removal = useMutation({
     mutationFn: (id: string) => runUiEffect(invoicingClient.deleteDraft(id)),
     onSuccess: async (_result, id) => {

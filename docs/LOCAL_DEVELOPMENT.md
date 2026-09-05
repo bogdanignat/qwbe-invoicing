@@ -49,7 +49,7 @@ Every cube use-case is an `Effect` and has a 1:1 authenticated HTTP endpoint. Au
 - `POST /api/invoices` — issue an invoice atomically from complete authoring content without first persisting a draft
 - `GET /api/invoices` / `GET /api/invoices/:id` — latest 100 issued invoices / immutable issued snapshot (Effect)
 - `POST /api/invoices/:id/pdf` (idempotent render) / `GET /api/invoices/:id/pdf` (download with SHA-256 ETag)
-- `POST /api/invoices/:id/payments` (record payment) / `GET /api/invoices/:id/payments` (list payments with derived status `unpaid`/`partially_paid`/`paid`/`overpaid`/`overdue`, `paidAmount`/`remainingAmount`)
+- `POST /api/invoices/:id/payments` (record payment; requires `Idempotency-Key`) / `POST /api/invoices/:id/payments/:paymentId/reversal` (reverse one payment in full with an immutable counter-row; requires `Idempotency-Key`, optional `reason`) / `GET /api/invoices/:id/payments` (list payments with derived status `unpaid`/`partially_paid`/`paid`/`overpaid`/`overdue`, `paidAmount`/`remainingAmount`)
 - `POST /api/invoices/:id/corrections` (storno fiscal — creează document nou imuabil cu referință la factura originală, motiv obligatoriu, totals negative) / `GET /api/invoices/:id/corrections` / `GET /api/corrections/:id` — după emitere nu se mai editează factura, doar storno
 - Issued invoices have no `DELETE` endpoint and allocated invoice numbers are never reused; mistakes are handled through correction documents
 
@@ -130,7 +130,7 @@ SHA-256 below `/data/artifacts`; reads verify key, digest, and byte length. The 
 DejaVu Sans font supports Romanian glyphs and its distribution license is stored next
 to the font in `standalone/assets/fonts/`.
 
-`doctor` now reports `pendingMigrations`, `migrationsReady`, `organizationId`, `authTokenFile`/`authTokenReadable` and `nodeVersion` in addition to `writable`/`databaseReady`; it exits non-zero while any check fails so it can gate deployments. Liveness remains `GET /health/live` (process up); readiness is `GET /health/ready` (storage writable + migrations current) and drives the Dockerfile `HEALTHCHECK` and Compose readiness.
+`doctor` now reports `pendingMigrations`, `migrationsReady`, `organizationId`, `authTokenFile`/`authTokenReadable` and `nodeVersion` in addition to `writable`/`databaseReady`; it exits non-zero while any check fails so it can gate deployments. Liveness remains `GET /health/live` (process up); readiness is `GET /health/ready` (storage writable + migrations current, evaluated lock-free and cached for 5 seconds) and drives the Dockerfile `HEALTHCHECK` and Compose readiness.
 
 ## Backup and restore
 
@@ -154,7 +154,7 @@ docker compose exec app node bin/qwbe-invoicing.ts restore --input /data/backup-
 docker compose exec app node bin/qwbe-invoicing.ts restore --input /backup/qwbe-backup.tar.gz --apply --confirm-production --json
 ```
 
-`backup` is read-only and idempotent; repeated runs with the same `--output` overwrite atomically. `restore --apply` is idempotent — re-applying the same archive re-verifies each file via SHA-256 and is safe to retry after partial failure. In production, stop the `app` container before restore and run `doctor --json` + `migrate --json` after restore to confirm readiness. Never use `docker compose down -v` as a backup strategy; it deletes the named volume.
+`backup` is read-only and idempotent; repeated runs with the same `--output` overwrite atomically. `restore --apply` is idempotent — re-applying the same archive re-verifies each file via SHA-256 and is safe to retry after partial failure. In production, stop the `app` container before restore (restore refuses to overwrite a database another connection is writing) and run `doctor --json` + `migrate --json` after restore to confirm readiness. Each file is written under a temporary name and renamed into place, so a failed restore leaves the previous file intact. Databases run in write-ahead logging mode (`journal_mode=WAL`, set by `migrate`), so readers are not blocked by a writer; `backup` snapshots with `VACUUM INTO`, and the `migrate` step that runs before `app` puts a restored file back into WAL mode. Never use `docker compose down -v` as a backup strategy; it deletes the named volume.
 
 ## Delivery (PDF download)
 

@@ -1,10 +1,11 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useState } from "react"
 
 import { runUiEffect } from "./api.ts"
 import { formField, type FormSubmitEvent } from "./form.ts"
 import { invoicingClient, type CustomerInput } from "./invoicing-client.ts"
 import type { Customer, PartyType } from "./models.ts"
+import { usePagedList } from "./paged-query.ts"
 
 interface CustomerSaveRequest {
   readonly id?: string
@@ -32,7 +33,7 @@ export const useCustomerRegistry = (notify: (message: string) => void) => {
   const queryClient = useQueryClient()
   const [editing, setEditing] = useState<Customer | undefined>(undefined)
   const [partyType, setPartyType] = useState<PartyType>("company")
-  const customers = useQuery({ queryKey: ["customers"], queryFn: ({ signal }) => runUiEffect(invoicingClient.listCustomers(), signal) })
+  const customers = usePagedList(["customers"], (page) => invoicingClient.listCustomers(page))
   const save = useMutation({
     mutationFn: (request: CustomerSaveRequest) => request.id === undefined
       ? runUiEffect(invoicingClient.createCustomer(request.body))

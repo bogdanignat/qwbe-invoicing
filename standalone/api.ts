@@ -12,7 +12,6 @@ import {
   ValidationFailure,
   createInvoicingService,
   type DocumentSource,
-  type IdempotencyOperation,
   type InvoicingFailure,
 } from "../cube/invoicing/index.ts"
 import {
@@ -35,7 +34,7 @@ import {
   type DocumentsFailure,
 } from "../cube/invoicing/documents/index.ts"
 import { createStandaloneArtifactService } from "./artifact-runtime.ts"
-import { authoringInvoiceInput, authoringProformaInput, correctionInput, customerInput, documentSeriesInput, draftInput, emptyInput, issuerInput, issueProformaInput, lineInput, paymentInput, productPresetInput, updateDraftInput, updateLineInput } from "./api-inputs.ts"
+import { authoringInvoiceInput, authoringProformaInput, correctionInput, customerInput, documentSeriesInput, draftInput, emptyInput, issuerInput, issueProformaInput, lineInput, pageRequest, paymentInput, productPresetInput, reversalInput, updateDraftInput, updateLineInput } from "./api-inputs.ts"
 import { matchApplicationRoute } from "./api-route-adapter.ts"
 import type { RequestAuthenticator } from "./auth.ts"
 import { createSqlitePaymentsStore, createSqliteStore } from "./sqlite-store.ts"
@@ -75,7 +74,7 @@ const canonicalJson = (value: unknown): string => {
   throw new ValidationFailure({ issues: ["request cannot be fingerprinted"] })
 }
 
-const idempotentRequest = <Input>(request: ApiRequest, operation: IdempotencyOperation, input: Input) => {
+const idempotentRequest = <Input>(request: ApiRequest, operation: string, input: Input) => {
   const key = request.idempotencyKey
   if (key === undefined || !/^[\x21-\x7e]{1,255}$/.test(key)) {
     throw new ValidationFailure({ issues: ["Idempotency-Key header is required and must contain 1-255 visible ASCII characters"] })
@@ -162,16 +161,16 @@ export const handleApiRequest = async (request: ApiRequest, runtime: ApiRuntime)
       case "listDocumentSeries": operation = service.listDocumentSeries(); break
       case "addDocumentSeries": operation = service.addDocumentSeries(documentSeriesInput(request.body)); break
       case "listUnitOfMeasures": operation = service.listUnitOfMeasures(); break
-      case "listCustomers": operation = service.listCustomers(); break
+      case "listCustomers": operation = service.listCustomers(pageRequest(requestUrl.searchParams)); break
       case "getCustomer": operation = service.getCustomer(pathParam("id")); break
       case "createCustomer": operation = service.createCustomer(customerInput(request.body)); break
       case "updateCustomer": operation = service.updateCustomer({ id: pathParam("id"), ...customerInput(request.body) }); break
       case "deleteCustomer": operation = Effect.map(service.deleteCustomer(pathParam("id")), () => ({ deleted: true } as const)); break
-      case "listProductPresets": operation = service.listProductPresets(); break
+      case "listProductPresets": operation = service.listProductPresets(pageRequest(requestUrl.searchParams)); break
       case "createProductPreset": operation = service.createProductPreset(productPresetInput(request.body)); break
       case "updateProductPreset": operation = service.updateProductPreset({ id: pathParam("id"), ...productPresetInput(request.body) }); break
       case "deleteProductPreset": operation = Effect.map(service.deleteProductPreset(pathParam("id")), () => ({ deleted: true } as const)); break
-      case "listDrafts": operation = service.listDrafts(sourceFilter(requestUrl.searchParams)); break
+      case "listDrafts": operation = service.listDrafts(sourceFilter(requestUrl.searchParams), pageRequest(requestUrl.searchParams)); break
       case "getDraft": operation = service.getDraft(pathParam("id")); break
       case "createDraft": operation = service.createDraft(draftInput(request.body)); break
       case "updateDraft": operation = service.updateDraft(updateDraftInput(pathParam("id"), request.body)); break
@@ -191,7 +190,8 @@ export const handleApiRequest = async (request: ApiRequest, runtime: ApiRuntime)
         break
       }
       case "listPayments": operation = payments.listPayments(pathParam("invoiceId")); break
-      case "recordPayment": operation = payments.recordPayment(paymentInput(pathParam("invoiceId"), request.body)); break
+      case "recordPayment": operation = payments.recordPayment(idempotentRequest(request, "record_payment", paymentInput(pathParam("invoiceId"), request.body))); break
+      case "reversePayment": operation = payments.reversePayment(idempotentRequest(request, "reverse_payment", reversalInput(pathParam("invoiceId"), pathParam("paymentId"), request.body))); break
       case "createCorrection": {
         const input = correctionInput(pathParam("invoiceId"), request.body)
         operation = service.createCorrection(idempotentRequest(request, "create_correction", input))
@@ -199,7 +199,7 @@ export const handleApiRequest = async (request: ApiRequest, runtime: ApiRuntime)
       }
       case "listCorrections": operation = service.listCorrections(pathParam("invoiceId"), sourceFilter(requestUrl.searchParams)); break
       case "getCorrection": operation = service.getCorrection(pathParam("id")); break
-      case "listIssuedInvoices": operation = service.listIssuedInvoices(sourceFilter(requestUrl.searchParams)); break
+      case "listIssuedInvoices": operation = service.listIssuedInvoices(sourceFilter(requestUrl.searchParams), pageRequest(requestUrl.searchParams)); break
       case "getIssuedInvoice": operation = service.getIssuedInvoice(pathParam("id")); break
       case "issueDraftProforma": {
         const input = issueProformaInput(pathParam("draftId"), request.body)
@@ -211,7 +211,7 @@ export const handleApiRequest = async (request: ApiRequest, runtime: ApiRuntime)
         operation = service.issueProforma(idempotentRequest(request, "issue_proforma_direct", input))
         break
       }
-      case "listProformas": operation = service.listProformas(sourceFilter(requestUrl.searchParams)); break
+      case "listProformas": operation = service.listProformas(sourceFilter(requestUrl.searchParams), pageRequest(requestUrl.searchParams)); break
       case "getProforma": operation = service.getProforma(pathParam("id")); break
       case "issueInvoiceFromProforma": {
         emptyInput(request.body)
