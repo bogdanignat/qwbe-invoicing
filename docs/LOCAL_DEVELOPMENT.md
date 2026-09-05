@@ -154,7 +154,7 @@ docker compose exec app node bin/qwbe-invoicing.ts restore --input /data/backup-
 docker compose exec app node bin/qwbe-invoicing.ts restore --input /backup/qwbe-backup.tar.gz --apply --confirm-production --json
 ```
 
-`backup` is read-only and idempotent; repeated runs with the same `--output` overwrite atomically. `restore --apply` is idempotent — re-applying the same archive re-verifies each file via SHA-256 and is safe to retry after partial failure. In production, stop the `app` container before restore and run `doctor --json` + `migrate --json` after restore to confirm readiness. Never use `docker compose down -v` as a backup strategy; it deletes the named volume.
+`backup` is read-only and idempotent; repeated runs with the same `--output` overwrite atomically. `restore --apply` is idempotent — re-applying the same archive re-verifies each file via SHA-256 and is safe to retry after partial failure. In production, stop the `app` container before restore (restore refuses to overwrite a database another connection is writing) and run `doctor --json` + `migrate --json` after restore to confirm readiness. Each file is written under a temporary name and renamed into place, so a failed restore leaves the previous file intact. Never use `docker compose down -v` as a backup strategy; it deletes the named volume.
 
 ## Delivery (PDF download)
 
