@@ -87,7 +87,7 @@ void test("issues deterministic immutable invoice snapshots through the public s
   assert.equal(issued.totalIncludingVat, "151.25")
   assert.equal(issued.issuer.name, "Exemplu SRL")
   assert.equal(issued.customer.name, "Client SRL")
-  assert.deepEqual(await Effect.runPromise(service.listIssuedInvoices()), [issued])
+  assert.deepEqual(await Effect.runPromise(service.listIssuedInvoices()), { items: [issued], nextCursor: null })
 
   await Effect.runPromise(service.configureIssuer({
     name: "Exemplu Renamed SRL",
@@ -102,7 +102,7 @@ void test("issues deterministic immutable invoice snapshots through the public s
   assert.equal(preserved.series, "QWBE")
 
   await Effect.runPromise(service.deleteCustomer(customer.id))
-  assert.deepEqual(await Effect.runPromise(service.listCustomers()), [])
+  assert.deepEqual(await Effect.runPromise(service.listCustomers()), { items: [], nextCursor: null })
   const deletedCustomer = await Effect.runPromise(Effect.flip(service.getCustomer(customer.id)))
   assert.equal(deletedCustomer instanceof ResourceNotFound, true)
   const newDraft = await Effect.runPromise(Effect.flip(service.createDraft({
@@ -207,7 +207,7 @@ void test("issues immutable proformas from saved drafts", async () => {
   assert.equal(proforma.dueDate, null)
   assert.equal(proforma.convertedDraftId, null)
   assert.equal((await Effect.runPromise(service.getProforma(proforma.id))).convertedDraftId, null)
-  assert.equal((await Effect.runPromise(service.listProformas()))[0]?.convertedDraftId, null)
+  assert.equal((await Effect.runPromise(service.listProformas())).items[0]?.convertedDraftId, null)
   assert.equal((await Effect.runPromise(service.getDraft(source.id))).status, "proforma_issued")
   await expectConflict(service.deleteDraft(source.id), "draft_already_issued")
   await expectConflict(service.issueInvoice(idempotent({ draftId: source.id })), "invoice_already_issued")
@@ -219,7 +219,7 @@ void test("issues immutable proformas from saved drafts", async () => {
   const invoiceSource = await Effect.runPromise(service.createDraft({ customer: buyer, series: "SAME", issueDate: "2026-09-01" }))
   await Effect.runPromise(service.addDraftLine({ draftId: invoiceSource.id, description: "Direct", quantity: "1", unitPrice: "10", unitOfMeasure: each, vatRateCode: "RO_STANDARD" }))
   assert.equal((await Effect.runPromise(service.issueInvoice(idempotent({ draftId: invoiceSource.id })))).number, 1)
-  assert.equal((await Effect.runPromise(service.listProformas()))[0]?.convertedDraftId, null)
+  assert.equal((await Effect.runPromise(service.listProformas())).items[0]?.convertedDraftId, null)
 
   const denied = createInvoicingService({
     context: contextProvider({ identity: { ...identity, permissions: identity.permissions.filter((p) => p !== "invoicing:proforma.issue") }, organization: { id: "org-1" } }),

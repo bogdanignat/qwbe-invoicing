@@ -132,8 +132,11 @@ void test("OpenAPI 3.1 mirrors paths, PDF encoding, and authentication metadata"
     assert.ok(operation, `${method.toUpperCase()} ${path} is absent`)
     assert.deepEqual(Object.keys(operation.responses).sort(), [...new Set([...base, ...extras])].sort())
   }
-  for (const path of ["/api/document-series", "/api/unit-of-measures", "/api/customers", "/api/product-presets", "/api/drafts", "/api/invoices/{invoiceId}/corrections", "/api/invoices", "/api/proformas"]) {
+  for (const path of ["/api/document-series", "/api/unit-of-measures", "/api/invoices/{invoiceId}/corrections"]) {
     expectStatuses("get", path)
+  }
+  for (const path of ["/api/customers", "/api/product-presets", "/api/drafts", "/api/invoices", "/api/proformas"]) {
+    expectStatuses("get", path, ["400"])
   }
   for (const path of ["/api/issuer", "/api/customers/{id}", "/api/drafts/{id}", "/api/invoices/{invoiceId}/payments", "/api/corrections/{id}", "/api/invoices/{id}", "/api/invoices/{invoiceId}/pdf", "/api/proformas/{id}", "/api/proformas/{proformaId}/pdf"]) {
     expectStatuses("get", path, ["404"])

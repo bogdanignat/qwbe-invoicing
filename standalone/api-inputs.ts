@@ -9,6 +9,7 @@ import {
   type CreateCustomerInput,
   type CreateDraftInput,
   type DocumentSource,
+  type PageRequest,
   type ProductPresetInput,
   type UnitOfMeasure,
   type UpdateDraftInput,
@@ -171,6 +172,16 @@ export const authoringInvoiceInput = authoring
 export const authoringProformaInput = (value: unknown): AuthoringProformaInput => {
   const input = object(value)
   return { ...authoring(input), proformaSeries: text(input.proformaSeries, "proformaSeries") }
+}
+export const pageRequest = (params: URLSearchParams): PageRequest | undefined => {
+  if (params.getAll("limit").length > 1 || params.getAll("cursor").length > 1) {
+    throw new ValidationFailure({ issues: ["limit and cursor must be supplied at most once"] })
+  }
+  const limitText = params.get("limit")
+  const cursor = params.get("cursor")
+  if (limitText !== null && !/^\d{1,6}$/.test(limitText)) throw new ValidationFailure({ issues: ["limit must be an integer"] })
+  if (limitText === null && cursor === null) return undefined
+  return { ...(limitText === null ? {} : { limit: Number(limitText) }), ...(cursor === null ? {} : { cursor }) }
 }
 export const emptyInput = (value: unknown): Record<string, never> => {
   object(value)

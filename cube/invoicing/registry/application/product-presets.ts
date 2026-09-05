@@ -1,6 +1,6 @@
 import { Effect } from "effect"
 
-import { checked, missing, type Authorize, type OperationDependencies } from "../../application/support.ts"
+import { checked, missing, namePageQuery, pageOf, type Authorize, type OperationDependencies, type Page, type PageRequest } from "../../application/support.ts"
 import type { InvoicingFailure } from "../../contracts/failures.ts"
 import type { InvoicingPermissions } from "../../contracts/permissions.ts"
 import type { ProductPreset, ProductPresetInput, UpdateProductPresetInput } from "../../domain/invoice.ts"
@@ -8,7 +8,7 @@ import { normalizeProductPreset } from "../domain/validation.ts"
 
 export interface ProductPresetOperations {
   readonly createProductPreset: (input: ProductPresetInput) => Effect.Effect<ProductPreset, InvoicingFailure>
-  readonly listProductPresets: () => Effect.Effect<ReadonlyArray<ProductPreset>, InvoicingFailure>
+  readonly listProductPresets: (page?: PageRequest) => Effect.Effect<Page<ProductPreset>, InvoicingFailure>
   readonly updateProductPreset: (input: UpdateProductPresetInput) => Effect.Effect<ProductPreset, InvoicingFailure>
   readonly deleteProductPreset: (id: string) => Effect.Effect<void, InvoicingFailure>
 }
@@ -25,9 +25,11 @@ export const createProductPresetOperations = (
     yield* dependencies.store.transaction((transaction) => transaction.saveProductPreset(preset))
     return structuredClone(preset)
   })
-  const listProductPresets = () => Effect.gen(function*() {
+  const listProductPresets = (page?: PageRequest) => Effect.gen(function*() {
+    const query = yield* checked(() => namePageQuery(page))
     const context = yield* authorize(permissions.read)
-    return structuredClone(yield* dependencies.store.transaction((transaction) => transaction.listProductPresets(context.organization.id)))
+    const rows = yield* dependencies.store.transaction((transaction) => transaction.listProductPresets(context.organization.id, query))
+    return pageOf(rows, query, (preset) => ({ name: preset.description, id: preset.id }))
   })
   const updateProductPreset = (input: UpdateProductPresetInput) => Effect.gen(function*() {
     const context = yield* authorize(permissions.manageSettings)

@@ -85,6 +85,12 @@ export const SourceFilter = Schema.Struct({
   sourceKind: optionalString,
   sourceId: optionalString,
 })
+export const PageQuery = Schema.Struct({
+  limit: Schema.optional(Schema.NumberFromString.annotations({ description: "Page size, 1-200, default 100." })),
+  cursor: Schema.optional(Schema.String.annotations({ description: "Opaque nextCursor of the previous page." })),
+})
+export const ListQuery = Schema.Struct({ ...SourceFilter.fields, ...PageQuery.fields })
+const pageOf = <A, I, R>(item: Schema.Schema<A, I, R>) => Schema.Struct({ items: Schema.Array(item), nextCursor: Schema.NullOr(Schema.String) })
 
 export const Customer = Schema.Struct({
   id: Schema.String,
@@ -96,6 +102,8 @@ export const Customer = Schema.Struct({
   defaultPaymentTermDays: Schema.optional(Schema.Int),
   deletedAt: optionalString,
 })
+
+export const CustomerPage = pageOf(Customer)
 
 export const ProductPresetInput = Schema.Struct({
   description: Schema.String,
@@ -131,6 +139,8 @@ export const VatBreakdown = Schema.Struct({
   vatAmount: Schema.String,
 })
 
+export const ProductPresetPage = pageOf(ProductPreset)
+
 export const DraftInvoice = Schema.Struct({
   id: Schema.String,
   organizationId: Schema.String,
@@ -148,6 +158,8 @@ export const DraftInvoice = Schema.Struct({
   vatTotal: Schema.String,
   totalIncludingVat: Schema.String,
 })
+
+export const DraftInvoicePage = pageOf(DraftInvoice)
 
 export const IssuedInvoice = Schema.Struct({
   id: Schema.String,
@@ -170,6 +182,8 @@ export const IssuedInvoice = Schema.Struct({
   totalIncludingVat: Schema.String,
   eFacturaStatus: Schema.Literal("not_sent", "pending", "sent", "accepted", "rejected"),
 })
+
+export const IssuedInvoicePage = pageOf(IssuedInvoice)
 
 const BuyerById = Schema.Struct({ customerId: Schema.String })
 const InlineBuyer = Schema.Struct({ customer: Buyer })
@@ -288,6 +302,7 @@ export const Proforma = Schema.Struct({
   vatTotal: Schema.String,
   totalIncludingVat: Schema.String,
 })
+export const ProformaPage = pageOf(Proforma)
 export const IssueProformaInput = Schema.Struct({ series: Schema.String })
 export const EmptyInput = Schema.Struct({})
 export const ProformaArtifact = Schema.Struct({

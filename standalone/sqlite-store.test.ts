@@ -93,7 +93,7 @@ void test("persists an issued snapshot across store recreation and isolates orga
     assert.equal(updatedCustomer.defaultPaymentTermDays, 30)
     const preset = await Effect.runPromise(service.createProductPreset({ description: "  Servicii software  ", unitPrice: "125.5", unitOfMeasure: each }))
     assert.equal(preset.unitPrice, "125.50")
-    assert.deepEqual(await Effect.runPromise(service.listProductPresets()), [preset])
+    assert.deepEqual(await Effect.runPromise(service.listProductPresets()), { items: [preset], nextCursor: null })
     const draft = await Effect.runPromise(service.createDraft({
       customerId: customer.id,
       issueDate: "2026-09-01",
@@ -128,7 +128,7 @@ void test("persists an issued snapshot across store recreation and isolates orga
     const proforma = await Effect.runPromise(service.issueProforma(idempotent({ draftId: proformaSource.id, series: "PRO" })))
     assert.equal(proforma.convertedDraftId, null)
     assert.equal((await Effect.runPromise(service.getProforma(proforma.id))).convertedDraftId, null)
-    assert.equal((await Effect.runPromise(service.listProformas()))[0]?.convertedDraftId, null)
+    assert.equal((await Effect.runPromise(service.listProformas())).items[0]?.convertedDraftId, null)
     const converted = await Effect.runPromise(service.issueInvoiceFromProforma(idempotent({ proformaId: proforma.id })))
     assert.deepEqual(converted.lines, proformaAuthored.lines)
     assert.equal(converted.series, "QWBE")
@@ -154,16 +154,16 @@ void test("persists an issued snapshot across store recreation and isolates orga
       cubeIdentity: "invoicing",
     })
     assert.deepEqual(await Effect.runPromise(restarted.getIssuedInvoice(issued.id)), issued)
-    assert.deepEqual(await Effect.runPromise(restarted.listIssuedInvoices({ app: "crm", kind: "contract", id: "contract-1" })), [issued])
+    assert.deepEqual(await Effect.runPromise(restarted.listIssuedInvoices({ app: "crm", kind: "contract", id: "contract-1" })), { items: [issued], nextCursor: null })
     assert.deepEqual(await Effect.runPromise(restarted.getIssuedInvoice(directInvoice.id)), directInvoice)
     assert.deepEqual(await Effect.runPromise(restarted.getProforma(proforma.id)), { ...proforma, convertedInvoiceId: converted.id })
-    assert.deepEqual((await Effect.runPromise(restarted.listProformas())).find(({ id }) => id === proforma.id),
+    assert.deepEqual((await Effect.runPromise(restarted.listProformas())).items.find(({ id }) => id === proforma.id),
       { ...proforma, convertedInvoiceId: converted.id })
     assert.deepEqual(await Effect.runPromise(restarted.listProformas({ app: "crm", kind: "offer", id: "offer-1" })),
-      [{ ...proforma, convertedInvoiceId: converted.id }])
+      { items: [{ ...proforma, convertedInvoiceId: converted.id }], nextCursor: null })
     assert.equal((await Effect.runPromise(restarted.getDraft(proformaSource.id))).status, "proforma_issued")
     assert.equal((await Effect.runPromise(restarted.getCustomer(customer.id))).defaultPaymentTermDays, 30)
-    assert.deepEqual(await Effect.runPromise(restarted.listProductPresets()), [preset])
+    assert.deepEqual(await Effect.runPromise(restarted.listProductPresets()), { items: [preset], nextCursor: null })
     const persistedDraft = await Effect.runPromise(restarted.getDraft(draft.id))
     assert.equal(persistedDraft.series, "QWBE")
     assert.equal(persistedDraft.customer.partyType, "company")
@@ -175,7 +175,7 @@ void test("persists an issued snapshot across store recreation and isolates orga
     ])
 
     await Effect.runPromise(restarted.deleteCustomer(customer.id))
-    assert.deepEqual(await Effect.runPromise(restarted.listCustomers()), [])
+    assert.deepEqual(await Effect.runPromise(restarted.listCustomers()), { items: [], nextCursor: null })
     const deletedCustomer = await Effect.runPromise(Effect.flip(restarted.getCustomer(customer.id)))
     assert.equal(deletedCustomer instanceof ResourceNotFound, true)
     assert.equal(await Effect.runPromise(Effect.flip(restarted.updateCustomer(updatedCustomer))) instanceof ResourceNotFound, true)
@@ -253,13 +253,13 @@ void test("persists an issued snapshot across store recreation and isolates orga
     const failure = await Effect.runPromise(Effect.flip(otherOrganization.getIssuedInvoice(issued.id)))
     assert.equal(failure instanceof ResourceNotFound, true)
     assert.equal(await Effect.runPromise(Effect.flip(otherOrganization.getProforma(proforma.id))) instanceof ResourceNotFound, true)
-    assert.deepEqual(await Effect.runPromise(otherOrganization.listProductPresets()), [])
+    assert.deepEqual(await Effect.runPromise(otherOrganization.listProductPresets()), { items: [], nextCursor: null })
     assert.equal(await Effect.runPromise(Effect.flip(otherOrganization.updateProductPreset({
       id: preset.id, description: "Intrus", unitPrice: "1.00", unitOfMeasure: each,
     }))) instanceof ResourceNotFound, true)
     assert.equal(await Effect.runPromise(Effect.flip(otherOrganization.deleteProductPreset(preset.id))) instanceof ResourceNotFound, true)
     await Effect.runPromise(restarted.deleteProductPreset(preset.id))
-    assert.deepEqual(await Effect.runPromise(restarted.listProductPresets()), [])
+    assert.deepEqual(await Effect.runPromise(restarted.listProductPresets()), { items: [], nextCursor: null })
     const databaseAfterDelete = new DatabaseSync(databasePath(directory), { readOnly: true })
     try {
       assert.equal(databaseAfterDelete.prepare("SELECT 1 FROM product_presets WHERE id=?").get(preset.id), undefined)

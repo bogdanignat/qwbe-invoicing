@@ -1,6 +1,6 @@
 import { Effect } from "effect"
 
-import { checked, copyBuyer, missing, type Authorize, type OperationDependencies } from "../../application/support.ts"
+import { checked, copyBuyer, missing, namePageQuery, pageOf, type Authorize, type OperationDependencies, type Page, type PageRequest } from "../../application/support.ts"
 import { DomainConflict, type InvoicingFailure } from "../../contracts/failures.ts"
 import type { InvoicingPermissions } from "../../contracts/permissions.ts"
 import type { CreateCustomerInput, Customer, UpdateCustomerInput } from "../../domain/invoice.ts"
@@ -10,7 +10,7 @@ export interface CustomerOperations {
   readonly createCustomer: (input: CreateCustomerInput) => Effect.Effect<Customer, InvoicingFailure>
   readonly updateCustomer: (input: UpdateCustomerInput) => Effect.Effect<Customer, InvoicingFailure>
   readonly getCustomer: (id: string) => Effect.Effect<Customer, InvoicingFailure>
-  readonly listCustomers: () => Effect.Effect<ReadonlyArray<Customer>, InvoicingFailure>
+  readonly listCustomers: (page?: PageRequest) => Effect.Effect<Page<Customer>, InvoicingFailure>
   readonly deleteCustomer: (id: string) => Effect.Effect<void, InvoicingFailure>
 }
 
@@ -46,9 +46,11 @@ export const createCustomerOperations = (
       ? yield* Effect.fail(missing("customer", id))
       : structuredClone(customer)
   })
-  const listCustomers = () => Effect.gen(function*() {
+  const listCustomers = (page?: PageRequest) => Effect.gen(function*() {
+    const query = yield* checked(() => namePageQuery(page))
     const context = yield* authorize(permissions.read)
-    return structuredClone(yield* dependencies.store.transaction((transaction) => transaction.listCustomers(context.organization.id)))
+    const rows = yield* dependencies.store.transaction((transaction) => transaction.listCustomers(context.organization.id, query))
+    return pageOf(rows, query, (customer) => ({ name: customer.name, id: customer.id }))
   })
   const deleteCustomer = (id: string) => Effect.gen(function*() {
     const context = yield* authorize(permissions.manageCustomers)

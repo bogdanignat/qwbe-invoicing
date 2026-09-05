@@ -260,6 +260,11 @@ generated from the same Effect `HttpApi` contract that serves the routes.
 | Proformas | `POST /api/proformas`, `POST /api/drafts/:id/proformas`, `GET /api/proformas`, `GET /api/proformas/:id`, `POST /api/proformas/:id/invoice`, `POST`, `GET /api/proformas/:id/pdf` |
 | Health | `GET /health/live`, `GET /health/ready` (no auth) |
 
+Registries (`GET /api/customers`, `/api/product-presets`, `/api/drafts`, `/api/invoices`, `/api/proformas`)
+are paged: the response is `{ "items": [...], "nextCursor": "..." | null }`, `?limit=` takes 1 to 200
+(default 100) and `?cursor=` repeats the previous `nextCursor`. Documents are ordered by issue date,
+number and id, registries by name and id, so a cursor stays valid while new records arrive.
+
 Issued invoices have no `DELETE`. Mistakes are handled through correction documents.
 The complete route inventory with request rules is in
 [`docs/LOCAL_DEVELOPMENT.md`](./docs/LOCAL_DEVELOPMENT.md).

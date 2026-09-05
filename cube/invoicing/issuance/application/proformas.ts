@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 
 import { findIdempotencyReplay, idempotencyRecord, missingIdempotencyResult } from "../../application/idempotency.ts"
-import { checked, missing, type Authorize, type OperationDependencies } from "../../application/support.ts"
+import { checked, documentPageQuery, missing, pageOf, type Authorize, type OperationDependencies, type Page, type PageRequest } from "../../application/support.ts"
 import { DomainConflict, type InvoicingFailure } from "../../contracts/failures.ts"
 import type { InvoicingPermissions } from "../../contracts/permissions.ts"
 import type { AuthoringProformaInput, ConvertProformaInput, DocumentSource, Idempotent, IssueProformaInput, IssuedInvoice, Proforma } from "../../domain/invoice.ts"
@@ -12,7 +12,7 @@ export interface ProformaOperations {
   readonly issueProforma: (input: Idempotent<AuthoringProformaInput | IssueProformaInput>) => Effect.Effect<Proforma, InvoicingFailure>
   readonly issueInvoiceFromProforma: (input: Idempotent<ConvertProformaInput>) => Effect.Effect<IssuedInvoice, InvoicingFailure>
   readonly getProforma: (id: string) => Effect.Effect<Proforma, InvoicingFailure>
-  readonly listProformas: (source?: DocumentSource) => Effect.Effect<ReadonlyArray<Proforma>, InvoicingFailure>
+  readonly listProformas: (source?: DocumentSource, page?: PageRequest) => Effect.Effect<Page<Proforma>, InvoicingFailure>
 }
 
 export const createProformaOperations = (
@@ -89,10 +89,12 @@ export const createProformaOperations = (
     return value === undefined ? yield* Effect.fail(missing("proforma", id)) : structuredClone(value)
   })
 
-  const listProformas = (source?: DocumentSource) => Effect.gen(function*() {
+  const listProformas = (source?: DocumentSource, page?: PageRequest) => Effect.gen(function*() {
     if (source !== undefined) yield* checked(() => { validateDocumentSource(source) })
+    const query = yield* checked(() => documentPageQuery(page))
     const context = yield* authorize(permissions.read)
-    return structuredClone(yield* dependencies.store.transaction((transaction) => transaction.listProformas(context.organization.id, source)))
+    const rows = yield* dependencies.store.transaction((transaction) => transaction.listProformas(context.organization.id, query, source))
+    return pageOf(rows, query, (proforma) => ({ issueDate: proforma.issueDate, number: proforma.number, id: proforma.id }))
   })
 
   return { issueProforma, issueInvoiceFromProforma, getProforma, listProformas }

@@ -185,6 +185,15 @@ export interface CorrectionDocument {
   readonly totalIncludingVat: string
 }
 
+export interface Page<Item> {
+  readonly items: ReadonlyArray<Item>
+  readonly nextCursor: string | null
+}
+export interface PageRequest {
+  readonly limit?: number
+  readonly cursor?: string
+}
+
 type JsonObject = Readonly<Record<string, unknown>>
 export type Decoder<Value> = (input: unknown) => Value
 
@@ -416,6 +425,16 @@ export const decodeCorrection: Decoder<CorrectionDocument> = (input) => {
     currency: text(value.currency, "currency"), totalIncludingVat: text(value.totalIncludingVat, "totalIncludingVat"),
   }
 }
+
+export const decodePage = <Item>(decodeItem: Decoder<Item>): Decoder<Page<Item>> => (input) => {
+  const value = object(input)
+  return { items: array(value.items, decodeItem, "items"), nextCursor: nullableText(value.nextCursor, "nextCursor") }
+}
+export const decodeCustomerPage = decodePage(decodeCustomer)
+export const decodeProductPresetPage = decodePage(decodeProductPreset)
+export const decodeDraftPage = decodePage(decodeDraft)
+export const decodeInvoicePage = decodePage(decodeInvoice)
+export const decodeProformaPage = decodePage(decodeProforma)
 
 export const decodeProductPresets: Decoder<ReadonlyArray<ProductPreset>> = (input) => array(input, decodeProductPreset, "productPresets")
 export const decodeUnitOfMeasures: Decoder<ReadonlyArray<UnitOfMeasure>> = (input) => array(input, decodeUnitOfMeasure, "unitOfMeasures")

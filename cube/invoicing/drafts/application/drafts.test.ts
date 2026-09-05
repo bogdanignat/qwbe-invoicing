@@ -68,7 +68,7 @@ void test("authors snapshot-owned drafts and recalculates every server-derived a
   const replacement = await Effect.runPromise(service.addDraftLine({
     draftId: draft.id, description: "Final", quantity: "1", unitPrice: "50", unitOfMeasure: each, vatRateCode: "RO_STANDARD",
   }))
-  assert.deepEqual(await Effect.runPromise(service.listDrafts()), [replacement])
+  assert.deepEqual(await Effect.runPromise(service.listDrafts()), { items: [replacement], nextCursor: null })
   await Effect.runPromise(service.issueInvoice(idempotent({ draftId: draft.id })))
   for (const mutation of [
     service.deleteDraft(draft.id),

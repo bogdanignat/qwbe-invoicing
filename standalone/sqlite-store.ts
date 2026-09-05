@@ -9,6 +9,8 @@ import {
   type Address,
   type BuyerSnapshot,
   type Customer,
+  type DocumentCursor,
+  type DraftCursor,
   type DraftInvoice,
   type DraftLine,
   type DocumentSeries,
@@ -16,6 +18,8 @@ import {
   type IdempotencyRecord,
   type InvoicingTransaction,
   type IssuedInvoice,
+  type NameCursor,
+  type PageQuery,
   type PartySnapshot,
   type ProductPreset,
   type Proforma,
@@ -149,6 +153,19 @@ const sourceValues = (source: DocumentSource | undefined): ReadonlyArray<string 
 const sourceFilter = (source: DocumentSource | undefined, prefix = "") => source === undefined
   ? { sql: "", values: [] as ReadonlyArray<string> }
   : { sql: ` AND ${prefix}source_app=? AND ${prefix}source_kind=? AND ${prefix}source_id=?`, values: [source.app, source.kind, source.id] }
+
+// Keyset conditions mirror the ORDER BY of each registry; the store returns limit + 1 rows.
+const documentKeyset = (page: PageQuery<DocumentCursor>, prefix = "") => page.after === undefined
+  ? { sql: "", values: [] as ReadonlyArray<string | number> }
+  : { sql: ` AND (${prefix}issue_date < ? OR (${prefix}issue_date = ? AND ${prefix}number < ?) OR (${prefix}issue_date = ? AND ${prefix}number = ? AND ${prefix}id > ?))`,
+    values: [page.after.issueDate, page.after.issueDate, page.after.number, page.after.issueDate, page.after.number, page.after.id] }
+const draftKeyset = (page: PageQuery<DraftCursor>) => page.after === undefined
+  ? { sql: "", values: [] as ReadonlyArray<string> }
+  : { sql: " AND (issue_date < ? OR (issue_date = ? AND id > ?))", values: [page.after.issueDate, page.after.issueDate, page.after.id] }
+const nameKeyset = (page: PageQuery<NameCursor>, column: string) => page.after === undefined
+  ? { sql: "", values: [] as ReadonlyArray<string> }
+  : { sql: ` AND (${column} COLLATE NOCASE > ? OR (${column} COLLATE NOCASE = ? AND id > ?))`, values: [page.after.name, page.after.name, page.after.id] }
+const rowsWanted = (page: PageQuery<unknown>): number => page.limit + 1
 
 const customerFrom = (value: Row): Customer => {
   const deletedAt = optionalText(value, "deleted_at")
@@ -377,10 +394,12 @@ const transactionAdapter = (database: DatabaseSync): InvoicingTransaction => ({
     const value = row(database.prepare("SELECT * FROM customers WHERE organization_id = ? AND id = ?").get(organizationId, id))
     return value === undefined ? undefined : customerFrom(value)
   }),
-  listCustomers: (organizationId) => read("list customers", () =>
-    database.prepare(`SELECT * FROM customers
-      WHERE organization_id = ? AND deleted_at IS NULL
-      ORDER BY legal_name COLLATE NOCASE, id LIMIT 100`).all(organizationId).map((value) => customerFrom(value as Row))),
+  listCustomers: (organizationId, page) => read("list customers", () => {
+    const keyset = nameKeyset(page, "legal_name")
+    return database.prepare(`SELECT * FROM customers
+      WHERE organization_id = ? AND deleted_at IS NULL${keyset.sql}
+      ORDER BY legal_name COLLATE NOCASE, id LIMIT ?`).all(organizationId, ...keyset.values, rowsWanted(page)).map((value) => customerFrom(value as Row))
+  }),
   softDeleteCustomer: (organizationId, id, deletedAt) => write("soft delete customer", () => {
     const result = database.prepare(`UPDATE customers SET deleted_at = ?
       WHERE organization_id = ? AND id = ? AND deleted_at IS NULL`).run(deletedAt, organizationId, id)
@@ -405,9 +424,11 @@ const transactionAdapter = (database: DatabaseSync): InvoicingTransaction => ({
     const value = row(database.prepare("SELECT * FROM product_presets WHERE organization_id=? AND id=?").get(organizationId, id))
     return value === undefined ? undefined : productPresetFrom(value)
   }),
-  listProductPresets: (organizationId) => read("list product presets", () =>
-    database.prepare(`SELECT * FROM product_presets WHERE organization_id=?
-      ORDER BY description COLLATE NOCASE,id LIMIT 100`).all(organizationId).map((value) => productPresetFrom(value as Row))),
+  listProductPresets: (organizationId, page) => read("list product presets", () => {
+    const keyset = nameKeyset(page, "description")
+    return database.prepare(`SELECT * FROM product_presets WHERE organization_id=?${keyset.sql}
+      ORDER BY description COLLATE NOCASE,id LIMIT ?`).all(organizationId, ...keyset.values, rowsWanted(page)).map((value) => productPresetFrom(value as Row))
+  }),
   deleteProductPreset: (organizationId, id) => write("delete product preset", () => {
     database.prepare("DELETE FROM product_presets WHERE organization_id=? AND id=?").run(organizationId, id)
   }),
@@ -444,10 +465,11 @@ const transactionAdapter = (database: DatabaseSync): InvoicingTransaction => ({
       status: draftStatus(value), lines, ...calculateTotals(lines),
     }
   }),
-  listDrafts: (organizationId, source) => read("list drafts", () => {
+  listDrafts: (organizationId, page, source) => read("list drafts", () => {
     const filter = sourceFilter(source)
-    const values = database.prepare(`SELECT * FROM invoice_drafts WHERE organization_id = ? AND status = 'draft'${filter.sql}
-      ORDER BY issue_date DESC, id LIMIT 100`).all(organizationId, ...filter.values) as ReadonlyArray<Row>
+    const keyset = draftKeyset(page)
+    const values = database.prepare(`SELECT * FROM invoice_drafts WHERE organization_id = ? AND status = 'draft'${filter.sql}${keyset.sql}
+      ORDER BY issue_date DESC, id LIMIT ?`).all(organizationId, ...filter.values, ...keyset.values, rowsWanted(page)) as ReadonlyArray<Row>
     return values.map((value) => {
       const id = text(value, "id")
       const customerId = optionalText(value, "customer_id")
@@ -496,10 +518,11 @@ const transactionAdapter = (database: DatabaseSync): InvoicingTransaction => ({
     const value = row(database.prepare("SELECT * FROM issued_invoices WHERE organization_id = ? AND id = ?").get(organizationId, id))
     return value === undefined ? undefined : issuedInvoiceFrom(database, value)
   }),
-  listIssuedInvoices: (organizationId, source) => read("list issued invoices", () => {
+  listIssuedInvoices: (organizationId, page, source) => read("list issued invoices", () => {
     const filter = sourceFilter(source)
-    return database.prepare(`SELECT * FROM issued_invoices WHERE organization_id = ?${filter.sql}
-      ORDER BY issue_date DESC, number DESC, id LIMIT 100`).all(organizationId, ...filter.values)
+    const keyset = documentKeyset(page)
+    return database.prepare(`SELECT * FROM issued_invoices WHERE organization_id = ?${filter.sql}${keyset.sql}
+      ORDER BY issue_date DESC, number DESC, id LIMIT ?`).all(organizationId, ...filter.values, ...keyset.values, rowsWanted(page))
       .map((value) => issuedInvoiceFrom(database, value as Row))
   }),
   saveProforma: (proforma) => write("save proforma", () => {
@@ -529,13 +552,14 @@ const transactionAdapter = (database: DatabaseSync): InvoicingTransaction => ({
       WHERE p.organization_id=? AND p.id=? AND p.sealed=1`).get(organizationId, id))
     return value === undefined ? undefined : proformaFrom(database, value)
   }),
-  listProformas: (organizationId, source) => read("list proformas", () => {
+  listProformas: (organizationId, page, source) => read("list proformas", () => {
     const filter = sourceFilter(source, "p.")
+    const keyset = documentKeyset(page, "p.")
     return database.prepare(`SELECT p.*,c.resulting_draft_id AS converted_draft_id,i.resulting_invoice_id AS converted_invoice_id FROM proformas p
       LEFT JOIN proforma_conversions c ON c.organization_id=p.organization_id AND c.proforma_id=p.id
       LEFT JOIN proforma_invoice_conversions i ON i.organization_id=p.organization_id AND i.proforma_id=p.id
-      WHERE p.organization_id=? AND p.sealed=1${filter.sql} ORDER BY p.issue_date DESC,p.number DESC,p.id LIMIT 100`)
-      .all(organizationId, ...filter.values).map((value) => proformaFrom(database, value as Row))
+      WHERE p.organization_id=? AND p.sealed=1${filter.sql}${keyset.sql} ORDER BY p.issue_date DESC,p.number DESC,p.id LIMIT ?`)
+      .all(organizationId, ...filter.values, ...keyset.values, rowsWanted(page)).map((value) => proformaFrom(database, value as Row))
   }),
   findProformaConversion: (organizationId, proformaId) => read("find proforma conversion", () => {
     const value = row(database.prepare("SELECT * FROM proforma_conversions WHERE organization_id=? AND proforma_id=?")

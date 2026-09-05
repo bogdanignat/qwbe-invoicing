@@ -8,6 +8,7 @@ import type { AuthoringDocumentInput } from "./invoicing-client.ts"
 import { authoringPayloadMatchesDraft } from "./invoice-authoring-state.ts"
 import { useIdempotencyKey } from "./idempotency-key.ts"
 import { navigate } from "./navigation.ts"
+import { usePagedList } from "./paged-query.ts"
 import { proformaIssuanceAvailability } from "./proforma-state.ts"
 import { evictDraftAfterNavigation } from "./query-cache.ts"
 
@@ -76,10 +77,7 @@ export const useProformaIssuance = (input: ProformaIssuanceInput): ProformaIssua
   }
 }
 
-export const useProformas = () => useQuery({
-  queryKey: ["proformas"],
-  queryFn: ({ signal }) => runUiEffect(invoicingClient.listProformas(), signal),
-})
+export const useProformas = () => usePagedList(["proformas"], (page) => invoicingClient.listProformas(page))
 
 export const useProformaDetail = (id: string) => {
   const queryClient = useQueryClient()
