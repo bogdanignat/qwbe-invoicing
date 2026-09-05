@@ -50,6 +50,14 @@ export interface InvoicingTransaction {
   readonly findDraft: Find<DraftInvoice>
   readonly listDrafts: PagedList<DraftInvoice, DraftCursor>
   readonly deleteDraft: Remove
+  // Highest issue date already numbered in (organization, fiscal year, series) for the given document type;
+  // corrections count as invoices because they are numbered in the invoice series (Codul fiscal art. 330).
+  readonly findLatestIssueDate: (
+    organizationId: string,
+    fiscalYear: number,
+    documentType: NumberedDocumentType,
+    series: string,
+  ) => Read<string | undefined>
   readonly allocateDocumentNumber: (
     organizationId: string,
     fiscalYear: number,

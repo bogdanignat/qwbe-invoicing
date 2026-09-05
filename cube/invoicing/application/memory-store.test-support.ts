@@ -113,6 +113,16 @@ export const memoryStore = (state: MemoryState): TransactionalStore<InvoicingTra
         }
         working.drafts.delete(id)
       }),
+      findLatestIssueDate: (organizationId, fiscalYear, documentType, series) => Effect.sync(() => {
+        const dates = documentType === "proforma"
+          ? [...working.proformas.values()].filter((p) => p.organizationId === organizationId && p.series === series).map((p) => p.issueDate)
+          : [
+            ...[...working.issued.values()].filter((i) => i.organizationId === organizationId && i.series === series).map((i) => i.issueDate),
+            ...[...working.corrections.values()].filter((c) => c.organizationId === organizationId && c.series === series).map((c) => c.issueDate),
+          ]
+        const inYear = dates.filter((date) => Number(date.slice(0, 4)) === fiscalYear).sort()
+        return inYear.at(-1)
+      }),
       allocateDocumentNumber: (organizationId, fiscalYear, documentType, series) => Effect.sync(() => {
         const key = `${organizationId}:${String(fiscalYear)}:${documentType}:${series}`
         const next = (working.sequences.get(key) ?? 0) + 1

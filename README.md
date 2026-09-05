@@ -265,7 +265,11 @@ are paged: the response is `{ "items": [...], "nextCursor": "..." | null }`, `?l
 (default 100) and `?cursor=` repeats the previous `nextCursor`. Documents are ordered by issue date,
 number and id, registries by name and id, so a cursor stays valid while new records arrive.
 
-Issued invoices have no `DELETE`. Mistakes are handled through correction documents.
+Issued invoices have no `DELETE`. Mistakes are handled through correction documents, which are
+numbered in the invoice series like any other invoice (Codul fiscal art. 330). Issue dates cannot be
+in the future or before the last document numbered in the same series and fiscal year, and an invoice
+issued from a proforma is dated on the day of conversion (art. 319 (20) b) with the proforma's payment
+term carried over.
 The complete route inventory with request rules is in
 [`docs/LOCAL_DEVELOPMENT.md`](./docs/LOCAL_DEVELOPMENT.md).
 

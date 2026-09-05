@@ -358,7 +358,7 @@ void test("requires host authentication and serves the complete invoice-core rou
       customer: { partyType: "company", name: "Client CRM SRL", fiscalIdentifier: "RO87654329",
         address: { countryCode: "RO", city: "Iași", street: "Strada CRM 5" } },
       source: { app: "crm", kind: "contract", id: "contract-123" },
-      series: "QWBE", issueDate: "2026-09-06", dueDate: null, currency: "RON",
+      series: "QWBE", issueDate: "2026-09-05", dueDate: null, currency: "RON",
       lines: [{ description: "Direct din CRM", quantity: "1", unitPrice: "25", unitOfMeasure: { code: "HUR", name: "oră" }, vatRateCode: "RO_STANDARD" }],
     }
     assert.equal((await handleApiRequest({ method: "POST", url: "/api/invoices", authorization,
@@ -385,10 +385,10 @@ void test("requires host authentication and serves the complete invoice-core rou
     assert.equal((await handleApiRequest({ method: "GET", url: "/api/invoices?cursor=%%%", authorization, body: undefined }, runtime)).status, 400)
     assert.equal((await handleApiRequest({ method: "GET", url: "/api/invoices?sourceApp=crm", authorization, body: undefined }, runtime)).status, 400)
     assert.deepEqual(await handleApiRequest({ method: "POST", url: "/api/proformas", authorization,
-      idempotencyKey: "direct-invoice-1", body: { ...authoredBody, issueDate: "2026-09-07", proformaSeries: "PRO" } }, runtime),
+      idempotencyKey: "direct-invoice-1", body: { ...authoredBody, issueDate: "2026-09-05", proformaSeries: "PRO" } }, runtime),
     { status: 409, body: { error: "DomainConflict", code: "idempotency_key_reused" } })
     const directProforma = await handleApiRequest({ method: "POST", url: "/api/proformas", authorization,
-      idempotencyKey: "direct-proforma-1", body: { ...authoredBody, issueDate: "2026-09-07", proformaSeries: "PRO" } }, runtime)
+      idempotencyKey: "direct-proforma-1", body: { ...authoredBody, issueDate: "2026-09-05", proformaSeries: "PRO" } }, runtime)
     assert.equal(directProforma.status, 200)
     assert.equal((directProforma.body as { sourceDraftId: string | null }).sourceDraftId, null)
     const directProformaId = (directProforma.body as { id: string }).id
@@ -400,7 +400,7 @@ void test("requires host authentication and serves the complete invoice-core rou
       url: `/api/invoices/${invoiceId}/corrections`,
       authorization,
       idempotencyKey: "correction-1",
-      body: { reason: "Corecție integrală de test", issueDate: "2026-09-03",
+      body: { reason: "Corecție integrală de test", issueDate: "2026-09-05",
         source: { app: "erp", kind: "return", id: "return-1" } },
     }, runtime)
     assert.equal(correction.status, 200)
@@ -421,7 +421,7 @@ void test("requires host authentication and serves the complete invoice-core rou
       url: `/api/invoices/${invoiceId}/corrections`,
       authorization,
       idempotencyKey: "correction-2",
-      body: { reason: "Corecție duplicată", issueDate: "2026-09-04" },
+      body: { reason: "Corecție duplicată", issueDate: "2026-09-05" },
     }, runtime)
     assert.deepEqual(duplicateCorrection, {
       status: 409,

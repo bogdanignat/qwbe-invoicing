@@ -137,7 +137,7 @@ void test("persists an issued snapshot across store recreation and isolates orga
     const duplicateConversion = await Effect.runPromise(Effect.flip(service.issueInvoiceFromProforma(idempotent({ proformaId: proforma.id }))))
     assert.equal(duplicateConversion instanceof DomainConflict && duplicateConversion.code === "proforma_already_converted", true)
     const directProforma = await Effect.runPromise(service.issueProforma(idempotent({ customerId: customer.id, series: "QWBE",
-      proformaSeries: "PRO", issueDate: "2026-09-02", currency: "RON",
+      proformaSeries: "PRO", issueDate: "2026-09-01", currency: "RON",
       lines: [{ description: "Direct", quantity: "1", unitPrice: "75", unitOfMeasure: each, vatRateCode: "RO_STANDARD" }] })))
     const directInvoice = await Effect.runPromise(service.issueInvoiceFromProforma(idempotent({ proformaId: directProforma.id })))
     assert.equal(directInvoice.sourceProformaId, directProforma.id)

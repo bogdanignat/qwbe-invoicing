@@ -34,7 +34,7 @@ void test("SQLite registries page with a keyset cursor in issue-date, number and
     await Effect.runPromise(service.addDocumentSeries({ documentType: "invoice", series: "QWBE" }))
     const customer = { partyType: "company" as const, name: "Client SRL", fiscalIdentifier: "RO87654329", address: { countryCode: "RO", city: "Iași", street: "Strada 2" } }
     const issued: Array<IssuedInvoice> = []
-    for (const issueDate of ["2026-09-01", "2026-09-03", "2026-09-03", "2026-09-02", "2026-09-03"]) {
+    for (const issueDate of ["2026-09-01", "2026-09-02", "2026-09-03", "2026-09-03", "2026-09-03"]) {
       issued.push(await Effect.runPromise(service.issueInvoice(idempotent({
         customer, series: "QWBE", issueDate, currency: "RON" as const,
         lines: [{ description: "Servicii", quantity: "1", unitPrice: "10", unitOfMeasure: each, vatRateCode: "RO_STANDARD" }],

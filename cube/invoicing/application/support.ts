@@ -1,8 +1,8 @@
 import { Effect } from "effect"
 
-import { ResourceNotFound, ValidationFailure, type InvoicingFailure } from "../contracts/failures.ts"
+import { ResourceNotFound, ValidationFailure, type InvoicingFailure, type PersistenceFailure } from "../contracts/failures.ts"
 import type { Clock, IdGenerator, RequestContext, TransactionalStore } from "../contracts/host.ts"
-import type { BuyerSnapshot, DocumentSource, PartySnapshot } from "../domain/invoice.ts"
+import type { BuyerSnapshot, DocumentSource, NumberedDocumentType, PartySnapshot } from "../domain/invoice.ts"
 import type { DocumentCursor, DraftCursor, InvoicingTransaction, NameCursor, PageQuery } from "./ports.ts"
 
 export type { DocumentCursor, DraftCursor, NameCursor, PageQuery } from "./ports.ts"
@@ -33,6 +33,19 @@ export const copyParty = (party: PartySnapshot): PartySnapshot => ({
 export const copyBuyer = (buyer: BuyerSnapshot): BuyerSnapshot => ({
   ...copyParty(buyer),
   partyType: buyer.partyType,
+})
+
+// Codul fiscal art. 319 (20): the invoice date is the issue date and numbers are sequential per series,
+// so a document cannot be dated in the future or before the last document numbered in its series.
+export const ensureChronology = (
+  transaction: InvoicingTransaction, organizationId: string, documentType: NumberedDocumentType, series: string,
+  issueDate: string, today: string,
+): Effect.Effect<void, ValidationFailure | PersistenceFailure> => Effect.gen(function*() {
+  if (issueDate > today) return yield* Effect.fail(new ValidationFailure({ issues: ["issueDate cannot be in the future"] }))
+  const latest = yield* transaction.findLatestIssueDate(organizationId, Number(issueDate.slice(0, 4)), documentType, series)
+  if (latest !== undefined && issueDate < latest) {
+    return yield* Effect.fail(new ValidationFailure({ issues: [`issueDate cannot be before ${latest}, the last ${documentType} issued in series ${series}`] }))
+  }
 })
 
 // Keyset pagination. The application decodes the opaque cursor into a typed key, the store

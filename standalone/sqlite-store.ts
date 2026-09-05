@@ -489,6 +489,16 @@ const transactionAdapter = (database: DatabaseSync): InvoicingTransaction => ({
       .run(organizationId, id)
     if (result.changes === 0) throw new DomainConflict({ code: "draft_not_editable", message: "Draft cannot be deleted" })
   }),
+  findLatestIssueDate: (organizationId, fiscalYear, documentType, series) => read("find latest issue date", () => {
+    const sql = documentType === "proforma"
+      ? "SELECT MAX(issue_date) AS latest FROM proformas WHERE organization_id = ? AND fiscal_year = ? AND series = ? AND sealed = 1"
+      : `SELECT MAX(latest) AS latest FROM (
+          SELECT MAX(issue_date) AS latest FROM issued_invoices WHERE organization_id = ? AND fiscal_year = ? AND series = ?
+          UNION ALL SELECT MAX(issue_date) FROM correction_documents WHERE organization_id = ? AND fiscal_year = ? AND series = ?)`
+    const values = documentType === "proforma" ? [organizationId, fiscalYear, series] : [organizationId, fiscalYear, series, organizationId, fiscalYear, series]
+    const value = row(database.prepare(sql).get(...values))
+    return value === undefined ? undefined : optionalText(value, "latest")
+  }),
   allocateDocumentNumber: (organizationId, fiscalYear, documentType, series) => write("allocate document number", () => {
     const value = row(database.prepare(`INSERT INTO invoice_sequences
       (organization_id, fiscal_year, document_type, series, last_number) VALUES (?, ?, ?, ?, 1)
