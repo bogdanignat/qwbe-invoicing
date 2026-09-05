@@ -18,6 +18,7 @@ RUN pnpm install --frozen-lockfile
 COPY vite.config.ts ./
 COPY web ./web
 COPY standalone/ui/app.css ./standalone/ui/app.css
+COPY standalone/ui-routes.ts ./standalone/ui-routes.ts
 RUN pnpm build:ui
 
 FROM node:${NODE_VERSION}-alpine@${NODE_IMAGE_DIGEST} AS runtime
