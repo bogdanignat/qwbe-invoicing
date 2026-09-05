@@ -5,7 +5,8 @@ import { checked, copyBuyer, copySource, missing } from "../../application/suppo
 import { DomainConflict, ValidationFailure, type InvoicingFailure } from "../../contracts/failures.ts"
 import type { IdGenerator } from "../../contracts/host.ts"
 import { calculateLine, calculateTotals } from "../../domain/calculation.ts"
-import type { AuthoringDocumentInput, BuyerSnapshot, CreateDraftInput, DocumentSource, DraftInvoice, UpdateDraftInput } from "../../domain/invoice.ts"
+import type { BuyerSnapshot, DocumentSource, DraftInvoice } from "../../domain/invoice.ts"
+import type { AuthoringDocumentInput, CreateDraftInput, UpdateDraftInput } from "../../domain/inputs.ts"
 import { resolveVatConfiguration, validateBuyer, validateDate, validateDocumentSeries, validateDocumentSource } from "../../domain/validation.ts"
 
 export const withTotals = (draft: Omit<DraftInvoice, "vatBreakdown" | "totalExcludingVat" | "vatTotal" | "totalIncludingVat">): DraftInvoice => ({

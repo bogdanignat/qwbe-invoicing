@@ -4,7 +4,8 @@ import type { InvoicingTransaction } from "../../application/ports.ts"
 import { copyParty, copySource, missing } from "../../application/support.ts"
 import { DomainConflict, ValidationFailure } from "../../contracts/failures.ts"
 import type { IdGenerator } from "../../contracts/host.ts"
-import type { AuthoringDocumentInput, DraftInvoice, PartySnapshot } from "../../domain/invoice.ts"
+import type { DraftInvoice, PartySnapshot } from "../../domain/invoice.ts"
+import type { AuthoringDocumentInput } from "../../domain/inputs.ts"
 import { authorDocument } from "../../drafts/index.ts"
 
 type SnapshotContent = Omit<DraftInvoice, "id" | "status" | "customerId">

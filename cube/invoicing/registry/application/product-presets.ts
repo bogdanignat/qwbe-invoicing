@@ -3,7 +3,8 @@ import { Effect } from "effect"
 import { checked, missing, type Authorize, type OperationDependencies } from "../../application/support.ts"
 import type { InvoicingFailure } from "../../contracts/failures.ts"
 import type { InvoicingPermissions } from "../../contracts/permissions.ts"
-import type { ProductPreset, ProductPresetInput, UpdateProductPresetInput } from "../../domain/invoice.ts"
+import type { ProductPreset } from "../../domain/invoice.ts"
+import type { ProductPresetInput, UpdateProductPresetInput } from "../../domain/inputs.ts"
 import { normalizeProductPreset } from "../domain/validation.ts"
 
 export interface ProductPresetOperations {
