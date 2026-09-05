@@ -10,6 +10,7 @@ import { Shell } from "./components/Shell.tsx"
 import { ButtonLink } from "./components/ui/ButtonLink.tsx"
 import { invoicingClient } from "./invoicing-client.ts"
 import { currentRoute, navigate, subscribeToRoute } from "./navigation.ts"
+import { matchUiRoute } from "../../standalone/ui-routes.ts"
 import { CustomersView } from "./views/CustomersView.tsx"
 import { DraftView } from "./views/DraftView.tsx"
 import { InvoiceDetailView } from "./views/InvoiceDetailView.tsx"
@@ -80,26 +81,21 @@ export const App = () => {
     content = <Loading label="Verific sesiunea…" />
   } else if (!unlocked) {
     content = <UnlockView onUnlock={unlock} />
-  } else if (route === "/invoices") {
-    content = <InvoicesView />
-  } else if (route === "/invoices/new") {
-    content = <NewInvoiceView notify={notify} />
-  } else if (route === "/proformas") {
-    content = <ProformasView />
-  } else if (route === "/customers") {
-    content = <CustomersView notify={notify} />
-  } else if (route === "/products") {
-    content = <ProductPresetsView notify={notify} />
-  } else if (route === "/settings") {
-    content = <SettingsView notify={notify} />
   } else {
-    const draft = /^\/drafts\/([^/]+)$/.exec(route)
-    const invoice = /^\/invoices\/([^/]+)$/.exec(route)
-    const proforma = /^\/proformas\/([^/]+)$/.exec(route)
-    if (draft?.[1] !== undefined) content = <DraftView id={decodeURIComponent(draft[1])} notify={notify} />
-    else if (invoice?.[1] !== undefined) content = <InvoiceDetailView id={decodeURIComponent(invoice[1])} notify={notify} />
-    else if (proforma?.[1] !== undefined) content = <ProformaDetailView id={decodeURIComponent(proforma[1])} />
-    else content = <Page title="Pagina nu există" eyebrow="404"><p>Ruta cerută nu este disponibilă.</p><ButtonLink href="/invoices">Înapoi la facturi</ButtonLink></Page>
+    const matched = matchUiRoute(route)
+    switch (matched.kind) {
+      case "invoices": content = <InvoicesView />; break
+      case "invoice-new": content = <NewInvoiceView notify={notify} />; break
+      case "proformas": content = <ProformasView />; break
+      case "customers": content = <CustomersView notify={notify} />; break
+      case "products": content = <ProductPresetsView notify={notify} />; break
+      case "settings": content = <SettingsView notify={notify} />; break
+      case "draft": content = <DraftView id={matched.id} notify={notify} />; break
+      case "invoice": content = <InvoiceDetailView id={matched.id} notify={notify} />; break
+      case "proforma": content = <ProformaDetailView id={matched.id} />; break
+      case "unlock": content = <InvoicesView />; break
+      case "not-found": content = <Page title="Pagina nu există" eyebrow="404"><p>Ruta cerută nu este disponibilă.</p><ButtonLink href="/invoices">Înapoi la facturi</ButtonLink></Page>; break
+    }
   }
 
   return <><Shell unlocked={unlocked} route={route} logoutPending={logoutPending} onLogout={logout}>{content}</Shell>{toast === undefined ? null : <div className="toast" role="status">{toast}</div>}</>
