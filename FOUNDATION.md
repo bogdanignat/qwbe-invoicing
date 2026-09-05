@@ -375,7 +375,7 @@ The scanner must understand recursive cube roots before child cubes are introduc
 
 Sources: QWBE `qwbe.config.json`, `probes/sizecaps.mjs`, and `probes/size-lib.mjs`.
 
-Status on 2 September 2026: this repository's `qwbe.config.json` was raised in four steps to 11,000 / 65,000 / 20 while the mother still enforces 6,000 / 40,000 / 15 with a recorded baseline and a split-first rule. Measured after complete invoice authoring, `cube/invoicing` holds 63,158 code characters across 19 files, with two files over 6,000 (`application/draft-authoring.ts` 10,192 and `domain/validation.ts` 7,447). That is inherited debt this document said would not exist; the repair is either to split (draft authoring and validation, and a child-cube boundary if one is real) or to record a baseline the mother's way, never a silent raise.
+Status on 2 September 2026: this repository's `qwbe.config.json` was raised in four steps to 11,000 / 65,000 / 20 while the mother still enforces 6,000 / 40,000 / 15 with a recorded baseline and a split-first rule. Repaired on 5 September 2026: the cube was split into component cubes and the caps returned to 6,000 / 40,000 / 15 with no baseline needed. Measured after complete invoice authoring, `cube/invoicing` holds 63,158 code characters across 19 files, with two files over 6,000 (`application/draft-authoring.ts` 10,192 and `domain/validation.ts` 7,447). That is inherited debt this document said would not exist; the repair is either to split (draft authoring and validation, and a child-cube boundary if one is real) or to record a baseline the mother's way, never a silent raise.
 
 On 4 September 2026, adding customer payment terms and product presets exposed the
 unit cap. The existing payment lifecycle was extracted into the independent
@@ -569,6 +569,6 @@ Reviewed on 2 September 2026 after the mother's `main` moved from `987e11b` to `
 | `usesBatch` raw-SQL capability (declared, outbox-exempt) | QWB-45 | Not usable as an escape: the role has no `CREATE`, so DDL is refused. |
 | Custom field values under the reserved `custom` key of a row body | QWB-46 | No impact on relational tables. `custom` becomes a reserved column name if the cube ever moves to the six-operation store. |
 | Installer strips a pack's top-level `frontend/`, `dist/`, `build/` | QWB-48 | No impact: the UI lives in `web/` and `standalone/ui-dist`, outside the package. Future external-app integration remains unimplemented. |
-| Size caps unchanged at 6,000 / 40,000 / 15 | - | Not aligned: caps raised locally to 11,000 / 65,000 / 20; `cube/invoicing` measures 63,158 characters across 19 files. Section 10. |
+| Size caps unchanged at 6,000 / 40,000 / 15 | - | Aligned on 5 September 2026: `qwbe.config.json` is back at 6,000 / 40,000 / 15 after the cube was split into component cubes (registry, drafts, issuance, corrections) and the three files still over 6,000 were cut. Section 10. |
 
 Pre-existing gaps that the pull did not create but that a mounted install would hit first: `create()` returns `handlers: {}`, so the cube serves no HTTP surface under the mother (every endpoint lives in `standalone/api.ts`); `CurrentOrganization` is still a standalone-only contract (section 4); `qwbe-core` is still `0.0.0` and private (open decision 10).

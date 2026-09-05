@@ -3,7 +3,8 @@ import { Effect } from "effect"
 import { checked, copyBuyer, missing, namePageQuery, pageOf, type Authorize, type OperationDependencies, type Page, type PageRequest } from "../../application/support.ts"
 import { DomainConflict, type InvoicingFailure } from "../../contracts/failures.ts"
 import type { InvoicingPermissions } from "../../contracts/permissions.ts"
-import type { CreateCustomerInput, Customer, UpdateCustomerInput } from "../../domain/invoice.ts"
+import type { Customer } from "../../domain/invoice.ts"
+import type { CreateCustomerInput, UpdateCustomerInput } from "../../domain/inputs.ts"
 import { validateCustomer } from "../domain/validation.ts"
 
 export interface CustomerOperations {

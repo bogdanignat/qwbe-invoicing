@@ -4,7 +4,8 @@ import { findIdempotencyReplay, idempotencyRecord, missingIdempotencyResult } fr
 import { checked, documentPageQuery, ensureChronology, missing, pageOf, type Authorize, type OperationDependencies, type Page, type PageRequest } from "../../application/support.ts"
 import type { InvoicingFailure } from "../../contracts/failures.ts"
 import type { InvoicingPermissions } from "../../contracts/permissions.ts"
-import type { AuthoringDocumentInput, DocumentSource, Idempotent, IssuedInvoice } from "../../domain/invoice.ts"
+import type { DocumentSource, Idempotent, IssuedInvoice } from "../../domain/invoice.ts"
+import type { AuthoringDocumentInput } from "../../domain/inputs.ts"
 import { calendarDate, validateDocumentSource } from "../../domain/validation.ts"
 import { fiscalYear, issuanceSource, numberedSnapshot } from "./snapshot.ts"
 
