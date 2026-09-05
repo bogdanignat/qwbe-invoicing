@@ -1,5 +1,5 @@
 import { ValidationFailure } from "../contracts/failures.ts"
-import type { BuyerSnapshot, DocumentSource, DraftLine, PartySnapshot, TaxBreakdown } from "./invoice.ts"
+import type { BuyerSnapshot, DocumentSource, DraftLine, PartySnapshot, VatBreakdown } from "./invoice.ts"
 export interface CreateCorrectionInput {
   readonly originalInvoiceId: string
   readonly reason: string
@@ -15,8 +15,8 @@ export interface CorrectionDocument {
   readonly issuer: PartySnapshot
   readonly customer: BuyerSnapshot
   readonly lines: ReadonlyArray<DraftLine>
-  readonly taxBreakdown: ReadonlyArray<TaxBreakdown>
-  readonly totalExcludingTax: string; readonly taxTotal: string; readonly totalIncludingTax: string
+  readonly vatBreakdown: ReadonlyArray<VatBreakdown>
+  readonly totalExcludingVat: string; readonly vatTotal: string; readonly totalIncludingVat: string
 }
 export const validateCreateCorrectionInput = (input: CreateCorrectionInput): void => {
   const issues: Array<string> = []

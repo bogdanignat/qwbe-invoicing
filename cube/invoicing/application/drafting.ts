@@ -54,7 +54,7 @@ export const createDraftingOperations = (
     const issuer: IssuerProfile = {
       ...copyParty(input), organizationId: context.organization.id,
       defaultCurrency: input.defaultCurrency, defaultPaymentTermDays: input.defaultPaymentTermDays,
-      taxConfigurations: structuredClone(input.taxConfigurations),
+      vatConfigurations: structuredClone(input.vatConfigurations),
     }
     yield* checked(() => { validateIssuer(issuer) })
     yield* dependencies.store.transaction((transaction) => transaction.saveIssuer(issuer))

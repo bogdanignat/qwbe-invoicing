@@ -14,14 +14,14 @@ import {
   type UpdateDraftInput,
   type UpdateDraftLineInput,
 } from "../domain/invoice.ts"
-import { resolveTaxConfiguration, validateBuyer, validateDate, validateDocumentSeries, validateDocumentSource } from "../domain/validation.ts"
+import { resolveVatConfiguration, validateBuyer, validateDate, validateDocumentSeries, validateDocumentSource } from "../domain/validation.ts"
 import type { InvoicingTransaction } from "./ports.ts"
 import { checked, copyBuyer, copySource, missing } from "./support.ts"
 
 type Dependencies = { ids: IdGenerator; store: TransactionalStore<InvoicingTransaction> }
 type Authorize = (permission: string) => Effect.Effect<RequestContext, InvoicingFailure>
 
-const withTotals = (draft: Omit<DraftInvoice, "taxBreakdown" | "totalExcludingTax" | "taxTotal" | "totalIncludingTax">): DraftInvoice => ({
+const withTotals = (draft: Omit<DraftInvoice, "vatBreakdown" | "totalExcludingVat" | "vatTotal" | "totalIncludingVat">): DraftInvoice => ({
   ...draft,
   ...calculateTotals(draft.lines),
 })
@@ -97,7 +97,7 @@ export const authorDocument = (
   const header = yield* dates(input.issueDate, input.dueDate)
   const source = yield* documentSource(input.source)
   const lines = yield* Effect.forEach("lines" in input ? input.lines : [], (line) => Effect.flatMap(ids.next, (id) =>
-    checked(() => calculateLine({ ...line, id, tax: resolveTaxConfiguration(issuer, line.taxCode, input.issueDate) }))))
+    checked(() => calculateLine({ ...line, id, vat: resolveVatConfiguration(issuer, line.vatRateCode, input.issueDate) }))))
   return { issuer, document: { organizationId, ...customer, ...(source === undefined ? {} : { source }), series: series.series, ...header, currency: "RON" as const,
     lines, ...calculateTotals(lines) } }
 })
@@ -139,7 +139,7 @@ export const createDraftAuthoringOperations = (
       const lines = yield* Effect.forEach(current.lines, (line) => checked(() => calculateLine({
         id: line.id, description: line.description, quantity: line.quantity, unitPrice: line.unitPrice,
         unitOfMeasure: line.unitOfMeasure,
-        tax: resolveTaxConfiguration(issuer, line.taxCode, input.issueDate),
+        vat: resolveVatConfiguration(issuer, line.vatRateCode, input.issueDate),
       })))
       const base = { ...current }
       delete base.customerId
@@ -164,8 +164,8 @@ export const createDraftAuthoringOperations = (
       if (replace && index < 0) return yield* Effect.fail(missing("draft_line", lineId))
       const issuer = yield* transaction.findIssuer(context.organization.id)
       if (issuer === undefined) return yield* Effect.fail(missing("issuer", context.organization.id))
-      const tax = yield* checked(() => resolveTaxConfiguration(issuer, input.taxCode, draft.issueDate))
-      const line = yield* checked(() => calculateLine({ ...input, id: lineId, tax }))
+      const tax = yield* checked(() => resolveVatConfiguration(issuer, input.vatRateCode, draft.issueDate))
+      const line = yield* checked(() => calculateLine({ ...input, id: lineId, vat: tax }))
       const lines = replace ? draft.lines.map((value) => value.id === lineId ? line : value) : [...draft.lines, line]
       const updated = withTotals({ ...draft, lines })
       yield* transaction.saveDraft(updated)

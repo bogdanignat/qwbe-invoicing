@@ -9,8 +9,10 @@ export interface Address {
 }
 
 export interface PartySnapshot {
-  readonly legalName: string
-  readonly taxIdentifier: string
+  readonly name: string
+  // CUI/CIF for companies, CNP for individuals. For the issuer the RO prefix also
+  // marks VAT registration; e-Factura will later split it into BT-30 and BT-31.
+  readonly fiscalIdentifier: string
   readonly address: Address
 }
 
@@ -54,9 +56,8 @@ export interface Idempotent<Input> {
   readonly idempotency: IdempotencyAttempt
 }
 
-export interface TaxConfiguration {
+export interface VatConfiguration {
   readonly code: string
-  readonly category: "standard"
   readonly rate: string
   readonly effectiveFrom: string
   readonly effectiveTo?: string
@@ -66,7 +67,7 @@ export interface IssuerProfile extends PartySnapshot {
   readonly organizationId: string
   readonly defaultCurrency: string
   readonly defaultPaymentTermDays: number
-  readonly taxConfigurations: ReadonlyArray<TaxConfiguration>
+  readonly vatConfigurations: ReadonlyArray<VatConfiguration>
 }
 
 export type DocumentType = "invoice" | "proforma"
@@ -101,12 +102,11 @@ export interface DraftLine {
   readonly quantity: string
   readonly unitPrice: string
   readonly unitOfMeasure: UnitOfMeasure
-  readonly taxCode: string
-  readonly taxCategory: "standard"
-  readonly taxRate: string
-  readonly totalExcludingTax: string
-  readonly taxAmount: string
-  readonly totalIncludingTax: string
+  readonly vatRateCode: string
+  readonly vatRate: string
+  readonly totalExcludingVat: string
+  readonly vatAmount: string
+  readonly totalIncludingVat: string
 }
 
 interface DocumentContent {
@@ -116,10 +116,10 @@ interface DocumentContent {
   readonly dueDate: string | null
   readonly currency: string
   readonly lines: readonly DraftLine[]
-  readonly taxBreakdown: ReadonlyArray<TaxBreakdown>
-  readonly totalExcludingTax: string
-  readonly taxTotal: string
-  readonly totalIncludingTax: string
+  readonly vatBreakdown: ReadonlyArray<VatBreakdown>
+  readonly totalExcludingVat: string
+  readonly vatTotal: string
+  readonly totalIncludingVat: string
 }
 
 export interface DraftInvoice extends DocumentContent {
@@ -130,12 +130,13 @@ export interface DraftInvoice extends DocumentContent {
   readonly status: "draft" | "issued" | "proforma_issued"
 }
 
-export interface TaxBreakdown {
-  readonly taxCode: string
-  readonly category: "standard"
+// VAT category per UNCL5305 (S, Z, E, O, AE) is not modelled yet; when e-Factura
+// needs it the field is `vatCategoryCode`, never a bare `category`.
+export interface VatBreakdown {
+  readonly code: string
   readonly rate: string
-  readonly taxableAmount: string
-  readonly taxAmount: string
+  readonly vatBaseAmount: string
+  readonly vatAmount: string
 }
 
 interface NumberedDocumentSnapshot extends DocumentContent {
@@ -197,7 +198,7 @@ export interface RawDocumentLine {
   readonly quantity: string
   readonly unitPrice: string
   readonly unitOfMeasure: UnitOfMeasure
-  readonly taxCode: string
+  readonly vatRateCode: string
 }
 
 export type AuthoringDocumentInput = BuyerSource & {
@@ -232,7 +233,7 @@ export interface AddDraftLineInput {
   readonly quantity: string
   readonly unitPrice: string
   readonly unitOfMeasure: UnitOfMeasure
-  readonly taxCode: string
+  readonly vatRateCode: string
 }
 
 export type UpdateDraftLineInput = AddDraftLineInput & { readonly lineId: string }

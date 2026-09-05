@@ -28,8 +28,8 @@ export interface RequestContext {
 
 export interface RenderableParty {
   readonly partyType?: "company" | "individual"
-  readonly legalName: string
-  readonly taxIdentifier: string
+  readonly name: string
+  readonly fiscalIdentifier: string
   readonly address: {
     readonly countryCode: string
     readonly city: string
@@ -48,10 +48,10 @@ export interface RenderableLine {
   readonly quantity: string
   readonly unitPrice: string
   readonly unitOfMeasure: { readonly code: string; readonly name: string }
-  readonly taxRate: string
-  readonly totalExcludingTax: string
-  readonly taxAmount: string
-  readonly totalIncludingTax: string
+  readonly vatRate: string
+  readonly totalExcludingVat: string
+  readonly vatAmount: string
+  readonly totalIncludingVat: string
 }
 
 export type DocumentKind = "invoice" | "proforma"
@@ -68,14 +68,14 @@ interface RenderableNumberedDocument {
   readonly issuer: RenderableParty
   readonly customer: RenderableBuyer
   readonly lines: ReadonlyArray<RenderableLine>
-  readonly taxBreakdown: ReadonlyArray<{
+  readonly vatBreakdown: ReadonlyArray<{
     readonly rate: string
-    readonly taxableAmount: string
-    readonly taxAmount: string
+    readonly vatBaseAmount: string
+    readonly vatAmount: string
   }>
-  readonly totalExcludingTax: string
-  readonly taxTotal: string
-  readonly totalIncludingTax: string
+  readonly totalExcludingVat: string
+  readonly vatTotal: string
+  readonly totalIncludingVat: string
 }
 
 export type RenderableInvoice = RenderableNumberedDocument

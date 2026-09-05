@@ -13,8 +13,8 @@ export const checked = <Value>(operation: () => Value): Effect.Effect<Value, Val
 export const missing = (resource: string, id: string) => new ResourceNotFound({ resource, id })
 
 export const copyParty = (party: PartySnapshot): PartySnapshot => ({
-  legalName: party.legalName,
-  taxIdentifier: party.taxIdentifier.trim().toUpperCase(),
+  name: party.name,
+  fiscalIdentifier: party.fiscalIdentifier.trim().toUpperCase(),
   address: { ...party.address },
 })
 

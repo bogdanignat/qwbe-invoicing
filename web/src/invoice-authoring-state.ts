@@ -23,7 +23,7 @@ export interface InvoiceAuthoringForm {
   readonly buyerMode: BuyerMode
   readonly customerId: string
   readonly partyType: PartyType
-  readonly legalName: string
+  readonly name: string
   readonly companyTaxIdentifier: string
   readonly individualTaxIdentifier: string
   readonly countryCode: "RO"
@@ -69,7 +69,7 @@ export const newAuthoringForm = (
   issueDate: string,
 ): InvoiceAuthoringForm => ({
   ...initialBuyerSelection(hasSavedCustomers), partyType: "company",
-  legalName: "", companyTaxIdentifier: "", individualTaxIdentifier: "", countryCode: "RO", city: "", street: "", county: "", postalCode: "",
+  name: "", companyTaxIdentifier: "", individualTaxIdentifier: "", countryCode: "RO", city: "", street: "", county: "", postalCode: "",
   series, issueDate, dueDate: addCalendarDays(issueDate, issuer.defaultPaymentTermDays), dueDateEdited: false,
 })
 
@@ -144,8 +144,8 @@ const buyerPayload = (form: InvoiceAuthoringForm): { readonly customerId: string
     : {
         customer: {
           partyType: form.partyType,
-          legalName: form.legalName,
-          taxIdentifier: selectedTaxIdentifier(form),
+          name: form.name,
+          fiscalIdentifier: selectedTaxIdentifier(form),
           address: {
             countryCode: form.countryCode,
             city: form.city,
@@ -168,7 +168,7 @@ export const updateDraftPayload = (form: InvoiceAuthoringForm): UpdateDraftInput
 
 export const draftLinePayload = (line: EditableInvoiceLine): DraftLineInput => ({
   description: line.description, quantity: line.quantity, unitPrice: line.unitPrice,
-  unitOfMeasure: line.unitOfMeasure, taxCode: line.taxCode,
+  unitOfMeasure: line.unitOfMeasure, vatRateCode: line.vatRateCode,
 })
 
 export const authoringDocumentPayload = (
@@ -186,7 +186,7 @@ export const authoringPayloadMatchesDraft = (payload: AuthoringDocumentInput, dr
       const expected = payload.lines[index]
       return expected !== undefined && line.description === expected.description && line.quantity === expected.quantity
         && line.unitPrice === expected.unitPrice && line.unitOfMeasure.code === expected.unitOfMeasure.code
-        && line.unitOfMeasure.name === expected.unitOfMeasure.name && line.taxCode === expected.taxCode
+        && line.unitOfMeasure.name === expected.unitOfMeasure.name && line.vatRateCode === expected.vatRateCode
     })
 }
 
@@ -204,9 +204,9 @@ export const formFromDraft = (draft: DraftInvoice): InvoiceAuthoringForm => ({
   buyerMode: draft.customerId === undefined ? "one-time" : "saved",
   customerId: draft.customerId ?? "",
   partyType: draft.customer.partyType,
-  legalName: draft.customer.legalName,
-  companyTaxIdentifier: draft.customer.partyType === "company" ? draft.customer.taxIdentifier : "",
-  individualTaxIdentifier: draft.customer.partyType === "individual" ? draft.customer.taxIdentifier : "",
+  name: draft.customer.name,
+  companyTaxIdentifier: draft.customer.partyType === "company" ? draft.customer.fiscalIdentifier : "",
+  individualTaxIdentifier: draft.customer.partyType === "individual" ? draft.customer.fiscalIdentifier : "",
   countryCode: "RO",
   city: draft.customer.address.city,
   street: draft.customer.address.street,
@@ -220,7 +220,7 @@ export const formFromDraft = (draft: DraftInvoice): InvoiceAuthoringForm => ({
 
 export const draftLinesForEditing = (draft: DraftInvoice): ReadonlyArray<EditableInvoiceLine> => draft.lines.map((line) => ({
   key: line.id, lineId: line.id, description: line.description, quantity: line.quantity,
-  unitPrice: line.unitPrice, unitOfMeasure: line.unitOfMeasure, taxCode: line.taxCode,
+  unitPrice: line.unitPrice, unitOfMeasure: line.unitOfMeasure, vatRateCode: line.vatRateCode,
 }))
 
 export const headerMatchesDraft = (form: InvoiceAuthoringForm, draft: DraftInvoice): boolean => {
@@ -228,8 +228,8 @@ export const headerMatchesDraft = (form: InvoiceAuthoringForm, draft: DraftInvoi
     ? draft.customerId === form.customerId
     : draft.customerId === undefined
       && draft.customer.partyType === form.partyType
-      && draft.customer.legalName === form.legalName
-      && draft.customer.taxIdentifier === selectedTaxIdentifier(form)
+      && draft.customer.name === form.name
+      && draft.customer.fiscalIdentifier === selectedTaxIdentifier(form)
       && draft.customer.address.countryCode === form.countryCode
       && draft.customer.address.city === form.city
       && draft.customer.address.street === form.street
@@ -241,7 +241,7 @@ export const headerMatchesDraft = (form: InvoiceAuthoringForm, draft: DraftInvoi
 const lineMatches = (line: EditableInvoiceLine, persisted: DraftInvoice["lines"][number]): boolean =>
   line.description === persisted.description && line.quantity === persisted.quantity
   && line.unitPrice === persisted.unitPrice && line.unitOfMeasure.code === persisted.unitOfMeasure.code
-  && line.unitOfMeasure.name === persisted.unitOfMeasure.name && line.taxCode === persisted.taxCode
+  && line.unitOfMeasure.name === persisted.unitOfMeasure.name && line.vatRateCode === persisted.vatRateCode
 
 export const pendingLineOperations = (lines: ReadonlyArray<EditableInvoiceLine>, draft: DraftInvoice): ReadonlyArray<LineSaveOperation> =>
   lines.flatMap((line): ReadonlyArray<LineSaveOperation> => {
@@ -270,7 +270,7 @@ export const authoringReadiness = (
   const synchronized = editable && draft !== undefined && headerMatchesDraft(form, draft) && linesMatchDraft(lines, draft)
   const hasLines = lines.length > 0 && lines.every((line) =>
     line.description.trim() !== "" && line.quantity.trim() !== "" && line.unitPrice.trim() !== ""
-    && line.unitOfMeasure.code.trim() !== "" && line.unitOfMeasure.name.trim() !== "" && line.taxCode.trim() !== "")
+    && line.unitOfMeasure.code.trim() !== "" && line.unitOfMeasure.name.trim() !== "" && line.vatRateCode.trim() !== "")
   return { editable, synchronized, hasLines,
     canIssue: editable && hasLines && !pending && (draft === undefined || synchronized) }
 }

@@ -36,19 +36,19 @@ const issueFixture = async (directory: string): Promise<{ readonly invoiceId: st
     cubeIdentity: "invoicing",
   })
   await Effect.runPromise(service.configureIssuer({
-    legalName: "Știință și Tehnică SRL",
-    taxIdentifier: "RO12345674",
+    name: "Știință și Tehnică SRL",
+    fiscalIdentifier: "RO12345674",
     address: { countryCode: "RO", city: "Botoșani", street: "Strada Independenței 1" },
     defaultCurrency: "RON",
     defaultPaymentTermDays: 15,
-    taxConfigurations: [{ code: "RO_STANDARD", category: "standard", rate: "21", effectiveFrom: "2025-08-01" }],
+    vatConfigurations: [{ code: "RO_STANDARD", rate: "21", effectiveFrom: "2025-08-01" }],
   }))
   await Effect.runPromise(service.addDocumentSeries({ documentType: "invoice", series: "QWBE" }))
   await Effect.runPromise(service.addDocumentSeries({ documentType: "proforma", series: "PRO" }))
   const customer = await Effect.runPromise(service.createCustomer({
     partyType: "company",
-    legalName: "Țesături România SRL",
-    taxIdentifier: "RO87654329",
+    name: "Țesături România SRL",
+    fiscalIdentifier: "RO87654329",
     address: { countryCode: "RO", city: "Iași", street: "Șoseaua Națională 2" },
   }))
   const draft = await Effect.runPromise(service.createDraft({ customerId: customer.id, issueDate: "2026-09-01", series: "QWBE" }))
@@ -58,14 +58,14 @@ const issueFixture = async (directory: string): Promise<{ readonly invoiceId: st
     quantity: "1",
     unitPrice: "100",
     unitOfMeasure: each,
-    taxCode: "RO_STANDARD",
+    vatRateCode: "RO_STANDARD",
   }))
   const invoiceId = (await Effect.runPromise(service.issueInvoice(idempotent("fixture-invoice", { draftId: draft.id })))).id
   const proformaDraft = await Effect.runPromise(service.createDraft({
     customerId: customer.id, issueDate: "2026-09-01", dueDate: null, series: "QWBE",
   }))
   await Effect.runPromise(service.addDraftLine({
-    draftId: proformaDraft.id, description: "Avans", quantity: "1", unitPrice: "50", unitOfMeasure: each, taxCode: "RO_STANDARD",
+    draftId: proformaDraft.id, description: "Avans", quantity: "1", unitPrice: "50", unitOfMeasure: each, vatRateCode: "RO_STANDARD",
   }))
   const proformaId = (await Effect.runPromise(service.issueProforma(idempotent("fixture-proforma", { draftId: proformaDraft.id, series: "PRO" })))).id
   return { invoiceId, proformaId }

@@ -17,9 +17,9 @@ type PaymentAmounts = { readonly status: PaymentStatus; readonly paidAmount: str
 export type RecordPaymentResult = PaymentAmounts & { readonly payment: Payment }
 export type InvoicePaymentSummary = PaymentAmounts & { readonly invoiceId: string; readonly payments: ReadonlyArray<Payment> }
 const summarize = (invoice: InvoiceSnapshot, payments: ReadonlyArray<Payment>, now: Date): PaymentAmounts => {
-  const paid = sumPaymentsMinor(payments); const remaining = moneyMinor(invoice.totalIncludingTax) - paid
+  const paid = sumPaymentsMinor(payments); const remaining = moneyMinor(invoice.totalIncludingVat) - paid
   return {
-    status: derivePaymentStatus({ totalIncludingTax: invoice.totalIncludingTax, dueDate: invoice.dueDate, payments, now }),
+    status: derivePaymentStatus({ totalIncludingVat: invoice.totalIncludingVat, dueDate: invoice.dueDate, payments, now }),
     paidAmount: formatMinor(paid), remainingAmount: formatMinor(remaining < 0n ? 0n : remaining),
   }
 }

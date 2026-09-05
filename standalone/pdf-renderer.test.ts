@@ -17,14 +17,14 @@ const invoice: RenderableInvoice = {
   issuedAt: "2026-09-01T10:00:00.000Z",
   currency: "RON",
   issuer: {
-    legalName: "Știință și Tehnică SRL",
-    taxIdentifier: "RO12345674",
+    name: "Știință și Tehnică SRL",
+    fiscalIdentifier: "RO12345674",
     address: { countryCode: "RO", city: "Botoșani", street: "Strada Independenței 1" },
   },
   customer: {
     partyType: "company",
-    legalName: "Țesături România SRL",
-    taxIdentifier: "RO87654329",
+    name: "Țesături România SRL",
+    fiscalIdentifier: "RO87654329",
     address: { countryCode: "RO", city: "Iași", street: "Șoseaua Națională 2" },
   },
   lines: [{
@@ -32,15 +32,15 @@ const invoice: RenderableInvoice = {
     quantity: "1.0000",
     unitPrice: "100.00",
     unitOfMeasure: { code: "HUR", name: "oră" },
-    taxRate: "21.00",
-    totalExcludingTax: "100.00",
-    taxAmount: "21.00",
-    totalIncludingTax: "121.00",
+    vatRate: "21.00",
+    totalExcludingVat: "100.00",
+    vatAmount: "21.00",
+    totalIncludingVat: "121.00",
   }],
-  taxBreakdown: [{ rate: "21.00", taxableAmount: "100.00", taxAmount: "21.00" }],
-  totalExcludingTax: "100.00",
-  taxTotal: "21.00",
-  totalIncludingTax: "121.00",
+  vatBreakdown: [{ rate: "21.00", vatBaseAmount: "100.00", vatAmount: "21.00" }],
+  totalExcludingVat: "100.00",
+  vatTotal: "21.00",
+  totalIncludingVat: "121.00",
 }
 
 void test("renders deterministic valid PDFs with Romanian glyphs and fixed metadata", async () => {
@@ -61,9 +61,9 @@ void test("renders deterministic valid PDFs with Romanian glyphs and fixed metad
 })
 
 void test("renders an individual buyer with a CNP label and omits an empty identifier", async () => {
-  const individual = { ...invoice.customer, partyType: "individual" as const, legalName: "Ion Popescu", taxIdentifier: "1800101221144" }
+  const individual = { ...invoice.customer, partyType: "individual" as const, name: "Ion Popescu", fiscalIdentifier: "1800101221144" }
   assert.equal(partyIdentifierLine(individual), "CNP: 1800101221144")
-  assert.equal(partyIdentifierLine({ ...individual, taxIdentifier: "" }), undefined)
+  assert.equal(partyIdentifierLine({ ...individual, fiscalIdentifier: "" }), undefined)
   assert.equal(partyIdentifierLine(invoice.issuer), "CUI: RO12345674")
   const rendered = await Effect.runPromise(createPdfRenderer().render({ ...invoice, customer: individual }))
   const parsed = await PDFDocument.load(rendered.bytes, { updateMetadata: false })

@@ -9,14 +9,13 @@ export interface VatInference {
 }
 
 export interface EffectiveVat extends VatValues {
-  readonly category: "standard"
   readonly effectiveFrom: string
   readonly effectiveTo?: string
 }
 
 interface DraftTaxLine {
-  readonly taxCode: string
-  readonly taxRate: string
+  readonly vatRateCode: string
+  readonly vatRate: string
 }
 
 const STANDARD_VAT: VatValues = { code: "RO_STANDARD", rate: "21.00" }
@@ -27,10 +26,10 @@ export const normalizeRomanianCui = (value: string): string => value.trim().toUp
 
 export const inferRomanianVatDefaults = (
   countryCode: string,
-  taxIdentifier: string,
+  fiscalIdentifier: string,
 ): VatInference | undefined => {
   if (countryCode.trim().toUpperCase() !== "RO") return undefined
-  const identifier = normalizeRomanianCui(taxIdentifier)
+  const identifier = normalizeRomanianCui(fiscalIdentifier)
   if (/^RO\d+$/.test(identifier)) return { registered: true, values: STANDARD_VAT }
   if (/^\d+$/.test(identifier)) return { registered: false, values: NON_VAT }
   return undefined
@@ -38,10 +37,10 @@ export const inferRomanianVatDefaults = (
 
 export const vatRegistrationMismatch = (
   countryCode: string,
-  taxIdentifier: string,
+  fiscalIdentifier: string,
   registered: boolean,
 ): string | undefined => {
-  const inferred = inferRomanianVatDefaults(countryCode, taxIdentifier)
+  const inferred = inferRomanianVatDefaults(countryCode, fiscalIdentifier)
   if (inferred === undefined || inferred.registered === registered) return undefined
   return inferred.registered
     ? "CUI-ul cu prefix RO nu poate fi salvat ca neplătitor de TVA. Elimină prefixul RO sau bifează opțiunea."
@@ -68,11 +67,11 @@ export const isNonVat = (vat: VatValues): boolean => vat.code === NON_VAT.code &
 
 export const vatTimelineMismatch = (
   countryCode: string,
-  taxIdentifier: string,
+  fiscalIdentifier: string,
   configurations: ReadonlyArray<EffectiveVat>,
 ): string | undefined => {
   const latest = [...configurations].sort((left, right) => right.effectiveFrom.localeCompare(left.effectiveFrom))[0]
-  return latest === undefined ? undefined : vatRegistrationMismatch(countryCode, taxIdentifier, !isNonVat(latest))
+  return latest === undefined ? undefined : vatRegistrationMismatch(countryCode, fiscalIdentifier, !isNonVat(latest))
 }
 
 export const currentEffectiveVat = (
@@ -115,7 +114,7 @@ export const updateVatTimeline = (
   const closed = previous === undefined ? kept : kept.map((configuration) => configuration === previous
     ? { ...configuration, effectiveTo: previousDay(effectiveFrom) }
     : configuration)
-  return [...closed, { ...next, category: "standard", effectiveFrom }]
+  return [...closed, { ...next, effectiveFrom }]
 }
 
 export const hasStaleDraftTax = (
@@ -123,7 +122,7 @@ export const hasStaleDraftTax = (
   lines: ReadonlyArray<DraftTaxLine>,
   configurations: ReadonlyArray<EffectiveVat>,
 ): boolean => lines.some((line) => !configurations.some((configuration) =>
-  configuration.code === line.taxCode
-  && sameRate(configuration.rate, line.taxRate)
+  configuration.code === line.vatRateCode
+  && sameRate(configuration.rate, line.vatRate)
   && configuration.effectiveFrom <= issueDate
   && (configuration.effectiveTo === undefined || issueDate <= configuration.effectiveTo)))

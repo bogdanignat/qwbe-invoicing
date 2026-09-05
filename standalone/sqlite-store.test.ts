@@ -60,14 +60,14 @@ void test("persists an issued snapshot across store recreation and isolates orga
       cubeIdentity: "invoicing",
     })
     await Effect.runPromise(service.configureIssuer({
-      legalName: "Exemplu SRL",
-      taxIdentifier: "RO12345674",
+      name: "Exemplu SRL",
+      fiscalIdentifier: "RO12345674",
       address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1", postalCode: "710000" },
       defaultCurrency: "RON",
       defaultPaymentTermDays: 15,
-      taxConfigurations: [{
+      vatConfigurations: [{
         code: "RO_STANDARD",
-        category: "standard",
+
         rate: "21.00",
         effectiveFrom: "2025-08-01",
       }],
@@ -81,13 +81,13 @@ void test("persists an issued snapshot across store recreation and isolates orga
     assert.equal(duplicate instanceof DomainConflict && duplicate.code === "document_series_exists", true)
     const customer = await Effect.runPromise(service.createCustomer({
       partyType: "company",
-      legalName: "Client SRL",
-      taxIdentifier: "RO87654329",
+      name: "Client SRL",
+      fiscalIdentifier: "RO87654329",
       address: { countryCode: "RO", city: "Iași", street: "Strada Mică 2" },
       defaultPaymentTermDays: 14,
     }))
     const updatedCustomer = await Effect.runPromise(service.updateCustomer({
-      id: customer.id, partyType: "company", legalName: "Client Actualizat SRL", taxIdentifier: "RO87654329",
+      id: customer.id, partyType: "company", name: "Client Actualizat SRL", fiscalIdentifier: "RO87654329",
       address: { countryCode: "RO", city: "Iași", street: "Strada Nouă 3" }, defaultPaymentTermDays: 30,
     }))
     assert.equal(updatedCustomer.defaultPaymentTermDays, 30)
@@ -115,7 +115,7 @@ void test("persists an issued snapshot across store recreation and isolates orga
       quantity: "1.25",
       unitPrice: "100.00",
       unitOfMeasure: each,
-      taxCode: "RO_STANDARD",
+      vatRateCode: "RO_STANDARD",
     }))
     const issued = await Effect.runPromise(service.issueInvoice(idempotent({ draftId: draft.id })))
     const proformaSource = await Effect.runPromise(service.createDraft({
@@ -123,7 +123,7 @@ void test("persists an issued snapshot across store recreation and isolates orga
       source: { app: "crm", kind: "offer", id: "offer-1" },
     }))
     const proformaAuthored = await Effect.runPromise(service.addDraftLine({
-      draftId: proformaSource.id, description: "Avans", quantity: "1", unitPrice: "50", unitOfMeasure: each, taxCode: "RO_STANDARD",
+      draftId: proformaSource.id, description: "Avans", quantity: "1", unitPrice: "50", unitOfMeasure: each, vatRateCode: "RO_STANDARD",
     }))
     const proforma = await Effect.runPromise(service.issueProforma(idempotent({ draftId: proformaSource.id, series: "PRO" })))
     assert.equal(proforma.convertedDraftId, null)
@@ -138,7 +138,7 @@ void test("persists an issued snapshot across store recreation and isolates orga
     assert.equal(duplicateConversion instanceof DomainConflict && duplicateConversion.code === "proforma_already_converted", true)
     const directProforma = await Effect.runPromise(service.issueProforma(idempotent({ customerId: customer.id, series: "QWBE",
       proformaSeries: "PRO", issueDate: "2026-09-02", currency: "RON",
-      lines: [{ description: "Direct", quantity: "1", unitPrice: "75", unitOfMeasure: each, taxCode: "RO_STANDARD" }] })))
+      lines: [{ description: "Direct", quantity: "1", unitPrice: "75", unitOfMeasure: each, vatRateCode: "RO_STANDARD" }] })))
     const directInvoice = await Effect.runPromise(service.issueInvoiceFromProforma(idempotent({ proformaId: directProforma.id })))
     assert.equal(directInvoice.sourceProformaId, directProforma.id)
     assert.deepEqual(directInvoice.lines, directProforma.lines)
@@ -167,7 +167,7 @@ void test("persists an issued snapshot across store recreation and isolates orga
     const persistedDraft = await Effect.runPromise(restarted.getDraft(draft.id))
     assert.equal(persistedDraft.series, "QWBE")
     assert.equal(persistedDraft.customer.partyType, "company")
-    assert.equal(persistedDraft.totalIncludingTax, "151.25")
+    assert.equal(persistedDraft.totalIncludingVat, "151.25")
     assert.deepEqual(await Effect.runPromise(restarted.listDocumentSeries()), [
       { organizationId: "org-1", documentType: "invoice", series: "ALT" },
       { organizationId: "org-1", documentType: "invoice", series: "QWBE" },

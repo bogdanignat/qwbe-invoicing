@@ -140,10 +140,10 @@ void test("surfaces the first typed validation issue instead of the backend tag"
   try {
     globalThis.fetch = (input) => {
       const sessionRequest = requestPath(input) === "/api/session"
-      return Promise.resolve(new Response(JSON.stringify(sessionRequest ? { authenticated: true, csrfToken: "csrf-token" } : { error: "ValidationFailure", issues: ["taxCode is required"] }), { status: sessionRequest ? 200 : 400, headers: { "content-type": "application/json" } }))
+      return Promise.resolve(new Response(JSON.stringify(sessionRequest ? { authenticated: true, csrfToken: "csrf-token" } : { error: "ValidationFailure", issues: ["vatRateCode is required"] }), { status: sessionRequest ? 200 : 400, headers: { "content-type": "application/json" } }))
     }
     await runUiEffect(loginApiSession("secret-token"))
-    await assert.rejects(runUiEffect(apiRequest("/api/test", (input) => input)), (error) => error instanceof ApiFailure && error.message === "taxCode is required" && error.issues.length === 1)
+    await assert.rejects(runUiEffect(apiRequest("/api/test", (input) => input)), (error) => error instanceof ApiFailure && error.message === "vatRateCode is required" && error.issues.length === 1)
   } finally {
     await runUiEffect(clearApiSession)
     globalThis.fetch = originalFetch
@@ -207,7 +207,7 @@ void test("lists and creates document series with the final API contract", async
       const body = path === "/api/session"
         ? { authenticated: true, csrfToken: "csrf-token" }
         : path === "/api/drafts"
-          ? { id: "draft-1", organizationId: "org-1", customerId: "customer-1", customer: { partyType: "company", legalName: "Client", taxIdentifier: "RO1", address: { countryCode: "RO", city: "Iași", street: "Strada 1" } }, series: "QWBE", issueDate: "2026-09-01", dueDate: "2026-09-16", currency: "RON", status: "draft", lines: [], taxBreakdown: [], totalExcludingTax: "0.00", taxTotal: "0.00", totalIncludingTax: "0.00" }
+          ? { id: "draft-1", organizationId: "org-1", customerId: "customer-1", customer: { partyType: "company", name: "Client", fiscalIdentifier: "RO1", address: { countryCode: "RO", city: "Iași", street: "Strada 1" } }, series: "QWBE", issueDate: "2026-09-01", dueDate: "2026-09-16", currency: "RON", status: "draft", lines: [], vatBreakdown: [], totalExcludingVat: "0.00", vatTotal: "0.00", totalIncludingVat: "0.00" }
         : init?.method === "POST"
           ? { organizationId: "org-1", documentType: "invoice", series: "QWBE" }
           : [{ organizationId: "org-1", documentType: "invoice", series: "QWBE" }]
@@ -244,7 +244,7 @@ void test("calls customer edit and product preset CRUD routes", async () => {
   const originalFetch = globalThis.fetch
   const calls: Array<{ readonly path: string; readonly init: RequestInit }> = []
   const customer = {
-    id: "customer/1", organizationId: "org-1", partyType: "company" as const, legalName: "Client", taxIdentifier: "RO1",
+    id: "customer/1", organizationId: "org-1", partyType: "company" as const, name: "Client", fiscalIdentifier: "RO1",
     address: { countryCode: "RO", city: "Iași", street: "Strada 1" }, defaultPaymentTermDays: 30,
   }
   const preset = { id: "preset/1", organizationId: "org-1", description: "Consultanță", unitPrice: "100.00",
@@ -264,7 +264,7 @@ void test("calls customer edit and product preset CRUD routes", async () => {
     }
     await runUiEffect(loginApiSession("secret-token"))
     await runUiEffect(invoicingClient.updateCustomer(customer.id, {
-      partyType: customer.partyType, legalName: customer.legalName, taxIdentifier: customer.taxIdentifier,
+      partyType: customer.partyType, name: customer.name, fiscalIdentifier: customer.fiscalIdentifier,
       address: customer.address, defaultPaymentTermDays: customer.defaultPaymentTermDays,
     }))
     await runUiEffect(invoicingClient.listProductPresets())
@@ -285,7 +285,7 @@ void test("calls customer edit and product preset CRUD routes", async () => {
     assert.equal(typeof customerBody, "string")
     assert.equal(typeof updatePresetBody, "string")
     assert.deepEqual(JSON.parse(customerBody as string), {
-      partyType: "company", legalName: "Client", taxIdentifier: "RO1",
+      partyType: "company", name: "Client", fiscalIdentifier: "RO1",
       address: { countryCode: "RO", city: "Iași", street: "Strada 1" }, defaultPaymentTermDays: 30,
     })
     assert.deepEqual(JSON.parse(updatePresetBody as string), { description: "Consultanță", unitPrice: "120.00",
@@ -301,19 +301,19 @@ void test("calls direct and draft issuance, proforma invoice, registry, detail, 
   const calls: Array<{ readonly path: string; readonly init: RequestInit }> = []
   const draft = {
     id: "draft-2", organizationId: "org-1", customerId: "customer-1",
-    customer: { partyType: "company", legalName: "Client", taxIdentifier: "RO1", address: { countryCode: "RO", city: "Iași", street: "Strada 1" } },
-    series: "QWBE", issueDate: "2026-09-01", dueDate: null, currency: "RON", status: "draft", lines: [], taxBreakdown: [],
-    totalExcludingTax: "0.00", taxTotal: "0.00", totalIncludingTax: "0.00",
+    customer: { partyType: "company", name: "Client", fiscalIdentifier: "RO1", address: { countryCode: "RO", city: "Iași", street: "Strada 1" } },
+    series: "QWBE", issueDate: "2026-09-01", dueDate: null, currency: "RON", status: "draft", lines: [], vatBreakdown: [],
+    totalExcludingVat: "0.00", vatTotal: "0.00", totalIncludingVat: "0.00",
   }
   const proforma = {
     ...draft, id: "proforma-1", sourceDraftId: "draft-1", series: "PRO", number: 7, issuedAt: "2026-09-01T10:00:00.000Z",
-    issuer: { legalName: "QWBE", taxIdentifier: "RO2", address: { countryCode: "RO", city: "Botoșani", street: "Strada 2" } },
+    issuer: { name: "QWBE", fiscalIdentifier: "RO2", address: { countryCode: "RO", city: "Botoșani", street: "Strada 2" } },
     invoiceSeries: "QWBE", convertedDraftId: null, convertedInvoiceId: null,
   }
   const invoice = { ...proforma, id: "invoice-1", draftId: null, sourceProformaId: "proforma-1", series: "QWBE", number: 8, eFacturaStatus: "not_sent" }
   const authoring = { customerId: "customer-1", series: "QWBE", issueDate: "2026-09-01", dueDate: null,
     currency: "RON" as const, lines: [{ description: "Serviciu", quantity: "1", unitPrice: "100",
-      unitOfMeasure: { code: "HUR", name: "oră" }, taxCode: "RO_STANDARD" }] }
+      unitOfMeasure: { code: "HUR", name: "oră" }, vatRateCode: "RO_STANDARD" }] }
   try {
     globalThis.fetch = (input, init) => {
       const path = requestPath(input)

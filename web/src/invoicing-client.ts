@@ -48,7 +48,7 @@ export interface DraftLineInput {
   readonly quantity: string
   readonly unitPrice: string
   readonly unitOfMeasure: UnitOfMeasure
-  readonly taxCode: string
+  readonly vatRateCode: string
 }
 
 export type AuthoringDocumentInput = CreateDraftInput & {

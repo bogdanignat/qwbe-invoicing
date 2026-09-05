@@ -14,7 +14,7 @@ interface BuyerEditorProps {
 
 export const BuyerEditor = ({ form, customers, disabled, onChange, onBuyerModeChange, onSavedCustomerChange }: BuyerEditorProps) => {
   const choosePartyType = (partyType: PartyType): void => { onChange(switchPartyType(form, partyType)) }
-  const taxIdentifier = form.partyType === "company" ? form.companyTaxIdentifier : form.individualTaxIdentifier
+  const fiscalIdentifier = form.partyType === "company" ? form.companyTaxIdentifier : form.individualTaxIdentifier
   return <section className="card authoring-section">
     <div className="section-heading"><div><h2>2. Cumpărător</h2><p>Alege un client salvat sau completează un client folosit doar pe această factură.</p></div></div>
     <fieldset className="segmented-fieldset"><legend>Sursa cumpărătorului</legend><div className="segmented-control">
@@ -22,7 +22,7 @@ export const BuyerEditor = ({ form, customers, disabled, onChange, onBuyerModeCh
       <label><input type="radio" name="buyerMode" value="one-time" checked={form.buyerMode === "one-time"} disabled={disabled} onChange={() => { onBuyerModeChange("one-time") }} /><span>Client ocazional</span></label>
     </div></fieldset>
     {form.buyerMode === "saved" ? <div>
-      {customers.length === 0 ? <p className="status-note">Registrul este gol. Alege „Client ocazional” și continuă fără să salvezi clientul în registru.</p> : <label>Client<select required disabled={disabled} value={form.customerId} onChange={(event) => { onSavedCustomerChange(event.currentTarget.value) }}><option value="" disabled>Alege clientul</option>{customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.legalName}{customer.taxIdentifier === "" ? "" : ` — ${identifierLabel(customer.partyType)} ${customer.taxIdentifier}`}</option>)}</select></label>}
+      {customers.length === 0 ? <p className="status-note">Registrul este gol. Alege „Client ocazional” și continuă fără să salvezi clientul în registru.</p> : <label>Client<select required disabled={disabled} value={form.customerId} onChange={(event) => { onSavedCustomerChange(event.currentTarget.value) }}><option value="" disabled>Alege clientul</option>{customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.name}{customer.fiscalIdentifier === "" ? "" : ` — ${identifierLabel(customer.partyType)} ${customer.fiscalIdentifier}`}</option>)}</select></label>}
       <p className="hint left">Datele clientului ocazional rămân păstrate dacă schimbi temporar modul.</p>
     </div> : <>
       <fieldset className="segmented-fieldset"><legend>Tip persoană</legend><div className="segmented-control compact-segments">
@@ -30,8 +30,8 @@ export const BuyerEditor = ({ form, customers, disabled, onChange, onBuyerModeCh
         <label><input type="radio" name="partyType" value="individual" checked={form.partyType === "individual"} disabled={disabled} onChange={() => { choosePartyType("individual") }} /><span>Persoană fizică (PF)</span></label>
       </div></fieldset>
       <div className="form-grid two">
-        <label>{form.partyType === "company" ? "Denumire" : "Nume complet"}<input required disabled={disabled} value={form.legalName} onChange={(event) => { onChange({ legalName: event.currentTarget.value }) }} /></label>
-        <label>{identifierLabel(form.partyType)} {form.partyType === "individual" ? <span className="optional">opțional</span> : null}<input value={taxIdentifier} required={form.partyType === "company"} disabled={disabled} pattern={form.partyType === "company" ? romanianCuiPattern : "(?:[0-9]{13})?"} maxLength={13} title={form.partyType === "company" ? "CUI românesc valid, cu sau fără prefixul RO" : "CNP valid din 13 cifre sau câmp gol"} inputMode={form.partyType === "individual" ? "numeric" : "text"} onChange={(event) => { const value = form.partyType === "company" ? normalizeRomanianCui(event.currentTarget.value) : event.currentTarget.value.replace(/\D/g, ""); onChange(form.partyType === "company" ? { companyTaxIdentifier: value } : { individualTaxIdentifier: value }) }} /></label>
+        <label>{form.partyType === "company" ? "Denumire" : "Nume complet"}<input required disabled={disabled} value={form.name} onChange={(event) => { onChange({ name: event.currentTarget.value }) }} /></label>
+        <label>{identifierLabel(form.partyType)} {form.partyType === "individual" ? <span className="optional">opțional</span> : null}<input value={fiscalIdentifier} required={form.partyType === "company"} disabled={disabled} pattern={form.partyType === "company" ? romanianCuiPattern : "(?:[0-9]{13})?"} maxLength={13} title={form.partyType === "company" ? "CUI românesc valid, cu sau fără prefixul RO" : "CNP valid din 13 cifre sau câmp gol"} inputMode={form.partyType === "individual" ? "numeric" : "text"} onChange={(event) => { const value = form.partyType === "company" ? normalizeRomanianCui(event.currentTarget.value) : event.currentTarget.value.replace(/\D/g, ""); onChange(form.partyType === "company" ? { companyTaxIdentifier: value } : { individualTaxIdentifier: value }) }} /></label>
         <label>Țară<select value="RO" disabled><option value="RO">România (RO)</option></select></label>
         <label>Localitate<input required disabled={disabled} value={form.city} onChange={(event) => { onChange({ city: event.currentTarget.value }) }} /></label>
         <label className="span-two">Stradă și număr<input required disabled={disabled} value={form.street} onChange={(event) => { onChange({ street: event.currentTarget.value }) }} /></label>

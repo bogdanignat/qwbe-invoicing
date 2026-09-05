@@ -28,8 +28,8 @@ const numberedSnapshot = (
   ...(draft.source === undefined ? {} : { source: copySource(draft.source) }),
   issueDate: draft.issueDate, dueDate: draft.dueDate, currency: draft.currency,
   issuer: copyParty(issuer), customer: structuredClone(draft.customer), lines: structuredClone(draft.lines),
-  taxBreakdown: structuredClone(draft.taxBreakdown), totalExcludingTax: draft.totalExcludingTax,
-  taxTotal: draft.taxTotal, totalIncludingTax: draft.totalIncludingTax,
+  vatBreakdown: structuredClone(draft.vatBreakdown), totalExcludingVat: draft.totalExcludingVat,
+  vatTotal: draft.vatTotal, totalIncludingVat: draft.totalIncludingVat,
 })
 const issuanceSource = (
   input: AuthoringDocumentInput | { readonly draftId: string }, organizationId: string,

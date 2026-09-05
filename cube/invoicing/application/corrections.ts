@@ -40,14 +40,14 @@ export const createCorrectionOperations = (d: CorrectionDependencies, perms: Inv
       const number = yield* tx.allocateDocumentNumber(ctx.organization.id, fy(issueDate), "correction", orig.series)
       const issuedAt = now.toISOString()
       const source = input.source ?? orig.source
-      const negLines = orig.lines.map((l) => ({ ...l, totalExcludingTax: negateMoney(l.totalExcludingTax), taxAmount: negateMoney(l.taxAmount), totalIncludingTax: negateMoney(l.totalIncludingTax) }))
-      const negBreakdown = orig.taxBreakdown.map((t) => ({ ...t, taxableAmount: negateMoney(t.taxableAmount), taxAmount: negateMoney(t.taxAmount) }))
+      const negLines = orig.lines.map((l) => ({ ...l, totalExcludingVat: negateMoney(l.totalExcludingVat), vatAmount: negateMoney(l.vatAmount), totalIncludingVat: negateMoney(l.totalIncludingVat) }))
+      const negBreakdown = orig.vatBreakdown.map((t) => ({ ...t, vatBaseAmount: negateMoney(t.vatBaseAmount), vatAmount: negateMoney(t.vatAmount) }))
       const corr: CorrectionDocument = {
         id, organizationId: ctx.organization.id, originalInvoiceId: orig.id, fiscalYear: fy(issueDate), series: orig.series, number, issueDate, issuedAt, reason: input.reason.trim(), currency: orig.currency,
         ...(source === undefined ? {} : { source: copySource(source) }),
         issuer: copyParty(orig.issuer), customer: copyBuyer(orig.customer),
-        lines: negLines, taxBreakdown: negBreakdown,
-        totalExcludingTax: negateMoney(orig.totalExcludingTax), taxTotal: negateMoney(orig.taxTotal), totalIncludingTax: negateMoney(orig.totalIncludingTax),
+        lines: negLines, vatBreakdown: negBreakdown,
+        totalExcludingVat: negateMoney(orig.totalExcludingVat), vatTotal: negateMoney(orig.vatTotal), totalIncludingVat: negateMoney(orig.totalIncludingVat),
       }
       yield* tx.saveCorrection(corr)
       yield* tx.saveIdempotencyRecord(idempotencyRecord(

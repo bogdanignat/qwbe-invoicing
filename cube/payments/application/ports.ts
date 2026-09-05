@@ -10,7 +10,7 @@ export interface InvoiceSnapshot {
   readonly organizationId: string
   readonly currency: string
   readonly dueDate: string | null
-  readonly totalIncludingTax: string
+  readonly totalIncludingVat: string
 }
 export interface PaymentsTransaction {
   readonly findInvoiceSnapshot: (organizationId: string, invoiceId: string) => Read<InvoiceSnapshot | undefined>
