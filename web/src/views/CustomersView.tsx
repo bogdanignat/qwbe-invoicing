@@ -8,7 +8,7 @@ import { ButtonLink } from "../components/ui/ButtonLink.tsx"
 import { useCustomerRegistry } from "../customer-registry-hooks.ts"
 import { focusAndReveal } from "../focus.ts"
 import { identifierLabel } from "../invoice-authoring-state.ts"
-import { normalizeRomanianCui, romanianCuiPattern } from "../vat-defaults.ts"
+import { normalizeRomanianCui, romanianCuiPattern } from "../identifiers.ts"
 
 export const CustomersView = ({ notify }: { readonly notify: (message: string) => void }) => {
   const state = useCustomerRegistry(notify)

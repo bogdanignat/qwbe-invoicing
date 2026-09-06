@@ -4,8 +4,9 @@ import type { InvoicingTransaction } from "../../application/ports.ts"
 import { copyParty, copySource, missing } from "../../application/support.ts"
 import { DomainConflict, ValidationFailure } from "../../contracts/failures.ts"
 import type { IdGenerator } from "../../contracts/host.ts"
-import type { DraftInvoice, PartySnapshot } from "../../domain/invoice.ts"
+import type { DraftInvoice, IssuerProfile, PartySnapshot } from "../../domain/invoice.ts"
 import type { AuthoringDocumentInput } from "../../domain/inputs.ts"
+import { resolveVatConfiguration } from "../../domain/validation.ts"
 import { authorDocument } from "../../drafts/index.ts"
 
 type SnapshotContent = Omit<DraftInvoice, "id" | "status" | "customerId">
@@ -41,5 +42,19 @@ export const issuanceSource = (
   }))
   if (draft.lines.length === 0) return yield* Effect.fail(new ValidationFailure({ issues: [`${kind} must contain at least one line`] }))
   const issuer = yield* transaction.findIssuer(organizationId)
-  return issuer === undefined ? yield* Effect.fail(missing("issuer", organizationId)) : { document: draft, issuer, draft }
+  if (issuer === undefined) return yield* Effect.fail(missing("issuer", organizationId))
+  if (draft.lines.some((line) => staleVat(issuer, line, draft.issueDate))) {
+    return yield* Effect.fail(new ValidationFailure({ issues: ["draft lines carry a VAT rate that is no longer configured on the issue date; re-add the affected lines"] }))
+  }
+  return { document: draft, issuer, draft }
 })
+
+// Lines keep the VAT resolved when they were added; if the issuer's configuration moved since, the
+// numbers on the draft are no longer what the law asks on the issue date, so issuance stops here.
+const staleVat = (issuer: IssuerProfile, line: DraftInvoice["lines"][number], issueDate: string): boolean => {
+  try {
+    return Number(resolveVatConfiguration(issuer, line.vatRateCode, issueDate).rate) !== Number(line.vatRate)
+  } catch {
+    return true
+  }
+}

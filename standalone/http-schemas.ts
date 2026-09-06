@@ -51,14 +51,19 @@ const VatConfigurationInput = Schema.Struct({
   effectiveTo: optionalString,
 })
 
-export const IssuerInput = Schema.Struct({
+const IssuerFields = {
   name: Schema.String,
   fiscalIdentifier: Schema.String,
   address: Address,
   defaultCurrency: Schema.String,
   defaultPaymentTermDays: Schema.Int,
-  vatConfigurations: Schema.Array(VatConfigurationInput),
-})
+}
+export const VatChange = Schema.Struct({ code: Schema.String, rate: Schema.String, effectiveFrom: Schema.String })
+// Either the whole VAT history or one regime change scheduled into the stored history; never both.
+export const IssuerInput = Schema.Union(
+  Schema.Struct({ ...IssuerFields, vatConfigurations: Schema.Array(VatConfigurationInput), vatChange: optional(Schema.Never) }),
+  Schema.Struct({ ...IssuerFields, vatChange: VatChange, vatConfigurations: optional(Schema.Never) }),
+)
 
 export const Issuer = Schema.Struct({
   name: Schema.String,
@@ -68,6 +73,13 @@ export const Issuer = Schema.Struct({
   defaultCurrency: Schema.String,
   defaultPaymentTermDays: Schema.Int,
   vatConfigurations: Schema.Array(VatConfiguration),
+  currentVat: Schema.NullOr(VatConfiguration).annotations({ description: "The configuration in force today, or the nearest scheduled one." }),
+})
+export const VatRegime = Schema.Struct({ code: Schema.String, rate: Schema.String, registered: Schema.Boolean, label: Schema.String })
+export const VatRegimes = Schema.Struct({ regimes: Schema.Array(VatRegime), inferred: Schema.NullOr(VatRegime) })
+export const VatRegimeQuery = Schema.Struct({
+  countryCode: optional(Schema.String.annotations({ description: "With fiscalIdentifier: infer the regime the identifier implies." })),
+  fiscalIdentifier: optionalString,
 })
 
 export const DocumentSeriesInput = Schema.Struct({

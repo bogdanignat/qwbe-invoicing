@@ -323,3 +323,43 @@ void test("numbers documents chronologically per series and dates proforma conve
   const oldProforma = await Effect.runPromise(Effect.flip(service.issueProforma(idempotent({ ...document("2026-08-19"), proformaSeries: "PRO" }))))
   assert.equal(oldProforma instanceof ValidationFailure, true)
 })
+
+void test("refuses to issue a draft whose lines carry a VAT rate the issuer no longer applies on the issue date", async () => {
+  const state = emptyState()
+  const service = createInvoicingService({
+    context: contextProvider({ identity, organization: { id: "org-1" } }),
+    clock: fixedClock,
+    ids: sequentialIds(),
+    store: memoryStore(state),
+    cubeIdentity: "invoicing",
+  })
+  const issuer = {
+    name: "Exemplu SRL", fiscalIdentifier: "RO12345674",
+    address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" },
+    defaultCurrency: "RON", defaultPaymentTermDays: 15,
+  }
+  await Effect.runPromise(service.configureIssuer({ ...issuer, vatConfigurations }))
+  await Effect.runPromise(service.addDocumentSeries({ documentType: "invoice", series: "QWBE" }))
+  const draft = await Effect.runPromise(service.createDraft({
+    customer: { partyType: "company", name: "Client SRL", fiscalIdentifier: "RO87654329", address: { countryCode: "RO", city: "Iași", street: "Strada 2" } },
+    issueDate: "2026-09-01", series: "QWBE",
+  }))
+  await Effect.runPromise(service.addDraftLine({ draftId: draft.id, description: "Servicii", quantity: "1", unitPrice: "100.00", unitOfMeasure: each, vatRateCode: "RO_STANDARD" }))
+  // The standard rate moves before the draft's issue date: the stored 21% line is no longer what applies.
+  const reconfigured = await Effect.runPromise(service.configureIssuer({ ...issuer, vatChange: { code: "RO_STANDARD", rate: "19.00", effectiveFrom: "2026-08-15" } }))
+  assert.deepEqual(reconfigured.vatConfigurations, [
+    { code: "RO_STANDARD", rate: "21.00", effectiveFrom: "2025-08-01", effectiveTo: "2026-08-14" },
+    { code: "RO_STANDARD", rate: "19.00", effectiveFrom: "2026-08-15" },
+  ])
+  assert.equal(reconfigured.currentVat?.rate, "19.00")
+  const refused = await Effect.runPromise(Effect.flip(service.issueInvoice(idempotent({ draftId: draft.id }))))
+  assert.equal(refused instanceof ValidationFailure && refused.issues[0]?.includes("no longer configured"), true)
+  assert.equal(state.issued.size, 0)
+  // Re-adding the line picks up the rate in force, and issuance goes through.
+  const refreshed = await Effect.runPromise(service.getDraft(draft.id))
+  const current = refreshed.lines[0]
+  assert.ok(current)
+  await Effect.runPromise(service.updateDraftLine({ draftId: draft.id, lineId: current.id, description: "Servicii", quantity: "1", unitPrice: "100.00", unitOfMeasure: each, vatRateCode: "RO_STANDARD" }))
+  const issued = await Effect.runPromise(service.issueInvoice(idempotent({ draftId: draft.id })))
+  assert.equal(issued.vatTotal, "19.00")
+})

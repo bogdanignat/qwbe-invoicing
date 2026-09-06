@@ -99,6 +99,23 @@ void test("requires host authentication and serves the complete invoice-core rou
     assert.equal(rejectedUpdate.status, 400)
     const issuerAfterRejectedUpdate = await handleApiRequest({ method: "GET", url: "/api/issuer", authorization, body: undefined }, runtime)
     assert.equal((issuerAfterRejectedUpdate.body as { fiscalIdentifier: string }).fiscalIdentifier, "RO12345674")
+    const regimes = await handleApiRequest({ method: "GET", url: "/api/vat-regimes?countryCode=RO&fiscalIdentifier=12345674", authorization, body: undefined }, runtime)
+    assert.equal(regimes.status, 200)
+    assert.deepEqual((regimes.body as { regimes: ReadonlyArray<{ code: string }> }).regimes.map(({ code }) => code), ["RO_STANDARD", "RO_REDUCED", "RO_NON_VAT"])
+    assert.equal((regimes.body as { inferred: { code: string } }).inferred.code, "RO_NON_VAT")
+    assert.equal((await handleApiRequest({ method: "GET", url: "/api/vat-regimes?countryCode=RO", authorization, body: undefined }, runtime)).status, 400)
+    assert.equal((await handleApiRequest({ method: "GET", url: "/api/vat-regimes", authorization, body: undefined }, runtime)).status, 200)
+    // A regime change closes the open period of the stored history and is refused when it contradicts the CUI prefix.
+    const nonVatChange = { code: "RO_NON_VAT", rate: "0.00", effectiveFrom: "2026-09-01" }
+    const scheduled = await handleApiRequest({ method: "PUT", url: "/api/issuer", authorization,
+      body: { ...issuerBody, fiscalIdentifier: "12345674", vatConfigurations: undefined, vatChange: nonVatChange } }, runtime)
+    assert.deepEqual((scheduled.body as { vatConfigurations: unknown }).vatConfigurations, [
+      { code: "RO_STANDARD", rate: "21.00", effectiveFrom: "2025-08-01", effectiveTo: "2026-08-31" },
+      nonVatChange,
+    ])
+    assert.equal((await handleApiRequest({ method: "PUT", url: "/api/issuer", authorization,
+      body: { ...issuerBody, vatConfigurations: undefined, vatChange: nonVatChange } }, runtime)).status, 400)
+    assert.equal((await handleApiRequest({ method: "PUT", url: "/api/issuer", authorization, body: issuerBody }, runtime)).status, 200)
     const customer = await handleApiRequest({
       method: "POST",
       url: "/api/customers",
