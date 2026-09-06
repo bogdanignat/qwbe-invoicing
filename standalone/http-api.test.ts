@@ -10,7 +10,7 @@ import { applicationHttpApi, operationNames } from "./http-api.ts"
 import * as S from "./http-schemas.ts"
 
 const inventory = [
-  "GET /api/issuer", "PUT /api/issuer", "GET /api/document-series", "POST /api/document-series",
+  "GET /api/issuer", "PUT /api/issuer", "GET /api/vat-regimes", "GET /api/document-series", "POST /api/document-series",
   "GET /api/unit-of-measures",
   "GET /api/customers", "GET /api/customers/:id", "POST /api/customers", "PUT /api/customers/:id", "DELETE /api/customers/:id",
   "GET /api/product-presets", "POST /api/product-presets", "PUT /api/product-presets/:id", "DELETE /api/product-presets/:id",
@@ -25,11 +25,11 @@ const inventory = [
   "GET /api/session", "POST /api/session", "DELETE /api/session",
 ].sort()
 
-void test("the contract exposes exactly the current 44 operations", () => {
-  assert.equal(operationNames.length, 44)
-  assert.equal(new Set(operationNames).size, 44)
-  assert.equal(applicationRoutes.length, 44)
-  assert.equal(new Set(applicationRoutes.map((route) => route.operationId)).size, 44)
+void test("the contract exposes exactly the current 45 operations", () => {
+  assert.equal(operationNames.length, 45)
+  assert.equal(new Set(operationNames).size, 45)
+  assert.equal(applicationRoutes.length, 45)
+  assert.equal(new Set(applicationRoutes.map((route) => route.operationId)).size, 45)
   assert.deepEqual(applicationRoutes.map((route) => `${route.method} ${route.path}`).sort(), inventory)
   assert.equal(applicationRoutes.some((route) => route.path === "/api"), false)
 })

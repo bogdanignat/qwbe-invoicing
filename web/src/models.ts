@@ -55,6 +55,20 @@ export interface Issuer extends Party {
   readonly defaultCurrency: string
   readonly defaultPaymentTermDays: number
   readonly vatConfigurations: ReadonlyArray<VatConfiguration>
+  // Resolved by the server for today; the UI never walks the VAT periods itself.
+  readonly currentVat: VatConfiguration | null
+}
+
+export interface VatRegime {
+  readonly code: string
+  readonly rate: string
+  readonly registered: boolean
+  readonly label: string
+}
+
+export interface VatRegimes {
+  readonly regimes: ReadonlyArray<VatRegime>
+  readonly inferred: VatRegime | null
 }
 
 export type DocumentType = "invoice" | "proforma"
@@ -314,6 +328,21 @@ export const decodeIssuer: Decoder<Issuer> = (input) => {
     defaultCurrency: text(value.defaultCurrency, "defaultCurrency"),
     defaultPaymentTermDays: integer(value.defaultPaymentTermDays, "defaultPaymentTermDays"),
     vatConfigurations: array(value.vatConfigurations, decodeVatConfiguration, "vatConfigurations"),
+    currentVat: value.currentVat === null ? null : decodeVatConfiguration(value.currentVat),
+  }
+}
+
+const decodeVatRegime: Decoder<VatRegime> = (input) => {
+  const value = object(input)
+  if (typeof value.registered !== "boolean") throw new Error("invalid registered")
+  return { code: text(value.code, "code"), rate: text(value.rate, "rate"), registered: value.registered, label: text(value.label, "label") }
+}
+
+export const decodeVatRegimes: Decoder<VatRegimes> = (input) => {
+  const value = object(input)
+  return {
+    regimes: array(value.regimes, decodeVatRegime, "regimes"),
+    inferred: value.inferred === null || value.inferred === undefined ? null : decodeVatRegime(value.inferred),
   }
 }
 

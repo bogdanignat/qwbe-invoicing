@@ -1,4 +1,4 @@
-import type { BuyerSnapshot, DocumentSeries, DocumentSource, IssuerProfile, ProductPreset } from "./invoice.ts"
+import type { BuyerSnapshot, DocumentSeries, DocumentSource, IssuerProfile, ProductPreset, VatConfiguration } from "./invoice.ts"
 import type { UnitOfMeasure } from "./unit-of-measures.ts"
 
 // Request shapes accepted by the components; the persisted model lives in invoice.ts.
@@ -7,7 +7,11 @@ export type ConfigureDocumentSeriesInput = Pick<DocumentSeries, "documentType" |
 export type IssueProformaInput = { readonly draftId: string; readonly series: string }
 export type ConvertProformaInput = { readonly proformaId: string }
 
-export type ConfigureIssuerInput = Omit<IssuerProfile, "organizationId">
+export interface VatChange { readonly code: string; readonly rate: string; readonly effectiveFrom: string }
+// Either the whole VAT history (external callers) or one regime change the cube schedules into the stored history.
+export type ConfigureIssuerInput = Omit<IssuerProfile, "organizationId" | "vatConfigurations"> & (
+  | { readonly vatConfigurations: ReadonlyArray<VatConfiguration>; readonly vatChange?: never }
+  | { readonly vatChange: VatChange; readonly vatConfigurations?: never })
 
 export type CustomerInput = BuyerSnapshot & { readonly defaultPaymentTermDays?: number }
 export type CreateCustomerInput = CustomerInput

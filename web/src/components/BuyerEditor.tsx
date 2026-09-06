@@ -1,7 +1,7 @@
 import type { BuyerMode, InvoiceAuthoringForm } from "../invoice-authoring-state.ts"
 import { identifierLabel, switchPartyType } from "../invoice-authoring-state.ts"
 import type { Customer, PartyType } from "../models.ts"
-import { normalizeRomanianCui, romanianCuiPattern } from "../vat-defaults.ts"
+import { normalizeRomanianCui, romanianCuiPattern } from "../identifiers.ts"
 
 interface BuyerEditorProps {
   readonly form: InvoiceAuthoringForm

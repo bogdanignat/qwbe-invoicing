@@ -9,6 +9,7 @@ import {
   type DocumentSource,
   type InvoicingFailure,
   type RequestContext,
+  type VatInference,
 } from "../cube/invoicing/index.ts"
 import type { DocumentsFailure } from "../cube/invoicing/documents/index.ts"
 import { createPaymentsService, type PaymentsFailure } from "../cube/invoicing/payments/index.ts"
@@ -192,6 +193,13 @@ const invoicingGroup = (runtime: ApiRuntime) => {
   return HttpApiBuilder.group(applicationHttpApi, "invoicing", (handlers) => handlers
     .handle("getIssuer", () => use((s) => s.invoicing.getIssuer()).pipe(Effect.mapError(errors("ResourceNotFound"))))
     .handle("configureIssuer", ({ payload }) => use((s) => s.invoicing.configureIssuer(payload)).pipe(Effect.mapError(errors("ValidationFailure"))))
+    .handle("listVatRegimes", ({ urlParams: { countryCode, fiscalIdentifier } }) => {
+      const inference: Effect.Effect<VatInference | undefined, ValidationFailure> =
+        countryCode === undefined && fiscalIdentifier === undefined ? Effect.succeed(undefined)
+          : countryCode !== undefined && fiscalIdentifier !== undefined ? Effect.succeed({ countryCode, fiscalIdentifier })
+          : Effect.fail(new ValidationFailure({ issues: ["countryCode and fiscalIdentifier must be supplied together"] }))
+      return inference.pipe(Effect.flatMap((value) => use((s) => s.invoicing.listVatRegimes(value))), Effect.mapError(errors("ValidationFailure")))
+    })
     .handle("listDocumentSeries", () => use((s) => s.invoicing.listDocumentSeries()).pipe(Effect.mapError(errors())))
     .handle("addDocumentSeries", ({ payload }) => use((s) => s.invoicing.addDocumentSeries(payload)).pipe(Effect.mapError(errors("ValidationFailure", "DomainConflict"))))
     .handle("listUnitOfMeasures", () => use((s) => s.invoicing.listUnitOfMeasures()).pipe(Effect.mapError(errors())))

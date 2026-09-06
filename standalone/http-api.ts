@@ -15,7 +15,7 @@ import type { RequestContext } from "../cube/invoicing/index.ts"
 import * as S from "./http-schemas.ts"
 
 export const operationNames = [
-  "getIssuer", "configureIssuer", "listDocumentSeries", "addDocumentSeries", "listUnitOfMeasures",
+  "getIssuer", "configureIssuer", "listVatRegimes", "listDocumentSeries", "addDocumentSeries", "listUnitOfMeasures",
   "listCustomers", "getCustomer", "createCustomer", "updateCustomer", "deleteCustomer",
   "listProductPresets", "createProductPreset", "updateProductPreset", "deleteProductPreset",
   "listDrafts", "getDraft", "createDraft", "updateDraft", "deleteDraft",
@@ -116,6 +116,7 @@ const conflict = <N extends string, M extends HttpMethod, P, U, B, H, Success, E
 const invoicing = HttpApiGroup.make("invoicing")
   .add(invoicingBase(notFound(HttpApiEndpoint.get("getIssuer", "/issuer").addSuccess(S.Issuer))))
   .add(invoicingBase(validation(body(HttpApiEndpoint.put("configureIssuer", "/issuer").setPayload(S.IssuerInput).addSuccess(S.Issuer)))))
+  .add(invoicingBase(validation(HttpApiEndpoint.get("listVatRegimes", "/vat-regimes").setUrlParams(S.VatRegimeQuery).addSuccess(S.VatRegimes))))
   .add(invoicingBase(HttpApiEndpoint.get("listDocumentSeries", "/document-series").addSuccess(Schema.Array(S.DocumentSeries))))
   .add(invoicingBase(conflict(validation(body(HttpApiEndpoint.post("addDocumentSeries", "/document-series").setPayload(S.DocumentSeriesInput).addSuccess(S.DocumentSeries))))))
   .add(invoicingBase(HttpApiEndpoint.get("listUnitOfMeasures", "/unit-of-measures").addSuccess(Schema.Array(S.UnitOfMeasure))))

@@ -48,6 +48,7 @@ void test("requires integer issuer terms and decodes tax configuration", () => {
     address: { countryCode: "RO", city: "Botoșani", street: "Strada 2" },
     defaultCurrency: "RON", defaultPaymentTermDays: 15,
     vatConfigurations: [{ code: "RO_STANDARD", rate: "21.00", effectiveFrom: "2026-01-01", effectiveTo: null }],
+    currentVat: null,
   }
   assert.equal(decodeIssuer(input).vatConfigurations[0]?.effectiveTo, undefined)
   assert.throws(() => decodeIssuer({ ...input, defaultPaymentTermDays: "15" }), /invalid defaultPaymentTermDays/)

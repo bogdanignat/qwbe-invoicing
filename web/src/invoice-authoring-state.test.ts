@@ -20,7 +20,7 @@ const draft: DraftInvoice = {
 const issuer: Issuer = {
   organizationId: "org-1", name: "QWBE", fiscalIdentifier: "RO2",
   address: { countryCode: "RO", city: "Botoșani", street: "Strada 2" },
-  defaultCurrency: "RON", defaultPaymentTermDays: 15, vatConfigurations: [],
+  defaultCurrency: "RON", defaultPaymentTermDays: 15, vatConfigurations: [], currentVat: null,
 }
 
 const customer: Customer = {

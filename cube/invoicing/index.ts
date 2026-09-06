@@ -34,5 +34,6 @@ export type { DocumentCursor, DraftCursor, NameCursor, PageQuery } from "./appli
 export type { InvoicingDependencies, InvoicingService, InvoicingTransaction } from "./application/invoicing.ts"
 export type * from "./domain/invoice.ts"
 export type * from "./domain/inputs.ts"
+export type { IssuerView, VatInference, VatRegime, VatRegimes } from "./registry/index.ts"
 export type * from "./corrections/domain/corrections.ts"
 export type * from "./domain/unit-of-measures.ts"
