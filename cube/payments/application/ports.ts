@@ -12,6 +12,17 @@ export interface InvoiceSnapshot {
   readonly dueDate: string | null
   readonly totalIncludingVat: string
 }
+// Same shape as the parent's audit event: payments append to the invoicing trail, it does not own one.
+export interface AuditEvent {
+  readonly id: string
+  readonly organizationId: string
+  readonly actorId: string
+  readonly occurredAt: string
+  readonly action: string
+  readonly targetKind: string
+  readonly targetId: string
+  readonly reason?: string
+}
 export interface PaymentsTransaction {
   readonly findInvoiceSnapshot: (organizationId: string, invoiceId: string) => Read<InvoiceSnapshot | undefined>
   readonly savePayment: (payment: Payment) => Write
@@ -19,4 +30,5 @@ export interface PaymentsTransaction {
   readonly findPayment: (organizationId: string, invoiceId: string, paymentId: string) => Read<Payment | undefined>
   readonly findIdempotencyRecord: (organizationId: string, key: string) => Read<PaymentIdempotencyRecord | undefined>
   readonly saveIdempotencyRecord: (record: PaymentIdempotencyRecord) => Write
+  readonly appendAuditEvent: (event: AuditEvent) => Write
 }

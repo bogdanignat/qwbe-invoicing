@@ -28,12 +28,13 @@ void test("migration apply is idempotent", () => {
       "010-product-presets-payment-terms",
       "011-external-api-snapshots",
       "012-payment-idempotency",
+      "013-audit-trail",
       "documents/000-foundation",
       "documents/001-artifacts",
       "documents/002-proforma-artifacts",
       "sessions/000-browser-sessions",
     ])
-    assert.equal(applyMigrations(directory).changed, 17)
+    assert.equal(applyMigrations(directory).changed, 18)
     assert.equal(applyMigrations(directory).changed, 0)
     assert.equal(databaseReady(directory), true)
   } finally {
@@ -58,7 +59,8 @@ void test("migrations leave every database in write-ahead logging mode with the 
       const triggers = new Set(database.prepare("SELECT name FROM sqlite_master WHERE type = 'trigger'").all().map((row) => String(row.name)))
       for (const expected of ["issued_invoices_no_update", "issued_invoices_no_delete", "issued_lines_no_update", "issued_lines_no_delete",
         "issued_tax_breakdown_no_update", "issued_tax_breakdown_no_delete", "correction_documents_no_update", "correction_documents_no_delete",
-        "proformas_no_delete", "proformas_no_content_update", "idempotency_records_no_update", "idempotency_records_no_delete"]) {
+        "proformas_no_delete", "proformas_no_content_update", "idempotency_records_no_update", "idempotency_records_no_delete",
+        "issued_invoices_actor_no_update", "proformas_actor_no_update", "correction_documents_actor_no_update", "audit_events_no_update", "audit_events_no_delete"]) {
         assert.ok(triggers.has(expected), `${expected} must exist after all migrations`)
       }
     } finally {

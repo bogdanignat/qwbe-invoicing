@@ -143,6 +143,8 @@ interface NumberedDocumentSnapshot extends DocumentContent {
   readonly series: string
   readonly number: number
   readonly issuedAt: string
+  // Identity that issued the document; fixed at issuance like every other snapshot field.
+  readonly actorId: string
   readonly issuer: PartySnapshot
 }
 
@@ -158,6 +160,20 @@ export interface Proforma extends NumberedDocumentSnapshot {
   readonly invoiceSeries: string
   readonly convertedDraftId: string | null
   readonly convertedInvoiceId: string | null
+}
+
+// Append-only trail of who did what to which record, written in the same transaction as the change
+// itself so no fiscal document exists without its event. Actions are dotted `target.verb` strings;
+// child cubes append their own without the parent listing them.
+export interface AuditEvent {
+  readonly id: string
+  readonly organizationId: string
+  readonly actorId: string
+  readonly occurredAt: string
+  readonly action: string
+  readonly targetKind: string
+  readonly targetId: string
+  readonly reason?: string
 }
 
 export type ProformaConversion = Readonly<{

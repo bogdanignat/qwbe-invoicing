@@ -81,6 +81,15 @@ void test("issues deterministic immutable invoice snapshots through the public s
 
   const issued = await Effect.runPromise(service.issueInvoice(idempotent({ draftId: draft.id })))
   assert.equal(issued.number, 1)
+  assert.equal(issued.actorId, identity.id)
+  assert.deepEqual(state.auditEvents.map(({ action, actorId, targetKind, targetId }) => ({ action, actorId, targetKind, targetId })), [
+    { action: "issuer.configured", actorId: identity.id, targetKind: "issuer", targetId: "org-1" },
+    { action: "series.added", actorId: identity.id, targetKind: "document_series", targetId: "invoice:QWBE" },
+    { action: "series.added", actorId: identity.id, targetKind: "document_series", targetId: "invoice:ALT" },
+    { action: "series.added", actorId: identity.id, targetKind: "document_series", targetId: "proforma:PRO" },
+    { action: "invoice.issued", actorId: identity.id, targetKind: "invoice", targetId: issued.id },
+  ])
+  assert.equal(state.auditEvents.at(-1)?.occurredAt, issued.issuedAt)
   assert.equal(issued.series, "QWBE")
   assert.equal(issued.totalExcludingVat, "125.00")
   assert.equal(issued.vatTotal, "26.25")
@@ -256,6 +265,11 @@ void test("issues authored documents without drafts and invoices a proforma snap
   const converted = await Effect.runPromise(service.issueInvoiceFromProforma(idempotent({ proformaId: proforma.id })))
   assert.equal(converted.draftId, null)
   assert.equal(converted.sourceProformaId, proforma.id)
+  assert.deepEqual(state.auditEvents.slice(-3).map(({ action, targetId }) => ({ action, targetId })), [
+    { action: "proforma.issued", targetId: proforma.id },
+    { action: "proforma.converted", targetId: proforma.id },
+    { action: "invoice.issued", targetId: converted.id },
+  ])
   assert.deepEqual([converted.issuer, converted.customer, converted.lines, converted.vatBreakdown,
     converted.dueDate, converted.currency, converted.totalExcludingVat, converted.vatTotal, converted.totalIncludingVat],
   [proforma.issuer, proforma.customer, proforma.lines, proforma.vatBreakdown,

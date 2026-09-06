@@ -223,6 +223,7 @@ void test("requires host authentication and serves the complete invoice-core rou
       body: {},
     }, runtime)
     assert.equal(issued.status, 200)
+    assert.equal((issued.body as { actorId: string }).actorId, "standalone-owner")
     assert.equal((issued.body as { totalIncludingVat: string }).totalIncludingVat, "121.00")
     assert.equal((issued.body as { customer: { name: string } }).customer.name, "Maria Ionescu")
     const invoiceId = (issued.body as { id: string }).id

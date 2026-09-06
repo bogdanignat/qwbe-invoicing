@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 
 import { findIdempotencyReplay, idempotencyRecord, missingIdempotencyResult } from "../../application/idempotency.ts"
-import { checked, documentPageQuery, ensureChronology, missing, pageOf, type Authorize, type OperationDependencies, type Page, type PageRequest } from "../../application/support.ts"
+import { audit, checked, documentPageQuery, ensureChronology, missing, pageOf, type Authorize, type OperationDependencies, type Page, type PageRequest } from "../../application/support.ts"
 import type { InvoicingFailure } from "../../contracts/failures.ts"
 import type { InvoicingPermissions } from "../../contracts/permissions.ts"
 import type { DocumentSource, Idempotent, Proforma } from "../../domain/invoice.ts"
@@ -40,13 +40,14 @@ export const createProformaOperations = (
         sourceDraftId: draft?.id ?? null, invoiceSeries: document.series, convertedDraftId: null, convertedInvoiceId: null,
         ...numberedSnapshot(document, issuer, { id, series: series.series,
           number: yield* transaction.allocateDocumentNumber(context.organization.id, fiscalYear(document.issueDate), "proforma", series.series),
-          issuedAt }),
+          issuedAt, actorId: context.identity.id }),
       }
       yield* transaction.saveProforma(proforma)
       if (draft !== undefined) yield* transaction.saveDraft({ ...draft, status: "proforma_issued" })
       yield* transaction.saveIdempotencyRecord(idempotencyRecord(
         context.organization.id, idempotency, operation, "proforma", proforma.id, issuedAt.toISOString(),
       ))
+      yield* audit(transaction, context, dependencies.ids, issuedAt, { action: "proforma.issued", targetKind: "proforma", targetId: proforma.id })
       return structuredClone(proforma)
     }))
   })
