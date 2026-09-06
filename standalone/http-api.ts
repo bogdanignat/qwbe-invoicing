@@ -8,7 +8,9 @@ import {
   OpenApi,
 } from "@effect/platform"
 import type { HttpMethod } from "@effect/platform/HttpMethod"
-import { Schema } from "effect"
+import { Context, Schema } from "effect"
+
+import type { RequestContext } from "../cube/invoicing/index.ts"
 
 import * as S from "./http-schemas.ts"
 
@@ -31,13 +33,23 @@ const bearer = HttpApiSecurity.bearer.pipe(
 const sessionCookie = HttpApiSecurity.apiKey({ key: "qwbe_session", in: "cookie" }).pipe(
   HttpApiSecurity.annotate(OpenApi.Description, "Opaque browser session cookie"),
 )
-class ApiAuthentication extends HttpApiMiddleware.Tag<ApiAuthentication>()("ApiAuthentication", {
+// What the security middleware hands to handlers: the host-authenticated principal for API
+// calls, the browser session (CSRF token and cookie) for the session endpoints.
+export class CurrentRequest extends Context.Tag("qwbe-invoicing/CurrentRequest")<CurrentRequest, RequestContext>() {}
+export interface BrowserPrincipal {
+  readonly csrfToken: string
+  readonly cookie: string
+}
+export class CurrentSession extends Context.Tag("qwbe-invoicing/CurrentSession")<CurrentSession, BrowserPrincipal>() {}
+export class ApiAuthentication extends HttpApiMiddleware.Tag<ApiAuthentication>()("ApiAuthentication", {
   security: { bearerAuth: bearer, sessionCookie },
-  failure: S.AuthenticationRequiredError,
+  failure: Schema.Union(S.AuthenticationRequiredError, S.CsrfError, S.BusinessUnavailableError),
+  provides: CurrentRequest,
 }) {}
-class SessionAuthentication extends HttpApiMiddleware.Tag<SessionAuthentication>()("SessionAuthentication", {
+export class SessionAuthentication extends HttpApiMiddleware.Tag<SessionAuthentication>()("SessionAuthentication", {
   security: { sessionCookie },
   failure: S.AuthenticationRequiredError,
+  provides: CurrentSession,
 }) {}
 
 const id = HttpApiSchema.param("id", Schema.String)
@@ -130,7 +142,7 @@ const invoicing = HttpApiGroup.make("invoicing")
   .add(invoicingBase(conflict(notFound(validation(idempotentBody(HttpApiEndpoint.post("recordPayment")`/invoices/${invoiceId}/payments`.setPayload(S.PaymentInput).addSuccess(S.RecordPaymentResult)))))))
   .add(invoicingBase(conflict(notFound(validation(idempotentBody(HttpApiEndpoint.post("reversePayment")`/invoices/${invoiceId}/payments/${paymentId}/reversal`.setPayload(S.ReversalInput).addSuccess(S.RecordPaymentResult)))))))
   .add(invoicingBase(conflict(notFound(validation(idempotentBody(HttpApiEndpoint.post("createCorrection")`/invoices/${invoiceId}/corrections`.setPayload(S.CorrectionInput).addSuccess(S.Correction)))))))
-  .add(invoicingBase(HttpApiEndpoint.get("listCorrections")`/invoices/${invoiceId}/corrections`.setUrlParams(S.SourceFilter).addSuccess(Schema.Array(S.Correction))))
+  .add(invoicingBase(validation(HttpApiEndpoint.get("listCorrections")`/invoices/${invoiceId}/corrections`.setUrlParams(S.SourceFilter).addSuccess(Schema.Array(S.Correction)))))
   .add(invoicingBase(notFound(HttpApiEndpoint.get("getCorrection")`/corrections/${id}`.addSuccess(S.Correction))))
   .add(invoicingBase(validation(HttpApiEndpoint.get("listIssuedInvoices", "/invoices").setUrlParams(S.ListQuery).addSuccess(S.IssuedInvoicePage))))
   .add(invoicingBase(conflict(notFound(validation(idempotentBody(HttpApiEndpoint.post("issueInvoice", "/invoices").setPayload(S.AuthoringDocumentInput).addSuccess(S.IssuedInvoice)))))))
@@ -141,8 +153,8 @@ const invoicing = HttpApiGroup.make("invoicing")
   .add(invoicingBase(conflict(notFound(validation(idempotentBody(HttpApiEndpoint.post("issueProforma", "/proformas")
     .setPayload(S.AuthoringProformaInput).addSuccess(S.Proforma)))))))
   .add(invoicingBase(notFound(HttpApiEndpoint.get("getProforma")`/proformas/${id}`.addSuccess(S.Proforma))))
-  .add(invoicingBase(conflict(notFound(idempotentBody(HttpApiEndpoint.post("issueInvoiceFromProforma")`/proformas/${id}/invoice`
-    .setPayload(S.EmptyInput).addSuccess(S.IssuedInvoice))))))
+  .add(invoicingBase(conflict(notFound(validation(idempotentBody(HttpApiEndpoint.post("issueInvoiceFromProforma")`/proformas/${id}/invoice`
+    .setPayload(S.EmptyInput).addSuccess(S.IssuedInvoice)))))))
 
 const documents = HttpApiGroup.make("documents")
   .add(documentsBase(body(HttpApiEndpoint.post("renderInvoicePdf")`/invoices/${invoiceId}/pdf`.addSuccess(S.Artifact)

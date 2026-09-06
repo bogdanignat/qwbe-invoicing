@@ -1,9 +1,12 @@
 import { HttpApiSchema } from "@effect/platform"
 import { Schema } from "effect"
 
-const optionalString = Schema.optional(Schema.String)
+// Exact optionals: an absent key decodes to an absent key, never to `undefined`, so decoded
+// payloads satisfy the cube's `exactOptionalPropertyTypes` inputs without a copy.
+const optional = <A, I, R>(schema: Schema.Schema<A, I, R>) => Schema.optionalWith(schema, { exact: true })
+const optionalString = optional(Schema.String)
 const nullableString = Schema.NullOr(Schema.String)
-const optionalNullableString = Schema.optional(nullableString)
+const optionalNullableString = optional(nullableString)
 
 export const Address = Schema.Struct({
   countryCode: Schema.String,
@@ -31,7 +34,7 @@ export const CustomerInput = Schema.Struct({
   name: Schema.String,
   fiscalIdentifier: Schema.String,
   address: Address,
-  defaultPaymentTermDays: Schema.optional(Schema.Int),
+  defaultPaymentTermDays: optional(Schema.Int),
 })
 
 export const VatConfiguration = Schema.Struct({
@@ -86,8 +89,8 @@ export const SourceFilter = Schema.Struct({
   sourceId: optionalString,
 })
 export const PageQuery = Schema.Struct({
-  limit: Schema.optional(Schema.NumberFromString.annotations({ description: "Page size, 1-200, default 100." })),
-  cursor: Schema.optional(Schema.String.annotations({ description: "Opaque nextCursor of the previous page." })),
+  limit: optional(Schema.NumberFromString.annotations({ description: "Page size, 1-200, default 100." })),
+  cursor: optional(Schema.String.annotations({ description: "Opaque nextCursor of the previous page." })),
 })
 export const ListQuery = Schema.Struct({ ...SourceFilter.fields, ...PageQuery.fields })
 const pageOf = <A, I, R>(item: Schema.Schema<A, I, R>) => Schema.Struct({ items: Schema.Array(item), nextCursor: Schema.NullOr(Schema.String) })
@@ -99,7 +102,7 @@ export const Customer = Schema.Struct({
   name: Schema.String,
   fiscalIdentifier: Schema.String,
   address: Address,
-  defaultPaymentTermDays: Schema.optional(Schema.Int),
+  defaultPaymentTermDays: optional(Schema.Int),
   deletedAt: optionalString,
 })
 
@@ -146,7 +149,7 @@ export const DraftInvoice = Schema.Struct({
   organizationId: Schema.String,
   customer: Buyer,
   customerId: optionalString,
-  source: Schema.optional(DocumentSource),
+  source: optional(DocumentSource),
   series: Schema.String,
   issueDate: Schema.String,
   dueDate: nullableString,
@@ -166,7 +169,7 @@ export const IssuedInvoice = Schema.Struct({
   draftId: nullableString,
   sourceProformaId: nullableString,
   organizationId: Schema.String,
-  source: Schema.optional(DocumentSource),
+  source: optional(DocumentSource),
   series: Schema.String,
   number: Schema.Int,
   issueDate: Schema.String,
@@ -185,15 +188,17 @@ export const IssuedInvoice = Schema.Struct({
 
 export const IssuedInvoicePage = pageOf(IssuedInvoice)
 
-const BuyerById = Schema.Struct({ customerId: Schema.String })
-const InlineBuyer = Schema.Struct({ customer: Buyer })
+// Exactly one buyer source: each member forbids the other's key, mirroring the cube's `BuyerSource`.
+const BuyerById = Schema.Struct({ customerId: Schema.String, customer: optional(Schema.Never) })
+const InlineBuyer = Schema.Struct({ customer: Buyer, customerId: optional(Schema.Never) })
+const DraftFields = { source: optional(DocumentSource), series: Schema.String, issueDate: Schema.String, currency: optionalString, dueDate: optionalNullableString }
 export const DraftInput = Schema.Union(
-  Schema.Struct({ customerId: Schema.String, source: Schema.optional(DocumentSource), series: Schema.String, issueDate: Schema.String, currency: optionalString, dueDate: optionalNullableString }),
-  Schema.Struct({ customer: Buyer, source: Schema.optional(DocumentSource), series: Schema.String, issueDate: Schema.String, currency: optionalString, dueDate: optionalNullableString }),
+  Schema.Struct({ ...BuyerById.fields, ...DraftFields }),
+  Schema.Struct({ ...InlineBuyer.fields, ...DraftFields }),
 )
 export const UpdateDraftInput = Schema.Union(
-  Schema.Struct({ ...BuyerById.fields, source: Schema.optional(Schema.NullOr(DocumentSource)), issueDate: Schema.String, dueDate: optionalNullableString }),
-  Schema.Struct({ ...InlineBuyer.fields, source: Schema.optional(Schema.NullOr(DocumentSource)), issueDate: Schema.String, dueDate: optionalNullableString }),
+  Schema.Struct({ ...BuyerById.fields, source: optional(Schema.NullOr(DocumentSource)), issueDate: Schema.String, dueDate: optionalNullableString }),
+  Schema.Struct({ ...InlineBuyer.fields, source: optional(Schema.NullOr(DocumentSource)), issueDate: Schema.String, dueDate: optionalNullableString }),
 )
 export const DraftLineInput = Schema.Struct({
   description: Schema.String,
@@ -202,7 +207,7 @@ export const DraftLineInput = Schema.Struct({
   unitOfMeasure: UnitOfMeasure,
   vatRateCode: Schema.String,
 })
-const AuthoringFields = { source: Schema.optional(DocumentSource), series: Schema.String, issueDate: Schema.String, dueDate: optionalNullableString,
+const AuthoringFields = { source: optional(DocumentSource), series: Schema.String, issueDate: Schema.String, dueDate: optionalNullableString,
   currency: Schema.Literal("RON"), lines: Schema.Array(DraftLineInput) }
 export const AuthoringDocumentInput = Schema.Union(
   Schema.Struct({ ...BuyerById.fields, ...AuthoringFields }), Schema.Struct({ ...InlineBuyer.fields, ...AuthoringFields }),
@@ -251,12 +256,12 @@ export const PaymentSummary = Schema.Struct({
   payments: Schema.Array(Payment),
 })
 
-export const CorrectionInput = Schema.Struct({ reason: Schema.String, issueDate: optionalString, source: Schema.optional(DocumentSource) })
+export const CorrectionInput = Schema.Struct({ reason: Schema.String, issueDate: optionalString, source: optional(DocumentSource) })
 export const Correction = Schema.Struct({
   id: Schema.String,
   organizationId: Schema.String,
   originalInvoiceId: Schema.String,
-  source: Schema.optional(DocumentSource),
+  source: optional(DocumentSource),
   fiscalYear: Schema.Int,
   series: Schema.String,
   number: Schema.Int,
@@ -291,7 +296,7 @@ export const Proforma = Schema.Struct({
   convertedDraftId: nullableString,
   convertedInvoiceId: nullableString,
   organizationId: Schema.String,
-  source: Schema.optional(DocumentSource),
+  source: optional(DocumentSource),
   series: Schema.String,
   number: Schema.Int,
   issueDate: Schema.String,
@@ -309,7 +314,7 @@ export const Proforma = Schema.Struct({
 })
 export const ProformaPage = pageOf(Proforma)
 export const IssueProformaInput = Schema.Struct({ series: Schema.String })
-export const EmptyInput = Schema.Struct({})
+export const EmptyInput = Schema.Struct({}).pipe(Schema.filter((value) => !Array.isArray(value), { message: () => "request body must be a JSON object" }))
 export const ProformaArtifact = Schema.Struct({
   proformaId: Schema.String,
   organizationId: Schema.String,
@@ -326,14 +331,12 @@ export const LoginInput = Schema.Struct({ token: Schema.String })
 export const AuthenticatedSession = Schema.Struct({ authenticated: Schema.Literal(true), csrfToken: Schema.String })
 export const LoggedOutSession = Schema.Struct({ authenticated: Schema.Literal(false) })
 
-const errorUnion = (status: number, ...members: ReadonlyArray<Schema.Schema.Any>) =>
-  Schema.Union(...members.map((member) => member.annotations(HttpApiSchema.annotations({ status }))))
-const tagged = (status: number, ...tags: ReadonlyArray<string>) =>
-  errorUnion(status, ...tags.map((error) => Schema.Struct({ error: Schema.Literal(error) })))
-export const ValidationError = errorUnion(
-  400,
-  Schema.Struct({ error: Schema.Literal("ValidationFailure"), issues: Schema.Array(Schema.String) }),
-)
+// Error shapes keep their literal tags in the type: a handler may only fail with the shapes its
+// endpoint declares, and the compiler enforces it (see `only` in api.ts). `Schema.Schema.Any` here
+// would erase that to `any` and silently disable the check.
+const withStatus = <A, I, R>(status: number, schema: Schema.Schema<A, I, R>) => schema.annotations(HttpApiSchema.annotations({ status }))
+const tagged = <const Tag extends string>(status: number, tag: Tag) => withStatus(status, Schema.Struct({ error: Schema.Literal(tag) }))
+export const ValidationError = withStatus(400, Schema.Struct({ error: Schema.Literal("ValidationFailure"), issues: Schema.Array(Schema.String) }))
 export const InvalidJsonError = tagged(400, "invalid_json")
 export const InvalidCredentialsRequestError = tagged(400, "invalid_credentials")
 export const AuthenticationRequiredError = tagged(401, "AuthenticationRequired")
@@ -344,14 +347,13 @@ export const CsrfError = tagged(403, "csrf_validation_failed")
 export const OriginForbiddenError = tagged(403, "origin_not_allowed")
 export const ResourceNotFoundError = tagged(404, "ResourceNotFound")
 export const DocumentNotFoundError = tagged(404, "DocumentNotFound")
-export const DomainConflictError = errorUnion(
-  409,
-  Schema.Struct({ error: Schema.Literal("DomainConflict"), code: Schema.String }),
-)
+export const DomainConflictError = withStatus(409, Schema.Struct({ error: Schema.Literal("DomainConflict"), code: Schema.String }))
 export const ArtifactConflictError = tagged(409, "ArtifactConflict")
 export const PayloadTooLargeError = tagged(413, "request_body_too_large")
-export const InvoicingInternalError = tagged(500, "PersistenceFailure", "internal_failure")
-export const DocumentsInternalError = tagged(500, "DocumentPersistenceFailure", "DocumentRenderingFailure", "internal_failure")
+export const InvoicingInternalError = Schema.Union(tagged(500, "PersistenceFailure"), tagged(500, "internal_failure"))
+export const DocumentsInternalError = Schema.Union(
+  tagged(500, "DocumentPersistenceFailure"), tagged(500, "DocumentRenderingFailure"), tagged(500, "internal_failure"),
+)
 export const SessionInternalError = tagged(500, "internal_failure")
-export const BusinessUnavailableError = tagged(503, "OrganizationContextMissing", "not_ready")
+export const BusinessUnavailableError = Schema.Union(tagged(503, "OrganizationContextMissing"), tagged(503, "not_ready"))
 export const ReadinessError = tagged(503, "not_ready")
