@@ -20,5 +20,5 @@ export const createStandaloneArtifactService = (
   source: createInvoiceSource(dataDirectory),
   renderer: createPdfRenderer(),
   objects: createPdfObjectStore(dataDirectory),
-  cubeIdentity: "documents",
+  cubeIdentity: "invoicing",
 })

@@ -8,7 +8,6 @@ export const cube = {
     requiresAuth: true,
     permissions: [],
   },
-  create: () => ({ handlers: {} }),
 }
 
 export { createCorrectionOperations } from "./application/corrections.ts"

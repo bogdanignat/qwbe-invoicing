@@ -287,7 +287,6 @@ const issuedInvoiceFrom = (database: DatabaseSync, value: Row): IssuedInvoice =>
     lines: loadLines(database, "issued_lines", id), vatBreakdown,
     totalExcludingVat: text(value, "total_excluding_tax"), vatTotal: text(value, "tax_total"),
     totalIncludingVat: text(value, "total_including_tax"),
-    eFacturaStatus: (optionalText(value, "e_factura_status") ?? "not_sent") as IssuedInvoice["eFacturaStatus"],
   }
 }
 
@@ -519,13 +518,13 @@ const transactionAdapter = (database: DatabaseSync): InvoicingTransaction => ({
        issued_at, currency, issuer_legal_name, issuer_tax_identifier, issuer_country_code, issuer_city,
         issuer_street, issuer_county, issuer_postal_code, customer_legal_name, customer_tax_identifier, customer_party_type,
        customer_country_code, customer_city, customer_street, customer_county, customer_postal_code,
-       total_excluding_tax, tax_total, total_including_tax, e_factura_status, actor_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'invoice', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+       total_excluding_tax, tax_total, total_including_tax, actor_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'invoice', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .run(invoice.id, invoice.draftId, invoice.sourceProformaId, invoice.organizationId, ...sourceValues(invoice.source), Number(invoice.issueDate.slice(0, 4)),
         invoice.series, invoice.number, invoice.issueDate, invoice.dueDate, invoice.issuedAt, invoice.currency,
         invoice.issuer.name, invoice.issuer.fiscalIdentifier, ...addressValues(invoice.issuer.address),
         invoice.customer.name, invoice.customer.fiscalIdentifier, invoice.customer.partyType, ...addressValues(invoice.customer.address),
-        invoice.totalExcludingVat, invoice.vatTotal, invoice.totalIncludingVat, (invoice as unknown as { eFacturaStatus?: string }).eFacturaStatus ?? "not_sent", invoice.actorId)
+        invoice.totalExcludingVat, invoice.vatTotal, invoice.totalIncludingVat, invoice.actorId)
     saveLines(database, { table: "issued_lines" }, invoice.id, invoice.lines)
     const statement = database.prepare(`INSERT INTO issued_tax_breakdown
       (invoice_id, line_position, tax_code, category, rate, taxable_amount, tax_amount) VALUES (?, ?, ?, ?, ?, ?, ?)`)

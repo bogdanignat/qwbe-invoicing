@@ -148,11 +148,10 @@ interface NumberedDocumentSnapshot extends DocumentContent {
   readonly issuer: PartySnapshot
 }
 
-export type EFacturaStatus = "not_sent" | "pending" | "sent" | "accepted" | "rejected"
+// Transmission state (e-Factura) belongs to the child cube that owns the transport, never here.
 export interface IssuedInvoice extends NumberedDocumentSnapshot {
   readonly draftId: string | null
   readonly sourceProformaId: string | null
-  readonly eFacturaStatus: EFacturaStatus
 }
 
 export interface Proforma extends NumberedDocumentSnapshot {

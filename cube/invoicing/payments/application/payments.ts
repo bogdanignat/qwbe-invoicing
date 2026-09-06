@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 
 import { ValidationFailure, type PaymentsFailure } from "../contracts/failures.ts"
-import { legacyPaymentsPermissions, paymentsPermissions } from "../contracts/permissions.ts"
+import { paymentsPermissions } from "../contracts/permissions.ts"
 import { formatMinor, moneyMinor, validateRecordPaymentInput, type Idempotent, type Payment, type RecordPaymentInput } from "../domain/payments.ts"
 import { findReplay, idempotencyRecord, validateAttempt } from "./idempotency.ts"
 import { createReversePayment } from "./reversals.ts"
@@ -13,7 +13,7 @@ export const createPaymentsService = (dependencies: PaymentsDependencies) => {
   const recordPayment = ({ request: input, idempotency }: Idempotent<RecordPaymentInput>): Effect.Effect<RecordPaymentResult, PaymentsFailure> => Effect.gen(function*() {
     validateRecordPaymentInput(input)
     yield* validateAttempt(idempotency)
-    const context = yield* authorized(permissions.record, legacyPaymentsPermissions.record); const id = yield* dependencies.ids.next; const now = yield* dependencies.clock.now
+    const context = yield* authorized(permissions.record); const id = yield* dependencies.ids.next; const now = yield* dependencies.clock.now
     return yield* dependencies.store.transaction((transaction) => Effect.gen(function*() {
       const invoice = yield* transaction.findInvoiceSnapshot(context.organization.id, input.invoiceId)
       if (invoice === undefined) return yield* Effect.fail(missingInvoice(input.invoiceId))
@@ -36,7 +36,7 @@ export const createPaymentsService = (dependencies: PaymentsDependencies) => {
     }))
   })
   const listPayments = (invoiceId: string): Effect.Effect<InvoicePaymentSummary, PaymentsFailure> => Effect.gen(function*() {
-    const context = yield* authorized(permissions.read, legacyPaymentsPermissions.read); const now = yield* dependencies.clock.now
+    const context = yield* authorized(permissions.read); const now = yield* dependencies.clock.now
     return yield* dependencies.store.transaction((transaction) => Effect.gen(function*() {
       const invoice = yield* transaction.findInvoiceSnapshot(context.organization.id, invoiceId)
       if (invoice === undefined) return yield* Effect.fail(missingInvoice(invoiceId))

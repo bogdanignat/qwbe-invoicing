@@ -14,7 +14,6 @@ export const cube = {
     requiresAuth: true,
     permissions: [],
   },
-  create: () => ({ handlers: {} }),
 }
 
 export type IssuanceOperations = InvoiceOperations & ProformaOperations & ProformaConversionOperations

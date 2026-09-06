@@ -3,7 +3,7 @@ import { accessSync, constants } from "node:fs"
 
 import { Effect } from "effect"
 
-import { documentsPermissions } from "../cube/invoicing/documents/index.ts"
+import { invoicingPermissions } from "../cube/invoicing/index.ts"
 import { reconcileArtifacts } from "../standalone/artifact-reconciliation.ts"
 import { createStandaloneArtifactService } from "../standalone/artifact-runtime.ts"
 import { executeBackup, executeRestore, planRestore } from "../standalone/backup.ts"
@@ -100,7 +100,7 @@ if (command !== undefined) {
         const service = createStandaloneArtifactService(config.dataDirectory, Effect.succeed({
           identity: {
             id: "standalone-operator",
-            permissions: [documentsPermissions.read, documentsPermissions.render],
+            permissions: [invoicingPermissions("invoicing").read],
           },
           organization: { id: config.organizationId },
         }))

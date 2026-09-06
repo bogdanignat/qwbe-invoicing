@@ -1,22 +1,14 @@
 const identity = "documents"
 
-export const documentsPermissions = {
-  read: `${identity}:read`,
-  render: `${identity}:render`,
-}
-
+// Child cube: reading and rendering artifacts is covered by the parent's read permission.
 export const cube = {
   manifest: {
     name: identity,
     parent: "invoicing",
     tables: ["invoice_artifacts", "proforma_artifacts"],
     requiresAuth: true,
-    permissions: [
-      { name: documentsPermissions.read, roles: ["admin"] },
-      { name: documentsPermissions.render, roles: ["admin"] },
-    ],
+    permissions: [],
   },
-  create: () => ({ handlers: {} }),
 }
 
 export { createArtifactService } from "./application/artifacts.ts"

@@ -13,7 +13,6 @@ export const cube = {
     requiresAuth: true,
     permissions: [],
   },
-  create: () => ({ handlers: {} }),
 }
 
 export type DraftOperations = DraftDocumentOperations & DraftLineOperations

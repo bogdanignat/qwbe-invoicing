@@ -56,7 +56,7 @@ void test("upgrades a populated version-six database without rewriting migration
   const directory = mkdtempSync(join(tmpdir(), "qwbe-upgrade-"))
   try {
     seedVersionSix(directory)
-    assert.equal(applyMigrations(directory).changed, 10)
+    assert.equal(applyMigrations(directory).changed, 11)
     const database = new DatabaseSync(databasePath(directory))
     try {
       database.exec("PRAGMA foreign_keys = ON")
@@ -66,7 +66,7 @@ void test("upgrades a populated version-six database without rewriting migration
       assert.deepEqual(migrations, ["000-foundation", "001-invoice-core", "002-invoice-payments", "003-invoice-corrections",
         "004-invoice-delete-last", "005-allow-e-factura-status-update", "006-customer-soft-delete", "007-complete-invoice-authoring",
          "008-proforma-workflow", "009-proforma-direct-invoice", "010-product-presets-payment-terms",
-         "011-external-api-snapshots", "012-payment-idempotency", "013-audit-trail", "014-invoice-artifacts", "015-proforma-artifacts"])
+         "011-external-api-snapshots", "012-payment-idempotency", "013-audit-trail", "014-invoice-artifacts", "015-proforma-artifacts", "016-drop-e-factura-status"])
       const columns = database.prepare("PRAGMA table_info(invoice_drafts)").all()
       assert.equal(columns.some((row) => row.name === "customer_id" && row.notnull === 0), true)
       assert.equal(columns.some((row) => row.name === "due_date" && row.notnull === 0), true)
@@ -108,7 +108,7 @@ void test("upgrades a populated version-six database without rewriting migration
         "invoice_drafts_series_update", "issued_invoices_no_update", "issued_invoices_no_delete",
         "issued_lines_no_delete", "issued_tax_breakdown_no_delete", "issued_invoices_source_no_update",
         "proformas_source_no_update"]) assert.equal(triggers.has(name), true)
-      database.prepare("UPDATE issued_invoices SET e_factura_status='pending' WHERE id='invoice-1'").run()
+      assert.equal(database.prepare("PRAGMA table_info(issued_invoices)").all().some((column) => column.name === "e_factura_status"), false)
       assert.throws(() => database.prepare("UPDATE issued_invoices SET issuer_county='IS' WHERE id='invoice-1'").run())
       assert.throws(() => database.prepare("UPDATE issued_invoices SET issuer_postal_code=NULL WHERE id='invoice-1'").run())
       assert.throws(() => database.prepare("UPDATE issued_invoices SET source_app='crm' WHERE id='invoice-1'").run())
@@ -126,12 +126,12 @@ void test("upgrades a populated version-six database without rewriting migration
         issue_date,due_date,issued_at,currency,issuer_legal_name,issuer_tax_identifier,issuer_country_code,issuer_city,
         issuer_street,issuer_county,issuer_postal_code,customer_legal_name,customer_tax_identifier,customer_country_code,
         customer_city,customer_street,customer_county,customer_postal_code,total_excluding_tax,tax_total,total_including_tax,
-        e_factura_status,customer_party_type,source_proforma_id)
+        customer_party_type,source_proforma_id)
         SELECT 'invoice-null','draft-null',organization_id,fiscal_year,document_type,
         series,8,'2026-09-04',NULL,issued_at,currency,issuer_legal_name,issuer_tax_identifier,issuer_country_code,issuer_city,
         issuer_street,issuer_county,issuer_postal_code,customer_legal_name,customer_tax_identifier,customer_country_code,
         customer_city,customer_street,customer_county,customer_postal_code,total_excluding_tax,tax_total,total_including_tax,
-        e_factura_status,customer_party_type,NULL FROM issued_invoices WHERE id='invoice-1'`).run()
+        customer_party_type,NULL FROM issued_invoices WHERE id='invoice-1'`).run()
       assert.equal(database.prepare("SELECT due_date FROM issued_invoices WHERE id='invoice-null'").get()?.due_date, null)
     } finally {
       database.close()

@@ -137,7 +137,7 @@ export const handleApiRequest = async (request: ApiRequest, runtime: ApiRuntime)
     clock,
     ids: { next: Effect.sync(randomUUID) },
     store: paymentsStore,
-    cubeIdentity: "payments",
+    cubeIdentity: "invoicing",
   })
   const documents = createStandaloneArtifactService(runtime.dataDirectory, Effect.succeed({
     identity: {

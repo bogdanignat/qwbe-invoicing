@@ -31,7 +31,7 @@ const order = [
   "005-allow-e-factura-status-update", "006-customer-soft-delete", "007-complete-invoice-authoring",
   "008-proforma-workflow", "009-proforma-direct-invoice", "010-product-presets-payment-terms",
   "011-external-api-snapshots", "012-payment-idempotency", "013-audit-trail",
-  "014-invoice-artifacts", "015-proforma-artifacts",
+  "014-invoice-artifacts", "015-proforma-artifacts", "016-drop-e-factura-status",
 ]
 if (order.length !== owned.length) throw new Error("every owned migration must appear exactly once in the invoicing order")
 export const invoicingMigrations: ReadonlyArray<InvoicingMigration> = order.map((name) => {

@@ -3,12 +3,9 @@ export interface PaymentsPermissions {
   readonly record: string
 }
 
-export const paymentsPermissions = (cubeIdentity: string): PaymentsPermissions => ({
-  read: `${cubeIdentity}:read`,
-  record: `${cubeIdentity}:payment.record`,
+// Payments is a child cube: it checks permissions from its parent's vocabulary, so the
+// identity passed here is the level-1 cube's, and the host grants nothing payment-specific.
+export const paymentsPermissions = (parentIdentity: string): PaymentsPermissions => ({
+  read: `${parentIdentity}:read`,
+  record: `${parentIdentity}:payment.record`,
 })
-
-export const legacyPaymentsPermissions: PaymentsPermissions = {
-  read: "invoicing:read",
-  record: "invoicing:payment.record",
-}

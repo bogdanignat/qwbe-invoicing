@@ -129,14 +129,13 @@ invoicing:invoice.issue
 invoicing:invoice.void
 invoicing:proforma.issue
 invoicing:settings.manage
-payments:read
-payments:payment.record
+invoicing:payment.record
 ```
 
-Names are provisional until use cases are written. Payments accepts the legacy
-`invoicing:read` and `invoicing:payment.record` grants during upgrades, while new
-hosts declare `payments:*`. In standalone mode each manifest uses its literal cube
-identity prefix. The same static declarations become invalid if a cube is mounted
+Names are provisional until use cases are written. The level-1 cube owns the whole
+vocabulary; child cubes (`payments`, `documents`) declare no permissions of their own
+and check the parent's names, so the host grants and the mother sees one list. In
+standalone mode the manifest uses its literal cube identity prefix. The same static declarations become invalid if a cube is mounted
 under another identity, because current validation requires the full mounted
 identity as prefix and offers no rebinding hook. No-rewrite mounting therefore
 requires either a definition/packaging factory that materializes identity-derived

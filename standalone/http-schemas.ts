@@ -181,7 +181,6 @@ export const IssuedInvoice = Schema.Struct({
   totalExcludingVat: Schema.String,
   vatTotal: Schema.String,
   totalIncludingVat: Schema.String,
-  eFacturaStatus: Schema.Literal("not_sent", "pending", "sent", "accepted", "rejected"),
 })
 
 export const IssuedInvoicePage = pageOf(IssuedInvoice)
