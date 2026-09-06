@@ -56,6 +56,8 @@ export interface ApiResponse {
 export interface ApiRuntime {
   readonly authenticate: RequestAuthenticator
   readonly dataDirectory: string
+  // Wall clock for "today" in chronology, due-date and correction rules; tests pin it.
+  readonly now?: () => Date
 }
 
 type ApiFailure = InvoicingFailure | PaymentsFailure | DocumentsFailure
@@ -122,16 +124,17 @@ export const handleApiRequest = async (request: ApiRequest, runtime: ApiRuntime)
   const authenticatedContext = authenticated.right
   const store = createSqliteStore(runtime.dataDirectory)
   const paymentsStore = createSqlitePaymentsStore(runtime.dataDirectory)
+  const clock = { now: Effect.sync(runtime.now ?? (() => new Date())) }
   const service = createInvoicingService({
     context: { current: Effect.succeed(authenticatedContext) },
-    clock: { now: Effect.sync(() => new Date()) },
+    clock,
     ids: { next: Effect.sync(randomUUID) },
     store,
     cubeIdentity: "invoicing",
   })
   const payments = createPaymentsService({
     context: { current: Effect.succeed(authenticatedContext) },
-    clock: { now: Effect.sync(() => new Date()) },
+    clock,
     ids: { next: Effect.sync(randomUUID) },
     store: paymentsStore,
     cubeIdentity: "payments",
