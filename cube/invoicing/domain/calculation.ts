@@ -59,29 +59,32 @@ export const calculateLine = (input: {
 
 const moneyToMinor = (value: string): bigint => parseScaled(value, 2, "money")
 
+// Document VAT is computed once per VAT category from the summed taxable base (EN 16931
+// BR-CO-17), never by adding the per-line amounts: line VAT is rounded on each line, so
+// summing it can miss the category amount by a cent and fail e-Factura validation. The
+// line `vatAmount` stays informational; the sum of line totals may therefore differ from
+// `totalIncludingVat` by rounding, which the standard allows (BR-CO-14, BR-CO-15).
 export const calculateTotals = (lines: ReadonlyArray<DraftLine>) => {
-  const groups = new Map<string, { line: DraftLine; base: bigint; vat: bigint }>()
+  const groups = new Map<string, { line: DraftLine; base: bigint }>()
   let totalExcludingVat = 0n
-  let vatTotal = 0n
   for (const line of lines) {
     const base = moneyToMinor(line.totalExcludingVat)
-    const vat = moneyToMinor(line.vatAmount)
     totalExcludingVat += base
-    vatTotal += vat
     const key = `${line.vatRateCode}:${line.vatRate}`
     const current = groups.get(key)
-    groups.set(key, {
-      line,
-      base: (current?.base ?? 0n) + base,
-      vat: (current?.vat ?? 0n) + vat,
-    })
+    groups.set(key, { line, base: (current?.base ?? 0n) + base })
   }
-  const vatBreakdown: ReadonlyArray<VatBreakdown> = [...groups.values()].map(({ line, base, vat }) => ({
-    code: line.vatRateCode,
-    rate: line.vatRate,
-    vatBaseAmount: formatScaled(base, 2),
-    vatAmount: formatScaled(vat, 2),
-  }))
+  let vatTotal = 0n
+  const vatBreakdown: ReadonlyArray<VatBreakdown> = [...groups.values()].map(({ line, base }) => {
+    const vat = divideHalfUp(base * parseScaled(line.vatRate, 2, "vatRate"), 10_000n)
+    vatTotal += vat
+    return {
+      code: line.vatRateCode,
+      rate: line.vatRate,
+      vatBaseAmount: formatScaled(base, 2),
+      vatAmount: formatScaled(vat, 2),
+    }
+  })
   return {
     totalExcludingVat: formatScaled(totalExcludingVat, 2),
     vatTotal: formatScaled(vatTotal, 2),

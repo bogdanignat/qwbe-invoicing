@@ -54,6 +54,26 @@ void test("calculates quantity, configured VAT, grouped breakdown, and totals wi
   })
 })
 
+void test("computes category VAT from the summed base, not from the rounded line amounts (EN 16931 BR-CO-17)", () => {
+  // Three lines of 1.11 at 21%: each line rounds 0.2331 to 0.23, so the line sum is 0.69,
+  // while the category owes round(3.33 × 21%) = round(0.6993) = 0.70.
+  const lines = [1, 2, 3].map((index) => calculateLine({
+    id: `line-${String(index)}`,
+    description: "Serviciu",
+    quantity: "1",
+    unitPrice: "1.11",
+    unitOfMeasure: each,
+    vat: tax("RO_STANDARD", "21.00"),
+  }))
+  assert.deepEqual(lines.map((line) => line.vatAmount), ["0.23", "0.23", "0.23"])
+  assert.deepEqual(calculateTotals(lines), {
+    totalExcludingVat: "3.33",
+    vatTotal: "0.70",
+    totalIncludingVat: "4.03",
+    vatBreakdown: [{ code: "RO_STANDARD", rate: "21.00", vatBaseAmount: "3.33", vatAmount: "0.70" }],
+  })
+})
+
 void test("rejects excess precision and impossible configured rates instead of rounding input", () => {
   assert.throws(
     () => calculateLine({
