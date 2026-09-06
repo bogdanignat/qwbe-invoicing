@@ -26,6 +26,9 @@ void test("requires host authentication and serves the complete invoice-core rou
         organizationId: "org-1",
       }),
       dataDirectory: directory,
+      // The route sequence writes literal September 2026 dates; pin "today" so chronology,
+      // future-date and correction rules judge them the same way on every run.
+      now: () => new Date("2026-09-05T10:00:00.000Z"),
     }
     const issuerBody = {
       name: "Exemplu SRL",
