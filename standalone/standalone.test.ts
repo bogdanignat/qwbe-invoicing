@@ -29,9 +29,9 @@ void test("migration apply is idempotent", () => {
       "011-external-api-snapshots",
       "012-payment-idempotency",
       "013-audit-trail",
-      "documents/000-foundation",
-      "documents/001-artifacts",
-      "documents/002-proforma-artifacts",
+      "014-invoice-artifacts",
+      "015-proforma-artifacts",
+      "016-drop-e-factura-status",
       "sessions/000-browser-sessions",
     ])
     assert.equal(applyMigrations(directory).changed, 18)
@@ -46,7 +46,7 @@ void test("migrations leave every database in write-ahead logging mode with the 
   const directory = mkdtempSync(join(tmpdir(), "qwbe-wal-"))
   try {
     applyMigrations(directory)
-    for (const file of ["invoicing.sqlite", "documents.sqlite", "sessions.sqlite"]) {
+    for (const file of ["invoicing.sqlite", "sessions.sqlite"]) {
       const database = new DatabaseSync(join(directory, file), { readOnly: true })
       try {
         assert.equal(database.prepare("PRAGMA journal_mode").get()?.journal_mode, "wal", file)

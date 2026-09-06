@@ -130,7 +130,6 @@ export interface IssuedInvoice {
   readonly totalExcludingVat: string
   readonly vatTotal: string
   readonly totalIncludingVat: string
-  readonly eFacturaStatus: string
 }
 
 export interface Proforma {
@@ -372,7 +371,6 @@ export const decodeInvoice: Decoder<IssuedInvoice> = (input) => {
     vatBreakdown: array(value.vatBreakdown, decodeVatBreakdown, "vatBreakdown"),
     totalExcludingVat: text(value.totalExcludingVat, "totalExcludingVat"), vatTotal: text(value.vatTotal, "vatTotal"),
     totalIncludingVat: text(value.totalIncludingVat, "totalIncludingVat"),
-    eFacturaStatus: text(value.eFacturaStatus, "eFacturaStatus"),
   }
 }
 

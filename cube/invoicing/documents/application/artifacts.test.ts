@@ -50,7 +50,7 @@ const invoice: RenderableInvoice = {
 }
 
 const context = Effect.succeed({
-  identity: { id: "user-1", permissions: ["documents:read", "documents:render"] },
+  identity: { id: "user-1", permissions: ["invoicing:read"] },
   organization: { id: "org-1" },
 })
 
@@ -102,7 +102,7 @@ void test("renders once, persists immutable metadata, and returns verified bytes
       putPdf: () => Effect.succeed({ objectKey: "sha256/abc.pdf", sha256: "abc", byteLength: bytes.length }),
       readPdf: () => Effect.succeed(bytes),
     },
-    cubeIdentity: "documents",
+    cubeIdentity: "invoicing",
   })
 
   const first = await Effect.runPromise(service.renderInvoice(invoice.id))
@@ -128,7 +128,7 @@ void test("does not persist metadata when rendering or object storage fails", as
       putPdf: () => Effect.fail(new DocumentPersistenceFailure({ operation: "write pdf" })),
       readPdf: () => Effect.fail(new DocumentPersistenceFailure({ operation: "read pdf" })),
     },
-    cubeIdentity: "documents",
+    cubeIdentity: "invoicing",
   })
 
   await assert.rejects(Effect.runPromise(service.renderInvoice(invoice.id)))
@@ -169,7 +169,7 @@ void test("finds missing invoices after any number of healthy artifacts", async 
       putPdf: () => Effect.fail(new DocumentPersistenceFailure({ operation: "write pdf" })),
       readPdf: () => Effect.succeed(new Uint8Array([1, 2, 3])),
     },
-    cubeIdentity: "documents",
+    cubeIdentity: "invoicing",
   })
 
   assert.deepEqual(await Effect.runPromise(service.listMissingInvoiceIds()), ["invoice-after-healthy-page"])

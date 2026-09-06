@@ -45,7 +45,7 @@ export const createProformaConversionOperations = (
       const dueDate = proforma.dueDate === null ? null : shiftDate(issueDate, daysBetween(proforma.issueDate, proforma.dueDate))
       yield* ensureChronology(transaction, context.organization.id, "invoice", proforma.invoiceSeries, issueDate, issueDate)
       const invoice: IssuedInvoice = {
-        draftId: null, sourceProformaId: proforma.id, eFacturaStatus: "not_sent",
+        draftId: null, sourceProformaId: proforma.id,
         ...numberedSnapshot({ ...proforma, issueDate, dueDate }, proforma.issuer, { id, series: proforma.invoiceSeries,
           number: yield* transaction.allocateDocumentNumber(context.organization.id, fiscalYear(issueDate), "invoice", proforma.invoiceSeries),
           issuedAt: convertedAt, actorId: context.identity.id }),

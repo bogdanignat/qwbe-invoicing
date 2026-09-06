@@ -1,10 +1,7 @@
-import { HttpApiGroup } from "@effect/platform"
-
 import { invoicingPermissions } from "./contracts/permissions.ts"
 
 const identity = "invoicing"
 const permissions = invoicingPermissions(identity)
-const group = HttpApiGroup.make(identity)
 const declaredPermissions = [
   permissions.read,
   permissions.manageCustomers,
@@ -13,6 +10,7 @@ const declaredPermissions = [
   permissions.issueProformas,
   permissions.voidInvoices,
   permissions.manageSettings,
+  permissions.recordPayments,
 ]
 
 export const cube = {
@@ -24,10 +22,6 @@ export const cube = {
     requiresAuth: true,
     permissions: declaredPermissions.map((name) => ({ name, roles: ["admin"] })),
   },
-  create: () => ({
-    group,
-    handlers: {},
-  }),
 }
 
 export * from "./contracts/index.ts"

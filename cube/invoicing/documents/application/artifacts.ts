@@ -25,8 +25,9 @@ export interface ArtifactService {
 }
 
 export const createArtifactService = (dependencies: ArtifactServiceDependencies): ArtifactService => {
+  // `cubeIdentity` is the parent's: artifacts are a deterministic view of an issued document, so reading it suffices.
   const readPermission = `${dependencies.cubeIdentity}:read`
-  const renderPermission = `${dependencies.cubeIdentity}:render`
+  const renderPermission = readPermission
   const authorized = (permission: string): Effect.Effect<RequestContext, DocumentsFailure> =>
     Effect.flatMap(dependencies.context, (context) =>
       context.identity.permissions.includes(permission)

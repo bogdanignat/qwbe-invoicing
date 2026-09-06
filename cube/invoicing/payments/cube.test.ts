@@ -23,20 +23,22 @@ const transaction: PaymentsTransaction = {
 let keyCounter = 0
 const idempotent = <Input>(request: Input, key = `key-${String(++keyCounter)}`) => ({ request, idempotency: { key, fingerprint: `sha256:${"0".repeat(64)}` } })
 const reset = () => { payments.clear(); records.clear(); auditEvents.length = 0 }
-const service = (organizationId = "org-1", permissionsList: ReadonlyArray<string> = ["payments:read", "payments:payment.record"], ids = ["payment-1"]) => {
+const service = (organizationId = "org-1", permissionsList: ReadonlyArray<string> = ["invoicing:read", "invoicing:payment.record"], ids = ["payment-1"]) => {
   let next = 0
   return createPaymentsService({
     context: { current: Effect.succeed({ identity: { id: "user-1", username: "owner", roles: ["admin"], permissions: permissionsList }, organization: { id: organizationId } }) },
     clock: { now: Effect.succeed(new Date("2026-09-10T00:00:00.000Z")) }, ids: { next: Effect.sync(() => ids[next++] ?? `payment-${String(next)}`) },
-    store: { transaction: (use) => use(transaction) }, cubeIdentity: "payments",
+    store: { transaction: (use) => use(transaction) }, cubeIdentity: "invoicing",
   })
 }
 
 void test("publishes an authenticated payment cube", () => {
   assert.equal(cube.manifest.name, "payments")
-  assert.deepEqual(cube.manifest.tables, ["invoice_payments"])
+  assert.equal(cube.manifest.parent, "invoicing")
+  assert.deepEqual(cube.manifest.tables, ["invoice_payments", "payment_idempotency_records"])
   assert.deepEqual(paymentsMigrations.map(({ name }) => name), ["002-invoice-payments", "012-payment-idempotency"])
-  assert.deepEqual(paymentsPermissions("payments"), { read: "payments:read", record: "payments:payment.record" })
+  assert.deepEqual(cube.manifest.permissions, [])
+  assert.deepEqual(paymentsPermissions("invoicing"), { read: "invoicing:read", record: "invoicing:payment.record" })
 })
 void test("records and summarizes payments through invoice and payment ports", async () => {
   reset()
@@ -74,12 +76,4 @@ void test("preserves validation, permission, and tenant isolation failures", asy
     /ValidationFailure/)
   assert.equal(await Effect.runPromise(Effect.flip(service("org-2").listPayments(invoice.id))) instanceof ResourceNotFound, true)
   assert.equal(await Effect.runPromise(Effect.flip(service("org-1", []).listPayments(invoice.id))) instanceof PermissionDenied, true)
-})
-void test("accepts legacy invoicing payment permissions during host upgrades", async () => {
-  reset()
-  const recorded = await Effect.runPromise(service("org-1", ["invoicing:payment.record"]).recordPayment(idempotent({
-    invoiceId: invoice.id, amount: "10", currency: "RON", paymentDate: "2026-09-10", method: "cash",
-  })))
-  assert.equal(recorded.payment.amount, "10.00")
-  assert.equal((await Effect.runPromise(service("org-1", ["invoicing:read"]).listPayments(invoice.id))).payments.length, 1)
 })

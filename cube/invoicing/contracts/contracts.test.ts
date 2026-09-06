@@ -11,6 +11,7 @@ import {
 void test("materializes permission names from the mounted cube identity", () => {
   assert.deepEqual(invoicingPermissions("mother/invoicing"), {
     read: "mother/invoicing:read",
+    recordPayments: "mother/invoicing:payment.record",
     manageCustomers: "mother/invoicing:customer.manage",
     draftInvoices: "mother/invoicing:invoice.draft",
     issueInvoices: "mother/invoicing:invoice.issue",

@@ -16,11 +16,11 @@ export type PaymentAmounts = { readonly status: PaymentStatus; readonly paidAmou
 export type RecordPaymentResult = PaymentAmounts & { readonly payment: Payment }
 export type InvoicePaymentSummary = PaymentAmounts & { readonly invoiceId: string; readonly payments: ReadonlyArray<Payment> }
 
-export type Authorize = (permission: string, legacyPermission: string) => Effect.Effect<RequestContext, PaymentsFailure>
+export type Authorize = (permission: string) => Effect.Effect<RequestContext, PaymentsFailure>
 
-export const createAuthorize = (dependencies: PaymentsDependencies): Authorize => (permission, legacyPermission) =>
+export const createAuthorize = (dependencies: PaymentsDependencies): Authorize => (permission) =>
   Effect.flatMap(dependencies.context.current, (context) =>
-    context.identity.permissions.includes(permission) || context.identity.permissions.includes(legacyPermission)
+    context.identity.permissions.includes(permission)
       ? Effect.succeed(context)
       : Effect.fail(new PermissionDenied({ permission })))
 

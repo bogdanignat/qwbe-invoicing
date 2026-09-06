@@ -10,8 +10,6 @@ import {
   type RequestContext,
   type RequestContextProvider,
 } from "../cube/invoicing/index.ts"
-import { documentsPermissions } from "../cube/invoicing/documents/index.ts"
-import { paymentsPermissions } from "../cube/payments/index.ts"
 import type { RuntimeConfig } from "./config.ts"
 
 const bearerToken = (authorization: string | undefined): string | undefined => {
@@ -35,21 +33,8 @@ export const createRequestAuthenticator = (config: RuntimeConfig): RequestAuthen
   if (configuredToken !== undefined && configuredToken.length < 32) {
     throw new Error("AUTH_TOKEN_FILE must contain at least 32 characters")
   }
-  const invoicing = invoicingPermissions("invoicing")
-  const payments = paymentsPermissions("payments")
-  const permissions = [
-    invoicing.read,
-    invoicing.manageCustomers,
-    invoicing.draftInvoices,
-    invoicing.issueInvoices,
-    invoicing.issueProformas,
-    invoicing.voidInvoices,
-    invoicing.manageSettings,
-    payments.read,
-    payments.record,
-    documentsPermissions.read,
-    documentsPermissions.render,
-  ]
+  // The standalone owner holds every permission the level-1 cube declares; child cubes check against the same names.
+  const permissions = Object.values(invoicingPermissions("invoicing"))
 
   return (authorization) => ({
     current: Effect.suspend((): Effect.Effect<

@@ -129,14 +129,13 @@ invoicing:invoice.issue
 invoicing:invoice.void
 invoicing:proforma.issue
 invoicing:settings.manage
-payments:read
-payments:payment.record
+invoicing:payment.record
 ```
 
-Names are provisional until use cases are written. Payments accepts the legacy
-`invoicing:read` and `invoicing:payment.record` grants during upgrades, while new
-hosts declare `payments:*`. In standalone mode each manifest uses its literal cube
-identity prefix. The same static declarations become invalid if a cube is mounted
+Names are provisional until use cases are written. The level-1 cube owns the whole
+vocabulary; child cubes (`payments`, `documents`) declare no permissions of their own
+and check the parent's names, so the host grants and the mother sees one list. In
+standalone mode the manifest uses its literal cube identity prefix. The same static declarations become invalid if a cube is mounted
 under another identity, because current validation requires the full mounted
 identity as prefix and offers no rebinding hook. No-rewrite mounting therefore
 requires either a definition/packaging factory that materializes identity-derived
@@ -247,7 +246,7 @@ Static boundaries must reject:
 
 This is lint isolation, not a security sandbox. Process-level isolation remains a separate future decision.
 
-The isolation unit is a top-level cube together with its child cubes. The mother's `no-cube-to-cube` rule captures only the first path segment under `cubes/`, and its example plugin has `booktags/bookmarks` importing a helper from the parent `booktags`. `probes/boundary-rules.mjs` mirrors that: `cube/invoicing` and its components (`registry`, `drafts`, `issuance`, `corrections`, `documents`) may import each other, `cube/invoicing` and `cube/payments` may not. Components import the parent's domain, ports and contracts directly; the parent imports only a component's `index.ts`, so the graph stays acyclic.
+The isolation unit is a top-level cube together with its child cubes. The mother's `no-cube-to-cube` rule captures only the first path segment under `cubes/`, and its example plugin has `booktags/bookmarks` importing a helper from the parent `booktags`. `probes/boundary-rules.mjs` mirrors that: `cube/invoicing` and its child cubes (`registry`, `drafts`, `issuance`, `corrections`, `documents`, `payments`) may import each other; two top-level cubes may not. Components import the parent's domain, ports and contracts directly; the parent imports only a component's `index.ts`, so the graph stays acyclic.
 
 Source: QWBE `core/.dependency-cruiser.cjs`.
 
@@ -379,7 +378,7 @@ Status on 2 September 2026: this repository's `qwbe.config.json` was raised in f
 
 On 4 September 2026, adding customer payment terms and product presets exposed the
 unit cap. The existing payment lifecycle was extracted into the independent
-`cube/payments` bounded context and composed by the standalone host through public
+`payments` bounded context (since 6 September 2026 the child cube `cube/invoicing/payments`) and composed by the standalone host through public
 ports. The cap was not raised; invoice and payment cubes remain independently
 measured and cannot import each other.
 

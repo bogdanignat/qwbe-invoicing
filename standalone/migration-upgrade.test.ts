@@ -6,9 +6,7 @@ import { DatabaseSync } from "node:sqlite"
 import test from "node:test"
 
 import { invoicingMigrations } from "../cube/invoicing/index.ts"
-import { documentsMigrations } from "../cube/invoicing/documents/index.ts"
-import { paymentsMigrations } from "../cube/payments/index.ts"
-import { applyMigrations, databasePath, documentsDatabasePath } from "./migrations.ts"
+import { applyMigrations, databasePath } from "./migrations.ts"
 
 const seedVersionSix = (directory: string) => {
   const database = new DatabaseSync(databasePath(directory))
@@ -16,9 +14,7 @@ const seedVersionSix = (directory: string) => {
     database.exec("PRAGMA foreign_keys = ON")
     database.exec("CREATE TABLE schema_migrations(name TEXT PRIMARY KEY,applied_at TEXT NOT NULL)STRICT")
     database.prepare("INSERT INTO schema_migrations(name,applied_at)VALUES('000-foundation','2026-01-01')").run()
-    const applicationMigrations = [...invoicingMigrations, ...paymentsMigrations]
-      .sort((left, right) => left.name.localeCompare(right.name))
-    for (const migration of applicationMigrations.filter(({ name }) => name <= "006-customer-soft-delete")) {
+    for (const migration of invoicingMigrations.filter(({ name }) => name <= "006-customer-soft-delete")) {
       for (const statement of migration.statements) database.exec(statement)
       database.prepare("INSERT INTO schema_migrations(name,applied_at)VALUES(?,?)").run(migration.name, "2026-01-01")
     }
@@ -70,7 +66,7 @@ void test("upgrades a populated version-six database without rewriting migration
       assert.deepEqual(migrations, ["000-foundation", "001-invoice-core", "002-invoice-payments", "003-invoice-corrections",
         "004-invoice-delete-last", "005-allow-e-factura-status-update", "006-customer-soft-delete", "007-complete-invoice-authoring",
          "008-proforma-workflow", "009-proforma-direct-invoice", "010-product-presets-payment-terms",
-         "011-external-api-snapshots", "012-payment-idempotency", "013-audit-trail"])
+         "011-external-api-snapshots", "012-payment-idempotency", "013-audit-trail", "014-invoice-artifacts", "015-proforma-artifacts", "016-drop-e-factura-status"])
       const columns = database.prepare("PRAGMA table_info(invoice_drafts)").all()
       assert.equal(columns.some((row) => row.name === "customer_id" && row.notnull === 0), true)
       assert.equal(columns.some((row) => row.name === "due_date" && row.notnull === 0), true)
@@ -112,7 +108,7 @@ void test("upgrades a populated version-six database without rewriting migration
         "invoice_drafts_series_update", "issued_invoices_no_update", "issued_invoices_no_delete",
         "issued_lines_no_delete", "issued_tax_breakdown_no_delete", "issued_invoices_source_no_update",
         "proformas_source_no_update"]) assert.equal(triggers.has(name), true)
-      database.prepare("UPDATE issued_invoices SET e_factura_status='pending' WHERE id='invoice-1'").run()
+      assert.equal(database.prepare("PRAGMA table_info(issued_invoices)").all().some((column) => column.name === "e_factura_status"), false)
       assert.throws(() => database.prepare("UPDATE issued_invoices SET issuer_county='IS' WHERE id='invoice-1'").run())
       assert.throws(() => database.prepare("UPDATE issued_invoices SET issuer_postal_code=NULL WHERE id='invoice-1'").run())
       assert.throws(() => database.prepare("UPDATE issued_invoices SET source_app='crm' WHERE id='invoice-1'").run())
@@ -130,12 +126,12 @@ void test("upgrades a populated version-six database without rewriting migration
         issue_date,due_date,issued_at,currency,issuer_legal_name,issuer_tax_identifier,issuer_country_code,issuer_city,
         issuer_street,issuer_county,issuer_postal_code,customer_legal_name,customer_tax_identifier,customer_country_code,
         customer_city,customer_street,customer_county,customer_postal_code,total_excluding_tax,tax_total,total_including_tax,
-        e_factura_status,customer_party_type,source_proforma_id)
+        customer_party_type,source_proforma_id)
         SELECT 'invoice-null','draft-null',organization_id,fiscal_year,document_type,
         series,8,'2026-09-04',NULL,issued_at,currency,issuer_legal_name,issuer_tax_identifier,issuer_country_code,issuer_city,
         issuer_street,issuer_county,issuer_postal_code,customer_legal_name,customer_tax_identifier,customer_country_code,
         customer_city,customer_street,customer_county,customer_postal_code,total_excluding_tax,tax_total,total_including_tax,
-        e_factura_status,customer_party_type,NULL FROM issued_invoices WHERE id='invoice-1'`).run()
+        customer_party_type,NULL FROM issued_invoices WHERE id='invoice-1'`).run()
       assert.equal(database.prepare("SELECT due_date FROM issued_invoices WHERE id='invoice-null'").get()?.due_date, null)
     } finally {
       database.close()
@@ -181,40 +177,4 @@ void test("009 preserves legacy proforma-to-draft conversion audit", () => {
         { source_draft_id: "source", invoice_series: "INV" })
     } finally { upgraded.close() }
   } finally { rmSync(directory, { recursive: true, force: true }) }
-})
-
-void test("adds proforma artifacts without changing existing invoice artifact metadata", () => {
-  const directory = mkdtempSync(join(tmpdir(), "qwbe-documents-upgrade-"))
-  try {
-    const database = new DatabaseSync(documentsDatabasePath(directory))
-    try {
-      database.exec("CREATE TABLE schema_migrations(name TEXT PRIMARY KEY,applied_at TEXT NOT NULL)STRICT")
-      const invoiceMigration = documentsMigrations[0]
-      assert.ok(invoiceMigration)
-      for (const statement of invoiceMigration.statements) database.exec(statement)
-      database.prepare("INSERT INTO schema_migrations VALUES(?,?)").run(invoiceMigration.name, "2026-01-01")
-      database.prepare(`INSERT INTO invoice_artifacts
-        (invoice_id,organization_id,object_key,sha256,byte_length,media_type,template_version,generated_at)
-        VALUES(?,?,?,?,?,?,?,?)`).run(
-        "invoice-1", "org-1", `sha256/${"a".repeat(2)}/${"a".repeat(64)}.pdf`, "a".repeat(64), 123,
-        "application/pdf", "invoice-v1", "2026-01-01T00:00:00.000Z",
-      )
-    } finally {
-      database.close()
-    }
-    applyMigrations(directory)
-    const upgraded = new DatabaseSync(documentsDatabasePath(directory), { readOnly: true })
-    try {
-      assert.deepEqual({ ...upgraded.prepare("SELECT * FROM invoice_artifacts").get() }, {
-        invoice_id: "invoice-1", organization_id: "org-1",
-        object_key: `sha256/${"a".repeat(2)}/${"a".repeat(64)}.pdf`, sha256: "a".repeat(64), byte_length: 123,
-        media_type: "application/pdf", template_version: "invoice-v1", generated_at: "2026-01-01T00:00:00.000Z",
-      })
-      assert.ok(upgraded.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='proforma_artifacts'").get())
-    } finally {
-      upgraded.close()
-    }
-  } finally {
-    rmSync(directory, { recursive: true, force: true })
-  }
 })

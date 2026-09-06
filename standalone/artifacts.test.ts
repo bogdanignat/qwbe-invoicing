@@ -11,7 +11,7 @@ import { createInvoicingService } from "../cube/invoicing/index.ts"
 import { createArtifactService } from "../cube/invoicing/documents/index.ts"
 import { reconcileArtifacts } from "./artifact-reconciliation.ts"
 import { createPdfObjectStore } from "./artifact-store.ts"
-import { applyMigrations, documentsDatabasePath } from "./migrations.ts"
+import { applyMigrations, databasePath } from "./migrations.ts"
 import { createPdfRenderer } from "./pdf-renderer.ts"
 import { createArtifactRepository, createInvoiceSource } from "./sqlite-artifacts.ts"
 import { createSqliteStore } from "./sqlite-store.ts"
@@ -78,7 +78,7 @@ void test("persists, reloads, and integrity-checks immutable PDF artifacts", asy
     const { invoiceId, proformaId } = await issueFixture(directory)
     const service = createArtifactService({
       context: Effect.succeed({
-        identity: { id: "user-1", permissions: ["documents:read", "documents:render"] },
+        identity: { id: "user-1", permissions: ["invoicing:read"] },
         organization: { id: "org-1" },
       }),
       clock: Effect.succeed(new Date("2026-09-01T10:05:00.000Z")),
@@ -86,7 +86,7 @@ void test("persists, reloads, and integrity-checks immutable PDF artifacts", asy
       source: createInvoiceSource(directory),
       renderer: createPdfRenderer(),
       objects: createPdfObjectStore(directory),
-      cubeIdentity: "documents",
+      cubeIdentity: "invoicing",
     })
 
     assert.deepEqual(await reconcileArtifacts(service, 10, false), {
@@ -114,7 +114,7 @@ void test("persists, reloads, and integrity-checks immutable PDF artifacts", asy
     assert.equal(firstProforma.templateVersion, "proforma-v1")
     assert.equal((await Effect.runPromise(service.downloadProforma(proformaId))).bytes.length, firstProforma.byteLength)
 
-    const database = new DatabaseSync(documentsDatabasePath(directory))
+    const database = new DatabaseSync(databasePath(directory))
     try {
       assert.throws(() => database.prepare("UPDATE invoice_artifacts SET byte_length = 1 WHERE invoice_id = ?").run(invoiceId))
       assert.throws(() => database.prepare("DELETE FROM invoice_artifacts WHERE invoice_id = ?").run(invoiceId))
@@ -130,15 +130,15 @@ void test("persists, reloads, and integrity-checks immutable PDF artifacts", asy
     assert.equal((await reconcileArtifacts(service, 10, true)).changed, 1)
     assert.equal((await Effect.runPromise(service.downloadInvoice(invoiceId))).bytes.length, first.byteLength)
     const restarted = createArtifactService({
-      context: Effect.succeed({ identity: { id: "user-1", permissions: ["documents:read", "documents:render"] }, organization: { id: "org-1" } }),
+      context: Effect.succeed({ identity: { id: "user-1", permissions: ["invoicing:read"] }, organization: { id: "org-1" } }),
       clock: Effect.succeed(new Date("2026-09-02T00:00:00.000Z")), repository: createArtifactRepository(directory),
-      source: createInvoiceSource(directory), renderer: createPdfRenderer(), objects: createPdfObjectStore(directory), cubeIdentity: "documents",
+      source: createInvoiceSource(directory), renderer: createPdfRenderer(), objects: createPdfObjectStore(directory), cubeIdentity: "invoicing",
     })
     assert.deepEqual(await Effect.runPromise(restarted.renderProforma(proformaId)), firstProforma)
     const isolated = createArtifactService({
-      context: Effect.succeed({ identity: { id: "user-2", permissions: ["documents:read", "documents:render"] }, organization: { id: "org-2" } }),
+      context: Effect.succeed({ identity: { id: "user-2", permissions: ["invoicing:read"] }, organization: { id: "org-2" } }),
       clock: Effect.succeed(new Date()), repository: createArtifactRepository(directory), source: createInvoiceSource(directory),
-      renderer: createPdfRenderer(), objects: createPdfObjectStore(directory), cubeIdentity: "documents",
+      renderer: createPdfRenderer(), objects: createPdfObjectStore(directory), cubeIdentity: "invoicing",
     })
     await assert.rejects(Effect.runPromise(isolated.downloadProforma(proformaId)))
     await assert.rejects(Effect.runPromise(isolated.renderProforma(proformaId)))

@@ -94,8 +94,8 @@ void test("strictly decodes nullable commercial dates and proforma conversion st
   assert.throws(() => decodeProforma({ ...commercialDocument, convertedDraftId: 2 }), /invalid convertedDraftId/)
   assert.equal(decodeDraft({ ...commercialDocument, status: "draft", customerId: "customer-1" }).dueDate, null)
   assert.throws(() => decodeDraft({ ...commercialDocument, status: "draft", customerId: "customer-1", dueDate: undefined }), /invalid dueDate/)
-  assert.equal(decodeInvoice({ ...commercialDocument, draftId: null, sourceProformaId: "proforma-1", eFacturaStatus: "not_sent" }).sourceProformaId, "proforma-1")
-  assert.throws(() => decodeInvoice({ ...commercialDocument, draftId: "draft-1", sourceProformaId: null, eFacturaStatus: "not_sent", dueDate: false }), /invalid dueDate/)
+  assert.equal(decodeInvoice({ ...commercialDocument, draftId: null, sourceProformaId: "proforma-1" }).sourceProformaId, "proforma-1")
+  assert.throws(() => decodeInvoice({ ...commercialDocument, draftId: "draft-1", sourceProformaId: null, dueDate: false }), /invalid dueDate/)
 })
 
 void test("requires the series fixed on a draft", () => {

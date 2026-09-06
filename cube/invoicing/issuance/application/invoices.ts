@@ -39,7 +39,6 @@ export const createInvoiceOperations = (
       const invoice: IssuedInvoice = {
         draftId: draft?.id ?? null, sourceProformaId: null,
         ...numberedSnapshot(document, issuer, { id: invoiceId, series: document.series, number, issuedAt, actorId: context.identity.id }),
-        eFacturaStatus: "not_sent",
       }
       yield* transaction.saveIssuedInvoice(invoice)
       if (draft !== undefined) yield* transaction.saveDraft({ ...draft, status: "issued" })

@@ -19,8 +19,8 @@ docker compose ps
 curl --fail --cacert ~/.warden/ssl/rootca/certs/ca.cert.pem https://invoice.test/health/ready
 ```
 
-`migrate` runs once before `app` and initializes `/data/invoicing.sqlite` plus the
-child documents cube database `/data/documents.sqlite`. SQLite is a standalone-host
+`migrate` runs once before `app` and initializes `/data/invoicing.sqlite`, the one
+database of the invoicing cube and its child cubes. SQLite is a standalone-host
 choice: the QWBE mother has run one Postgres database with one schema per cube since
 QWB-44, so nothing here describes mounted operation (see `FOUNDATION.md` section 18). Repeated `docker compose up -d`
 is safe: both migration plans are idempotent and do not consume invoice numbers
@@ -135,7 +135,7 @@ to the font in `standalone/assets/fonts/`.
 ## Backup and restore
 
 SQLite and artifacts are the durable state. The existing backup file set includes
-`invoicing.sqlite`, `documents.sqlite`, and artifact files, so proforma records,
+`invoicing.sqlite` and artifact files, so proforma records,
 conversion metadata, proforma artifact metadata, and proforma PDFs are included
 without a new backup format. Operator-provided configuration (`ORGANIZATION_ID`,
 `AUTH_TOKEN_FILE`), image digests and externally stored recovery secrets are **not**

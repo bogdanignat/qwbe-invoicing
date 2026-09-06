@@ -62,7 +62,7 @@ docker compose -f compose.prod.yaml logs --tail=100 migrate app
 
 For T-1069, startup applies `008-proforma-workflow` and the non-destructive
 `009-proforma-direct-invoice` upgrade to `invoicing.sqlite`, plus
-`documents/002-proforma-artifacts` to `documents.sqlite`. `doctor --json` remains the
+`015-proforma-artifacts` (artifact metadata lives in the same database). `doctor --json` remains the
 readiness gate and reports `pendingMigrations` and `migrationsReady`. `artifacts` is a dry-run by
 default and now reports both invoices and proformas missing PDFs; use `--apply`
 (plus `--confirm-production` outside development) only to reconcile at most
@@ -72,7 +72,7 @@ Never use `docker compose down -v` as an upgrade step — it deletes the named v
 
 ## Backup and restore (drill)
 
-Backup is read-only and idempotent; restore verifies `manifest.json` SHA-256 before each write and is idempotent — safe to retry after partial failure. The existing backup file set contains `invoicing.sqlite`, `documents.sqlite`, and `/data/artifacts`, therefore it includes proforma records/conversion metadata, proforma artifact metadata, and proforma PDF files without a separate backup command or format.
+Backup is read-only and idempotent; restore verifies `manifest.json` SHA-256 before each write and is idempotent — safe to retry after partial failure. The existing backup file set contains `invoicing.sqlite` and `/data/artifacts`, therefore it includes proforma records/conversion metadata, proforma artifact metadata, and proforma PDF files without a separate backup command or format.
 
 ```bash
 # Backup to a host path (recommended: host-mounted directory, not inside the volume)

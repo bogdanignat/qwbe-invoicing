@@ -310,7 +310,7 @@ void test("calls direct and draft issuance, proforma invoice, registry, detail, 
     issuer: { name: "QWBE", fiscalIdentifier: "RO2", address: { countryCode: "RO", city: "Botoșani", street: "Strada 2" } },
     invoiceSeries: "QWBE", convertedDraftId: null, convertedInvoiceId: null,
   }
-  const invoice = { ...proforma, id: "invoice-1", draftId: null, sourceProformaId: "proforma-1", series: "QWBE", number: 8, eFacturaStatus: "not_sent" }
+  const invoice = { ...proforma, id: "invoice-1", draftId: null, sourceProformaId: "proforma-1", series: "QWBE", number: 8 }
   const authoring = { customerId: "customer-1", series: "QWBE", issueDate: "2026-09-01", dueDate: null,
     currency: "RON" as const, lines: [{ description: "Serviciu", quantity: "1", unitPrice: "100",
       unitOfMeasure: { code: "HUR", name: "oră" }, vatRateCode: "RO_STANDARD" }] }
