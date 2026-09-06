@@ -8,6 +8,7 @@ import { DomainConflict, PermissionDenied, ResourceNotFound, createPaymentsServi
 const invoice = { id: "invoice-1", organizationId: "org-1", currency: "RON", dueDate: "2026-09-15", totalIncludingVat: "100.00" }
 const payments = new Map<string, Payment>()
 const records = new Map<string, PaymentIdempotencyRecord>()
+const auditEvents: Array<{ readonly action: string; readonly actorId: string; readonly targetId: string; readonly reason?: string }> = []
 const transaction: PaymentsTransaction = {
   findInvoiceSnapshot: (organizationId, id) => Effect.succeed(organizationId === invoice.organizationId && id === invoice.id ? invoice : undefined),
   savePayment: (payment) => Effect.sync(() => { payments.set(payment.id, payment) }),
@@ -17,10 +18,11 @@ const transaction: PaymentsTransaction = {
     payment.organizationId === organizationId && payment.invoiceId === invoiceId && payment.id === paymentId)),
   findIdempotencyRecord: (organizationId, key) => Effect.succeed(records.get(`${organizationId}:${key}`)),
   saveIdempotencyRecord: (record) => Effect.sync(() => { records.set(`${record.organizationId}:${record.key}`, record) }),
+  appendAuditEvent: ({ action, actorId, targetId, reason }) => Effect.sync(() => { auditEvents.push({ action, actorId, targetId, ...(reason === undefined ? {} : { reason }) }) }),
 }
 let keyCounter = 0
 const idempotent = <Input>(request: Input, key = `key-${String(++keyCounter)}`) => ({ request, idempotency: { key, fingerprint: `sha256:${"0".repeat(64)}` } })
-const reset = () => { payments.clear(); records.clear() }
+const reset = () => { payments.clear(); records.clear(); auditEvents.length = 0 }
 const service = (organizationId = "org-1", permissionsList: ReadonlyArray<string> = ["payments:read", "payments:payment.record"], ids = ["payment-1"]) => {
   let next = 0
   return createPaymentsService({
@@ -42,6 +44,7 @@ void test("records and summarizes payments through invoice and payment ports", a
   const result = await Effect.runPromise(service().recordPayment(attempt))
   assert.equal(result.payment.amount, "25.50")
   assert.equal(result.payment.kind, "payment")
+  assert.deepEqual(auditEvents, [{ action: "payment.recorded", actorId: "user-1", targetId: result.payment.id }])
   assert.deepEqual(await Effect.runPromise(service().listPayments(invoice.id)), {
     invoiceId: invoice.id, status: "partially_paid", paidAmount: "25.50", remainingAmount: "74.50", payments: [result.payment],
   })
@@ -56,6 +59,7 @@ void test("reverses a payment exactly once with an immutable counter-row", async
   const recorded = await Effect.runPromise(service().recordPayment(idempotent({ invoiceId: invoice.id, amount: "40", currency: "RON", paymentDate: "2026-09-10", method: "card" })))
   const reversal = await Effect.runPromise(service("org-1", undefined, ["reversal-1"]).reversePayment(idempotent({ invoiceId: invoice.id, paymentId: recorded.payment.id, reason: "Sumă greșită" })))
   assert.equal(reversal.payment.kind, "reversal")
+  assert.deepEqual(auditEvents.at(-1), { action: "payment.reversed", actorId: "user-1", targetId: reversal.payment.id, reason: "Sumă greșită" })
   assert.equal(reversal.payment.reversesPaymentId, recorded.payment.id)
   assert.equal(reversal.payment.amount, "40.00")
   assert.equal(reversal.payment.note, "Sumă greșită")

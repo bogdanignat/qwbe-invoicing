@@ -10,7 +10,7 @@ export interface CorrectionDocument {
   readonly id: string; readonly organizationId: string; readonly originalInvoiceId: string
   readonly source?: DocumentSource
   readonly fiscalYear: number; readonly series: string; readonly number: number
-  readonly issueDate: string; readonly issuedAt: string; readonly reason: string
+  readonly issueDate: string; readonly issuedAt: string; readonly reason: string; readonly actorId: string
   readonly currency: string
   readonly issuer: PartySnapshot
   readonly customer: BuyerSnapshot

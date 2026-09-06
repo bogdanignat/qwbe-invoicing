@@ -15,6 +15,7 @@ export interface NumberedIdentity {
   readonly series: string
   readonly number: number
   readonly issuedAt: Date
+  readonly actorId: string
 }
 
 export const fiscalYear = (isoDate: string): number => Number(isoDate.slice(0, 4))

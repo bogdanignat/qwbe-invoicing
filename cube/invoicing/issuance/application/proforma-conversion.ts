@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 
 import { findIdempotencyReplay, idempotencyRecord, missingIdempotencyResult } from "../../application/idempotency.ts"
-import { ensureChronology, missing, type Authorize, type OperationDependencies } from "../../application/support.ts"
+import { audit, ensureChronology, missing, type Authorize, type OperationDependencies } from "../../application/support.ts"
 import { DomainConflict, type InvoicingFailure } from "../../contracts/failures.ts"
 import type { InvoicingPermissions } from "../../contracts/permissions.ts"
 import type { ConvertProformaInput } from "../../domain/inputs.ts"
@@ -48,7 +48,7 @@ export const createProformaConversionOperations = (
         draftId: null, sourceProformaId: proforma.id, eFacturaStatus: "not_sent",
         ...numberedSnapshot({ ...proforma, issueDate, dueDate }, proforma.issuer, { id, series: proforma.invoiceSeries,
           number: yield* transaction.allocateDocumentNumber(context.organization.id, fiscalYear(issueDate), "invoice", proforma.invoiceSeries),
-          issuedAt: convertedAt }),
+          issuedAt: convertedAt, actorId: context.identity.id }),
       }
       yield* transaction.saveIssuedInvoice(invoice)
       yield* transaction.saveProformaInvoiceConversion({ proformaId: proforma.id, organizationId: context.organization.id,
@@ -56,6 +56,8 @@ export const createProformaConversionOperations = (
       yield* transaction.saveIdempotencyRecord(idempotencyRecord(
         context.organization.id, idempotency, operation, "invoice", invoice.id, convertedAt.toISOString(),
       ))
+      yield* audit(transaction, context, dependencies.ids, convertedAt, { action: "proforma.converted", targetKind: "proforma", targetId: proforma.id })
+      yield* audit(transaction, context, dependencies.ids, convertedAt, { action: "invoice.issued", targetKind: "invoice", targetId: invoice.id })
       return structuredClone(invoice)
     }))
   })

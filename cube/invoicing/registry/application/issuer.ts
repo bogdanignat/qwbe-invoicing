@@ -1,6 +1,6 @@
 import { Effect } from "effect"
 
-import { checked, copyParty, missing, type Authorize, type OperationDependencies } from "../../application/support.ts"
+import { audit, checked, copyParty, missing, type Authorize, type OperationDependencies } from "../../application/support.ts"
 import type { InvoicingFailure } from "../../contracts/failures.ts"
 import type { InvoicingPermissions } from "../../contracts/permissions.ts"
 import type { DocumentSeries, IssuerProfile } from "../../domain/invoice.ts"
@@ -28,7 +28,9 @@ export const createIssuerOperations = (
       vatConfigurations: structuredClone(input.vatConfigurations),
     }
     yield* checked(() => { validateIssuer(issuer) })
-    yield* dependencies.store.transaction((transaction) => transaction.saveIssuer(issuer))
+    const now = yield* dependencies.clock.now
+    yield* dependencies.store.transaction((transaction) => Effect.andThen(transaction.saveIssuer(issuer),
+      audit(transaction, context, dependencies.ids, now, { action: "issuer.configured", targetKind: "issuer", targetId: issuer.organizationId })))
     return structuredClone(issuer)
   })
   const getIssuer = () => Effect.gen(function*() {
@@ -40,7 +42,9 @@ export const createIssuerOperations = (
     const context = yield* authorize(permissions.manageSettings)
     const series: DocumentSeries = { organizationId: context.organization.id, ...input }
     yield* checked(() => { validateDocumentSeries(series) })
-    yield* dependencies.store.transaction((transaction) => transaction.addDocumentSeries(series))
+    const now = yield* dependencies.clock.now
+    yield* dependencies.store.transaction((transaction) => Effect.andThen(transaction.addDocumentSeries(series),
+      audit(transaction, context, dependencies.ids, now, { action: "series.added", targetKind: "document_series", targetId: `${series.documentType}:${series.series}` })))
     return structuredClone(series)
   })
   const listDocumentSeries = () => Effect.gen(function*() {

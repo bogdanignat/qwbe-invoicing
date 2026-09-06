@@ -2,8 +2,8 @@ import { Effect } from "effect"
 
 import { ResourceNotFound, ValidationFailure, type InvoicingFailure, type PersistenceFailure } from "../contracts/failures.ts"
 import type { Clock, IdGenerator, RequestContext, TransactionalStore } from "../contracts/host.ts"
-import type { BuyerSnapshot, DocumentSource, NumberedDocumentType, PartySnapshot } from "../domain/invoice.ts"
-import type { DocumentCursor, DraftCursor, InvoicingTransaction, NameCursor, PageQuery } from "./ports.ts"
+import type { AuditEvent, BuyerSnapshot, DocumentSource, NumberedDocumentType, PartySnapshot } from "../domain/invoice.ts"
+import type { DocumentCursor, DraftCursor, InvoicingTransaction, NameCursor, PageQuery, TransactionFailure } from "./ports.ts"
 
 export type { DocumentCursor, DraftCursor, NameCursor, PageQuery } from "./ports.ts"
 
@@ -23,6 +23,14 @@ export const checked = <Value>(operation: () => Value): Effect.Effect<Value, Val
 })
 
 export const missing = (resource: string, id: string) => new ResourceNotFound({ resource, id })
+
+// Records an audit event inside the caller's transaction, attributed to the request identity.
+export const audit = (
+  transaction: InvoicingTransaction, context: RequestContext, ids: IdGenerator, occurredAt: Date,
+  event: Pick<AuditEvent, "action" | "targetKind" | "targetId" | "reason">,
+): Effect.Effect<void, TransactionFailure> => Effect.flatMap(ids.next, (id) => transaction.appendAuditEvent({
+  id, organizationId: context.organization.id, actorId: context.identity.id, occurredAt: occurredAt.toISOString(), ...event,
+}))
 
 export const copyParty = (party: PartySnapshot): PartySnapshot => ({
   name: party.name,

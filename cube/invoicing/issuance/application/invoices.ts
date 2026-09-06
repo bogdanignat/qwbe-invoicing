@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 
 import { findIdempotencyReplay, idempotencyRecord, missingIdempotencyResult } from "../../application/idempotency.ts"
-import { checked, documentPageQuery, ensureChronology, missing, pageOf, type Authorize, type OperationDependencies, type Page, type PageRequest } from "../../application/support.ts"
+import { audit, checked, documentPageQuery, ensureChronology, missing, pageOf, type Authorize, type OperationDependencies, type Page, type PageRequest } from "../../application/support.ts"
 import type { InvoicingFailure } from "../../contracts/failures.ts"
 import type { InvoicingPermissions } from "../../contracts/permissions.ts"
 import type { DocumentSource, Idempotent, IssuedInvoice } from "../../domain/invoice.ts"
@@ -38,7 +38,7 @@ export const createInvoiceOperations = (
       const number = yield* transaction.allocateDocumentNumber(context.organization.id, fiscalYear(document.issueDate), "invoice", document.series)
       const invoice: IssuedInvoice = {
         draftId: draft?.id ?? null, sourceProformaId: null,
-        ...numberedSnapshot(document, issuer, { id: invoiceId, series: document.series, number, issuedAt }),
+        ...numberedSnapshot(document, issuer, { id: invoiceId, series: document.series, number, issuedAt, actorId: context.identity.id }),
         eFacturaStatus: "not_sent",
       }
       yield* transaction.saveIssuedInvoice(invoice)
@@ -46,6 +46,7 @@ export const createInvoiceOperations = (
       yield* transaction.saveIdempotencyRecord(idempotencyRecord(
         context.organization.id, idempotency, operation, "invoice", invoice.id, issuedAt.toISOString(),
       ))
+      yield* audit(transaction, context, dependencies.ids, issuedAt, { action: "invoice.issued", targetKind: "invoice", targetId: invoice.id })
       return structuredClone(invoice)
     }))
   })
