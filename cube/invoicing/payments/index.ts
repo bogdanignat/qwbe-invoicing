@@ -7,7 +7,8 @@ const permissions = paymentsPermissions(identity)
 export const cube = {
   manifest: {
     name: identity,
-    tables: ["invoice_payments"],
+    parent: "invoicing",
+    tables: ["invoice_payments", "payment_idempotency_records"],
     requiresAuth: true,
     permissions: [permissions.read, permissions.record].map((name) => ({ name, roles: ["admin"] })),
   },

@@ -34,7 +34,8 @@ const service = (organizationId = "org-1", permissionsList: ReadonlyArray<string
 
 void test("publishes an authenticated payment cube", () => {
   assert.equal(cube.manifest.name, "payments")
-  assert.deepEqual(cube.manifest.tables, ["invoice_payments"])
+  assert.equal(cube.manifest.parent, "invoicing")
+  assert.deepEqual(cube.manifest.tables, ["invoice_payments", "payment_idempotency_records"])
   assert.deepEqual(paymentsMigrations.map(({ name }) => name), ["002-invoice-payments", "012-payment-idempotency"])
   assert.deepEqual(paymentsPermissions("payments"), { read: "payments:read", record: "payments:payment.record" })
 })

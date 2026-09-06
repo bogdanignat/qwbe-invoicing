@@ -205,8 +205,8 @@ Variables used only by the Compose files, in `.env`:
 All durable state lives under `DATA_DIR`:
 
 ```text
-/data/invoicing.sqlite    issuer, customers, series, drafts, invoices, proformas, payments, corrections
-/data/documents.sqlite    artifact metadata of the documents cube
+/data/invoicing.sqlite    the invoicing cube and its child cubes: issuer, customers, series, drafts, invoices,
+                          proformas, corrections, audit trail, payments, artifact metadata
 /data/sessions.sqlite     browser sessions (revocable, cleared on restore)
 /data/artifacts/          PDFs stored by SHA-256
 ```
@@ -311,8 +311,8 @@ cube/invoicing/registry/   component: issuer, VAT configurations, document serie
 cube/invoicing/drafts/     component: document authoring, draft and line editing
 cube/invoicing/issuance/   component: numbered invoices and proformas, conversion, idempotent replay
 cube/invoicing/corrections/ component: correction documents (storno)
-cube/invoicing/documents/  component: rendered PDFs and artifact recovery
-cube/payments/             payment records and derived invoice payment status
+cube/invoicing/documents/  child cube: rendered PDFs and artifact recovery
+cube/invoicing/payments/   child cube: payment records and derived invoice payment status
 standalone/                host: HTTP, SQLite store, sessions, PDF renderer, CLI, backup
 web/                       browser UI: React 19, TypeScript, Tailwind CSS 4, Vite
 bin/qwbe-invoicing.ts      CLI entry point, also the container command

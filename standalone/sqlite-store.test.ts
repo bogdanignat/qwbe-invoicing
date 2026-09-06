@@ -15,7 +15,7 @@ import {
   type IdGenerator,
   type RequestContextProvider,
 } from "../cube/invoicing/index.ts"
-import { PersistenceFailure as PaymentsPersistenceFailure } from "../cube/payments/index.ts"
+import { PersistenceFailure as PaymentsPersistenceFailure } from "../cube/invoicing/payments/index.ts"
 import { applyMigrations, databasePath } from "./migrations.ts"
 import { createSqlitePaymentsStore, createSqliteStore } from "./sqlite-store.ts"
 

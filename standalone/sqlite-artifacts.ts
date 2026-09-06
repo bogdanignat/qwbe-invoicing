@@ -12,7 +12,7 @@ import {
   type RenderableInvoice,
   type RenderableProforma,
 } from "../cube/invoicing/documents/index.ts"
-import { databasePath, documentsDatabasePath } from "./migrations.ts"
+import { databasePath } from "./migrations.ts"
 import { createSqliteStore } from "./sqlite-store.ts"
 
 type Row = Readonly<Record<string, unknown>>
@@ -79,7 +79,7 @@ const sameProformaArtifact = (left: ProformaArtifact, right: ProformaArtifact): 
 
 export const createArtifactRepository = (dataDirectory: string): ArtifactRepository => ({
   findArtifact: (organizationId, invoiceId) => attempt("find artifact", () => {
-    const database = new DatabaseSync(documentsDatabasePath(dataDirectory), { readOnly: true })
+    const database = new DatabaseSync(databasePath(dataDirectory), { readOnly: true })
     try {
       const value = row(database.prepare(
         "SELECT * FROM invoice_artifacts WHERE organization_id = ? AND invoice_id = ?",
@@ -91,7 +91,7 @@ export const createArtifactRepository = (dataDirectory: string): ArtifactReposit
   }),
   saveArtifact: (artifact) => Effect.try({
     try: () => {
-      const database = new DatabaseSync(documentsDatabasePath(dataDirectory))
+      const database = new DatabaseSync(databasePath(dataDirectory))
       let open = false
       try {
         database.exec("BEGIN IMMEDIATE")
@@ -121,7 +121,7 @@ export const createArtifactRepository = (dataDirectory: string): ArtifactReposit
     catch: (error) => error instanceof ArtifactConflict ? error : failure("save artifact"),
   }),
   findProformaArtifact: (organizationId, proformaId) => attempt("find proforma artifact", () => {
-    const database = new DatabaseSync(documentsDatabasePath(dataDirectory), { readOnly: true })
+    const database = new DatabaseSync(databasePath(dataDirectory), { readOnly: true })
     try {
       const value = row(database.prepare(
         "SELECT * FROM proforma_artifacts WHERE organization_id = ? AND proforma_id = ?",
@@ -133,7 +133,7 @@ export const createArtifactRepository = (dataDirectory: string): ArtifactReposit
   }),
   saveProformaArtifact: (artifact) => Effect.try({
     try: () => {
-      const database = new DatabaseSync(documentsDatabasePath(dataDirectory))
+      const database = new DatabaseSync(databasePath(dataDirectory))
       let open = false
       try {
         database.exec("BEGIN IMMEDIATE")

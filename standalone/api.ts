@@ -24,7 +24,7 @@ import {
   ValidationFailure as PaymentsValidationFailure,
   createPaymentsService,
   type PaymentsFailure,
-} from "../cube/payments/index.ts"
+} from "../cube/invoicing/payments/index.ts"
 import {
   ArtifactConflict,
   DocumentNotFound,

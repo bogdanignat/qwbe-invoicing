@@ -4,7 +4,7 @@ export interface DocumentsMigration {
 }
 
 export const documentsMigrations: ReadonlyArray<DocumentsMigration> = [{
-  name: "001-artifacts",
+  name: "014-invoice-artifacts",
   statements: [
     `CREATE TABLE invoice_artifacts (
       invoice_id TEXT PRIMARY KEY,
@@ -25,7 +25,7 @@ export const documentsMigrations: ReadonlyArray<DocumentsMigration> = [{
       BEGIN SELECT RAISE(ABORT, 'invoice artifacts are immutable'); END`,
   ],
 }, {
-  name: "002-proforma-artifacts",
+  name: "015-proforma-artifacts",
   statements: [
     `CREATE TABLE proforma_artifacts (
       proforma_id TEXT PRIMARY KEY,

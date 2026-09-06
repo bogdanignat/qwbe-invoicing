@@ -42,7 +42,7 @@ interface Manifest {
   readonly files: ReadonlyArray<{ readonly path: string; readonly sha256: string; readonly byteLength: number }>
 }
 
-const sqliteFiles = ["invoicing.sqlite", "documents.sqlite", "sessions.sqlite"] as const
+const sqliteFiles = ["invoicing.sqlite", "sessions.sqlite"] as const
 const sqliteFileSet: ReadonlySet<string> = new Set(sqliteFiles)
 
 const sha256File = (path: string): string => {

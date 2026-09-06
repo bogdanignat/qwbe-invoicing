@@ -3,8 +3,6 @@ import { join } from "node:path"
 import { DatabaseSync } from "node:sqlite"
 
 import { invoicingMigrations, type InvoicingMigration } from "../cube/invoicing/index.ts"
-import { documentsMigrations } from "../cube/invoicing/documents/index.ts"
-import { paymentsMigrations } from "../cube/payments/index.ts"
 
 const foundationMigration: InvoicingMigration = { name: "000-foundation", statements: [] }
 const browserSessionsMigration: InvoicingMigration = {
@@ -20,12 +18,10 @@ const browserSessionsMigration: InvoicingMigration = {
     "CREATE INDEX browser_sessions_expiry ON browser_sessions (expires_at)",
   ],
 }
-const applicationMigrations: ReadonlyArray<InvoicingMigration> = [...invoicingMigrations, ...paymentsMigrations]
-  .sort((left, right) => left.name.localeCompare(right.name))
-const invoicingPlan = { label: "", file: "invoicing.sqlite", migrations: [foundationMigration, ...applicationMigrations] }
-const documentsPlan = { label: "documents/", file: "documents.sqlite", migrations: [foundationMigration, ...documentsMigrations] }
+// The invoicing cube already orders its own and its child cubes' migrations; the host only prepends its foundation marker.
+const invoicingPlan = { label: "", file: "invoicing.sqlite", migrations: [foundationMigration, ...invoicingMigrations] }
 const sessionsPlan = { label: "sessions/", file: "sessions.sqlite", migrations: [browserSessionsMigration] }
-const plans = [invoicingPlan, documentsPlan, sessionsPlan] as const
+const plans = [invoicingPlan, sessionsPlan] as const
 
 export interface MigrationReport {
   readonly scanned: number
@@ -36,7 +32,6 @@ export interface MigrationReport {
 }
 
 export const databasePath = (dataDirectory: string) => join(dataDirectory, invoicingPlan.file)
-export const documentsDatabasePath = (dataDirectory: string) => join(dataDirectory, documentsPlan.file)
 export const sessionsDatabasePath = (dataDirectory: string) => join(dataDirectory, sessionsPlan.file)
 
 const pathFor = (dataDirectory: string, plan: typeof plans[number]) => join(dataDirectory, plan.file)
@@ -95,7 +90,7 @@ const applyPlan = (dataDirectory: string, plan: typeof plans[number]): number =>
     transactionOpen = false
     const pending = pendingFor(database, plan)
     for (const migration of pending) {
-      const foreignKeysOff = "foreignKeys" in migration && migration.foreignKeys === "off"
+      const foreignKeysOff = migration.foreignKeys === "off"
       if (foreignKeysOff) database.exec("PRAGMA foreign_keys = OFF")
       try {
         database.exec("BEGIN IMMEDIATE")

@@ -11,7 +11,7 @@ import { createInvoicingService } from "../cube/invoicing/index.ts"
 import { createArtifactService } from "../cube/invoicing/documents/index.ts"
 import { reconcileArtifacts } from "./artifact-reconciliation.ts"
 import { createPdfObjectStore } from "./artifact-store.ts"
-import { applyMigrations, documentsDatabasePath } from "./migrations.ts"
+import { applyMigrations, databasePath } from "./migrations.ts"
 import { createPdfRenderer } from "./pdf-renderer.ts"
 import { createArtifactRepository, createInvoiceSource } from "./sqlite-artifacts.ts"
 import { createSqliteStore } from "./sqlite-store.ts"
@@ -114,7 +114,7 @@ void test("persists, reloads, and integrity-checks immutable PDF artifacts", asy
     assert.equal(firstProforma.templateVersion, "proforma-v1")
     assert.equal((await Effect.runPromise(service.downloadProforma(proformaId))).bytes.length, firstProforma.byteLength)
 
-    const database = new DatabaseSync(documentsDatabasePath(directory))
+    const database = new DatabaseSync(databasePath(directory))
     try {
       assert.throws(() => database.prepare("UPDATE invoice_artifacts SET byte_length = 1 WHERE invoice_id = ?").run(invoiceId))
       assert.throws(() => database.prepare("DELETE FROM invoice_artifacts WHERE invoice_id = ?").run(invoiceId))

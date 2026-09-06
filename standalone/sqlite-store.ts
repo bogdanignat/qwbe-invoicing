@@ -34,7 +34,7 @@ import {
   type Payment,
   type PaymentsTransaction,
   type TransactionalStore as PaymentsStore,
-} from "../cube/payments/index.ts"
+} from "../cube/invoicing/payments/index.ts"
 import { databasePath } from "./migrations.ts"
 
 type WriteFailure = DomainConflict | PersistenceFailure
