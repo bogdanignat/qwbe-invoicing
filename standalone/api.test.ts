@@ -7,6 +7,7 @@ import test from "node:test"
 import { handleApiRequest } from "./api.ts"
 import { createRequestAuthenticator } from "./auth.ts"
 import { applyMigrations } from "./migrations.ts"
+import { proformaTemplateVersion } from "./pdf-renderer.ts"
 const each = { code: "C62", name: "unitate" } as const
 
 void test("requires host authentication and serves the complete invoice-core route sequence", async () => {
@@ -331,7 +332,7 @@ void test("requires host authentication and serves the complete invoice-core rou
     }, runtime)
     assert.equal(renderedProforma.status, 200)
     assert.equal((renderedProforma.body as { proformaId: string; templateVersion: string }).proformaId, proformaId)
-    assert.equal((renderedProforma.body as { templateVersion: string }).templateVersion, "proforma-v1")
+    assert.equal((renderedProforma.body as { templateVersion: string }).templateVersion, proformaTemplateVersion)
     assert.deepEqual((await handleApiRequest({
       method: "POST", url: `/api/proformas/${proformaId}/pdf`, authorization, body: {},
     }, runtime)).body, renderedProforma.body)

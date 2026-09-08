@@ -5,7 +5,8 @@ import { Effect } from "effect"
 import { PDFDocument } from "pdf-lib"
 
 import type { RenderableInvoice, RenderableProforma } from "../cube/invoicing/documents/index.ts"
-import { createPdfRenderer, documentDateLine, invoiceTemplateVersion, partyIdentifierLine, proformaTemplateVersion } from "./pdf-renderer.ts"
+import { nameInitials } from "./pdf-layout.ts"
+import { createPdfRenderer, documentDateLine, formatAmount, formatRate, invoiceTemplateVersion, partyIdentifierLine, proformaTemplateVersion } from "./pdf-renderer.ts"
 
 const invoice: RenderableInvoice = {
   id: "invoice-1",
@@ -106,4 +107,50 @@ void test("renders deterministic non-fiscal proformas and omits a null due date"
   assert.equal(parsed.getTitle(), "Proformă QWBE 7")
   assert.equal(parsed.getSubject(), "PROFORMĂ — DOCUMENT NEFISCAL")
   assert.equal(parsed.getProducer(), `QWBE Invoicing ${proformaTemplateVersion}`)
+})
+
+void test("formats amounts with Romanian grouping and leaves unknown shapes untouched", () => {
+  assert.equal(formatAmount("11761.00"), "11.761,00")
+  assert.equal(formatAmount("4800.0000"), "4.800,0000")
+  assert.equal(formatAmount("100.00"), "100,00")
+  assert.equal(formatAmount("999"), "999")
+  assert.equal(formatAmount("1000"), "1.000")
+  assert.equal(formatAmount("-1234.56"), "-1.234,56")
+  assert.equal(formatAmount("n/a"), "n/a")
+})
+
+void test("compacts VAT rates without losing meaningful decimals", () => {
+  assert.equal(formatRate("21.00"), "21")
+  assert.equal(formatRate("0.00"), "0")
+  assert.equal(formatRate("20.50"), "20,5")
+  assert.equal(formatRate("9"), "9")
+})
+
+void test("derives logo initials while skipping legal-form suffixes", () => {
+  assert.equal(nameInitials("QWBE Software S.R.L."), "QS")
+  assert.equal(nameInitials("Alpha Retail S.A."), "AR")
+  assert.equal(nameInitials("Știință și Tehnică SRL"), "ȘȘ")
+  assert.equal(nameInitials("SRL"), "S")
+  assert.equal(nameInitials(""), "?")
+})
+
+void test("keeps the redesigned template on a single page for a multi-rate invoice", async () => {
+  const base = invoice.lines[0]
+  assert.ok(base !== undefined)
+  const multiRate: RenderableInvoice = {
+    ...invoice,
+    lines: [
+      { ...base, vatRate: "21.00" },
+      { ...base, description: "Suport", vatRate: "11.00", vatAmount: "11.00" },
+      { ...base, description: "Transport", vatRate: "0.00", vatAmount: "0.00" },
+    ],
+    vatBreakdown: [
+      { rate: "21.00", vatBaseAmount: "100.00", vatAmount: "21.00" },
+      { rate: "11.00", vatBaseAmount: "100.00", vatAmount: "11.00" },
+      { rate: "0.00", vatBaseAmount: "100.00", vatAmount: "0.00" },
+    ],
+  }
+  const rendered = await Effect.runPromise(createPdfRenderer().render(multiRate))
+  const parsed = await PDFDocument.load(rendered.bytes, { updateMetadata: false })
+  assert.equal(parsed.getPageCount(), 1)
 })

@@ -12,7 +12,7 @@ import { createArtifactService } from "../cube/invoicing/documents/index.ts"
 import { reconcileArtifacts } from "./artifact-reconciliation.ts"
 import { createPdfObjectStore } from "./artifact-store.ts"
 import { applyMigrations, documentsDatabasePath } from "./migrations.ts"
-import { createPdfRenderer } from "./pdf-renderer.ts"
+import { createPdfRenderer, proformaTemplateVersion } from "./pdf-renderer.ts"
 import { createArtifactRepository, createInvoiceSource } from "./sqlite-artifacts.ts"
 import { createSqliteStore } from "./sqlite-store.ts"
 const each = { code: "C62", name: "unitate" } as const
@@ -111,7 +111,7 @@ void test("persists, reloads, and integrity-checks immutable PDF artifacts", asy
     assert.equal(Buffer.from(download.bytes.subarray(0, 5)).toString("ascii"), "%PDF-")
     const firstProforma = await Effect.runPromise(service.renderProforma(proformaId))
     assert.deepEqual(await Effect.runPromise(service.renderProforma(proformaId)), firstProforma)
-    assert.equal(firstProforma.templateVersion, "proforma-v1")
+    assert.equal(firstProforma.templateVersion, proformaTemplateVersion)
     assert.equal((await Effect.runPromise(service.downloadProforma(proformaId))).bytes.length, firstProforma.byteLength)
 
     const database = new DatabaseSync(documentsDatabasePath(directory))
