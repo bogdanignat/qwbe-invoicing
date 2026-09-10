@@ -60,7 +60,7 @@ void test("upgrades a populated version-six database without rewriting migration
   const directory = mkdtempSync(join(tmpdir(), "qwbe-upgrade-"))
   try {
     seedVersionSix(directory)
-    assert.equal(applyMigrations(directory).changed, 10)
+    assert.equal(applyMigrations(directory).changed, 11)
     const database = new DatabaseSync(databasePath(directory))
     try {
       database.exec("PRAGMA foreign_keys = ON")
@@ -70,7 +70,7 @@ void test("upgrades a populated version-six database without rewriting migration
       assert.deepEqual(migrations, ["000-foundation", "001-invoice-core", "002-invoice-payments", "003-invoice-corrections",
         "004-invoice-delete-last", "005-allow-e-factura-status-update", "006-customer-soft-delete", "007-complete-invoice-authoring",
          "008-proforma-workflow", "009-proforma-direct-invoice", "010-product-presets-payment-terms",
-         "011-external-api-snapshots", "012-payment-idempotency"])
+         "011-external-api-snapshots", "012-payment-idempotency", "013-document-notes"])
       const columns = database.prepare("PRAGMA table_info(invoice_drafts)").all()
       assert.equal(columns.some((row) => row.name === "customer_id" && row.notnull === 0), true)
       assert.equal(columns.some((row) => row.name === "due_date" && row.notnull === 0), true)
@@ -217,4 +217,35 @@ void test("adds proforma artifacts without changing existing invoice artifact me
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
+})
+
+void test("013 adds nullable remarks guarded by the content-immutability triggers", () => {
+  const directory = mkdtempSync(join(tmpdir(), "qwbe-notes-upgrade-"))
+  try {
+    applyMigrations(directory)
+    const database = new DatabaseSync(databasePath(directory))
+    try {
+      for (const table of ["invoice_drafts", "proformas", "issued_invoices"]) {
+        const column = database.prepare(`SELECT * FROM pragma_table_info(?) WHERE name = 'notes'`).get(table) as
+          { readonly type: string; readonly notnull: number } | undefined
+        assert.deepEqual(column === undefined ? undefined : { type: column.type, notnull: column.notnull }, { type: "TEXT", notnull: 0 }, table)
+      }
+      const triggers = database.prepare("SELECT name,sql FROM sqlite_master WHERE type = 'trigger' AND name IN ('issued_invoices_no_update','proformas_no_content_update')").all()
+      assert.equal(triggers.length, 2)
+      for (const trigger of triggers) assert.ok(String(trigger.sql).includes("notes"), String(trigger.name))
+      database.exec(`
+        INSERT INTO issuers VALUES('org-1','Furnizor SRL','RO12345674','RO','Iași','Strada 1',NULL,NULL,'RON',15);
+        INSERT INTO document_series VALUES('org-1','invoice','INV'),('org-1','proforma','PRO');
+        INSERT INTO invoice_drafts(id,organization_id,customer_id,customer_party_type,customer_legal_name,customer_tax_identifier,
+          customer_country_code,customer_city,customer_street,customer_county,customer_postal_code,series,issue_date,due_date,currency,status,notes)
+          VALUES('draft-1','org-1',NULL,'company','Client SRL','RO87654329','RO','Iași','Strada 1',NULL,NULL,'INV','2026-09-01',NULL,'RON','draft','Observație');
+      `)
+      assert.equal(database.prepare("SELECT notes FROM invoice_drafts WHERE id = 'draft-1'").get()?.notes, "Observație")
+      database.prepare("UPDATE invoice_drafts SET notes = NULL WHERE id = 'draft-1'").run()
+      assert.equal(database.prepare("SELECT notes FROM invoice_drafts WHERE id = 'draft-1'").get()?.notes, null)
+      assert.throws(() => database.prepare("UPDATE invoice_drafts SET notes = ' spatii ' WHERE id = 'draft-1'").run())
+      assert.throws(() => database.prepare("UPDATE invoice_drafts SET notes = '' WHERE id = 'draft-1'").run())
+      assert.throws(() => database.prepare(`UPDATE invoice_drafts SET notes = ? WHERE id = 'draft-1'`).run("x".repeat(501)))
+    } finally { database.close() }
+  } finally { rmSync(directory, { recursive: true, force: true }) }
 })

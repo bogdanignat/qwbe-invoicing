@@ -31,6 +31,18 @@ const text = (value: unknown, field: string): string => {
 const optionalText = (value: unknown, field: string): string | undefined => value === undefined ? undefined : text(value, field)
 const optionalNullableText = (value: unknown, field: string): string | null | undefined =>
   value === undefined || value === null ? value : text(value, field)
+// Mirrors validateDocumentNotes in the cube: newlines allowed, nothing normalised.
+const documentNotes = (value: unknown): string | null | undefined => {
+  const notes = optionalNullableText(value, "notes")
+  if (notes === undefined || notes === null) return notes
+  const issues: Array<string> = []
+  if (notes.trim().length === 0) issues.push("notes is required")
+  if (notes !== notes.trim()) issues.push("notes must not have surrounding whitespace")
+  if (notes.length > 500) issues.push("notes must be at most 500 characters")
+  if (/(?!\n)[\p{Cc}\p{Zl}\p{Zp}]/u.test(notes)) issues.push("notes must not contain control characters")
+  if (issues.length > 0) throw new ValidationFailure({ issues })
+  return notes
+}
 const integer = (value: unknown, field: string): number => {
   if (typeof value !== "number" || !Number.isInteger(value)) throw new ValidationFailure({ issues: [`${field} must be an integer`] })
   return value
@@ -111,15 +123,17 @@ export const draftInput = (value: unknown): CreateDraftInput => {
   const currency = optionalText(input.currency, "currency")
   const dueDate = optionalNullableText(input.dueDate, "dueDate")
   const source = optionalDocumentSource(input.source)
+  const notes = documentNotes(input.notes)
   return { ...buyerSource(input), ...(source === undefined ? {} : { source }), series: text(input.series, "series"), issueDate: text(input.issueDate, "issueDate"),
-    ...(currency === undefined ? {} : { currency }), ...(dueDate === undefined ? {} : { dueDate }) }
+    ...(currency === undefined ? {} : { currency }), ...(dueDate === undefined ? {} : { dueDate }), ...(notes === undefined ? {} : { notes }) }
 }
 export const updateDraftInput = (draftId: string, value: unknown): UpdateDraftInput => {
   const input = object(value)
   const dueDate = optionalNullableText(input.dueDate, "dueDate")
   const source = input.source === null ? null : optionalDocumentSource(input.source)
+  const notes = documentNotes(input.notes)
   return { ...buyerSource(input), draftId, ...(source === undefined ? {} : { source }), issueDate: text(input.issueDate, "issueDate"),
-    ...(dueDate === undefined ? {} : { dueDate }) }
+    ...(dueDate === undefined ? {} : { dueDate }), ...(notes === undefined ? {} : { notes }) }
 }
 const lineFields = (draftId: string, value: unknown): AddDraftLineInput => {
   const input = object(value)
@@ -170,8 +184,9 @@ const authoring = (value: unknown): AuthoringDocumentInput => {
   const source = optionalDocumentSource(input.source)
   const currency = text(input.currency, "currency")
   if (currency !== "RON") throw new ValidationFailure({ issues: ["currency must be RON"] })
+  const notes = documentNotes(input.notes)
   return { ...buyerSource(input), ...(source === undefined ? {} : { source }), series: text(input.series, "series"), issueDate: text(input.issueDate, "issueDate"), currency,
-    ...(dueDate === undefined ? {} : { dueDate }), lines: rawLines(input.lines) }
+    ...(dueDate === undefined ? {} : { dueDate }), ...(notes === undefined ? {} : { notes }), lines: rawLines(input.lines) }
 }
 export const authoringInvoiceInput = authoring
 export const authoringProformaInput = (value: unknown): AuthoringProformaInput => {

@@ -61,7 +61,7 @@ void test("dueDate contracts accept absent, null, or string input and encode exp
   const draft = {
     id: "draft-1", organizationId: "org-1", customer: { partyType: "individual", name: "Ion", fiscalIdentifier: "",
       address: { countryCode: "RO", city: "Iași", street: "Strada 1" } }, series: "QWBE", issueDate: "2026-09-01",
-    dueDate: null, currency: "RON", status: "proforma_issued", lines: [], vatBreakdown: [], totalExcludingVat: "0.00",
+    dueDate: null, currency: "RON", notes: null, status: "proforma_issued", lines: [], vatBreakdown: [], totalExcludingVat: "0.00",
     vatTotal: "0.00", totalIncludingVat: "0.00",
   } as const
   assert.equal(Schema.encodeSync(S.DraftInvoice)(draft).dueDate, null)
@@ -210,4 +210,14 @@ void test("Swagger materialization recreates a disposed handler after failure", 
   assert.equal(Buffer.from(response.body).toString("utf8"), "<html>ok</html>")
   assert.equal(attempts, 2)
   assert.equal(disposals, 2)
+})
+
+void test("notes contract mirrors the runtime rules for whitespace, length, and invisible separators", () => {
+  const base = { customerId: "customer-1", series: "QWBE", issueDate: "2026-09-01" }
+  const decode = (notes: unknown) => Schema.decodeUnknownSync(S.DraftInput)({ ...base, notes })
+  assert.equal(decode(null).notes, null)
+  assert.equal(decode("Linie unu\nLinie doi").notes, "Linie unu\nLinie doi")
+  for (const notes of ["", " marginal ", "x".repeat(501), 7, "tab\tstop", "linie\u2028separata", "paragraf\u2029separat"]) {
+    assert.throws(() => decode(notes), String(notes))
+  }
 })

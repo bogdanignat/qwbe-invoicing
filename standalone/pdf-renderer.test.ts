@@ -17,6 +17,7 @@ const invoice: RenderableInvoice = {
   dueDate: "2026-09-16",
   issuedAt: "2026-09-01T10:00:00.000Z",
   currency: "RON",
+  notes: null,
   issuer: {
     name: "Știință și Tehnică SRL",
     fiscalIdentifier: "RO12345674",
@@ -153,4 +154,39 @@ void test("keeps the redesigned template on a single page for a multi-rate invoi
   const rendered = await Effect.runPromise(createPdfRenderer().render(multiRate))
   const parsed = await PDFDocument.load(rendered.bytes, { updateMetadata: false })
   assert.equal(parsed.getPageCount(), 1)
+})
+
+void test("renders document remarks without truncation and keeps the proforma legal notice", async () => {
+  const renderer = createPdfRenderer()
+  const withNotes: RenderableInvoice = { ...invoice, notes: "Livrare în tranșe.\nGaranție 24 de luni pentru piesele înlocuite." }
+  const first = await Effect.runPromise(renderer.render(withNotes))
+  const second = await Effect.runPromise(renderer.render(withNotes))
+  assert.deepEqual(first.bytes, second.bytes)
+  assert.equal(first.templateVersion, invoiceTemplateVersion)
+  const parsed = await PDFDocument.load(first.bytes, { updateMetadata: false })
+  assert.equal(parsed.getPageCount(), 1)
+  const plain = await Effect.runPromise(renderer.render(invoice))
+  assert.ok(first.bytes.length > plain.bytes.length)
+
+  const maximum = await Effect.runPromise(renderer.render({ ...invoice, notes: "ș".repeat(500) }))
+  assert.equal((await PDFDocument.load(maximum.bytes, { updateMetadata: false })).getPageCount(), 1)
+
+  const base = invoice.lines[0]
+  assert.ok(base !== undefined)
+  const crowded = await Effect.runPromise(renderer.render({
+    ...invoice,
+    lines: Array.from({ length: 18 }, (_, index) => ({ ...base, description: `Poziția ${String(index + 1)}` })),
+    notes: Array.from({ length: 10 }, (_, index) => `Paragraful ${String(index + 1)} cu observații detaliate.`).join("\n"),
+  }))
+  assert.ok((await PDFDocument.load(crowded.bytes, { updateMetadata: false })).getPageCount() > 1)
+
+  const proforma: RenderableProforma = {
+    ...invoice, id: "proforma-1", sourceDraftId: null, invoiceSeries: "QWBE",
+    convertedDraftId: null, convertedInvoiceId: null, notes: "Ofertă valabilă 30 de zile.",
+  }
+  const rendered = await Effect.runPromise(renderer.renderProforma(proforma))
+  assert.equal(rendered.templateVersion, proformaTemplateVersion)
+  const withoutNotes = await Effect.runPromise(renderer.renderProforma({ ...proforma, notes: null }))
+  assert.ok(rendered.bytes.length > withoutNotes.bytes.length)
+  assert.equal((await PDFDocument.load(rendered.bytes, { updateMetadata: false })).getPageCount(), 1)
 })

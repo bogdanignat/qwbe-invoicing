@@ -317,3 +317,55 @@ void test("exposes payment-owned persistence failures from the payment store ada
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+void test("round-trips document remarks and keeps them immutable once issued", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "qwbe-sqlite-notes-"))
+  try {
+    applyMigrations(directory)
+    const service = createInvoicingService({
+      context: context("org-1"), clock, ids: ids(), store: createSqliteStore(directory), cubeIdentity: "invoicing",
+    })
+    await Effect.runPromise(service.configureIssuer({
+      name: "Exemplu SRL", fiscalIdentifier: "RO12345674",
+      address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" },
+      defaultCurrency: "RON", defaultPaymentTermDays: 15,
+      vatConfigurations: [{ code: "RO_STANDARD", rate: "21.00", effectiveFrom: "2025-08-01" }],
+    }))
+    await Effect.runPromise(service.addDocumentSeries({ documentType: "invoice", series: "QWBE" }))
+    await Effect.runPromise(service.addDocumentSeries({ documentType: "proforma", series: "PRO" }))
+    const customer = {
+      partyType: "company" as const, name: "Client SRL", fiscalIdentifier: "RO87654329",
+      address: { countryCode: "RO", city: "Iași", street: "Strada Mică 2" },
+    }
+    const remarks = "Livrare în tranșe.\nGaranție 24 de luni."
+    const line = { description: "Servicii", quantity: "1", unitPrice: "100", unitOfMeasure: each, vatRateCode: "RO_STANDARD" }
+    const draft = await Effect.runPromise(service.createDraft({ customer, series: "QWBE", issueDate: "2026-09-01", notes: remarks }))
+    await Effect.runPromise(service.addDraftLine({ draftId: draft.id, ...line }))
+    assert.equal((await Effect.runPromise(service.getDraft(draft.id))).notes, remarks)
+    assert.equal((await Effect.runPromise(service.listDrafts())).items[0]?.notes, remarks)
+    const invoice = await Effect.runPromise(service.issueInvoice(idempotent({ draftId: draft.id })))
+    assert.equal(invoice.notes, remarks)
+    const proforma = await Effect.runPromise(service.issueProforma(idempotent({
+      customer, series: "QWBE", proformaSeries: "PRO", issueDate: "2026-09-01", dueDate: null, currency: "RON", lines: [line], notes: remarks,
+    })))
+    const reopened = createSqliteStore(directory)
+    const readBack = createInvoicingService({ context: context("org-1"), clock, ids: ids(), store: reopened, cubeIdentity: "invoicing" })
+    assert.equal((await Effect.runPromise(readBack.getIssuedInvoice(invoice.id))).notes, remarks)
+    assert.equal((await Effect.runPromise(readBack.getProforma(proforma.id))).notes, remarks)
+    assert.equal((await Effect.runPromise(readBack.listIssuedInvoices())).items[0]?.notes, remarks)
+    assert.equal((await Effect.runPromise(readBack.listProformas())).items[0]?.notes, remarks)
+    const open = await Effect.runPromise(service.createDraft({ customer, series: "QWBE", issueDate: "2026-09-01" }))
+    const database = new DatabaseSync(databasePath(directory))
+    try {
+      assert.throws(() => database.prepare("UPDATE issued_invoices SET notes = 'altceva' WHERE id = ?").run(invoice.id))
+      assert.throws(() => database.prepare("UPDATE proformas SET notes = 'altceva' WHERE id = ?").run(proforma.id))
+      assert.throws(() => database.prepare("UPDATE invoice_drafts SET notes = ' cu spatii ' WHERE id = ?").run(open.id))
+      assert.throws(() => database.prepare("UPDATE invoice_drafts SET notes = '' WHERE id = ?").run(open.id))
+      database.prepare("UPDATE invoice_drafts SET notes = NULL WHERE id = ?").run(open.id)
+    } finally {
+      database.close()
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})

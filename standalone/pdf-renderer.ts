@@ -35,8 +35,8 @@ import {
   wrapText,
 } from "./pdf-layout.ts"
 
-export const invoiceTemplateVersion = "invoice-v3"
-export const proformaTemplateVersion = "proforma-v2"
+export const invoiceTemplateVersion = "invoice-v4"
+export const proformaTemplateVersion = "proforma-v3"
 
 const regularFontPath = fileURLToPath(new URL("./assets/fonts/DejaVuSans.ttf", import.meta.url))
 const boldFontPath = fileURLToPath(new URL("./assets/fonts/DejaVuSans-Bold.ttf", import.meta.url))
@@ -395,8 +395,9 @@ const drawTotals = (sheet: Sheet, document: RenderableDocument, isProforma: bool
   sheet.y = boxTop - boxHeight
 }
 
-const drawNotes = (sheet: Sheet, top: number, isProforma: boolean): void => {
-  if (!isProforma) return
+/** Draws the proforma legal notice and returns the baseline below it, or `top` when absent. */
+const drawProformaNotice = (sheet: Sheet, top: number, isProforma: boolean): number => {
+  if (!isProforma) return top
   const width = contentWidth - 202
   const lines = wrapText(
     sheet.fonts.regular,
@@ -407,7 +408,7 @@ const drawNotes = (sheet: Sheet, top: number, isProforma: boolean): void => {
   const height = lines.length * 11 + 22
   sheet.page.drawRectangle({ x: margin, y: top - height, width, height, color: noteFill })
   sheet.page.drawRectangle({ x: margin, y: top - height, width: 2.5, height, color: warning })
-  const cursor = putLines(sheet.page, ["OBSERVAȚII"], {
+  const cursor = putLines(sheet.page, ["MENȚIUNE LEGALĂ"], {
     x: margin + 10,
     width: width - 16,
     top: top - 12,
@@ -424,6 +425,51 @@ const drawNotes = (sheet: Sheet, top: number, isProforma: boolean): void => {
     font: sheet.fonts.regular,
     leading: 11,
   })
+  return top - height
+}
+
+/**
+ * Draws the free-form document remarks full width under the summary area. The
+ * text is never truncated: whatever does not fit continues on a new page.
+ */
+const drawDocumentNotes = (sheet: Sheet, notes: string | null, top: number): void => {
+  if (notes === null) return
+  const width = contentWidth
+  const innerWidth = width - 20
+  let remaining = wrapText(sheet.fonts.regular, 8, innerWidth, notes)
+  let blockTop = top
+  while (remaining.length > 0) {
+    const capacity = Math.floor((blockTop - bottomLimit - 22) / 11)
+    if (capacity < 1) {
+      addPage(sheet)
+      blockTop = contentTop
+      continue
+    }
+    const chunk = remaining.slice(0, capacity)
+    remaining = remaining.slice(capacity)
+    const height = chunk.length * 11 + 22
+    sheet.page.drawRectangle({ x: margin, y: blockTop - height, width, height, color: noteFill })
+    sheet.page.drawRectangle({ x: margin, y: blockTop - height, width: 2.5, height, color: accent })
+    const cursor = putLines(sheet.page, ["OBSERVAȚII"], {
+      x: margin + 10,
+      width: innerWidth,
+      top: blockTop - 12,
+      size: 6.5,
+      font: sheet.fonts.bold,
+      color: muted,
+      leading: 11,
+    })
+    putLines(sheet.page, chunk, {
+      x: margin + 10,
+      width: innerWidth,
+      top: cursor,
+      size: 8,
+      font: sheet.fonts.regular,
+      leading: 11,
+    })
+    sheet.y = blockTop - height
+    blockTop = sheet.y - 14
+  }
 }
 
 const drawFooters = (sheet: Sheet, isProforma: boolean): void => {
@@ -492,7 +538,8 @@ const renderPdf = async (
   sheet.y -= 14
   const summaryTop = sheet.y
   drawTotals(sheet, document, isProforma)
-  drawNotes(sheet, summaryTop, isProforma)
+  const noticeBottom = drawProformaNotice(sheet, summaryTop, isProforma)
+  drawDocumentNotes(sheet, document.notes, Math.min(sheet.y, noticeBottom) - 14)
   drawFooters(sheet, isProforma)
 
   return pdf.save({ useObjectStreams: false, addDefaultPage: false, updateFieldAppearances: false })

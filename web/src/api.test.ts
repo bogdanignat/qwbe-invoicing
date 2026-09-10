@@ -207,7 +207,7 @@ void test("lists and creates document series with the final API contract", async
       const body = path === "/api/session"
         ? { authenticated: true, csrfToken: "csrf-token" }
         : path === "/api/drafts"
-          ? { id: "draft-1", organizationId: "org-1", customerId: "customer-1", customer: { partyType: "company", name: "Client", fiscalIdentifier: "RO1", address: { countryCode: "RO", city: "Iași", street: "Strada 1" } }, series: "QWBE", issueDate: "2026-09-01", dueDate: "2026-09-16", currency: "RON", status: "draft", lines: [], vatBreakdown: [], totalExcludingVat: "0.00", vatTotal: "0.00", totalIncludingVat: "0.00" }
+          ? { id: "draft-1", organizationId: "org-1", customerId: "customer-1", customer: { partyType: "company", name: "Client", fiscalIdentifier: "RO1", address: { countryCode: "RO", city: "Iași", street: "Strada 1" } }, series: "QWBE", issueDate: "2026-09-01", dueDate: "2026-09-16", currency: "RON", notes: null, status: "draft", lines: [], vatBreakdown: [], totalExcludingVat: "0.00", vatTotal: "0.00", totalIncludingVat: "0.00" }
         : init?.method === "POST"
           ? { organizationId: "org-1", documentType: "invoice", series: "QWBE" }
           : [{ organizationId: "org-1", documentType: "invoice", series: "QWBE" }]
@@ -302,7 +302,7 @@ void test("calls direct and draft issuance, proforma invoice, registry, detail, 
   const draft = {
     id: "draft-2", organizationId: "org-1", customerId: "customer-1",
     customer: { partyType: "company", name: "Client", fiscalIdentifier: "RO1", address: { countryCode: "RO", city: "Iași", street: "Strada 1" } },
-    series: "QWBE", issueDate: "2026-09-01", dueDate: null, currency: "RON", status: "draft", lines: [], vatBreakdown: [],
+    series: "QWBE", issueDate: "2026-09-01", dueDate: null, currency: "RON", notes: null, status: "draft", lines: [], vatBreakdown: [],
     totalExcludingVat: "0.00", vatTotal: "0.00", totalIncludingVat: "0.00",
   }
   const proforma = {

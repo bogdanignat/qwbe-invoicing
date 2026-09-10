@@ -6,7 +6,7 @@ import type { InvoicingPermissions } from "../../contracts/permissions.ts"
 import { calculateLine } from "../../domain/calculation.ts"
 import type { DocumentSource, DraftInvoice } from "../../domain/invoice.ts"
 import type { CreateDraftInput, UpdateDraftInput } from "../../domain/inputs.ts"
-import { resolveVatConfiguration, validateDocumentSource } from "../../domain/validation.ts"
+import { resolveVatConfiguration, validateDocumentNotes, validateDocumentSource } from "../../domain/validation.ts"
 import { authorDocument, buyerFrom, dates, documentSource, findEditable, withTotals } from "./authoring.ts"
 
 export interface DraftDocumentOperations {
@@ -47,6 +47,7 @@ export const createDraftDocumentOperations = (
   const updateDraft = (input: UpdateDraftInput) => Effect.gen(function*() {
     const context = yield* authorize(permissions.draftInvoices)
     return yield* dependencies.store.transaction((transaction) => Effect.gen(function*() {
+      yield* checked(() => { validateDocumentNotes(input.notes) })
       const current = yield* findEditable(transaction, context.organization.id, input.draftId)
       const issuer = yield* transaction.findIssuer(context.organization.id)
       if (issuer === undefined) return yield* Effect.fail(missing("issuer", context.organization.id))
@@ -61,7 +62,8 @@ export const createDraftDocumentOperations = (
       const base = { ...current }
       delete base.customerId
       delete base.source
-      const updated = withTotals({ ...base, ...buyer, ...(source === undefined ? {} : { source }), ...header, lines })
+      const notes = input.notes === undefined ? current.notes : input.notes
+      const updated = withTotals({ ...base, ...buyer, ...(source === undefined ? {} : { source }), ...header, notes, lines })
       yield* transaction.saveDraft(updated)
       return structuredClone(updated)
     }))

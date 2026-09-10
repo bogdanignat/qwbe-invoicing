@@ -98,6 +98,7 @@ export interface DraftInvoice {
   readonly issueDate: string
   readonly dueDate: string | null
   readonly currency: string
+  readonly notes: string | null
   readonly status: "draft" | "issued" | "proforma_issued"
   readonly lines: ReadonlyArray<DraftLine>
   readonly vatBreakdown: ReadonlyArray<VatBreakdown>
@@ -123,6 +124,7 @@ export interface IssuedInvoice {
   readonly issueDate: string
   readonly dueDate: string | null
   readonly currency: string
+  readonly notes: string | null
   readonly issuer: Party
   readonly customer: BuyerSnapshot
   readonly lines: ReadonlyArray<DraftLine>
@@ -145,6 +147,7 @@ export interface Proforma {
   readonly dueDate: string | null
   readonly issuedAt: string
   readonly currency: string
+  readonly notes: string | null
   readonly issuer: Party
   readonly customer: BuyerSnapshot
   readonly lines: ReadonlyArray<DraftLine>
@@ -350,7 +353,7 @@ export const decodeDraft: Decoder<DraftInvoice> = (input) => {
     ...(source === undefined ? {} : { source }),
     series: text(value.series, "series"),
     issueDate: text(value.issueDate, "issueDate"), dueDate: nullableText(value.dueDate, "dueDate"),
-    currency: text(value.currency, "currency"), status,
+    currency: text(value.currency, "currency"), notes: nullableText(value.notes, "notes"), status,
     lines: array(value.lines, decodeDraftLine, "lines"),
     vatBreakdown: array(value.vatBreakdown, decodeVatBreakdown, "vatBreakdown"),
     totalExcludingVat: text(value.totalExcludingVat, "totalExcludingVat"), vatTotal: text(value.vatTotal, "vatTotal"),
@@ -367,7 +370,8 @@ export const decodeInvoice: Decoder<IssuedInvoice> = (input) => {
     ...(source === undefined ? {} : { source }),
     series: text(value.series, "series"), number: integer(value.number, "number"),
     issueDate: text(value.issueDate, "issueDate"), dueDate: nullableText(value.dueDate, "dueDate"),
-    currency: text(value.currency, "currency"), issuer: decodeParty(value.issuer), customer: decodeBuyer(value.customer),
+    currency: text(value.currency, "currency"), notes: nullableText(value.notes, "notes"),
+    issuer: decodeParty(value.issuer), customer: decodeBuyer(value.customer),
     lines: array(value.lines, decodeDraftLine, "lines"),
     vatBreakdown: array(value.vatBreakdown, decodeVatBreakdown, "vatBreakdown"),
     totalExcludingVat: text(value.totalExcludingVat, "totalExcludingVat"), vatTotal: text(value.vatTotal, "vatTotal"),
@@ -386,7 +390,8 @@ export const decodeProforma: Decoder<Proforma> = (input) => {
     organizationId: text(value.organizationId, "organizationId"), series: text(value.series, "series"),
     number: integer(value.number, "number"), issueDate: text(value.issueDate, "issueDate"),
     dueDate: nullableText(value.dueDate, "dueDate"), issuedAt: text(value.issuedAt, "issuedAt"),
-    currency: text(value.currency, "currency"), issuer: decodeParty(value.issuer), customer: decodeBuyer(value.customer),
+    currency: text(value.currency, "currency"), notes: nullableText(value.notes, "notes"),
+    issuer: decodeParty(value.issuer), customer: decodeBuyer(value.customer),
     lines: array(value.lines, decodeDraftLine, "lines"), vatBreakdown: array(value.vatBreakdown, decodeVatBreakdown, "vatBreakdown"),
     totalExcludingVat: text(value.totalExcludingVat, "totalExcludingVat"), vatTotal: text(value.vatTotal, "vatTotal"),
     totalIncludingVat: text(value.totalIncludingVat, "totalIncludingVat"),

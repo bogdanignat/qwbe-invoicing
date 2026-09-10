@@ -5,6 +5,21 @@ const optionalString = Schema.optional(Schema.String)
 const nullableString = Schema.NullOr(Schema.String)
 const optionalNullableString = Schema.optional(nullableString)
 
+// Free-form document remarks: newlines allowed for paragraphs, every other
+// control character rejected. Mirrors validateDocumentNotes in the cube.
+const DocumentNotes = Schema.String.pipe(
+  Schema.minLength(1),
+  Schema.maxLength(500),
+  Schema.filter((value) => value === value.trim(), {
+    message: () => "notes must not have surrounding whitespace",
+  }),
+  Schema.filter((value) => !/(?!\n)[\p{Cc}\p{Zl}\p{Zp}]/u.test(value), {
+    message: () => "notes must not contain control characters",
+  }),
+)
+const nullableNotes = Schema.NullOr(DocumentNotes)
+const optionalNullableNotes = Schema.optional(nullableNotes)
+
 export const Address = Schema.Struct({
   countryCode: Schema.String,
   city: Schema.String,
@@ -151,6 +166,7 @@ export const DraftInvoice = Schema.Struct({
   issueDate: Schema.String,
   dueDate: nullableString,
   currency: Schema.String,
+  notes: nullableNotes,
   status: Schema.Literal("draft", "issued", "proforma_issued"),
   lines: Schema.Array(DraftLine),
   vatBreakdown: Schema.Array(VatBreakdown),
@@ -173,6 +189,7 @@ export const IssuedInvoice = Schema.Struct({
   dueDate: nullableString,
   issuedAt: Schema.String,
   currency: Schema.String,
+  notes: nullableNotes,
   issuer: Party,
   customer: Buyer,
   lines: Schema.Array(DraftLine),
@@ -188,12 +205,12 @@ export const IssuedInvoicePage = pageOf(IssuedInvoice)
 const BuyerById = Schema.Struct({ customerId: Schema.String })
 const InlineBuyer = Schema.Struct({ customer: Buyer })
 export const DraftInput = Schema.Union(
-  Schema.Struct({ customerId: Schema.String, source: Schema.optional(DocumentSource), series: Schema.String, issueDate: Schema.String, currency: optionalString, dueDate: optionalNullableString }),
-  Schema.Struct({ customer: Buyer, source: Schema.optional(DocumentSource), series: Schema.String, issueDate: Schema.String, currency: optionalString, dueDate: optionalNullableString }),
+  Schema.Struct({ customerId: Schema.String, source: Schema.optional(DocumentSource), series: Schema.String, issueDate: Schema.String, currency: optionalString, dueDate: optionalNullableString, notes: optionalNullableNotes }),
+  Schema.Struct({ customer: Buyer, source: Schema.optional(DocumentSource), series: Schema.String, issueDate: Schema.String, currency: optionalString, dueDate: optionalNullableString, notes: optionalNullableNotes }),
 )
 export const UpdateDraftInput = Schema.Union(
-  Schema.Struct({ ...BuyerById.fields, source: Schema.optional(Schema.NullOr(DocumentSource)), issueDate: Schema.String, dueDate: optionalNullableString }),
-  Schema.Struct({ ...InlineBuyer.fields, source: Schema.optional(Schema.NullOr(DocumentSource)), issueDate: Schema.String, dueDate: optionalNullableString }),
+  Schema.Struct({ ...BuyerById.fields, source: Schema.optional(Schema.NullOr(DocumentSource)), issueDate: Schema.String, dueDate: optionalNullableString, notes: optionalNullableNotes }),
+  Schema.Struct({ ...InlineBuyer.fields, source: Schema.optional(Schema.NullOr(DocumentSource)), issueDate: Schema.String, dueDate: optionalNullableString, notes: optionalNullableNotes }),
 )
 export const DraftLineInput = Schema.Struct({
   description: Schema.String,
@@ -203,7 +220,7 @@ export const DraftLineInput = Schema.Struct({
   vatRateCode: Schema.String,
 })
 const AuthoringFields = { source: Schema.optional(DocumentSource), series: Schema.String, issueDate: Schema.String, dueDate: optionalNullableString,
-  currency: Schema.Literal("RON"), lines: Schema.Array(DraftLineInput) }
+  currency: Schema.Literal("RON"), notes: optionalNullableNotes, lines: Schema.Array(DraftLineInput) }
 export const AuthoringDocumentInput = Schema.Union(
   Schema.Struct({ ...BuyerById.fields, ...AuthoringFields }), Schema.Struct({ ...InlineBuyer.fields, ...AuthoringFields }),
 )
@@ -297,6 +314,7 @@ export const Proforma = Schema.Struct({
   dueDate: nullableString,
   issuedAt: Schema.String,
   currency: Schema.String,
+  notes: nullableNotes,
   issuer: Party,
   customer: Buyer,
   lines: Schema.Array(DraftLine),

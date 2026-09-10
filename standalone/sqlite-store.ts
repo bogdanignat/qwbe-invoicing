@@ -282,6 +282,7 @@ const issuedInvoiceFrom = (database: DatabaseSync, value: Row): IssuedInvoice =>
     series: text(value, "series"), number: integer(value, "number"),
     issueDate: text(value, "issue_date"), dueDate: nullableText(value, "due_date"),
     issuedAt: text(value, "issued_at"), currency: text(value, "currency"),
+    notes: nullableText(value, "notes"),
     issuer: partyFrom(value, "issuer_"), customer: buyerFrom(value, "customer_"),
     lines: loadLines(database, "issued_lines", id), vatBreakdown,
     totalExcludingVat: text(value, "total_excluding_tax"), vatTotal: text(value, "tax_total"),
@@ -308,6 +309,7 @@ const proformaFrom = (database: DatabaseSync, value: Row): Proforma => {
     convertedInvoiceId: nullableText(value, "converted_invoice_id"),
     series: text(value, "series"), number: integer(value, "number"), issueDate: text(value, "issue_date"),
     dueDate: nullableText(value, "due_date"), issuedAt: text(value, "issued_at"), currency: text(value, "currency"),
+    notes: nullableText(value, "notes"),
     issuer: partyFrom(value, "issuer_"), customer: buyerFrom(value, "customer_"),
     lines: loadLines(database, "proforma_lines", id), vatBreakdown: taxFrom(database, "proforma_tax_breakdown", "proforma_id", id),
     totalExcludingVat: text(value, "total_excluding_tax"), vatTotal: text(value, "tax_total"),
@@ -439,18 +441,18 @@ const transactionAdapter = (database: DatabaseSync): InvoicingTransaction => ({
     const result = database.prepare(`INSERT INTO invoice_drafts
       (id, organization_id, source_app, source_kind, source_id, customer_id, customer_party_type, customer_legal_name, customer_tax_identifier,
        customer_country_code, customer_city, customer_street, customer_county, customer_postal_code,
-        series, issue_date, due_date, currency, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        series, issue_date, due_date, currency, status, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT (id) DO UPDATE SET source_app=excluded.source_app,source_kind=excluded.source_kind,source_id=excluded.source_id,
        customer_id=excluded.customer_id, customer_party_type=excluded.customer_party_type,
        customer_legal_name=excluded.customer_legal_name, customer_tax_identifier=excluded.customer_tax_identifier,
        customer_country_code=excluded.customer_country_code, customer_city=excluded.customer_city,
        customer_street=excluded.customer_street, customer_county=excluded.customer_county,
        customer_postal_code=excluded.customer_postal_code, issue_date=excluded.issue_date,
-       due_date=excluded.due_date, currency=excluded.currency, status=excluded.status
+       due_date=excluded.due_date, currency=excluded.currency, status=excluded.status, notes=excluded.notes
        WHERE invoice_drafts.organization_id=excluded.organization_id`)
       .run(draft.id, draft.organizationId, ...sourceValues(draft.source), draft.customerId ?? null, draft.customer.partyType,
         draft.customer.name, draft.customer.fiscalIdentifier, ...addressValues(draft.customer.address),
-        draft.series, draft.issueDate, draft.dueDate, draft.currency, draft.status)
+        draft.series, draft.issueDate, draft.dueDate, draft.currency, draft.status, draft.notes)
     if (result.changes === 0) throw new DomainConflict({ code: "draft_id_taken", message: "Draft id belongs to another organization" })
     saveLines(database, { table: "draft_lines" }, draft.id, draft.lines)
   }),
@@ -465,6 +467,7 @@ const transactionAdapter = (database: DatabaseSync): InvoicingTransaction => ({
       ...(customerId === undefined ? {} : { customerId }), customer: buyerFrom(value, "customer_"),
       series: text(value, "series"), issueDate: text(value, "issue_date"),
       dueDate: nullableText(value, "due_date"), currency: text(value, "currency"),
+      notes: nullableText(value, "notes"),
       status: draftStatus(value), lines, ...calculateTotals(lines),
     }
   }),
@@ -481,7 +484,8 @@ const transactionAdapter = (database: DatabaseSync): InvoicingTransaction => ({
       return { id, organizationId, ...(documentSource === undefined ? {} : { source: documentSource }),
         ...(customerId === undefined ? {} : { customerId }), customer: buyerFrom(value, "customer_"),
         series: text(value, "series"), issueDate: text(value, "issue_date"), dueDate: nullableText(value, "due_date"),
-        currency: text(value, "currency"), status: "draft" as const, lines, ...calculateTotals(lines) }
+        currency: text(value, "currency"), notes: nullableText(value, "notes"),
+        status: "draft" as const, lines, ...calculateTotals(lines) }
     })
   }),
   deleteDraft: (organizationId, id) => write("delete draft", () => {
@@ -513,13 +517,13 @@ const transactionAdapter = (database: DatabaseSync): InvoicingTransaction => ({
        issued_at, currency, issuer_legal_name, issuer_tax_identifier, issuer_country_code, issuer_city,
         issuer_street, issuer_county, issuer_postal_code, customer_legal_name, customer_tax_identifier, customer_party_type,
        customer_country_code, customer_city, customer_street, customer_county, customer_postal_code,
-       total_excluding_tax, tax_total, total_including_tax, e_factura_status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'invoice', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+       total_excluding_tax, tax_total, total_including_tax, e_factura_status, notes)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'invoice', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .run(invoice.id, invoice.draftId, invoice.sourceProformaId, invoice.organizationId, ...sourceValues(invoice.source), Number(invoice.issueDate.slice(0, 4)),
         invoice.series, invoice.number, invoice.issueDate, invoice.dueDate, invoice.issuedAt, invoice.currency,
         invoice.issuer.name, invoice.issuer.fiscalIdentifier, ...addressValues(invoice.issuer.address),
         invoice.customer.name, invoice.customer.fiscalIdentifier, invoice.customer.partyType, ...addressValues(invoice.customer.address),
-        invoice.totalExcludingVat, invoice.vatTotal, invoice.totalIncludingVat, (invoice as unknown as { eFacturaStatus?: string }).eFacturaStatus ?? "not_sent")
+        invoice.totalExcludingVat, invoice.vatTotal, invoice.totalIncludingVat, (invoice as unknown as { eFacturaStatus?: string }).eFacturaStatus ?? "not_sent", invoice.notes)
     saveLines(database, { table: "issued_lines" }, invoice.id, invoice.lines)
     const statement = database.prepare(`INSERT INTO issued_tax_breakdown
       (invoice_id, line_position, tax_code, category, rate, taxable_amount, tax_amount) VALUES (?, ?, ?, ?, ?, ?, ?)`)
@@ -543,12 +547,12 @@ const transactionAdapter = (database: DatabaseSync): InvoicingTransaction => ({
       (id,source_draft_id,organization_id,source_app,source_kind,source_id,fiscal_year,document_type,series,invoice_series,number,issue_date,due_date,issued_at,currency,
        issuer_legal_name,issuer_tax_identifier,issuer_country_code,issuer_city,issuer_street,issuer_county,issuer_postal_code,
        customer_party_type,customer_legal_name,customer_tax_identifier,customer_country_code,customer_city,customer_street,customer_county,customer_postal_code,
-         total_excluding_tax,tax_total,total_including_tax) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+         total_excluding_tax,tax_total,total_including_tax,notes) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
       .run(proforma.id, proforma.sourceDraftId, proforma.organizationId, ...sourceValues(proforma.source), Number(proforma.issueDate.slice(0, 4)), "proforma",
         proforma.series, proforma.invoiceSeries, proforma.number, proforma.issueDate, proforma.dueDate, proforma.issuedAt, proforma.currency,
         proforma.issuer.name, proforma.issuer.fiscalIdentifier, ...addressValues(proforma.issuer.address), proforma.customer.partyType,
         proforma.customer.name, proforma.customer.fiscalIdentifier, ...addressValues(proforma.customer.address),
-        proforma.totalExcludingVat, proforma.vatTotal, proforma.totalIncludingVat)
+        proforma.totalExcludingVat, proforma.vatTotal, proforma.totalIncludingVat, proforma.notes)
     saveLines(database, { table: "proforma_lines", organizationId: proforma.organizationId }, proforma.id, proforma.lines)
     const statement = database.prepare(`INSERT INTO proforma_tax_breakdown
       (proforma_id,organization_id,line_position,tax_code,category,rate,taxable_amount,tax_amount) VALUES(?,?,?,?,?,?,?,?)`)
