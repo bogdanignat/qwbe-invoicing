@@ -11,7 +11,6 @@ import {
   ResourceNotFound,
   ValidationFailure,
   createInvoicingService,
-  type DocumentSource,
   type InvoicingFailure,
 } from "../cube/invoicing/index.ts"
 import {
@@ -34,7 +33,7 @@ import {
   type DocumentsFailure,
 } from "../cube/invoicing/documents/index.ts"
 import { createStandaloneArtifactService } from "./artifact-runtime.ts"
-import { authoringInvoiceInput, authoringProformaInput, correctionInput, customerInput, documentSeriesInput, draftInput, emptyInput, issuerInput, issueProformaInput, lineInput, pageRequest, paymentInput, productPresetInput, reversalInput, updateDraftInput, updateLineInput } from "./api-inputs.ts"
+import { authoringInvoiceInput, authoringProformaInput, correctionInput, customerInput, documentSeriesInput, draftInput, emptyInput, issuerInput, issueProformaInput, lineInput, pageRequest, paymentInput, productPresetInput, reversalInput, sourceFilter, updateDraftInput, updateLineInput } from "./api-inputs.ts"
 import { matchApplicationRoute } from "./api-route-adapter.ts"
 import type { RequestAuthenticator } from "./auth.ts"
 import { createSqlitePaymentsStore, createSqliteStore } from "./sqlite-store.ts"
@@ -83,15 +82,6 @@ const idempotentRequest = <Input>(request: ApiRequest, operation: string, input:
   }
   const fingerprint = `sha256:${createHash("sha256").update(canonicalJson({ operation, input })).digest("hex")}`
   return { request: input, idempotency: { key, fingerprint } }
-}
-
-const sourceFilter = (params: URLSearchParams): DocumentSource | undefined => {
-  const entries = [params.get("sourceApp"), params.get("sourceKind"), params.get("sourceId")] as const
-  if (entries.every((value) => value === null)) return undefined
-  if (entries.some((value) => value === null) || ["sourceApp", "sourceKind", "sourceId"].some((key) => params.getAll(key).length !== 1)) {
-    throw new ValidationFailure({ issues: ["sourceApp, sourceKind, and sourceId must be supplied exactly once and together"] })
-  }
-  return { app: entries[0] as string, kind: entries[1] as string, id: entries[2] as string }
 }
 
 const failureResponse = (failure: ApiFailure): ApiResponse => {
