@@ -22,7 +22,7 @@ export const fiscalYear = (isoDate: string): number => Number(isoDate.slice(0, 4
 export const numberedSnapshot = (draft: SnapshotContent, issuer: PartySnapshot, identity: NumberedIdentity) => ({
   ...identity, issuedAt: identity.issuedAt.toISOString(), organizationId: draft.organizationId,
   ...(draft.source === undefined ? {} : { source: copySource(draft.source) }),
-  issueDate: draft.issueDate, dueDate: draft.dueDate, currency: draft.currency,
+  issueDate: draft.issueDate, dueDate: draft.dueDate, currency: draft.currency, notes: draft.notes,
   issuer: copyParty(issuer), customer: structuredClone(draft.customer), lines: structuredClone(draft.lines),
   vatBreakdown: structuredClone(draft.vatBreakdown), totalExcludingVat: draft.totalExcludingVat,
   vatTotal: draft.vatTotal, totalIncludingVat: draft.totalIncludingVat,

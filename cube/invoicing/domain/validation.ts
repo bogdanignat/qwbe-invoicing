@@ -81,18 +81,30 @@ export const validateDocumentSeries = (documentSeries: DocumentSeries): void => 
   if (issues.length > 0) throw new ValidationFailure({ issues })
 }
 
+const freeText = (field: string, value: string, maximum: number, issues: Array<string>, newlines = false): void => {
+  required(value, field, issues)
+  if (value !== value.trim()) issues.push(`${field} must not have surrounding whitespace`)
+  if (value.length > maximum) issues.push(`${field} must be at most ${String(maximum)} characters`)
+  if ((newlines ? /(?!\n)[\p{Cc}\p{Zl}\p{Zp}]/u : /[\p{Cc}\p{Zl}\p{Zp}]/u).test(value)) issues.push(`${field} must not contain control characters`)
+}
+
 export const validateDocumentSource = (source: DocumentSource): void => {
   const issues: Array<string> = []
-  for (const [field, value, maximum] of [
-    ["source.app", source.app, 100],
-    ["source.kind", source.kind, 100],
-    ["source.id", source.id, 255],
-  ] as const) {
-    if (value.trim().length === 0) issues.push(`${field} is required`)
-    if (value !== value.trim()) issues.push(`${field} must not have surrounding whitespace`)
-    if (value.length > maximum) issues.push(`${field} must be at most ${String(maximum)} characters`)
-    if (/\p{Cc}/u.test(value)) issues.push(`${field} must not contain control characters`)
-  }
+  freeText("source.app", source.app, 100, issues)
+  freeText("source.kind", source.kind, 100, issues)
+  freeText("source.id", source.id, 255, issues)
+  if (issues.length > 0) throw new ValidationFailure({ issues })
+}
+
+/**
+ * Document remarks are optional free text. Newlines are allowed so the PDF can
+ * render paragraphs; every other control character is rejected. Nothing is
+ * normalised silently — the SQLite CHECK is a safety net, this is the real gate.
+ */
+export const validateDocumentNotes = (notes: string | null | undefined): void => {
+  if (notes === null || notes === undefined) return
+  const issues: Array<string> = []
+  freeText("notes", notes, 500, issues, true)
   if (issues.length > 0) throw new ValidationFailure({ issues })
 }
 

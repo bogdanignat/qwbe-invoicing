@@ -309,3 +309,44 @@ void test("numbers documents chronologically per series and dates proforma conve
   const oldProforma = await Effect.runPromise(Effect.flip(service.issueProforma(idempotent({ ...document("2026-08-19"), proformaSeries: "PRO" }))))
   assert.equal(oldProforma instanceof ValidationFailure, true)
 })
+
+void test("freezes draft remarks into every issued snapshot and carries them through conversion", async () => {
+  const state = emptyState()
+  const service = createInvoicingService({ context: contextProvider({ identity, organization: { id: "org-1" } }),
+    clock: fixedClock, ids: sequentialIds(), store: memoryStore(state), cubeIdentity: "invoicing" })
+  await Effect.runPromise(service.configureIssuer({ name: "Exemplu SRL", fiscalIdentifier: "RO12345674",
+    address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" }, defaultCurrency: "RON",
+    defaultPaymentTermDays: 15, vatConfigurations }))
+  await Effect.runPromise(service.addDocumentSeries({ documentType: "invoice", series: "INV" }))
+  await Effect.runPromise(service.addDocumentSeries({ documentType: "proforma", series: "PRO" }))
+  const customer = { partyType: "company" as const, name: "Client SRL", fiscalIdentifier: "RO87654329",
+    address: { countryCode: "RO", city: "Iași", street: "Strada Mică 2" } }
+  const remarks = "Termen de execuție 10 zile.\nTransport inclus."
+  const line = { description: "Servicii", quantity: "1", unitPrice: "100", unitOfMeasure: each, vatRateCode: "RO_STANDARD" }
+  const authored = { customer, series: "INV", issueDate: "2026-09-01", dueDate: null, currency: "RON" as const, lines: [line], notes: remarks }
+
+  const directInvoice = await Effect.runPromise(service.issueInvoice(idempotent(authored)))
+  assert.equal(directInvoice.notes, remarks)
+
+  const invoiceDraft = await Effect.runPromise(service.createDraft({ customer, series: "INV", issueDate: "2026-09-01", notes: remarks }))
+  await Effect.runPromise(service.addDraftLine({ draftId: invoiceDraft.id, ...line }))
+  assert.equal((await Effect.runPromise(service.issueInvoice(idempotent({ draftId: invoiceDraft.id })))).notes, remarks)
+
+  const directProforma = await Effect.runPromise(service.issueProforma(idempotent({ ...authored, proformaSeries: "PRO" })))
+  assert.equal(directProforma.notes, remarks)
+
+  const proformaDraft = await Effect.runPromise(service.createDraft({ customer, series: "INV", issueDate: "2026-09-01", notes: remarks }))
+  await Effect.runPromise(service.addDraftLine({ draftId: proformaDraft.id, ...line }))
+  const draftProforma = await Effect.runPromise(service.issueProforma(idempotent({ draftId: proformaDraft.id, series: "PRO" })))
+  assert.equal(draftProforma.notes, remarks)
+
+  const converted = await Effect.runPromise(service.issueInvoiceFromProforma(idempotent({ proformaId: draftProforma.id })))
+  assert.equal(converted.notes, draftProforma.notes)
+
+  const bare = await Effect.runPromise(service.issueInvoice(idempotent({
+    customer, series: "INV", issueDate: "2026-09-01", dueDate: null, currency: "RON" as const, lines: [line],
+  })))
+  assert.equal(bare.notes, null)
+  const invalid = await Effect.runPromise(Effect.flip(service.issueProforma(idempotent({ ...authored, proformaSeries: "PRO", notes: "  " }))))
+  assert.equal(invalid instanceof ValidationFailure, true)
+})

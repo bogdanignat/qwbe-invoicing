@@ -522,3 +522,69 @@ void test("authenticates before parsing protected request bodies", async () => {
     rmSync(directory, { recursive: true, force: true })
   }
 })
+
+void test("carries document remarks through the HTTP contract and rejects invalid ones", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "qwbe-api-notes-"))
+  const token = "b".repeat(64)
+  const tokenFile = join(directory, "api-token")
+  writeFileSync(tokenFile, token, { mode: 0o600 })
+  try {
+    applyMigrations(directory)
+    const runtime = {
+      authenticate: createRequestAuthenticator({
+        host: "127.0.0.1", port: 3000, dataDirectory: directory, nodeEnvironment: "test",
+        authTokenFile: tokenFile, organizationId: "org-1",
+      }),
+      dataDirectory: directory,
+      now: () => new Date("2026-09-05T10:00:00.000Z"),
+    }
+    const authorization = `Bearer ${token}`
+    const call = (method: string, url: string, body?: unknown, idempotencyKey?: string) =>
+      handleApiRequest({ method, url, authorization, body, ...(idempotencyKey === undefined ? {} : { idempotencyKey }) }, runtime)
+    await call("PUT", "/api/issuer", {
+      name: "Exemplu SRL", fiscalIdentifier: "RO12345674",
+      address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" },
+      defaultCurrency: "RON", defaultPaymentTermDays: 15,
+      vatConfigurations: [{ code: "RO_STANDARD", rate: "21.00", effectiveFrom: "2025-08-01" }],
+    })
+    await call("POST", "/api/document-series", { documentType: "invoice", series: "QWBE" })
+    await call("POST", "/api/document-series", { documentType: "proforma", series: "PRO" })
+    const customer = { partyType: "company", name: "Client SRL", fiscalIdentifier: "RO87654329",
+      address: { countryCode: "RO", city: "Iași", street: "Strada Mică 2" } }
+    const remarks = "Plata în 15 zile.\nContact: birou vânzări."
+    const notesOf = (response: { readonly body: unknown }): unknown => (response.body as { notes: unknown }).notes
+
+    const draft = await call("POST", "/api/drafts", { customer, issueDate: "2026-09-01", series: "QWBE", notes: remarks })
+    assert.equal(draft.status, 200)
+    assert.equal(notesOf(draft), remarks)
+    const draftId = (draft.body as { id: string }).id
+    assert.equal(notesOf(await call("GET", `/api/drafts/${draftId}`)), remarks)
+    assert.equal(notesOf(await call("PUT", `/api/drafts/${draftId}`, { customer, issueDate: "2026-09-01" })), remarks)
+    assert.equal(notesOf(await call("PUT", `/api/drafts/${draftId}`, { customer, issueDate: "2026-09-01", notes: null })), null)
+    assert.equal(notesOf(await call("PUT", `/api/drafts/${draftId}`, { customer, issueDate: "2026-09-01", notes: remarks })), remarks)
+    for (const notes of ["", "   ", " marginal ", "x".repeat(501), 7, "tab\tstop", "linie\u2028separata", "paragraf\u2029separat"]) {
+      assert.equal((await call("POST", "/api/drafts", { customer, issueDate: "2026-09-01", series: "QWBE", notes })).status, 400, String(notes))
+      assert.equal((await call("PUT", `/api/drafts/${draftId}`, { customer, issueDate: "2026-09-01", notes })).status, 400, String(notes))
+    }
+    await call("POST", `/api/drafts/${draftId}/lines`, {
+      description: "Servicii", quantity: "1", unitPrice: "100", unitOfMeasure: each, vatRateCode: "RO_STANDARD",
+    })
+    const fromDraft = await call("POST", `/api/drafts/${draftId}/issue`, {}, "notes-draft-invoice")
+    assert.equal(notesOf(fromDraft), remarks)
+
+    const authored = { customer, series: "QWBE", issueDate: "2026-09-01", dueDate: null, currency: "RON",
+      lines: [{ description: "Servicii", quantity: "1", unitPrice: "100", unitOfMeasure: each, vatRateCode: "RO_STANDARD" }] }
+    const direct = await call("POST", "/api/invoices", { ...authored, notes: remarks }, "notes-direct-invoice")
+    assert.equal(notesOf(direct), remarks)
+    const replay = await call("POST", "/api/invoices", { ...authored, notes: "Alt text" }, "notes-direct-invoice")
+    assert.equal(replay.status, 409)
+    assert.equal((await call("POST", "/api/invoices", { ...authored, notes: " " }, "notes-invalid")).status, 400)
+
+    const proforma = await call("POST", "/api/proformas", { ...authored, proformaSeries: "PRO", notes: remarks }, "notes-direct-proforma")
+    assert.equal(notesOf(proforma), remarks)
+    const proformaId = (proforma.body as { id: string }).id
+    assert.equal(notesOf(await call("POST", `/api/proformas/${proformaId}/invoice`, {}, "notes-conversion")), remarks)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})

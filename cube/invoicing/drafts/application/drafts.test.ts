@@ -82,3 +82,42 @@ void test("authors snapshot-owned drafts and recalculates every server-derived a
   await Effect.runPromise(service.deleteDraft(disposable.id))
   assert.equal(await Effect.runPromise(Effect.flip(service.getDraft(disposable.id))) instanceof ResourceNotFound, true)
 })
+
+void test("captures, replaces and clears free-form remarks on a draft", async () => {
+  const state = emptyState()
+  const service = createInvoicingService({
+    context: contextProvider({ identity, organization: { id: "org-1" } }), clock: fixedClock,
+    ids: sequentialIds(), store: memoryStore(state), cubeIdentity: "invoicing",
+  })
+  await Effect.runPromise(service.configureIssuer({
+    name: "Exemplu SRL", fiscalIdentifier: "RO12345674",
+    address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" },
+    defaultCurrency: "RON", defaultPaymentTermDays: 15,
+    vatConfigurations: [{ code: "RO_STANDARD", rate: "21", effectiveFrom: "2025-08-01" }],
+  }))
+  await Effect.runPromise(service.addDocumentSeries({ documentType: "invoice", series: "QWBE" }))
+  const buyer = {
+    partyType: "individual" as const, name: "Ion Popescu", fiscalIdentifier: "",
+    address: { countryCode: "RO", city: "Cluj-Napoca", street: "Strada Unu 1" },
+  }
+  const header = { customer: buyer, series: "QWBE", issueDate: "2025-08-01" }
+  const remarks = "Livrare în 3 tranșe.\nPlata la recepție."
+  assert.equal((await Effect.runPromise(service.createDraft(header))).notes, null)
+  const draft = await Effect.runPromise(service.createDraft({ ...header, notes: remarks }))
+  assert.equal(draft.notes, remarks)
+  const untouched = await Effect.runPromise(service.updateDraft({ customer: buyer, draftId: draft.id, issueDate: "2025-08-01" }))
+  assert.equal(untouched.notes, remarks)
+  const replaced = await Effect.runPromise(service.updateDraft({ customer: buyer, draftId: draft.id, issueDate: "2025-08-01", notes: "Alt text" }))
+  assert.equal(replaced.notes, "Alt text")
+  const cleared = await Effect.runPromise(service.updateDraft({ customer: buyer, draftId: draft.id, issueDate: "2025-08-01", notes: null }))
+  assert.equal(cleared.notes, null)
+  assert.equal((await Effect.runPromise(service.getDraft(draft.id))).notes, null)
+  const maximum = "x".repeat(500)
+  assert.equal((await Effect.runPromise(service.createDraft({ ...header, notes: maximum }))).notes, maximum)
+  for (const notes of ["", "   ", " marginal ", `${maximum}x`, "tab\tstop", "linie\u2028separata", "paragraf\u2029separat"]) {
+    const created = await Effect.runPromise(Effect.flip(service.createDraft({ ...header, notes })))
+    assert.equal(created instanceof ValidationFailure, true, notes)
+    const updated = await Effect.runPromise(Effect.flip(service.updateDraft({ customer: buyer, draftId: draft.id, issueDate: "2025-08-01", notes })))
+    assert.equal(updated instanceof ValidationFailure, true, notes)
+  }
+})

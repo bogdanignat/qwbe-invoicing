@@ -65,6 +65,7 @@ interface RenderableNumberedDocument {
   readonly dueDate: string | null
   readonly issuedAt: string
   readonly currency: string
+  readonly notes: string | null
   readonly issuer: RenderableParty
   readonly customer: RenderableBuyer
   readonly lines: ReadonlyArray<RenderableLine>

@@ -1,0 +1,14 @@
+[
+  {
+    "name": "013-document-notes",
+    "statements": [
+      "ALTER TABLE invoice_drafts ADD COLUMN notes TEXT CHECK(notes IS NULL OR (length(notes) BETWEEN 1 AND 500 AND trim(notes)=notes))",
+      "ALTER TABLE proformas ADD COLUMN notes TEXT CHECK(notes IS NULL OR (length(notes) BETWEEN 1 AND 500 AND trim(notes)=notes))",
+      "ALTER TABLE issued_invoices ADD COLUMN notes TEXT CHECK(notes IS NULL OR (length(notes) BETWEEN 1 AND 500 AND trim(notes)=notes))",
+      "DROP TRIGGER issued_invoices_no_update",
+      "CREATE TRIGGER issued_invoices_no_update BEFORE UPDATE OF id,draft_id,source_proforma_id,organization_id,fiscal_year,document_type,series,number,issue_date,due_date,issued_at,currency,issuer_legal_name,issuer_tax_identifier,issuer_country_code,issuer_city,issuer_street,issuer_county,issuer_postal_code,customer_party_type,customer_legal_name,customer_tax_identifier,customer_country_code,customer_city,customer_street,customer_county,customer_postal_code,total_excluding_tax,tax_total,total_including_tax,notes ON issued_invoices BEGIN SELECT RAISE(ABORT,'issued invoices are immutable except e_factura_status');END",
+      "DROP TRIGGER proformas_no_content_update",
+      "CREATE TRIGGER proformas_no_content_update BEFORE UPDATE OF id,source_draft_id,organization_id,fiscal_year,document_type,series,invoice_series,number,issue_date,due_date,issued_at,currency,issuer_legal_name,issuer_tax_identifier,issuer_country_code,issuer_city,issuer_street,issuer_county,issuer_postal_code,customer_party_type,customer_legal_name,customer_tax_identifier,customer_country_code,customer_city,customer_street,customer_county,customer_postal_code,total_excluding_tax,tax_total,total_including_tax,notes ON proformas BEGIN SELECT RAISE(ABORT,'proformas are immutable');END"
+    ]
+  }
+]

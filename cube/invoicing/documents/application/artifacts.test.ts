@@ -22,6 +22,7 @@ const invoice: RenderableInvoice = {
   dueDate: "2026-09-16",
   issuedAt: "2026-09-01T10:00:00.000Z",
   currency: "RON",
+  notes: null,
   issuer: {
     name: "Știință și Tehnică SRL",
     fiscalIdentifier: "RO12345674",

@@ -234,6 +234,12 @@ td a { text-decoration-color: var(--color-invoice-link-decoration); text-underli
 .invoice-bottom dl div, .summary-card dl div { display: flex; justify-content: space-between; gap: 1rem; padding: .55rem 0; border-bottom: 1px solid var(--color-invoice-border); }
 dt { color: var(--color-invoice-muted); }
 dd { margin: 0; font-weight: 750; }
+.notes-field { display: block; margin-top: 1rem; }
+.notes-field textarea { width: 100%; min-height: 4.5rem; resize: vertical; font: inherit; }
+.notes-status { text-align: right; margin: .25rem 0 0; }
+.notes-status.warning { color: var(--color-invoice-danger, #b42318); }
+.document-notes { padding-top: 1.5rem; border-top: 1px solid var(--color-invoice-border); margin-top: 1.5rem; }
+.document-notes-body { margin: .4rem 0 0; white-space: pre-wrap; font-size: .82rem; }
 .grand-total { margin-top: .4rem; font-size: 1.1rem; }
 .grand-total dd { color: var(--color-invoice-primary); }
 .summary-card dl { margin: 1.2rem 0 1.5rem; font-size: .82rem; }

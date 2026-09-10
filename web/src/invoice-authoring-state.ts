@@ -35,6 +35,7 @@ export interface InvoiceAuthoringForm {
   readonly issueDate: string
   readonly dueDate: string
   readonly dueDateEdited: boolean
+  readonly notes: string
 }
 
 export interface EditableInvoiceLine extends DraftLineInput {
@@ -71,6 +72,7 @@ export const newAuthoringForm = (
   ...initialBuyerSelection(hasSavedCustomers), partyType: "company",
   name: "", companyTaxIdentifier: "", individualTaxIdentifier: "", countryCode: "RO", city: "", street: "", county: "", postalCode: "",
   series, issueDate, dueDate: addCalendarDays(issueDate, issuer.defaultPaymentTermDays), dueDateEdited: false,
+  notes: "",
 })
 
 export const selectSavedCustomer = (
@@ -156,14 +158,24 @@ const buyerPayload = (form: InvoiceAuthoringForm): { readonly customerId: string
         },
       }
 
+export const documentNotesMaxLength = 500
+
+/** Mirrors the server-side remark rules so the textarea can explain an invisible paste before submitting. */
+export const documentNotesIssue = (notes: string): string | null => {
+  if (/(?!\n)[\p{Cc}\p{Zl}\p{Zp}]/u.test(notes)) return "Observatiile nu pot contine caractere de control; inlocuieste tab-urile cu spatii."
+  return notes.trim().length > documentNotesMaxLength ? `Observatiile depasesc ${String(documentNotesMaxLength)} de caractere.` : null
+}
+
 export const createDraftPayload = (form: InvoiceAuthoringForm): CreateDraftInput => ({
   ...buyerPayload(form), series: form.series, issueDate: form.issueDate, currency: "RON",
   dueDate: form.dueDate === "" ? null : form.dueDate,
+  notes: form.notes.trim() === "" ? null : form.notes.trim(),
 })
 
 export const updateDraftPayload = (form: InvoiceAuthoringForm): UpdateDraftInput => ({
   ...buyerPayload(form), issueDate: form.issueDate,
   dueDate: form.dueDate === "" ? null : form.dueDate,
+  notes: form.notes.trim() === "" ? null : form.notes.trim(),
 })
 
 export const draftLinePayload = (line: EditableInvoiceLine): DraftLineInput => ({
@@ -182,6 +194,7 @@ export const authoringPayloadMatchesDraft = (payload: AuthoringDocumentInput, dr
     : draft.customerId === undefined && JSON.stringify(draft.customer) === JSON.stringify(payload.customer)
   return sameBuyer && draft.series === payload.series && draft.issueDate === payload.issueDate
     && draft.dueDate === (payload.dueDate ?? null) && draft.currency === payload.currency
+    && draft.notes === (payload.notes ?? null)
     && draft.lines.length === payload.lines.length && draft.lines.every((line, index) => {
       const expected = payload.lines[index]
       return expected !== undefined && line.description === expected.description && line.quantity === expected.quantity
@@ -216,6 +229,7 @@ export const formFromDraft = (draft: DraftInvoice): InvoiceAuthoringForm => ({
   issueDate: draft.issueDate,
   dueDate: draft.dueDate ?? "",
   dueDateEdited: true,
+  notes: draft.notes ?? "",
 })
 
 export const draftLinesForEditing = (draft: DraftInvoice): ReadonlyArray<EditableInvoiceLine> => draft.lines.map((line) => ({
@@ -235,7 +249,8 @@ export const headerMatchesDraft = (form: InvoiceAuthoringForm, draft: DraftInvoi
       && draft.customer.address.street === form.street
       && (draft.customer.address.county ?? "") === form.county
       && (draft.customer.address.postalCode ?? "") === form.postalCode
-  return sameBuyer && draft.series === form.series && draft.issueDate === form.issueDate && (draft.dueDate ?? "") === form.dueDate
+  return sameBuyer && draft.series === form.series && draft.issueDate === form.issueDate
+    && (draft.dueDate ?? "") === form.dueDate && (draft.notes ?? "") === form.notes.trim()
 }
 
 const lineMatches = (line: EditableInvoiceLine, persisted: DraftInvoice["lines"][number]): boolean =>

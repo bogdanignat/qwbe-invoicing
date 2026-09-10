@@ -33,6 +33,7 @@ export type AuthoringDocumentInput = BuyerSource & {
   readonly issueDate: string
   readonly dueDate?: string | null
   readonly currency: "RON"
+  readonly notes?: string | null
   readonly lines: ReadonlyArray<RawDocumentLine>
 }
 
@@ -44,6 +45,7 @@ export type CreateDraftInput = BuyerSource & {
   readonly issueDate: string
   readonly currency?: string
   readonly dueDate?: string | null
+  readonly notes?: string | null
 }
 
 export type UpdateDraftInput = BuyerSource & {
@@ -51,6 +53,7 @@ export type UpdateDraftInput = BuyerSource & {
   readonly source?: DocumentSource | null
   readonly issueDate: string
   readonly dueDate?: string | null
+  readonly notes?: string | null
 }
 
 export interface AddDraftLineInput {

@@ -113,6 +113,9 @@ interface DocumentContent {
   readonly issueDate: string
   readonly dueDate: string | null
   readonly currency: string
+  // Free-form remarks captured while the document is a draft; frozen into the
+  // snapshot on issuance. `null` means "no remarks"; the empty string is not a valid state.
+  readonly notes: string | null
   readonly lines: readonly DraftLine[]
   readonly vatBreakdown: ReadonlyArray<VatBreakdown>
   readonly totalExcludingVat: string

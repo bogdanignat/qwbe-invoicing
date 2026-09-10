@@ -42,12 +42,14 @@ export type CreateDraftInput = BuyerSource & {
   readonly issueDate: string
   readonly currency?: "RON"
   readonly dueDate?: string | null
+  readonly notes?: string | null
 }
 
 export type UpdateDraftInput = BuyerSource & {
   readonly source?: DocumentSource | null
   readonly issueDate: string
   readonly dueDate?: string | null
+  readonly notes?: string | null
 }
 
 export interface DraftLineInput {

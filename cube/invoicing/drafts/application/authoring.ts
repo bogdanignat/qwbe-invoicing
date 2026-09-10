@@ -7,7 +7,7 @@ import type { IdGenerator } from "../../contracts/host.ts"
 import { calculateLine, calculateTotals } from "../../domain/calculation.ts"
 import type { BuyerSnapshot, DocumentSource, DraftInvoice } from "../../domain/invoice.ts"
 import type { AuthoringDocumentInput, CreateDraftInput, UpdateDraftInput } from "../../domain/inputs.ts"
-import { resolveVatConfiguration, validateBuyer, validateDate, validateDocumentSeries, validateDocumentSource } from "../../domain/validation.ts"
+import { resolveVatConfiguration, validateBuyer, validateDate, validateDocumentNotes, validateDocumentSeries, validateDocumentSource } from "../../domain/validation.ts"
 
 export const withTotals = (draft: Omit<DraftInvoice, "vatBreakdown" | "totalExcludingVat" | "vatTotal" | "totalIncludingVat">): DraftInvoice => ({
   ...draft,
@@ -76,6 +76,7 @@ export const authorDocument = (
     validateDocumentSeries({ organizationId, documentType: "invoice", series: input.series })
     if (input.currency !== undefined && input.currency !== "RON") throw new ValidationFailure({ issues: ["currency must be RON"] })
     if ("lines" in input && input.lines.length === 0) throw new ValidationFailure({ issues: ["document must contain at least one line"] })
+    validateDocumentNotes(input.notes)
   })
   const issuer = yield* transaction.findIssuer(organizationId)
   if (issuer === undefined) return yield* Effect.fail(missing("issuer", organizationId))
@@ -87,5 +88,5 @@ export const authorDocument = (
   const lines = yield* Effect.forEach("lines" in input ? input.lines : [], (line) => Effect.flatMap(ids.next, (id) =>
     checked(() => calculateLine({ ...line, id, vat: resolveVatConfiguration(issuer, line.vatRateCode, input.issueDate) }))))
   return { issuer, document: { organizationId, ...customer, ...(source === undefined ? {} : { source }), series: series.series, ...header, currency: "RON" as const,
-    lines, ...calculateTotals(lines) } }
+    notes: input.notes ?? null, lines, ...calculateTotals(lines) } }
 })

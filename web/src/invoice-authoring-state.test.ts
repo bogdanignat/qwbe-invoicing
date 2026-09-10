@@ -1,19 +1,19 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { addCalendarDays, applyProductPreset, authoringAccess, authoringDocumentPayload, authoringPayloadMatchesDraft, authoringReadiness, authoringSeriesOptions, createDraftPayload, draftLinePayload, draftLinesForEditing, editDueDate, formFromDraft, headerMatchesDraft, initialBuyerSelection, linesMatchDraft, newAuthoringForm, pendingLineOperations, selectBuyerMode, selectIssueDate, selectedSavedCustomer, selectSavedCustomer, switchBuyerMode, switchPartyType, updateDraftPayload, type InvoiceAuthoringForm } from "./invoice-authoring-state.ts"
+import { addCalendarDays, applyProductPreset, authoringAccess, authoringDocumentPayload, authoringPayloadMatchesDraft, authoringReadiness, authoringSeriesOptions, createDraftPayload, documentNotesIssue, documentNotesMaxLength, draftLinePayload, draftLinesForEditing, editDueDate, formFromDraft, headerMatchesDraft, initialBuyerSelection, linesMatchDraft, newAuthoringForm, pendingLineOperations, selectBuyerMode, selectIssueDate, selectedSavedCustomer, selectSavedCustomer, switchBuyerMode, switchPartyType, updateDraftPayload, type InvoiceAuthoringForm } from "./invoice-authoring-state.ts"
 import type { Customer, DraftInvoice, Issuer, ProductPreset } from "./models.ts"
 const each = { code: "C62", name: "unitate" } as const
 
 const manualForm: InvoiceAuthoringForm = {
   buyerMode: "one-time", customerId: "", partyType: "individual", name: "Ana Pop", companyTaxIdentifier: "RO123", individualTaxIdentifier: "",
   countryCode: "RO", city: "Iași", street: "Strada 1", county: "", postalCode: "", series: "QWBE",
-  issueDate: "2026-09-02", dueDate: "2026-09-17", dueDateEdited: true,
+  issueDate: "2026-09-02", dueDate: "2026-09-17", dueDateEdited: true, notes: "",
 }
 
 const draft: DraftInvoice = {
   id: "draft-1", organizationId: "org-1", customer: { partyType: "individual", name: "Ana Pop", fiscalIdentifier: "", address: { countryCode: "RO", city: "Iași", street: "Strada 1" } },
-  series: "QWBE", issueDate: "2026-09-02", dueDate: "2026-09-17", currency: "RON", status: "draft", lines: [], vatBreakdown: [],
+  series: "QWBE", issueDate: "2026-09-02", dueDate: "2026-09-17", currency: "RON", notes: null, status: "draft", lines: [], vatBreakdown: [],
   totalExcludingVat: "0.00", vatTotal: "0.00", totalIncludingVat: "0.00",
 }
 
@@ -31,8 +31,18 @@ const customer: Customer = {
 void test("builds the exact one-time buyer payload and preserves blank optional CNP", () => {
   assert.deepEqual(createDraftPayload(manualForm), {
     customer: { partyType: "individual", name: "Ana Pop", fiscalIdentifier: "", address: { countryCode: "RO", city: "Iași", street: "Strada 1" } },
-    series: "QWBE", issueDate: "2026-09-02", dueDate: "2026-09-17", currency: "RON",
+    series: "QWBE", issueDate: "2026-09-02", dueDate: "2026-09-17", currency: "RON", notes: null,
   })
+  assert.equal(createDraftPayload({ ...manualForm, notes: "  Livrare esalonata  " }).notes, "Livrare esalonata")
+  assert.equal(updateDraftPayload({ ...manualForm, notes: "   " }).notes, null)
+})
+
+void test("keeps the header dirty until the remarks match the saved draft", () => {
+  assert.equal(headerMatchesDraft(manualForm, draft), true)
+  assert.equal(headerMatchesDraft({ ...manualForm, notes: "Observatie" }, draft), false)
+  assert.equal(headerMatchesDraft({ ...manualForm, notes: " Observatie " }, { ...draft, notes: "Observatie" }), true)
+  assert.equal(formFromDraft({ ...draft, notes: "Observatie" }).notes, "Observatie")
+  assert.equal(formFromDraft(draft).notes, "")
 })
 
 void test("switching buyer modes retains one-time buyer data", () => {
@@ -170,4 +180,19 @@ void test("selects only remaining new or changed lines for a resumed save", () =
   const queued = { key: "local-2", description: "Transport", quantity: "1", unitPrice: "20", unitOfMeasure: each, vatRateCode: "RO_STANDARD" }
   assert.deepEqual(pendingLineOperations([persisted, queued], withLine).map((operation) => operation.kind), ["create"])
   assert.deepEqual(pendingLineOperations([{ ...persisted, unitPrice: "110" }, queued], withLine).map((operation) => operation.kind), ["update", "create"])
+})
+
+void test("compares saved remarks before allowing a direct issuance payload", () => {
+  const payload = authoringDocumentPayload({ ...manualForm, notes: "Observatie" }, [])
+  const withNotes: DraftInvoice = { ...draft, notes: "Observatie" }
+  assert.equal(authoringPayloadMatchesDraft(payload, withNotes), true)
+  assert.equal(authoringPayloadMatchesDraft(payload, { ...draft, notes: "altceva" }), false)
+  assert.equal(authoringPayloadMatchesDraft(payload, draft), false)
+  assert.equal(authoringPayloadMatchesDraft(authoringDocumentPayload(manualForm, []), draft), true)
+  assert.equal(documentNotesIssue(""), null)
+  assert.equal(documentNotesIssue("Linie unu\nLinie doi"), null)
+  assert.equal(documentNotesIssue("tab\tstop") !== null, true)
+  assert.equal(documentNotesIssue("linie\u2028separata") !== null, true)
+  assert.equal(documentNotesIssue("paragraf\u2029separat") !== null, true)
+  assert.equal(documentNotesIssue("x".repeat(documentNotesMaxLength + 1)) !== null, true)
 })
