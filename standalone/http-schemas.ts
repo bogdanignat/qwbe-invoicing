@@ -1,24 +1,35 @@
 import { HttpApiSchema } from "@effect/platform"
 import { Schema } from "effect"
 
-const optionalString = Schema.optional(Schema.String)
+import type { BuyerSource } from "../cube/invoicing/index.ts"
+
+const optional = <S extends Schema.Schema.All>(schema: S) => Schema.optionalWith(schema, { exact: true })
+const optionalString = optional(Schema.String)
 const nullableString = Schema.NullOr(Schema.String)
-const optionalNullableString = Schema.optional(nullableString)
+const optionalNullableString = optional(nullableString)
+const bodyObject = { message: () => "request body must be a JSON object" }
+const FiscalIdentifierInput = Schema.transform(Schema.String, Schema.String, {
+  strict: true, decode: (value) => value.trim().toUpperCase(), encode: (value) => value,
+})
 
 // Free-form document remarks: newlines allowed for paragraphs, every other
 // control character rejected. Mirrors validateDocumentNotes in the cube.
-const DocumentNotes = Schema.String.pipe(
-  Schema.minLength(1),
-  Schema.maxLength(500),
-  Schema.filter((value) => value === value.trim(), {
-    message: () => "notes must not have surrounding whitespace",
-  }),
-  Schema.filter((value) => !/(?!\n)[\p{Cc}\p{Zl}\p{Zp}]/u.test(value), {
-    message: () => "notes must not contain control characters",
+const DocumentNotes = Schema.NullOr(Schema.String).pipe(
+  // One filter is intentional: chained refinements stop at the first failure.
+  Schema.filter((value): ReadonlyArray<Schema.FilterIssue> => {
+    if (value === null) return []
+    const issues: Array<Schema.FilterIssue> = []
+    if (value.trim().length === 0) issues.push({ path: [], message: "notes is required" })
+    if (value !== value.trim()) issues.push({ path: [], message: "notes must not have surrounding whitespace" })
+    if (value.length > 500) issues.push({ path: [], message: "notes must be at most 500 characters" })
+    if (/(?!\n)[\p{Cc}\p{Zl}\p{Zp}]/u.test(value)) issues.push({ path: [], message: "notes must not contain control characters" })
+    return issues
+  }, {
+    description: "1-500 characters, no surrounding whitespace or control characters except LF newlines.",
+    jsonSchema: { anyOf: [{ type: "string", minLength: 1, maxLength: 500 }, { type: "null" }] },
   }),
 )
-const nullableNotes = Schema.NullOr(DocumentNotes)
-const optionalNullableNotes = Schema.optional(nullableNotes)
+const optionalNullableNotes = optional(DocumentNotes)
 
 export const Address = Schema.Struct({
   countryCode: Schema.String,
@@ -26,7 +37,7 @@ export const Address = Schema.Struct({
   street: Schema.String,
   county: optionalString,
   postalCode: optionalString,
-})
+}).annotations(bodyObject)
 
 export const Party = Schema.Struct({
   name: Schema.String,
@@ -40,14 +51,12 @@ export const Buyer = Schema.Struct({
   fiscalIdentifier: Schema.String,
   address: Address,
 })
+const BuyerInput = Schema.Struct({ ...Buyer.fields, fiscalIdentifier: FiscalIdentifierInput }).annotations(bodyObject)
 
 export const CustomerInput = Schema.Struct({
-  partyType: Schema.Literal("company", "individual"),
-  name: Schema.String,
-  fiscalIdentifier: Schema.String,
-  address: Address,
-  defaultPaymentTermDays: Schema.optional(Schema.Int),
-})
+  ...BuyerInput.fields,
+  defaultPaymentTermDays: optional(Schema.Int),
+}).annotations(bodyObject)
 
 export const VatConfiguration = Schema.Struct({
   code: Schema.String,
@@ -61,16 +70,16 @@ const VatConfigurationInput = Schema.Struct({
   rate: Schema.String,
   effectiveFrom: Schema.String,
   effectiveTo: optionalString,
-})
+}).annotations(bodyObject)
 
 export const IssuerInput = Schema.Struct({
   name: Schema.String,
-  fiscalIdentifier: Schema.String,
+  fiscalIdentifier: FiscalIdentifierInput,
   address: Address,
   defaultCurrency: Schema.String,
   defaultPaymentTermDays: Schema.Int,
   vatConfigurations: Schema.Array(VatConfigurationInput),
-})
+}).annotations(bodyObject)
 
 export const Issuer = Schema.Struct({
   name: Schema.String,
@@ -85,7 +94,7 @@ export const Issuer = Schema.Struct({
 export const DocumentSeriesInput = Schema.Struct({
   documentType: Schema.Literal("invoice", "proforma"),
   series: Schema.String,
-})
+}).annotations(bodyObject)
 
 export const DocumentSeries = Schema.Struct({
   organizationId: Schema.String,
@@ -93,18 +102,31 @@ export const DocumentSeries = Schema.Struct({
   series: Schema.String,
 })
 
-export const UnitOfMeasure = Schema.Struct({ code: Schema.String, name: Schema.String })
-export const DocumentSource = Schema.Struct({ app: Schema.String, kind: Schema.String, id: Schema.String })
-export const SourceFilter = Schema.Struct({
+export const UnitOfMeasure = Schema.Struct({ code: Schema.String, name: Schema.String }).annotations(bodyObject)
+export const DocumentSource = Schema.Struct({ app: Schema.String, kind: Schema.String, id: Schema.String }).annotations(bodyObject)
+const SourceQueryFields = Schema.Struct({
   sourceApp: optionalString,
   sourceKind: optionalString,
   sourceId: optionalString,
 })
+const requireCompleteSource = <A extends Schema.Schema.Type<typeof SourceQueryFields>, I, R>(schema: Schema.Schema<A, I, R>) =>
+  schema.pipe(Schema.filter((input): input is A & (
+    { readonly sourceApp: string, readonly sourceKind: string, readonly sourceId: string } |
+    { readonly sourceApp?: never, readonly sourceKind?: never, readonly sourceId?: never }
+  ) => {
+    const values = [input.sourceApp, input.sourceKind, input.sourceId]
+    return values.every((value) => value === undefined) || values.every((value) => value !== undefined)
+  }, { message: () => "sourceApp, sourceKind, and sourceId must be supplied exactly once and together" }))
+export const SourceFilter = SourceQueryFields.pipe(requireCompleteSource)
+const PageLimit = Schema.String.pipe(
+  Schema.pattern(/^\d{1,6}$/, { message: () => "limit must be an integer" }),
+  Schema.transform(Schema.Number, { strict: true, decode: Number, encode: String }),
+).annotations({ description: "Page size, 1-200, default 100." })
 export const PageQuery = Schema.Struct({
-  limit: Schema.optional(Schema.NumberFromString.annotations({ description: "Page size, 1-200, default 100." })),
-  cursor: Schema.optional(Schema.String.annotations({ description: "Opaque nextCursor of the previous page." })),
+  limit: optional(PageLimit),
+  cursor: optional(Schema.String.annotations({ description: "Opaque nextCursor of the previous page." })),
 })
-export const ListQuery = Schema.Struct({ ...SourceFilter.fields, ...PageQuery.fields })
+export const ListQuery = Schema.Struct({ ...SourceQueryFields.fields, ...PageQuery.fields }).pipe(requireCompleteSource)
 const pageOf = <A, I, R>(item: Schema.Schema<A, I, R>) => Schema.Struct({ items: Schema.Array(item), nextCursor: Schema.NullOr(Schema.String) })
 
 export const Customer = Schema.Struct({
@@ -114,7 +136,7 @@ export const Customer = Schema.Struct({
   name: Schema.String,
   fiscalIdentifier: Schema.String,
   address: Address,
-  defaultPaymentTermDays: Schema.optional(Schema.Int),
+  defaultPaymentTermDays: optional(Schema.Int),
   deletedAt: optionalString,
 })
 
@@ -124,7 +146,7 @@ export const ProductPresetInput = Schema.Struct({
   description: Schema.String,
   unitPrice: Schema.String,
   unitOfMeasure: UnitOfMeasure,
-})
+}).annotations(bodyObject)
 
 export const ProductPreset = Schema.Struct({
   id: Schema.String,
@@ -161,12 +183,12 @@ export const DraftInvoice = Schema.Struct({
   organizationId: Schema.String,
   customer: Buyer,
   customerId: optionalString,
-  source: Schema.optional(DocumentSource),
+  source: optional(DocumentSource),
   series: Schema.String,
   issueDate: Schema.String,
   dueDate: nullableString,
   currency: Schema.String,
-  notes: nullableNotes,
+  notes: DocumentNotes,
   status: Schema.Literal("draft", "issued", "proforma_issued"),
   lines: Schema.Array(DraftLine),
   vatBreakdown: Schema.Array(VatBreakdown),
@@ -182,14 +204,14 @@ export const IssuedInvoice = Schema.Struct({
   draftId: nullableString,
   sourceProformaId: nullableString,
   organizationId: Schema.String,
-  source: Schema.optional(DocumentSource),
+  source: optional(DocumentSource),
   series: Schema.String,
   number: Schema.Int,
   issueDate: Schema.String,
   dueDate: nullableString,
   issuedAt: Schema.String,
   currency: Schema.String,
-  notes: nullableNotes,
+  notes: DocumentNotes,
   issuer: Party,
   customer: Buyer,
   lines: Schema.Array(DraftLine),
@@ -202,32 +224,32 @@ export const IssuedInvoice = Schema.Struct({
 
 export const IssuedInvoicePage = pageOf(IssuedInvoice)
 
-const BuyerById = Schema.Struct({ customerId: Schema.String })
-const InlineBuyer = Schema.Struct({ customer: Buyer })
-export const DraftInput = Schema.Union(
-  Schema.Struct({ customerId: Schema.String, source: Schema.optional(DocumentSource), series: Schema.String, issueDate: Schema.String, currency: optionalString, dueDate: optionalNullableString, notes: optionalNullableNotes }),
-  Schema.Struct({ customer: Buyer, source: Schema.optional(DocumentSource), series: Schema.String, issueDate: Schema.String, currency: optionalString, dueDate: optionalNullableString, notes: optionalNullableNotes }),
-)
-export const UpdateDraftInput = Schema.Union(
-  Schema.Struct({ ...BuyerById.fields, source: Schema.optional(Schema.NullOr(DocumentSource)), issueDate: Schema.String, dueDate: optionalNullableString, notes: optionalNullableNotes }),
-  Schema.Struct({ ...InlineBuyer.fields, source: Schema.optional(Schema.NullOr(DocumentSource)), issueDate: Schema.String, dueDate: optionalNullableString, notes: optionalNullableNotes }),
-)
+const BuyerSelection = Schema.Struct({ customerId: optionalString, customer: optional(BuyerInput) })
+const requireBuyer = <A extends Schema.Schema.Type<typeof BuyerSelection>, I, R>(schema: Schema.Schema<A, I, R>) =>
+  schema.annotations({ description: "Exactly one of customerId or customer is required." }).pipe(
+    Schema.filter((input): input is A & BuyerSource => (input.customerId !== undefined) !== (input.customer !== undefined), {
+      message: () => "exactly one of customerId or customer is required",
+    }),
+  )
+export const DraftInput = Schema.Struct({
+  ...BuyerSelection.fields, source: optional(DocumentSource), series: Schema.String, issueDate: Schema.String,
+  currency: optionalString, dueDate: optionalNullableString, notes: optionalNullableNotes,
+}).annotations(bodyObject).pipe(requireBuyer)
+export const UpdateDraftInput = Schema.Struct({
+  ...BuyerSelection.fields, source: optional(Schema.NullOr(DocumentSource)), issueDate: Schema.String,
+  dueDate: optionalNullableString, notes: optionalNullableNotes,
+}).annotations(bodyObject).pipe(requireBuyer)
 export const DraftLineInput = Schema.Struct({
   description: Schema.String,
   quantity: Schema.String,
   unitPrice: Schema.String,
   unitOfMeasure: UnitOfMeasure,
   vatRateCode: Schema.String,
-})
-const AuthoringFields = { source: Schema.optional(DocumentSource), series: Schema.String, issueDate: Schema.String, dueDate: optionalNullableString,
+}).annotations(bodyObject)
+const AuthoringFields = { ...BuyerSelection.fields, source: optional(DocumentSource), series: Schema.String, issueDate: Schema.String, dueDate: optionalNullableString,
   currency: Schema.Literal("RON"), notes: optionalNullableNotes, lines: Schema.Array(DraftLineInput) }
-export const AuthoringDocumentInput = Schema.Union(
-  Schema.Struct({ ...BuyerById.fields, ...AuthoringFields }), Schema.Struct({ ...InlineBuyer.fields, ...AuthoringFields }),
-)
-export const AuthoringProformaInput = Schema.Union(
-  Schema.Struct({ ...BuyerById.fields, ...AuthoringFields, proformaSeries: Schema.String }),
-  Schema.Struct({ ...InlineBuyer.fields, ...AuthoringFields, proformaSeries: Schema.String }),
-)
+export const AuthoringDocumentInput = Schema.Struct(AuthoringFields).annotations(bodyObject).pipe(requireBuyer)
+export const AuthoringProformaInput = Schema.Struct({ ...AuthoringFields, proformaSeries: Schema.String }).annotations(bodyObject).pipe(requireBuyer)
 
 export const PaymentInput = Schema.Struct({
   amount: Schema.String,
@@ -236,9 +258,9 @@ export const PaymentInput = Schema.Struct({
   method: Schema.String,
   externalReference: optionalString,
   note: optionalString,
-})
+}).annotations(bodyObject)
 export const PaymentStatus = Schema.Literal("unpaid", "partially_paid", "paid", "overpaid", "overdue")
-export const ReversalInput = Schema.Struct({ reason: optionalString })
+export const ReversalInput = Schema.Struct({ reason: optionalString }).annotations(bodyObject)
 export const Payment = Schema.Struct({
   id: Schema.String,
   invoiceId: Schema.String,
@@ -268,12 +290,12 @@ export const PaymentSummary = Schema.Struct({
   payments: Schema.Array(Payment),
 })
 
-export const CorrectionInput = Schema.Struct({ reason: Schema.String, issueDate: optionalString, source: Schema.optional(DocumentSource) })
+export const CorrectionInput = Schema.Struct({ reason: Schema.String, issueDate: optionalString, source: optional(DocumentSource) }).annotations(bodyObject)
 export const Correction = Schema.Struct({
   id: Schema.String,
   organizationId: Schema.String,
   originalInvoiceId: Schema.String,
-  source: Schema.optional(DocumentSource),
+  source: optional(DocumentSource),
   fiscalYear: Schema.Int,
   series: Schema.String,
   number: Schema.Int,
@@ -307,14 +329,14 @@ export const Proforma = Schema.Struct({
   convertedDraftId: nullableString,
   convertedInvoiceId: nullableString,
   organizationId: Schema.String,
-  source: Schema.optional(DocumentSource),
+  source: optional(DocumentSource),
   series: Schema.String,
   number: Schema.Int,
   issueDate: Schema.String,
   dueDate: nullableString,
   issuedAt: Schema.String,
   currency: Schema.String,
-  notes: nullableNotes,
+  notes: DocumentNotes,
   issuer: Party,
   customer: Buyer,
   lines: Schema.Array(DraftLine),
@@ -324,8 +346,13 @@ export const Proforma = Schema.Struct({
   totalIncludingVat: Schema.String,
 })
 export const ProformaPage = pageOf(Proforma)
-export const IssueProformaInput = Schema.Struct({ series: Schema.String })
-export const EmptyInput = Schema.Struct({})
+export const IssueProformaInput = Schema.Struct({ series: Schema.String }).annotations(bodyObject)
+// Effect's empty Struct also accepts primitives and arrays; retain the JSON-object
+// contract here and discard all fields just like the other request schemas.
+export const EmptyInput = Schema.Struct({}).annotations(bodyObject).pipe(
+  Schema.filter((value) => typeof value === "object" && !Array.isArray(value), { ...bodyObject, jsonSchema: { type: "object" } }),
+  Schema.transform(Schema.Struct({}), { strict: true, decode: (): Record<string, never> => ({}), encode: () => ({}) }),
+)
 export const ProformaArtifact = Schema.Struct({
   proformaId: Schema.String,
   organizationId: Schema.String,
