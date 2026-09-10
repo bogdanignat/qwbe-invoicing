@@ -20,7 +20,7 @@ const draft: DraftInvoice = {
 const issuer: Issuer = {
   organizationId: "org-1", name: "QWBE", fiscalIdentifier: "RO2",
   address: { countryCode: "RO", city: "Botoșani", street: "Strada 2" },
-  defaultCurrency: "RON", defaultPaymentTermDays: 15, vatConfigurations: [],
+  branding: null, defaultCurrency: "RON", defaultPaymentTermDays: 15, vatConfigurations: [],
 }
 
 const customer: Customer = {
@@ -35,6 +35,23 @@ void test("builds the exact one-time buyer payload and preserves blank optional 
   })
   assert.equal(createDraftPayload({ ...manualForm, notes: "  Livrare esalonata  " }).notes, "Livrare esalonata")
   assert.equal(updateDraftPayload({ ...manualForm, notes: "   " }).notes, null)
+})
+
+void test("compares one-time buyers semantically regardless of API property order before issuing a draft", () => {
+  const fromApi: DraftInvoice = {
+    ...draft,
+    customer: { name: "Ana Pop", fiscalIdentifier: "", address: { street: "Strada 1", city: "Iași", countryCode: "RO" }, partyType: "individual" },
+  }
+  const payload = authoringDocumentPayload(formFromDraft(fromApi), draftLinesForEditing(fromApi))
+  assert.equal(authoringPayloadMatchesDraft(payload, fromApi), true)
+  assert.equal(authoringPayloadMatchesDraft(payload, { ...fromApi, customer: { ...fromApi.customer, name: "Altcineva" } }), false)
+  assert.equal(authoringPayloadMatchesDraft(payload, { ...fromApi, customer: { ...fromApi.customer, fiscalIdentifier: "123" } }), false)
+  assert.equal(authoringPayloadMatchesDraft(payload, { ...fromApi, customer: { ...fromApi.customer, partyType: "company" } }), false)
+  for (const field of ["countryCode", "city", "street", "county", "postalCode"] as const) {
+    assert.equal(authoringPayloadMatchesDraft(payload, {
+      ...fromApi, customer: { ...fromApi.customer, address: { ...fromApi.customer.address, [field]: "schimbat" } },
+    }), false, field)
+  }
 })
 
 void test("keeps the header dirty until the remarks match the saved draft", () => {

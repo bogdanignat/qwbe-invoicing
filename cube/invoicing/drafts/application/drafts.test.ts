@@ -4,20 +4,20 @@ import test from "node:test"
 import { Effect } from "effect"
 
 import { createInvoicingService } from "../../application/invoicing.ts"
-import { contextProvider, each, emptyState, fixedClock, identity, idempotent, memoryStore, sequentialIds } from "../../application/memory-store.test-support.ts"
+import { brandingNormalizer, contextProvider, each, emptyState, fixedClock, identity, idempotent, memoryStore, sequentialIds } from "../../application/memory-store.test-support.ts"
 import { DomainConflict, ResourceNotFound, ValidationFailure } from "../../contracts/index.ts"
 
 void test("authors snapshot-owned drafts and recalculates every server-derived amount", async () => {
   const state = emptyState()
   const service = createInvoicingService({
     context: contextProvider({ identity, organization: { id: "org-1" } }), clock: fixedClock,
-    ids: sequentialIds(), store: memoryStore(state), cubeIdentity: "invoicing",
+    ids: sequentialIds(), store: memoryStore(state), branding: brandingNormalizer, cubeIdentity: "invoicing",
   })
   await Effect.runPromise(service.configureIssuer({
     name: "Exemplu SRL", fiscalIdentifier: "RO12345674",
     address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" },
     defaultCurrency: "RON", defaultPaymentTermDays: 15,
-    vatConfigurations: [
+    branding: null, vatConfigurations: [
       { code: "RO_STANDARD", rate: "19", effectiveFrom: "2020-01-01", effectiveTo: "2025-07-31" },
       { code: "RO_STANDARD", rate: "21", effectiveFrom: "2025-08-01" },
     ],
@@ -87,13 +87,13 @@ void test("captures, replaces and clears free-form remarks on a draft", async ()
   const state = emptyState()
   const service = createInvoicingService({
     context: contextProvider({ identity, organization: { id: "org-1" } }), clock: fixedClock,
-    ids: sequentialIds(), store: memoryStore(state), cubeIdentity: "invoicing",
+    ids: sequentialIds(), store: memoryStore(state), branding: brandingNormalizer, cubeIdentity: "invoicing",
   })
   await Effect.runPromise(service.configureIssuer({
     name: "Exemplu SRL", fiscalIdentifier: "RO12345674",
     address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" },
     defaultCurrency: "RON", defaultPaymentTermDays: 15,
-    vatConfigurations: [{ code: "RO_STANDARD", rate: "21", effectiveFrom: "2025-08-01" }],
+    branding: null, vatConfigurations: [{ code: "RO_STANDARD", rate: "21", effectiveFrom: "2025-08-01" }],
   }))
   await Effect.runPromise(service.addDocumentSeries({ documentType: "invoice", series: "QWBE" }))
   const buyer = {

@@ -56,6 +56,7 @@ void test("resolves exactly one effective-dated issuer tax configuration", () =>
     address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" },
     defaultCurrency: "RON",
     defaultPaymentTermDays: 15,
+    branding: null,
     vatConfigurations: [
       { code: "RO_STANDARD", rate: "19.00", effectiveFrom: "2020-01-01", effectiveTo: "2025-07-31" },
       { code: "RO_STANDARD", rate: "21.00", effectiveFrom: "2025-08-01" },

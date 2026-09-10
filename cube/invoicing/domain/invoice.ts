@@ -16,6 +16,21 @@ export interface PartySnapshot {
   readonly address: Address
 }
 
+export interface IssuerBrandingImage {
+  readonly pngBase64: string
+  readonly width: number
+  readonly height: number
+}
+
+export interface IssuerBranding {
+  readonly text: string | null
+  readonly image: IssuerBrandingImage | null
+}
+
+export interface IssuerSnapshot extends PartySnapshot {
+  readonly branding: IssuerBranding | null
+}
+
 export type PartyType = "company" | "individual"
 
 export interface BuyerSnapshot extends PartySnapshot {
@@ -63,7 +78,7 @@ export interface VatConfiguration {
   readonly effectiveTo?: string
 }
 
-export interface IssuerProfile extends PartySnapshot {
+export interface IssuerProfile extends IssuerSnapshot {
   readonly organizationId: string
   readonly defaultCurrency: string
   readonly defaultPaymentTermDays: number
@@ -146,7 +161,7 @@ interface NumberedDocumentSnapshot extends DocumentContent {
   readonly series: string
   readonly number: number
   readonly issuedAt: string
-  readonly issuer: PartySnapshot
+  readonly issuer: IssuerSnapshot
 }
 
 export type EFacturaStatus = "not_sent" | "pending" | "sent" | "accepted" | "rejected"
@@ -156,12 +171,16 @@ export interface IssuedInvoice extends NumberedDocumentSnapshot {
   readonly eFacturaStatus: EFacturaStatus
 }
 
+export type IssuedInvoiceSummary = Omit<IssuedInvoice, "issuer"> & { readonly issuer: PartySnapshot }
+
 export interface Proforma extends NumberedDocumentSnapshot {
   readonly sourceDraftId: string | null
   readonly invoiceSeries: string
   readonly convertedDraftId: string | null
   readonly convertedInvoiceId: string | null
 }
+
+export type ProformaSummary = Omit<Proforma, "issuer"> & { readonly issuer: PartySnapshot }
 
 export type ProformaConversion = Readonly<{
   proformaId: string

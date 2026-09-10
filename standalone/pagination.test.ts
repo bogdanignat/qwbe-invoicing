@@ -25,11 +25,12 @@ void test("SQLite registries page with a keyset cursor in issue-date, number and
       clock: { now: Effect.succeed(new Date("2026-09-05T10:00:00.000Z")) },
       ids: { next: Effect.sync(() => `id-${String(++next).padStart(3, "0")}`) },
       store: createSqliteStore(directory),
+      branding: { normalize: () => Effect.die("branding normalization is not expected") },
       cubeIdentity: "invoicing",
     })
     await Effect.runPromise(service.configureIssuer({
       name: "Exemplu SRL", fiscalIdentifier: "RO12345674", address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" },
-      defaultCurrency: "RON", defaultPaymentTermDays: 15, vatConfigurations: [{ code: "RO_STANDARD", rate: "21.00", effectiveFrom: "2025-08-01" }],
+      defaultCurrency: "RON", defaultPaymentTermDays: 15, vatConfigurations: [{ code: "RO_STANDARD", rate: "21.00", effectiveFrom: "2025-08-01" }], branding: null,
     }))
     await Effect.runPromise(service.addDocumentSeries({ documentType: "invoice", series: "QWBE" }))
     const customer = { partyType: "company" as const, name: "Client SRL", fiscalIdentifier: "RO87654329", address: { countryCode: "RO", city: "Iași", street: "Strada 2" } }

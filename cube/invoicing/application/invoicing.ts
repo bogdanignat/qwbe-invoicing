@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 
 import { PermissionDenied, type InvoicingFailure } from "../contracts/failures.ts"
-import type { Clock, IdGenerator, RequestContext, RequestContextProvider, TransactionalStore } from "../contracts/host.ts"
+import type { BrandingNormalizer, Clock, IdGenerator, RequestContext, RequestContextProvider, TransactionalStore } from "../contracts/host.ts"
 import { invoicingPermissions } from "../contracts/permissions.ts"
 import { createCorrectionOperations, type CorrectionOperations } from "../corrections/index.ts"
 import { unitOfMeasures, type UnitOfMeasure } from "../domain/unit-of-measures.ts"
@@ -15,6 +15,7 @@ export interface InvoicingDependencies {
   readonly clock: Clock
   readonly ids: IdGenerator
   readonly store: TransactionalStore<InvoicingTransaction>
+  readonly branding: BrandingNormalizer
   readonly cubeIdentity: string
 }
 

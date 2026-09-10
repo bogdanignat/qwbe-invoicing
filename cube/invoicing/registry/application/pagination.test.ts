@@ -4,7 +4,7 @@ import test from "node:test"
 import { Effect } from "effect"
 
 import { createInvoicingService } from "../../application/invoicing.ts"
-import { contextProvider, emptyState, fixedClock, identity, memoryStore, sequentialIds } from "../../application/memory-store.test-support.ts"
+import { brandingNormalizer, contextProvider, emptyState, fixedClock, identity, memoryStore, sequentialIds } from "../../application/memory-store.test-support.ts"
 import { ValidationFailure } from "../../contracts/index.ts"
 
 const address = { countryCode: "RO", city: "Iași", street: "Strada 1" }
@@ -12,7 +12,7 @@ const address = { countryCode: "RO", city: "Iași", street: "Strada 1" }
 void test("pages customers by name with an opaque cursor and validates the page request", async () => {
   const service = createInvoicingService({
     context: contextProvider({ identity, organization: { id: "org-1" } }),
-    clock: fixedClock, ids: sequentialIds(), store: memoryStore(emptyState()), cubeIdentity: "invoicing",
+    clock: fixedClock, ids: sequentialIds(), store: memoryStore(emptyState()), branding: brandingNormalizer, cubeIdentity: "invoicing",
   })
   for (const name of ["Delta", "alfa", "Charlie", "Bravo", "Echo"]) {
     await Effect.runPromise(service.createCustomer({ partyType: "individual", name, fiscalIdentifier: "", address }))

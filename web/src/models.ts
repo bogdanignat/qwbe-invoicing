@@ -12,6 +12,21 @@ export interface Party {
   readonly address: Address
 }
 
+export interface IssuerBrandingImage {
+  readonly pngBase64: string
+  readonly width: number
+  readonly height: number
+}
+
+export interface IssuerBranding {
+  readonly text: string | null
+  readonly image: IssuerBrandingImage | null
+}
+
+export interface IssuerSnapshot extends Party {
+  readonly branding: IssuerBranding | null
+}
+
 export type PartyType = "company" | "individual"
 
 export interface BuyerSnapshot extends Party {
@@ -50,7 +65,7 @@ export interface VatConfiguration {
   readonly effectiveTo?: string
 }
 
-export interface Issuer extends Party {
+export interface Issuer extends IssuerSnapshot {
   readonly organizationId: string
   readonly defaultCurrency: string
   readonly defaultPaymentTermDays: number
@@ -125,7 +140,7 @@ export interface IssuedInvoice {
   readonly dueDate: string | null
   readonly currency: string
   readonly notes: string | null
-  readonly issuer: Party
+  readonly issuer: IssuerSnapshot
   readonly customer: BuyerSnapshot
   readonly lines: ReadonlyArray<DraftLine>
   readonly vatBreakdown: ReadonlyArray<VatBreakdown>
@@ -134,6 +149,8 @@ export interface IssuedInvoice {
   readonly totalIncludingVat: string
   readonly eFacturaStatus: string
 }
+
+export type IssuedInvoiceSummary = Omit<IssuedInvoice, "issuer"> & { readonly issuer: Party }
 
 export interface Proforma {
   readonly id: string
@@ -148,7 +165,7 @@ export interface Proforma {
   readonly issuedAt: string
   readonly currency: string
   readonly notes: string | null
-  readonly issuer: Party
+  readonly issuer: IssuerSnapshot
   readonly customer: BuyerSnapshot
   readonly lines: ReadonlyArray<DraftLine>
   readonly vatBreakdown: ReadonlyArray<VatBreakdown>
@@ -158,6 +175,8 @@ export interface Proforma {
   readonly convertedDraftId: string | null
   readonly convertedInvoiceId: string | null
 }
+
+export type ProformaSummary = Omit<Proforma, "issuer"> & { readonly issuer: Party }
 
 export interface Payment {
   readonly id: string
@@ -247,6 +266,28 @@ const decodeParty: Decoder<Party> = (input) => {
   }
 }
 
+const decodeIssuerBrandingImage: Decoder<IssuerBrandingImage> = (input) => {
+  const value = object(input)
+  const pngBase64 = text(value.pngBase64, "pngBase64")
+  const width = integer(value.width, "width")
+  const height = integer(value.height, "height")
+  if (pngBase64.length === 0 || width <= 0 || height <= 0) throw new Error("invalid issuer branding image")
+  return { pngBase64, width, height }
+}
+
+const decodeIssuerBranding: Decoder<IssuerBranding> = (input) => {
+  const value = object(input)
+  return {
+    text: nullableText(value.text, "branding.text"),
+    image: value.image === null ? null : decodeIssuerBrandingImage(value.image),
+  }
+}
+
+const decodeIssuerSnapshot: Decoder<IssuerSnapshot> = (input) => {
+  const value = object(input)
+  return { ...decodeParty(value), branding: value.branding === null ? null : decodeIssuerBranding(value.branding) }
+}
+
 const decodePartyType = (input: unknown): PartyType => {
   const value = text(input, "partyType")
   if (value !== "company" && value !== "individual") throw new Error("invalid partyType")
@@ -314,7 +355,7 @@ export const decodeDocumentSeries: Decoder<DocumentSeries> = (input) => {
 export const decodeIssuer: Decoder<Issuer> = (input) => {
   const value = object(input)
   return {
-    ...decodeParty(value), organizationId: text(value.organizationId, "organizationId"),
+    ...decodeIssuerSnapshot(value), organizationId: text(value.organizationId, "organizationId"),
     defaultCurrency: text(value.defaultCurrency, "defaultCurrency"),
     defaultPaymentTermDays: integer(value.defaultPaymentTermDays, "defaultPaymentTermDays"),
     vatConfigurations: array(value.vatConfigurations, decodeVatConfiguration, "vatConfigurations"),
@@ -361,7 +402,7 @@ export const decodeDraft: Decoder<DraftInvoice> = (input) => {
   }
 }
 
-export const decodeInvoice: Decoder<IssuedInvoice> = (input) => {
+const decodeInvoiceWithIssuer = <Value extends Party>(input: unknown, decodeDocumentIssuer: Decoder<Value>): Omit<IssuedInvoice, "issuer"> & { readonly issuer: Value } => {
   const value = object(input)
   const source = optionalDocumentSource(value.source)
   return {
@@ -371,7 +412,7 @@ export const decodeInvoice: Decoder<IssuedInvoice> = (input) => {
     series: text(value.series, "series"), number: integer(value.number, "number"),
     issueDate: text(value.issueDate, "issueDate"), dueDate: nullableText(value.dueDate, "dueDate"),
     currency: text(value.currency, "currency"), notes: nullableText(value.notes, "notes"),
-    issuer: decodeParty(value.issuer), customer: decodeBuyer(value.customer),
+    issuer: decodeDocumentIssuer(value.issuer), customer: decodeBuyer(value.customer),
     lines: array(value.lines, decodeDraftLine, "lines"),
     vatBreakdown: array(value.vatBreakdown, decodeVatBreakdown, "vatBreakdown"),
     totalExcludingVat: text(value.totalExcludingVat, "totalExcludingVat"), vatTotal: text(value.vatTotal, "vatTotal"),
@@ -380,7 +421,10 @@ export const decodeInvoice: Decoder<IssuedInvoice> = (input) => {
   }
 }
 
-export const decodeProforma: Decoder<Proforma> = (input) => {
+export const decodeInvoice: Decoder<IssuedInvoice> = (input) => decodeInvoiceWithIssuer(input, decodeIssuerSnapshot)
+export const decodeInvoiceSummary: Decoder<IssuedInvoiceSummary> = (input) => decodeInvoiceWithIssuer(input, decodeParty)
+
+const decodeProformaWithIssuer = <Value extends Party>(input: unknown, decodeDocumentIssuer: Decoder<Value>): Omit<Proforma, "issuer"> & { readonly issuer: Value } => {
   const value = object(input)
   const source = optionalDocumentSource(value.source)
   return {
@@ -391,7 +435,7 @@ export const decodeProforma: Decoder<Proforma> = (input) => {
     number: integer(value.number, "number"), issueDate: text(value.issueDate, "issueDate"),
     dueDate: nullableText(value.dueDate, "dueDate"), issuedAt: text(value.issuedAt, "issuedAt"),
     currency: text(value.currency, "currency"), notes: nullableText(value.notes, "notes"),
-    issuer: decodeParty(value.issuer), customer: decodeBuyer(value.customer),
+    issuer: decodeDocumentIssuer(value.issuer), customer: decodeBuyer(value.customer),
     lines: array(value.lines, decodeDraftLine, "lines"), vatBreakdown: array(value.vatBreakdown, decodeVatBreakdown, "vatBreakdown"),
     totalExcludingVat: text(value.totalExcludingVat, "totalExcludingVat"), vatTotal: text(value.vatTotal, "vatTotal"),
     totalIncludingVat: text(value.totalIncludingVat, "totalIncludingVat"),
@@ -399,6 +443,10 @@ export const decodeProforma: Decoder<Proforma> = (input) => {
     convertedInvoiceId: nullableText(value.convertedInvoiceId, "convertedInvoiceId"),
   }
 }
+
+
+export const decodeProforma: Decoder<Proforma> = (input) => decodeProformaWithIssuer(input, decodeIssuerSnapshot)
+export const decodeProformaSummary: Decoder<ProformaSummary> = (input) => decodeProformaWithIssuer(input, decodeParty)
 
 const decodePayment: Decoder<Payment> = (input) => {
   const value = object(input)
@@ -444,17 +492,17 @@ export const decodePage = <Item>(decodeItem: Decoder<Item>): Decoder<Page<Item>>
 export const decodeCustomerPage = decodePage(decodeCustomer)
 export const decodeProductPresetPage = decodePage(decodeProductPreset)
 export const decodeDraftPage = decodePage(decodeDraft)
-export const decodeInvoicePage = decodePage(decodeInvoice)
-export const decodeProformaPage = decodePage(decodeProforma)
+export const decodeInvoicePage = decodePage(decodeInvoiceSummary)
+export const decodeProformaPage = decodePage(decodeProformaSummary)
 
 export const decodeProductPresets: Decoder<ReadonlyArray<ProductPreset>> = (input) => array(input, decodeProductPreset, "productPresets")
 export const decodeUnitOfMeasures: Decoder<ReadonlyArray<UnitOfMeasure>> = (input) => array(input, decodeUnitOfMeasure, "unitOfMeasures")
 
 export const decodeCustomers: Decoder<ReadonlyArray<Customer>> = (input) => array(input, decodeCustomer, "customers")
 export const decodeDocumentSeriesList: Decoder<ReadonlyArray<DocumentSeries>> = (input) => array(input, decodeDocumentSeries, "documentSeries")
-export const decodeInvoices: Decoder<ReadonlyArray<IssuedInvoice>> = (input) => array(input, decodeInvoice, "invoices")
+export const decodeInvoices: Decoder<ReadonlyArray<IssuedInvoiceSummary>> = (input) => array(input, decodeInvoiceSummary, "invoices")
 export const decodeDrafts: Decoder<ReadonlyArray<DraftInvoice>> = (input) => array(input, decodeDraft, "drafts")
-export const decodeProformas: Decoder<ReadonlyArray<Proforma>> = (input) => array(input, decodeProforma, "proformas")
+export const decodeProformas: Decoder<ReadonlyArray<ProformaSummary>> = (input) => array(input, decodeProformaSummary, "proformas")
 export const decodeCorrections: Decoder<ReadonlyArray<CorrectionDocument>> = (input) => array(input, decodeCorrection, "corrections")
 export const decodeDeleted: Decoder<{ readonly deleted: true }> = (input) => {
   const value = object(input)

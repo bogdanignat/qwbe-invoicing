@@ -10,6 +10,7 @@ import {
   type RequestContext,
   type RequestContextProvider,
   type TransactionalStore,
+  type BrandingNormalizer,
 } from "../contracts/index.ts"
 import type { IdempotencyRecord, ProformaConversion } from "../domain/invoice.ts"
 import type { DraftInvoice, InvoicingTransaction, IssuedInvoice, Proforma } from "./invoicing.ts"
@@ -29,6 +30,11 @@ const afterDraft = (item: { readonly issueDate: string; readonly id: string }, a
   item.issueDate < after.issueDate || (item.issueDate === after.issueDate && item.id > after.id)
 const afterName = (name: string, id: string, after: NameCursor): boolean =>
   name.localeCompare(after.name) > 0 || (name.localeCompare(after.name) === 0 && id > after.id)
+const withoutIssuerBranding = <Document extends IssuedInvoice | Proforma>(document: Document) => {
+  const issuer = { name: document.issuer.name, fiscalIdentifier: document.issuer.fiscalIdentifier,
+    address: structuredClone(document.issuer.address) }
+  return { ...document, issuer }
+}
 
 // In-memory transactional store and fixtures shared by the component tests.
 export interface MemoryState {
@@ -138,7 +144,7 @@ export const memoryStore = (state: MemoryState): TransactionalStore<InvoicingTra
           .filter((invoice) => invoice.organizationId === organizationId && sameSource(invoice, source))
           .sort((a, b) => b.issueDate.localeCompare(a.issueDate) || b.number - a.number || a.id.localeCompare(b.id)),
         page, afterDocument,
-      )),
+      ).map(withoutIssuerBranding)),
       saveProforma: (proforma) => Effect.sync(() => { working.proformas.set(proforma.id, proforma) }),
       findProforma: (organizationId, id) => Effect.sync(() => {
         const value = working.proformas.get(id)
@@ -152,7 +158,8 @@ export const memoryStore = (state: MemoryState): TransactionalStore<InvoicingTra
         .filter((value) => value.organizationId === organizationId && sameSource(value, source))
         .map((value) => ({ ...value, convertedDraftId: working.conversions.get(value.id)?.resultingDraftId ?? null,
           convertedInvoiceId: working.invoiceConversions.get(value.id)?.resultingInvoiceId ?? null }))
-        .sort((a, b) => b.issueDate.localeCompare(a.issueDate) || b.number - a.number || a.id.localeCompare(b.id)), page, afterDocument)),
+        .sort((a, b) => b.issueDate.localeCompare(a.issueDate) || b.number - a.number || a.id.localeCompare(b.id)), page, afterDocument)
+        .map(withoutIssuerBranding)),
       findProformaConversion: (organizationId, proformaId) => Effect.succeed(
         working.conversions.get(proformaId)?.organizationId === organizationId ? working.conversions.get(proformaId) : undefined,
       ),
@@ -212,6 +219,13 @@ export const contextProvider = (context: RequestContext): RequestContextProvider
 
 export const fixedClock: Clock = { now: Effect.succeed(new Date("2026-09-01T10:00:00.000Z")) }
 export const each = { code: "C62", name: "unitate" } as const
+export const brandingNormalizer: BrandingNormalizer = {
+  normalize: (input) => Effect.succeed({
+    pngBase64: "iVBORw0KGgo=",
+    width: input.length,
+    height: 1,
+  }),
+}
 let idempotencyCounter = 0
 export const idempotent = <Input>(request: Input, key = `test-${String(++idempotencyCounter)}`) => ({
   request,

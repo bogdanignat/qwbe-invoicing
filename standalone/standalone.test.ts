@@ -29,12 +29,13 @@ void test("migration apply is idempotent", () => {
       "011-external-api-snapshots",
       "012-payment-idempotency",
       "013-document-notes",
+      "014-issuer-branding",
       "documents/000-foundation",
       "documents/001-artifacts",
       "documents/002-proforma-artifacts",
       "sessions/000-browser-sessions",
     ])
-    assert.equal(applyMigrations(directory).changed, 18)
+    assert.equal(applyMigrations(directory).changed, 19)
     assert.equal(applyMigrations(directory).changed, 0)
     assert.equal(databaseReady(directory), true)
   } finally {
@@ -61,6 +62,13 @@ void test("migrations leave every database in write-ahead logging mode with the 
         "issued_tax_breakdown_no_update", "issued_tax_breakdown_no_delete", "correction_documents_no_update", "correction_documents_no_delete",
         "proformas_no_delete", "proformas_no_content_update", "idempotency_records_no_update", "idempotency_records_no_delete"]) {
         assert.ok(triggers.has(expected), `${expected} must exist after all migrations`)
+      }
+      for (const [table, column] of [["issuers", "branding"], ["issued_invoices", "issuer_branding"], ["proformas", "issuer_branding"]] as const) {
+        assert.ok(database.prepare("SELECT 1 FROM pragma_table_info(?) WHERE name=?").get(table, column), `${table}.${column}`)
+      }
+      for (const trigger of ["issued_invoices_no_update", "proformas_no_content_update"]) {
+        assert.ok(String(database.prepare("SELECT sql FROM sqlite_master WHERE type='trigger' AND name=?").get(trigger)?.sql)
+          .includes("issuer_branding"), trigger)
       }
     } finally {
       database.close()

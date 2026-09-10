@@ -46,7 +46,7 @@ void test("requires integer issuer terms and decodes tax configuration", () => {
   const input = {
     organizationId: "org-1", name: "QWBE", fiscalIdentifier: "RO2",
     address: { countryCode: "RO", city: "Botoșani", street: "Strada 2" },
-    defaultCurrency: "RON", defaultPaymentTermDays: 15,
+    branding: null, defaultCurrency: "RON", defaultPaymentTermDays: 15,
     vatConfigurations: [{ code: "RO_STANDARD", rate: "21.00", effectiveFrom: "2026-01-01", effectiveTo: null }],
   }
   assert.equal(decodeIssuer(input).vatConfigurations[0]?.effectiveTo, undefined)
@@ -76,7 +76,7 @@ void test("decodes document series and requires supported document types", () =>
 const commercialDocument = {
   id: "proforma-1", sourceDraftId: "draft-1", organizationId: "org-1", series: "PRO", number: 7,
   issueDate: "2026-09-01", dueDate: null, issuedAt: "2026-09-01T10:00:00.000Z", currency: "RON", notes: null,
-  issuer: { name: "QWBE", fiscalIdentifier: "RO2", address: { countryCode: "RO", city: "Botoșani", street: "Strada 2" } },
+  issuer: { name: "QWBE", fiscalIdentifier: "RO2", address: { countryCode: "RO", city: "Botoșani", street: "Strada 2" }, branding: null },
   customer: { partyType: "company", name: "Client", fiscalIdentifier: "RO1", address: { countryCode: "RO", city: "Iași", street: "Strada 1" } },
   lines: [{ id: "line-1", description: "Serviciu", quantity: "1.0000", unitPrice: "100.00", unitOfMeasure: each, vatRateCode: "RO_STANDARD", vatRate: "21.00", totalExcludingVat: "100.00", vatAmount: "21.00", totalIncludingVat: "121.00" }],
   vatBreakdown: [{ code: "RO_STANDARD", rate: "21.00", vatBaseAmount: "100.00", vatAmount: "21.00" }],
@@ -99,6 +99,26 @@ void test("strictly decodes nullable commercial dates and proforma conversion st
   assert.equal(decodeProforma({ ...commercialDocument, notes: "Mentiune" }).notes, "Mentiune")
   assert.equal(decodeInvoice({ ...commercialDocument, draftId: null, sourceProformaId: null, eFacturaStatus: "not_sent", notes: "Mentiune" }).notes, "Mentiune")
   assert.throws(() => decodeProforma({ ...commercialDocument, notes: undefined }), /invalid notes/)
+})
+
+void test("strictly requires and decodes issuer branding on details while summaries omit it", () => {
+  const issuerInput = {
+    organizationId: "org-1", name: "QWBE", fiscalIdentifier: "RO2",
+    address: { countryCode: "RO", city: "Botoșani", street: "Strada 2" },
+    defaultCurrency: "RON", defaultPaymentTermDays: 15, vatConfigurations: [],
+  }
+  const image = { pngBase64: "iVBORw0KGgo=", width: 120, height: 40 }
+  assert.equal(decodeIssuer({ ...issuerInput, branding: null }).branding, null)
+  assert.deepEqual(decodeIssuer({ ...issuerInput, branding: { text: "QWBE", image: null } }).branding, { text: "QWBE", image: null })
+  assert.deepEqual(decodeIssuer({ ...issuerInput, branding: { text: null, image } }).branding, { text: null, image })
+  assert.deepEqual(decodeIssuer({ ...issuerInput, branding: { text: "QWBE", image } }).branding, { text: "QWBE", image })
+  assert.throws(() => decodeIssuer(issuerInput), /expected object/)
+  assert.throws(() => decodeIssuer({ ...issuerInput, branding: {} }), /invalid branding.text/)
+  assert.throws(() => decodeIssuer({ ...issuerInput, branding: { text: null, image: { ...image, width: 0 } } }), /invalid issuer branding image/)
+  assert.throws(() => decodeProforma({ ...commercialDocument, issuer: { ...commercialDocument.issuer, branding: undefined } }), /expected object/)
+  const summary = decodeProformas([{ ...commercialDocument, issuer: { name: "QWBE", fiscalIdentifier: "RO2", address: commercialDocument.issuer.address } }])[0]
+  assert.ok(summary)
+  assert.equal("branding" in summary.issuer, false)
 })
 
 void test("requires the series fixed on a draft", () => {

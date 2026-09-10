@@ -27,6 +27,7 @@ void test("validates Romanian CUI, country, and issuer currency", () => {
     organizationId: "org-1",
     defaultCurrency: "RON",
     defaultPaymentTermDays: 15,
+    branding: null,
     vatConfigurations: [{ code: "RO_NON_VAT", rate: "0", effectiveFrom: "2026-01-01" }],
   }
   assert.throws(() => { validateIssuer({ ...issuer, fiscalIdentifier: "" }) }, hasIssue("fiscalIdentifier must be a valid Romanian CUI"))
@@ -77,6 +78,7 @@ void test("rejects overlapping effective ranges for the same tax code", () => {
     address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" },
     defaultCurrency: "RON",
     defaultPaymentTermDays: 15,
+    branding: null,
   }
   assert.throws(() => { validateIssuer({
     ...base,

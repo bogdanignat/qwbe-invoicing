@@ -1,7 +1,7 @@
 import type { Effect } from "effect"
 
 import type { DomainConflict, PersistenceFailure } from "../contracts/failures.ts"
-import type { Customer, DocumentSeries, DocumentSource, DocumentType, DraftInvoice, IdempotencyRecord, IssuedInvoice, IssuerProfile, NumberedDocumentType, ProductPreset, Proforma, ProformaConversion, ProformaInvoiceConversion } from "../domain/invoice.ts"
+import type { Customer, DocumentSeries, DocumentSource, DocumentType, DraftInvoice, IdempotencyRecord, IssuedInvoice, IssuedInvoiceSummary, IssuerProfile, NumberedDocumentType, ProductPreset, Proforma, ProformaConversion, ProformaInvoiceConversion, ProformaSummary } from "../domain/invoice.ts"
 import type { CorrectionDocument } from "../corrections/domain/corrections.ts"
 
 export interface PageQuery<Key> {
@@ -66,10 +66,10 @@ export interface InvoicingTransaction {
   ) => Write<number>
   readonly saveIssuedInvoice: Save<IssuedInvoice>
   readonly findIssuedInvoice: Find<IssuedInvoice>
-  readonly listIssuedInvoices: PagedList<IssuedInvoice, DocumentCursor>
+  readonly listIssuedInvoices: PagedList<IssuedInvoiceSummary, DocumentCursor>
   readonly saveProforma: Save<Proforma>
   readonly findProforma: Find<Proforma>
-  readonly listProformas: PagedList<Proforma, DocumentCursor>
+  readonly listProformas: PagedList<ProformaSummary, DocumentCursor>
   readonly findProformaConversion: Find<ProformaConversion>
   readonly findProformaInvoiceConversion: Find<ProformaInvoiceConversion>
   readonly saveProformaInvoiceConversion: Save<ProformaInvoiceConversion>

@@ -1,10 +1,10 @@
 import { Effect } from "effect"
 
 import type { InvoicingTransaction } from "../../application/ports.ts"
-import { copyParty, copySource, missing } from "../../application/support.ts"
+import { copyIssuerSnapshot, copySource, missing } from "../../application/support.ts"
 import { DomainConflict, ValidationFailure } from "../../contracts/failures.ts"
 import type { IdGenerator } from "../../contracts/host.ts"
-import type { DraftInvoice, PartySnapshot } from "../../domain/invoice.ts"
+import type { DraftInvoice, IssuerSnapshot } from "../../domain/invoice.ts"
 import type { AuthoringDocumentInput } from "../../domain/inputs.ts"
 import { authorDocument } from "../../drafts/index.ts"
 
@@ -19,11 +19,11 @@ export interface NumberedIdentity {
 
 export const fiscalYear = (isoDate: string): number => Number(isoDate.slice(0, 4))
 
-export const numberedSnapshot = (draft: SnapshotContent, issuer: PartySnapshot, identity: NumberedIdentity) => ({
+export const numberedSnapshot = (draft: SnapshotContent, issuer: IssuerSnapshot, identity: NumberedIdentity) => ({
   ...identity, issuedAt: identity.issuedAt.toISOString(), organizationId: draft.organizationId,
   ...(draft.source === undefined ? {} : { source: copySource(draft.source) }),
   issueDate: draft.issueDate, dueDate: draft.dueDate, currency: draft.currency, notes: draft.notes,
-  issuer: copyParty(issuer), customer: structuredClone(draft.customer), lines: structuredClone(draft.lines),
+  issuer: copyIssuerSnapshot(issuer), customer: structuredClone(draft.customer), lines: structuredClone(draft.lines),
   vatBreakdown: structuredClone(draft.vatBreakdown), totalExcludingVat: draft.totalExcludingVat,
   vatTotal: draft.vatTotal, totalIncludingVat: draft.totalIncludingVat,
 })

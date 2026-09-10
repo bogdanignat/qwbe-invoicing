@@ -135,6 +135,37 @@ void test("maps a missing issuer to null for TanStack Query first-run state", as
   }
 })
 
+void test("saves typed issuer branding input and decodes the canonical PNG", async () => {
+  const originalFetch = globalThis.fetch
+  const calls: Array<{ readonly path: string; readonly init: RequestInit }> = []
+  const input = {
+    name: "QWBE", fiscalIdentifier: "RO2", address: { countryCode: "RO", city: "Botoșani", street: "Strada 2" },
+    defaultCurrency: "RON", defaultPaymentTermDays: 15, vatConfigurations: [],
+    branding: { text: "QWBE", image: { dataBase64: "jpeg-input" } },
+  }
+  try {
+    globalThis.fetch = (request, init) => {
+      const path = requestPath(request)
+      calls.push({ path, init: init ?? {} })
+      const body = path === "/api/session"
+        ? { authenticated: true, csrfToken: "csrf-token" }
+        : { ...input, organizationId: "org-1", branding: { text: "QWBE", image: { pngBase64: "png-output", width: 120, height: 40 } } }
+      return Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } }))
+    }
+    await runUiEffect(loginApiSession("secret-token"))
+    const saved = await runUiEffect(invoicingClient.saveIssuer(input))
+    assert.equal(saved.branding?.image?.pngBase64, "png-output")
+    const saveCall = calls[1]
+    assert.ok(saveCall)
+    assert.equal(saveCall.path, "/api/issuer")
+    assert.equal(saveCall.init.method, "PUT")
+    assert.deepEqual(JSON.parse(saveCall.init.body as string), input)
+  } finally {
+    await runUiEffect(clearApiSession)
+    globalThis.fetch = originalFetch
+  }
+})
+
 void test("surfaces the first typed validation issue instead of the backend tag", async () => {
   const originalFetch = globalThis.fetch
   try {
@@ -307,7 +338,7 @@ void test("calls direct and draft issuance, proforma invoice, registry, detail, 
   }
   const proforma = {
     ...draft, id: "proforma-1", sourceDraftId: "draft-1", series: "PRO", number: 7, issuedAt: "2026-09-01T10:00:00.000Z",
-    issuer: { name: "QWBE", fiscalIdentifier: "RO2", address: { countryCode: "RO", city: "Botoșani", street: "Strada 2" } },
+    issuer: { name: "QWBE", fiscalIdentifier: "RO2", address: { countryCode: "RO", city: "Botoșani", street: "Strada 2" }, branding: null },
     invoiceSeries: "QWBE", convertedDraftId: null, convertedInvoiceId: null,
   }
   const invoice = { ...proforma, id: "invoice-1", draftId: null, sourceProformaId: "proforma-1", series: "QWBE", number: 8, eFacturaStatus: "not_sent" }

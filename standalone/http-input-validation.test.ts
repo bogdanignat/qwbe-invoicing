@@ -24,7 +24,7 @@ const draft = { customerId: "customer-1", series: "QWBE", issueDate: "2026-09-01
 const authoring = { ...draft, currency: "RON", lines: [line] }
 const issuer = { name: "Furnizor", fiscalIdentifier: " ro12345674 ", address: customer.address,
   defaultCurrency: "RON", defaultPaymentTermDays: 15,
-  vatConfigurations: [{ code: "RO_STANDARD", rate: "21.00", effectiveFrom: "2025-08-01" }] }
+  vatConfigurations: [{ code: "RO_STANDARD", rate: "21.00", effectiveFrom: "2025-08-01" }], branding: null }
 
 interface InputCase {
   readonly name: string
@@ -54,6 +54,13 @@ const inputs: ReadonlyArray<InputCase> = [
   { name: "author proforma", schema: S.AuthoringProformaInput, decode: A.authoringProformaInput, value: { ...authoring, proformaSeries: "PRO" } },
   { name: "empty", schema: S.EmptyInput, decode: A.emptyInput, value: {} },
 ]
+
+void test("issuer transport requires the raw branding shape", () => {
+  assert.deepEqual(A.issuerInput({ ...issuer, branding: { text: "Marcă", image: { dataBase64: "aGVsbG8=" } } }).branding,
+    { text: "Marcă", image: { dataBase64: "aGVsbG8=" } })
+  assert.throws(() => { A.issuerInput({ ...issuer, branding: undefined }) }, ValidationFailure)
+  assert.throws(() => { A.issuerInput({ ...issuer, branding: { text: null, image: { pngBase64: "x", width: 1, height: 1 } } }) }, ValidationFailure)
+})
 
 const issuesOf = (decode: () => unknown): ReadonlyArray<string> => {
   try { decode() } catch (error) {

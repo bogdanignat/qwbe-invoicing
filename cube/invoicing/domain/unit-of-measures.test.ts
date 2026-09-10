@@ -6,12 +6,23 @@ import { normalizeUnitOfMeasure, unitOfMeasures } from "./unit-of-measures.ts"
 
 void test("publishes only the curated Romanian invoicing units, piece first, with UN/ECE codes", () => {
   assert.equal(new Set(unitOfMeasures.map(({ code }) => code)).size, unitOfMeasures.length)
-  assert.ok(unitOfMeasures.length < 40, "the catalogue must stay a short curated list, not the full Rec 20/21")
-  assert.deepEqual(unitOfMeasures[0], { code: "H87", name: "bucată" })
-  assert.deepEqual(unitOfMeasures.find(({ code }) => code === "HUR"), { code: "HUR", name: "oră" })
-  assert.deepEqual(unitOfMeasures.find(({ code }) => code === "MON"), { code: "MON", name: "lună" })
-  assert.equal(unitOfMeasures.some(({ code }) => code === "X1A"), false, "steel drums are not a Romanian invoicing unit")
+  assert.deepEqual(unitOfMeasures, [
+    { code: "H87", name: "bucată" },
+    { code: "C62", name: "unitate" },
+    { code: "HUR", name: "oră" },
+    { code: "KGM", name: "kilogram" },
+    { code: "LTR", name: "litru" },
+    { code: "MTR", name: "metru" },
+    { code: "MTK", name: "metru pătrat" },
+    { code: "MTQ", name: "metru cub" },
+  ], "keep the catalogue limited to practical units, not every available UN/ECE code")
   assert.ok(unitOfMeasures.every(({ code }) => /^[A-Z0-9]{2,3}$/.test(code)))
+})
+
+void test("rejects removed calendar, packaging and redundant units for new input", () => {
+  for (const code of ["DAY", "WEE", "MON", "ANN", "MIN", "GRM", "TNE", "MLT", "CMT", "MMT", "KMT", "SET", "PR", "KWH", "LS", "E48", "XPK", "XBX"]) {
+    assert.throws(() => normalizeUnitOfMeasure({ code, name: "unitate eliminată" }), ValidationFailure, code)
+  }
 })
 
 void test("validates the curated code while preserving the caller-facing snapshot name", () => {

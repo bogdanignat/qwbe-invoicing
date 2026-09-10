@@ -33,6 +33,7 @@ const issueFixture = async (directory: string): Promise<{ readonly invoiceId: st
     clock: { now: Effect.succeed(new Date("2026-09-01T10:00:00.000Z")) },
     ids: { next: Effect.sync(() => `id-${String(++nextId)}`) },
     store: createSqliteStore(directory),
+    branding: { normalize: () => Effect.die("branding normalization is not expected") },
     cubeIdentity: "invoicing",
   })
   await Effect.runPromise(service.configureIssuer({
@@ -42,6 +43,7 @@ const issueFixture = async (directory: string): Promise<{ readonly invoiceId: st
     defaultCurrency: "RON",
     defaultPaymentTermDays: 15,
     vatConfigurations: [{ code: "RO_STANDARD", rate: "21", effectiveFrom: "2025-08-01" }],
+    branding: null,
   }))
   await Effect.runPromise(service.addDocumentSeries({ documentType: "invoice", series: "QWBE" }))
   await Effect.runPromise(service.addDocumentSeries({ documentType: "proforma", series: "PRO" }))
