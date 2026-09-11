@@ -43,6 +43,13 @@ export interface RenderableBuyer extends RenderableParty {
   readonly partyType: "company" | "individual"
 }
 
+export interface RenderableIssuer extends RenderableParty {
+  readonly branding: {
+    readonly text: string | null
+    readonly image: { readonly pngBase64: string; readonly width: number; readonly height: number } | null
+  } | null
+}
+
 export interface RenderableLine {
   readonly description: string
   readonly quantity: string
@@ -66,7 +73,7 @@ interface RenderableNumberedDocument {
   readonly issuedAt: string
   readonly currency: string
   readonly notes: string | null
-  readonly issuer: RenderableParty
+  readonly issuer: RenderableIssuer
   readonly customer: RenderableBuyer
   readonly lines: ReadonlyArray<RenderableLine>
   readonly vatBreakdown: ReadonlyArray<{

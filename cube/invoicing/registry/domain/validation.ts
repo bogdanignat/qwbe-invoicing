@@ -20,6 +20,15 @@ export const normalizeProductPreset = (input: ProductPresetInput): ProductPreset
   return { description, unitPrice: normalizeMoney(input.unitPrice, "unitPrice"), unitOfMeasure: normalizeUnitOfMeasure(input.unitOfMeasure) }
 }
 
+export const normalizeBrandingText = (value: string | null): string | null => {
+  if (value === null) return null
+  const text = value.trim()
+  if (text.length === 0) return null
+  if (Array.from(text).length > 80) throw new ValidationFailure({ issues: ["branding.text must be at most 80 Unicode codepoints"] })
+  if (/\p{C}/u.test(text)) throw new ValidationFailure({ issues: ["branding.text must not contain control characters"] })
+  return text
+}
+
 const dateIssues = (configuration: VatConfiguration): ReadonlyArray<string> => {
   const issues: Array<string> = []
   try {

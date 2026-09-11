@@ -5,8 +5,9 @@ export interface UnitOfMeasure {
   readonly name: string
 }
 
-// Units that actually appear on Romanian invoices, in the order a user expects
-// to find them. Codes are UN/ECE Recommendation 20 rev. 3 / 21 rev. 3, as RO
+// Only the everyday units needed for invoicing; piece and generic unit cover
+// countable goods and services without packaging-specific options.
+// Codes are UN/ECE Recommendation 20 rev. 3 / 21 rev. 3, as RO
 // e-Factura (EN 16931 BT-130) requires; names are the Romanian labels shown in
 // the UI and frozen into the document snapshot. Extend deliberately, never by
 // importing the full 2,000-entry catalogue.
@@ -14,29 +15,11 @@ const curated: ReadonlyArray<UnitOfMeasure> = [
   { code: "H87", name: "bucată" },
   { code: "C62", name: "unitate" },
   { code: "HUR", name: "oră" },
-  { code: "DAY", name: "zi" },
-  { code: "WEE", name: "săptămână" },
-  { code: "MON", name: "lună" },
-  { code: "ANN", name: "an" },
-  { code: "MIN", name: "minut" },
   { code: "KGM", name: "kilogram" },
-  { code: "GRM", name: "gram" },
-  { code: "TNE", name: "tonă" },
   { code: "LTR", name: "litru" },
-  { code: "MLT", name: "mililitru" },
   { code: "MTR", name: "metru" },
-  { code: "CMT", name: "centimetru" },
-  { code: "MMT", name: "milimetru" },
-  { code: "KMT", name: "kilometru" },
   { code: "MTK", name: "metru pătrat" },
   { code: "MTQ", name: "metru cub" },
-  { code: "SET", name: "set" },
-  { code: "PR", name: "pereche" },
-  { code: "KWH", name: "kilowatt-oră" },
-  { code: "LS", name: "sumă forfetară" },
-  { code: "E48", name: "unitate de serviciu" },
-  { code: "XPK", name: "pachet" },
-  { code: "XBX", name: "cutie" },
 ]
 
 const byCode = new Map(curated.map((unit) => [unit.code, Object.freeze({ ...unit })]))

@@ -45,6 +45,22 @@ export const Party = Schema.Struct({
   address: Address,
 })
 
+const BrandingTextInput = Schema.NullOr(Schema.String)
+const IssuerBrandingInput = Schema.NullOr(Schema.Struct({
+  text: BrandingTextInput,
+  image: Schema.NullOr(Schema.Struct({ dataBase64: Schema.String })),
+}))
+const IssuerBrandingImage = Schema.Struct({
+  pngBase64: Schema.String,
+  width: Schema.Int,
+  height: Schema.Int,
+})
+const IssuerBranding = Schema.NullOr(Schema.Struct({
+  text: Schema.NullOr(Schema.String),
+  image: Schema.NullOr(IssuerBrandingImage),
+}))
+export const IssuerParty = Schema.Struct({ ...Party.fields, branding: IssuerBranding })
+
 export const Buyer = Schema.Struct({
   partyType: Schema.Literal("company", "individual"),
   name: Schema.String,
@@ -79,6 +95,7 @@ export const IssuerInput = Schema.Struct({
   defaultCurrency: Schema.String,
   defaultPaymentTermDays: Schema.Int,
   vatConfigurations: Schema.Array(VatConfigurationInput),
+  branding: IssuerBrandingInput,
 }).annotations(bodyObject)
 
 export const Issuer = Schema.Struct({
@@ -89,6 +106,7 @@ export const Issuer = Schema.Struct({
   defaultCurrency: Schema.String,
   defaultPaymentTermDays: Schema.Int,
   vatConfigurations: Schema.Array(VatConfiguration),
+  branding: IssuerBranding,
 })
 
 export const DocumentSeriesInput = Schema.Struct({
@@ -212,7 +230,7 @@ export const IssuedInvoice = Schema.Struct({
   issuedAt: Schema.String,
   currency: Schema.String,
   notes: DocumentNotes,
-  issuer: Party,
+  issuer: IssuerParty,
   customer: Buyer,
   lines: Schema.Array(DraftLine),
   vatBreakdown: Schema.Array(VatBreakdown),
@@ -222,7 +240,8 @@ export const IssuedInvoice = Schema.Struct({
   eFacturaStatus: Schema.Literal("not_sent", "pending", "sent", "accepted", "rejected"),
 })
 
-export const IssuedInvoicePage = pageOf(IssuedInvoice)
+export const IssuedInvoiceSummary = Schema.Struct({ ...IssuedInvoice.fields, issuer: Party })
+export const IssuedInvoicePage = pageOf(IssuedInvoiceSummary)
 
 const BuyerSelection = Schema.Struct({ customerId: optionalString, customer: optional(BuyerInput) })
 const requireBuyer = <A extends Schema.Schema.Type<typeof BuyerSelection>, I, R>(schema: Schema.Schema<A, I, R>) =>
@@ -337,7 +356,7 @@ export const Proforma = Schema.Struct({
   issuedAt: Schema.String,
   currency: Schema.String,
   notes: DocumentNotes,
-  issuer: Party,
+  issuer: IssuerParty,
   customer: Buyer,
   lines: Schema.Array(DraftLine),
   vatBreakdown: Schema.Array(VatBreakdown),
@@ -345,7 +364,8 @@ export const Proforma = Schema.Struct({
   vatTotal: Schema.String,
   totalIncludingVat: Schema.String,
 })
-export const ProformaPage = pageOf(Proforma)
+export const ProformaSummary = Schema.Struct({ ...Proforma.fields, issuer: Party })
+export const ProformaPage = pageOf(ProformaSummary)
 export const IssueProformaInput = Schema.Struct({ series: Schema.String }).annotations(bodyObject)
 // Effect's empty Struct also accepts primitives and arrays; retain the JSON-object
 // contract here and discard all fields just like the other request schemas.

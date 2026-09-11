@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url"
 
 import fontkit from "@pdf-lib/fontkit"
 import { Effect } from "effect"
-import { PDFDocument, type PDFPage } from "pdf-lib"
+import { PDFDocument, type PDFImage, type PDFPage } from "pdf-lib"
 
 import {
   DocumentRenderingFailure,
@@ -23,7 +23,6 @@ import {
   ink,
   margin,
   muted,
-  nameInitials,
   noteFill,
   pageHeight,
   pageWidth,
@@ -35,8 +34,8 @@ import {
   wrapText,
 } from "./pdf-layout.ts"
 
-export const invoiceTemplateVersion = "invoice-v4"
-export const proformaTemplateVersion = "proforma-v3"
+export const invoiceTemplateVersion = "invoice-v5"
+export const proformaTemplateVersion = "proforma-v4"
 
 const regularFontPath = fileURLToPath(new URL("./assets/fonts/DejaVuSans.ttf", import.meta.url))
 const boldFontPath = fileURLToPath(new URL("./assets/fonts/DejaVuSans-Bold.ttf", import.meta.url))
@@ -122,26 +121,23 @@ const addPage = (sheet: Sheet): void => {
   sheet.y = contentTop
 }
 
-/** Draws the logo tile and returns the baseline directly below it. */
-const drawLogo = (sheet: Sheet, name: string): number => {
-  const top = sheet.y
-  sheet.page.drawRectangle({
-    x: headerLeftX,
-    y: top - logoSize,
-    width: logoSize,
-    height: logoSize,
-    color: accent,
-  })
-  putText(sheet.page, nameInitials(name), {
-    x: headerLeftX,
-    y: top - logoSize + 15,
-    size: 16,
-    font: sheet.fonts.bold,
-    color: paper,
-    align: "center",
-    width: logoSize,
-  })
-  return top - logoSize - 14
+/** Draws the frozen organization brand without replacing the legal party. */
+const drawBrand = (sheet: Sheet, branding: RenderableDocument["issuer"]["branding"], image: PDFImage | null): number => {
+  if (branding === null) return sheet.y
+  let cursor = sheet.y
+  if (image !== null) {
+    const scale = Math.min(headerLeftWidth / image.width, logoSize / image.height)
+    const width = image.width * scale
+    const height = image.height * scale
+    sheet.page.drawImage(image, { x: headerLeftX, y: cursor - height, width, height })
+    cursor -= height + 14
+  }
+  if (branding.text !== null) {
+    cursor = putLines(sheet.page, wrapText(sheet.fonts.bold, 11, headerLeftWidth, branding.text), {
+      x: headerLeftX, top: cursor, width: headerLeftWidth, size: 11, leading: 13, font: sheet.fonts.bold,
+    }) - 10
+  }
+  return cursor
 }
 
 const drawPartyColumn = (
@@ -240,8 +236,8 @@ const drawDocumentColumn = (sheet: Sheet, document: RenderableDocument, isProfor
   return cursor
 }
 
-const drawHeader = (sheet: Sheet, document: RenderableDocument, isProforma: boolean): void => {
-  const afterLogo = drawLogo(sheet, document.issuer.name)
+const drawHeader = (sheet: Sheet, document: RenderableDocument, isProforma: boolean, image: PDFImage | null): void => {
+  const afterLogo = drawBrand(sheet, document.issuer.branding, image)
   const leftBottom = drawPartyColumn(sheet, document.issuer, {
     label: "FURNIZOR",
     x: headerLeftX,
@@ -527,7 +523,9 @@ const renderPdf = async (
     page: pdf.addPage([pageWidth, pageHeight]),
     y: contentTop,
   }
-  drawHeader(sheet, document, isProforma)
+  const brandImage = document.issuer.branding === null ? null : document.issuer.branding.image
+  const image = brandImage === null ? null : await pdf.embedPng(brandImage.pngBase64)
+  drawHeader(sheet, document, isProforma, image)
   drawTableHeader(sheet)
   document.lines.forEach((line, index) => {
     drawTableRow(sheet, line, index)

@@ -4,7 +4,7 @@ import { findIdempotencyReplay, idempotencyRecord, missingIdempotencyResult } fr
 import { checked, documentPageQuery, ensureChronology, missing, pageOf, type Authorize, type OperationDependencies, type Page, type PageRequest } from "../../application/support.ts"
 import type { InvoicingFailure } from "../../contracts/failures.ts"
 import type { InvoicingPermissions } from "../../contracts/permissions.ts"
-import type { DocumentSource, Idempotent, Proforma } from "../../domain/invoice.ts"
+import type { DocumentSource, Idempotent, Proforma, ProformaSummary } from "../../domain/invoice.ts"
 import type { AuthoringProformaInput, IssueProformaInput } from "../../domain/inputs.ts"
 import { calendarDate, validateDocumentSource } from "../../domain/validation.ts"
 import { fiscalYear, issuanceSource, numberedSnapshot } from "./snapshot.ts"
@@ -12,7 +12,7 @@ import { fiscalYear, issuanceSource, numberedSnapshot } from "./snapshot.ts"
 export interface ProformaOperations {
   readonly issueProforma: (input: Idempotent<AuthoringProformaInput | IssueProformaInput>) => Effect.Effect<Proforma, InvoicingFailure>
   readonly getProforma: (id: string) => Effect.Effect<Proforma, InvoicingFailure>
-  readonly listProformas: (source?: DocumentSource, page?: PageRequest) => Effect.Effect<Page<Proforma>, InvoicingFailure>
+  readonly listProformas: (source?: DocumentSource, page?: PageRequest) => Effect.Effect<Page<ProformaSummary>, InvoicingFailure>
 }
 
 export const createProformaOperations = (

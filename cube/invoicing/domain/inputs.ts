@@ -7,7 +7,14 @@ export type ConfigureDocumentSeriesInput = Pick<DocumentSeries, "documentType" |
 export type IssueProformaInput = { readonly draftId: string; readonly series: string }
 export type ConvertProformaInput = { readonly proformaId: string }
 
-export type ConfigureIssuerInput = Omit<IssuerProfile, "organizationId">
+export interface RawIssuerBrandingImage { readonly dataBase64: string }
+export interface RawIssuerBranding {
+  readonly text: string | null
+  readonly image: RawIssuerBrandingImage | null
+}
+export type ConfigureIssuerInput = Omit<IssuerProfile, "organizationId" | "branding"> & {
+  readonly branding: RawIssuerBranding | null
+}
 
 export type CustomerInput = BuyerSnapshot & { readonly defaultPaymentTermDays?: number }
 export type CreateCustomerInput = CustomerInput

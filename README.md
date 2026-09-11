@@ -43,7 +43,14 @@ a rewrite.
 ## What it does
 
 - **Issuer profile**: legal name, CUI/CIF, VAT id, trade register id, structured address,
-  IBAN and bank, VAT regime, logo, default payment terms and notes.
+  IBAN and bank, VAT regime, PNG/JPEG logo and/or custom brand text, default payment terms and notes.
+  Branding is optional and configured in **Date firmă**: PNG or JPEG up to 256 KiB,
+  2048 px per axis / 4 megapixels, and plain text up to 80 Unicode characters.
+  Images are validated server-side and normalized to metadata-free PNG (also bounded
+  to 256 KiB); SVG, animated images and external image URLs are not accepted.
+  Drafts show the current brand; issued invoices and proformas freeze it in their
+  issuer snapshot and PDF, including proforma-to-invoice conversion. Document lists
+  omit branding images. Legal issuer details remain independent of the brand.
 - **Customers** (optional register): companies with a valid CUI/CIF, or natural persons with
   an optional CNP. A document can also be issued to a one-time buyer typed directly in the
   editor, so the register and draft persistence are conveniences, not prerequisites. A saved

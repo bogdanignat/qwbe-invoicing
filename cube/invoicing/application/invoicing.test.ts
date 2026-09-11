@@ -4,7 +4,7 @@ import test from "node:test"
 import { Effect } from "effect"
 
 import { createInvoicingService } from "./invoicing.ts"
-import { contextProvider, each, emptyState, fixedClock, identity, memoryStore, sequentialIds, vatConfigurations } from "./memory-store.test-support.ts"
+import { brandingNormalizer, contextProvider, each, emptyState, fixedClock, identity, memoryStore, sequentialIds, vatConfigurations } from "./memory-store.test-support.ts"
 import { PermissionDenied } from "../contracts/index.ts"
 
 void test("refuses missing permissions and cross-organization reads", async () => {
@@ -17,6 +17,7 @@ void test("refuses missing permissions and cross-organization reads", async () =
     clock: fixedClock,
     ids: sequentialIds(),
     store: memoryStore(state),
+    branding: brandingNormalizer,
     cubeIdentity: "invoicing",
   })
 
@@ -26,7 +27,7 @@ void test("refuses missing permissions and cross-organization reads", async () =
     address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" },
     defaultCurrency: "RON",
     defaultPaymentTermDays: 15,
-    vatConfigurations,
+    vatConfigurations, branding: null,
   })))
   assert.equal(failure instanceof PermissionDenied, true)
   assert.equal(await Effect.runPromise(Effect.flip(denied.listProductPresets())) instanceof PermissionDenied, true)

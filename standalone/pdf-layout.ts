@@ -118,18 +118,3 @@ export const horizontalRule = (
     color: options.color ?? rule,
   })
 }
-
-const legalFormSuffixes = new Set(["srl", "sa", "sca", "snc", "scs", "pfa", "ii", "if", "sr", "s", "r", "l"])
-
-/**
- * Derives up to two initials from a party name, skipping legal-form suffixes so
- * "Alpha Retail S.A." yields "AR" rather than "AS".
- */
-export const nameInitials = (name: string): string => {
-  const words = name.split(/[^\p{L}\p{N}]+/u).filter((word) => word.length > 0)
-  const meaningful = words.filter((word) => !legalFormSuffixes.has(word.toLowerCase()))
-  const chosen = meaningful.length > 0 ? meaningful : words
-  const letters = chosen.slice(0, 2).map((word) => Array.from(word)[0]?.toLocaleUpperCase("ro-RO") ?? "")
-  const joined = letters.join("")
-  return joined === "" ? "?" : joined
-}

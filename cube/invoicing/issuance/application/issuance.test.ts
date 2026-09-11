@@ -4,7 +4,7 @@ import test from "node:test"
 import { Effect } from "effect"
 
 import { createInvoicingService, type InvoicingTransaction } from "../../application/invoicing.ts"
-import { contextProvider, each, emptyState, expectConflict, fixedClock, identity, idempotent, memoryStore, sequentialIds, vatConfigurations } from "../../application/memory-store.test-support.ts"
+import { brandingNormalizer, contextProvider, each, emptyState, expectConflict, fixedClock, identity, idempotent, memoryStore, sequentialIds, vatConfigurations } from "../../application/memory-store.test-support.ts"
 import { DomainConflict, PermissionDenied, ResourceNotFound, ValidationFailure, type TransactionalStore } from "../../contracts/index.ts"
 
 void test("issues deterministic immutable invoice snapshots through the public service", async () => {
@@ -14,6 +14,7 @@ void test("issues deterministic immutable invoice snapshots through the public s
     clock: fixedClock,
     ids: sequentialIds(),
     store: memoryStore(state),
+    branding: brandingNormalizer,
     cubeIdentity: "invoicing",
   })
 
@@ -23,7 +24,7 @@ void test("issues deterministic immutable invoice snapshots through the public s
     address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" },
     defaultCurrency: "RON",
     defaultPaymentTermDays: 15,
-    vatConfigurations,
+    vatConfigurations, branding: null,
   }))
   await Effect.runPromise(service.addDocumentSeries({ documentType: "invoice", series: "QWBE" }))
   await Effect.runPromise(service.addDocumentSeries({ documentType: "invoice", series: "ALT" }))
@@ -87,7 +88,10 @@ void test("issues deterministic immutable invoice snapshots through the public s
   assert.equal(issued.totalIncludingVat, "151.25")
   assert.equal(issued.issuer.name, "Exemplu SRL")
   assert.equal(issued.customer.name, "Client SRL")
-  assert.deepEqual(await Effect.runPromise(service.listIssuedInvoices()), { items: [issued], nextCursor: null })
+  const listed = await Effect.runPromise(service.listIssuedInvoices())
+  assert.equal("branding" in (listed.items[0]?.issuer ?? {}), false)
+  assert.deepEqual(listed.items[0]?.issuer, { name: issued.issuer.name, fiscalIdentifier: issued.issuer.fiscalIdentifier,
+    address: issued.issuer.address })
 
   await Effect.runPromise(service.configureIssuer({
     name: "Exemplu Renamed SRL",
@@ -95,7 +99,7 @@ void test("issues deterministic immutable invoice snapshots through the public s
     address: { countryCode: "RO", city: "Botoșani", street: "Altă stradă 3" },
     defaultCurrency: "RON",
     defaultPaymentTermDays: 30,
-    vatConfigurations,
+    vatConfigurations, branding: null,
   }))
   const preserved = await Effect.runPromise(service.getIssuedInvoice(issued.id))
   assert.equal(preserved.issuer.name, "Exemplu SRL")
@@ -129,6 +133,7 @@ void test("failed invoice and proforma issuance rolls back both the document and
     clock: fixedClock,
     ids: sequentialIds(),
     store: failingStore,
+    branding: brandingNormalizer,
     cubeIdentity: "invoicing",
   })
 
@@ -138,7 +143,7 @@ void test("failed invoice and proforma issuance rolls back both the document and
     address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" },
     defaultCurrency: "RON",
     defaultPaymentTermDays: 15,
-    vatConfigurations,
+    vatConfigurations, branding: null,
   }))
   await Effect.runPromise(service.addDocumentSeries({ documentType: "invoice", series: "QWBE" }))
   await Effect.runPromise(service.addDocumentSeries({ documentType: "proforma", series: "PRO" }))
@@ -186,12 +191,12 @@ void test("issues immutable proformas from saved drafts", async () => {
   const state = emptyState()
   const service = createInvoicingService({
     context: contextProvider({ identity, organization: { id: "org-1" } }), clock: fixedClock,
-    ids: sequentialIds(), store: memoryStore(state), cubeIdentity: "invoicing",
+    ids: sequentialIds(), store: memoryStore(state), branding: brandingNormalizer, cubeIdentity: "invoicing",
   })
   await Effect.runPromise(service.configureIssuer({
     name: "Exemplu SRL", fiscalIdentifier: "RO12345674",
     address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" },
-    defaultCurrency: "RON", defaultPaymentTermDays: 15, vatConfigurations,
+    defaultCurrency: "RON", defaultPaymentTermDays: 15, vatConfigurations, branding: null,
   }))
   await Effect.runPromise(service.addDocumentSeries({ documentType: "invoice", series: "SAME" }))
   await Effect.runPromise(service.addDocumentSeries({ documentType: "proforma", series: "SAME" }))
@@ -223,11 +228,11 @@ void test("issues immutable proformas from saved drafts", async () => {
 
   const denied = createInvoicingService({
     context: contextProvider({ identity: { ...identity, permissions: identity.permissions.filter((p) => p !== "invoicing:proforma.issue") }, organization: { id: "org-1" } }),
-    clock: fixedClock, ids: sequentialIds(), store: memoryStore(state), cubeIdentity: "invoicing",
+    clock: fixedClock, ids: sequentialIds(), store: memoryStore(state), branding: brandingNormalizer, cubeIdentity: "invoicing",
   })
   assert.equal(await Effect.runPromise(Effect.flip(denied.issueProforma(idempotent({ draftId: source.id, series: "SAME" })))) instanceof PermissionDenied, true)
   const other = createInvoicingService({ context: contextProvider({ identity, organization: { id: "org-2" } }),
-    clock: fixedClock, ids: sequentialIds(), store: memoryStore(state), cubeIdentity: "invoicing" })
+    clock: fixedClock, ids: sequentialIds(), store: memoryStore(state), branding: brandingNormalizer, cubeIdentity: "invoicing" })
   assert.equal(await Effect.runPromise(Effect.flip(other.getProforma(proforma.id))) instanceof ResourceNotFound, true)
   assert.equal(await Effect.runPromise(Effect.flip(other.issueInvoiceFromProforma(idempotent({ proformaId: proforma.id })))) instanceof ResourceNotFound, true)
 })
@@ -235,10 +240,10 @@ void test("issues immutable proformas from saved drafts", async () => {
 void test("issues authored documents without drafts and invoices a proforma snapshot exactly once", async () => {
   const state = emptyState()
   const service = createInvoicingService({ context: contextProvider({ identity, organization: { id: "org-1" } }),
-    clock: fixedClock, ids: sequentialIds(), store: memoryStore(state), cubeIdentity: "invoicing" })
+    clock: fixedClock, ids: sequentialIds(), store: memoryStore(state), branding: brandingNormalizer, cubeIdentity: "invoicing" })
   await Effect.runPromise(service.configureIssuer({ name: "Exemplu SRL", fiscalIdentifier: "RO12345674",
     address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" }, defaultCurrency: "RON",
-    defaultPaymentTermDays: 15, vatConfigurations }))
+    defaultPaymentTermDays: 15, vatConfigurations, branding: { text: "Marca A", image: null } }))
   await Effect.runPromise(service.addDocumentSeries({ documentType: "invoice", series: "INV" }))
   await Effect.runPromise(service.addDocumentSeries({ documentType: "proforma", series: "PRO" }))
   const customer = { partyType: "company" as const, name: "Client SRL", fiscalIdentifier: "RO87654329",
@@ -253,9 +258,15 @@ void test("issues authored documents without drafts and invoices a proforma snap
   assert.equal(proforma.sourceDraftId, null)
   assert.equal(proforma.invoiceSeries, "INV")
   assert.equal(state.drafts.size, 0)
+  await Effect.runPromise(service.configureIssuer({ name: "Exemplu SRL", fiscalIdentifier: "RO12345674",
+    address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" }, defaultCurrency: "RON",
+    defaultPaymentTermDays: 15, vatConfigurations, branding: { text: "Marca B", image: null } }))
   const converted = await Effect.runPromise(service.issueInvoiceFromProforma(idempotent({ proformaId: proforma.id })))
   assert.equal(converted.draftId, null)
   assert.equal(converted.sourceProformaId, proforma.id)
+  assert.deepEqual(invoice.issuer.branding, { text: "Marca A", image: null })
+  assert.deepEqual(proforma.issuer.branding, { text: "Marca A", image: null })
+  assert.deepEqual(converted.issuer.branding, { text: "Marca A", image: null })
   assert.deepEqual([converted.issuer, converted.customer, converted.lines, converted.vatBreakdown,
     converted.dueDate, converted.currency, converted.totalExcludingVat, converted.vatTotal, converted.totalIncludingVat],
   [proforma.issuer, proforma.customer, proforma.lines, proforma.vatBreakdown,
@@ -268,7 +279,7 @@ void test("issues authored documents without drafts and invoices a proforma snap
   const invoiceCount = state.issued.size
   const invoiceSequence = state.sequences.get("org-1:2026:invoice:INV")
   const failing = createInvoicingService({ context: contextProvider({ identity, organization: { id: "org-1" } }),
-    clock: fixedClock, ids: sequentialIds(), cubeIdentity: "invoicing", store: {
+    clock: fixedClock, ids: sequentialIds(), branding: brandingNormalizer, cubeIdentity: "invoicing", store: {
       transaction: (use) => memoryStore(state).transaction((transaction) => use({ ...transaction,
         saveProformaInvoiceConversion: () => Effect.fail(new DomainConflict({ code: "forced_failure", message: "forced" })) })),
     } })
@@ -276,17 +287,17 @@ void test("issues authored documents without drafts and invoices a proforma snap
   assert.equal(state.issued.size, invoiceCount)
   assert.equal(state.sequences.get("org-1:2026:invoice:INV"), invoiceSequence)
   const other = createInvoicingService({ context: contextProvider({ identity, organization: { id: "org-2" } }),
-    clock: fixedClock, ids: sequentialIds(), store: memoryStore(state), cubeIdentity: "invoicing" })
+    clock: fixedClock, ids: sequentialIds(), store: memoryStore(state), branding: brandingNormalizer, cubeIdentity: "invoicing" })
   assert.equal(await Effect.runPromise(Effect.flip(other.issueInvoiceFromProforma(idempotent({ proformaId: proforma.id })))) instanceof ResourceNotFound, true)
 })
 
 void test("numbers documents chronologically per series and dates proforma conversions on the conversion day", async () => {
   const state = emptyState()
   const service = createInvoicingService({ context: contextProvider({ identity, organization: { id: "org-1" } }),
-    clock: fixedClock, ids: sequentialIds(), store: memoryStore(state), cubeIdentity: "invoicing" })
+    clock: fixedClock, ids: sequentialIds(), store: memoryStore(state), branding: brandingNormalizer, cubeIdentity: "invoicing" })
   await Effect.runPromise(service.configureIssuer({ name: "Exemplu SRL", fiscalIdentifier: "RO12345674",
     address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" }, defaultCurrency: "RON",
-    defaultPaymentTermDays: 15, vatConfigurations }))
+    defaultPaymentTermDays: 15, vatConfigurations, branding: null }))
   await Effect.runPromise(service.addDocumentSeries({ documentType: "invoice", series: "INV" }))
   await Effect.runPromise(service.addDocumentSeries({ documentType: "proforma", series: "PRO" }))
   const customer = { partyType: "company" as const, name: "Client SRL", fiscalIdentifier: "RO87654329",
@@ -313,10 +324,10 @@ void test("numbers documents chronologically per series and dates proforma conve
 void test("freezes draft remarks into every issued snapshot and carries them through conversion", async () => {
   const state = emptyState()
   const service = createInvoicingService({ context: contextProvider({ identity, organization: { id: "org-1" } }),
-    clock: fixedClock, ids: sequentialIds(), store: memoryStore(state), cubeIdentity: "invoicing" })
+    clock: fixedClock, ids: sequentialIds(), store: memoryStore(state), branding: brandingNormalizer, cubeIdentity: "invoicing" })
   await Effect.runPromise(service.configureIssuer({ name: "Exemplu SRL", fiscalIdentifier: "RO12345674",
     address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" }, defaultCurrency: "RON",
-    defaultPaymentTermDays: 15, vatConfigurations }))
+    defaultPaymentTermDays: 15, vatConfigurations, branding: null }))
   await Effect.runPromise(service.addDocumentSeries({ documentType: "invoice", series: "INV" }))
   await Effect.runPromise(service.addDocumentSeries({ documentType: "proforma", series: "PRO" }))
   const customer = { partyType: "company" as const, name: "Client SRL", fiscalIdentifier: "RO87654329",

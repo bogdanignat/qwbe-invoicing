@@ -36,6 +36,7 @@ import { createStandaloneArtifactService } from "./artifact-runtime.ts"
 import { authoringInvoiceInput, authoringProformaInput, correctionInput, customerInput, documentSeriesInput, draftInput, emptyInput, issuerInput, issueProformaInput, lineInput, pageRequest, paymentInput, productPresetInput, reversalInput, sourceFilter, updateDraftInput, updateLineInput } from "./api-inputs.ts"
 import { matchApplicationRoute } from "./api-route-adapter.ts"
 import type { RequestAuthenticator } from "./auth.ts"
+import { brandingNormalizer } from "./branding-normalizer.ts"
 import { createSqlitePaymentsStore, createSqliteStore } from "./sqlite-store.ts"
 
 export interface ApiRequest {
@@ -120,6 +121,7 @@ export const handleApiRequest = async (request: ApiRequest, runtime: ApiRuntime)
     clock,
     ids: { next: Effect.sync(randomUUID) },
     store,
+    branding: brandingNormalizer,
     cubeIdentity: "invoicing",
   })
   const payments = createPaymentsService({

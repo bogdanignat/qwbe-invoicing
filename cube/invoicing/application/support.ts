@@ -1,8 +1,8 @@
 import { Effect } from "effect"
 
 import { ResourceNotFound, ValidationFailure, type InvoicingFailure, type PersistenceFailure } from "../contracts/failures.ts"
-import type { Clock, IdGenerator, RequestContext, TransactionalStore } from "../contracts/host.ts"
-import type { BuyerSnapshot, DocumentSource, NumberedDocumentType, PartySnapshot } from "../domain/invoice.ts"
+import type { BrandingNormalizer, Clock, IdGenerator, RequestContext, TransactionalStore } from "../contracts/host.ts"
+import type { BuyerSnapshot, DocumentSource, IssuerSnapshot, NumberedDocumentType, PartySnapshot } from "../domain/invoice.ts"
 import type { DocumentCursor, DraftCursor, InvoicingTransaction, NameCursor, PageQuery } from "./ports.ts"
 
 export type { DocumentCursor, DraftCursor, NameCursor, PageQuery } from "./ports.ts"
@@ -13,6 +13,7 @@ export interface OperationDependencies {
   readonly clock: Clock
   readonly ids: IdGenerator
   readonly store: TransactionalStore<InvoicingTransaction>
+  readonly branding: BrandingNormalizer
 }
 
 export const checked = <Value>(operation: () => Value): Effect.Effect<Value, ValidationFailure> => Effect.try({
@@ -33,6 +34,11 @@ export const copyParty = (party: PartySnapshot): PartySnapshot => ({
 export const copyBuyer = (buyer: BuyerSnapshot): BuyerSnapshot => ({
   ...copyParty(buyer),
   partyType: buyer.partyType,
+})
+
+export const copyIssuerSnapshot = (issuer: IssuerSnapshot): IssuerSnapshot => ({
+  ...copyParty(issuer),
+  branding: issuer.branding === null ? null : structuredClone(issuer.branding),
 })
 
 // Codul fiscal art. 319 (20): the invoice date is the issue date and numbers are sequential per series,

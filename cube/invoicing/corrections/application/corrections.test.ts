@@ -4,19 +4,19 @@ import test from "node:test"
 import { Effect } from "effect"
 
 import { createInvoicingService } from "../../application/invoicing.ts"
-import { contextProvider, each, emptyState, expectConflict, fixedClock, identity, idempotent, memoryStore, sequentialIds, vatConfigurations } from "../../application/memory-store.test-support.ts"
+import { brandingNormalizer, contextProvider, each, emptyState, expectConflict, fixedClock, identity, idempotent, memoryStore, sequentialIds, vatConfigurations } from "../../application/memory-store.test-support.ts"
 import { PermissionDenied, ResourceNotFound, ValidationFailure } from "../../contracts/index.ts"
 
 void test("corrects an issued invoice exactly once with a negated immutable snapshot", async () => {
   const state = emptyState()
   const service = createInvoicingService({
     context: contextProvider({ identity, organization: { id: "org-1" } }),
-    clock: fixedClock, ids: sequentialIds(), store: memoryStore(state), cubeIdentity: "invoicing",
+    clock: fixedClock, ids: sequentialIds(), store: memoryStore(state), branding: brandingNormalizer, cubeIdentity: "invoicing",
   })
   await Effect.runPromise(service.configureIssuer({
     name: "Exemplu SRL", fiscalIdentifier: "RO12345674",
     address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" },
-    defaultCurrency: "RON", defaultPaymentTermDays: 15, vatConfigurations,
+    defaultCurrency: "RON", defaultPaymentTermDays: 15, vatConfigurations, branding: null,
   }))
   await Effect.runPromise(service.addDocumentSeries({ documentType: "invoice", series: "QWBE" }))
   const customer = { partyType: "company" as const, name: "Client SRL", fiscalIdentifier: "RO87654329",
@@ -49,7 +49,8 @@ void test("corrects an issued invoice exactly once with a negated immutable snap
   assert.equal(correction.totalIncludingVat, "-151.25")
   assert.equal(correction.lines[0]?.totalIncludingVat, "-151.25")
   assert.deepEqual(correction.vatBreakdown, [{ code: "RO_STANDARD", rate: "21.00", vatBaseAmount: "-125.00", vatAmount: "-26.25" }])
-  assert.deepEqual(correction.issuer, invoice.issuer)
+  assert.deepEqual(correction.issuer, { name: invoice.issuer.name, fiscalIdentifier: invoice.issuer.fiscalIdentifier,
+    address: invoice.issuer.address })
   assert.deepEqual(correction.customer, invoice.customer)
   assert.equal(state.sequences.get("org-1:2026:invoice:QWBE"), 2)
   assert.equal(state.sequences.get("org-1:2026:correction:QWBE"), undefined)
@@ -64,12 +65,12 @@ void test("corrects an issued invoice exactly once with a negated immutable snap
 
   const other = createInvoicingService({
     context: contextProvider({ identity, organization: { id: "org-2" } }),
-    clock: fixedClock, ids: sequentialIds(), store: memoryStore(state), cubeIdentity: "invoicing",
+    clock: fixedClock, ids: sequentialIds(), store: memoryStore(state), branding: brandingNormalizer, cubeIdentity: "invoicing",
   })
   assert.equal(await Effect.runPromise(Effect.flip(other.getCorrection(correction.id))) instanceof ResourceNotFound, true)
   const denied = createInvoicingService({
     context: contextProvider({ identity: { ...identity, permissions: identity.permissions.filter((p) => p !== "invoicing:invoice.void") }, organization: { id: "org-1" } }),
-    clock: fixedClock, ids: sequentialIds(), store: memoryStore(state), cubeIdentity: "invoicing",
+    clock: fixedClock, ids: sequentialIds(), store: memoryStore(state), branding: brandingNormalizer, cubeIdentity: "invoicing",
   })
   assert.equal(await Effect.runPromise(Effect.flip(denied.createCorrection(idempotent({ originalInvoiceId: invoice.id, reason: "Storno" })))) instanceof PermissionDenied, true)
 })

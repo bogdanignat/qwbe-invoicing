@@ -4,9 +4,18 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import test from "node:test"
 
+import sharp from "sharp"
+
 import { handleApiRequest } from "./api.ts"
 import { createRequestAuthenticator } from "./auth.ts"
 import { applyMigrations } from "./migrations.ts"
+
+const summaryOf = (document: unknown): unknown => {
+  const value = document as { readonly issuer: Readonly<Record<string, unknown>> }
+  const issuer = { ...value.issuer }
+  delete issuer.branding
+  return { ...value, issuer }
+}
 import { proformaTemplateVersion } from "./pdf-renderer.ts"
 const each = { code: "C62", name: "unitate" } as const
 
@@ -43,6 +52,10 @@ void test("requires host authentication and serves the complete invoice-core rou
         rate: "21.00",
         effectiveFrom: "2025-08-01",
       }],
+      branding: {
+        text: "  Marca Exemplu  ",
+        image: { dataBase64: (await sharp({ create: { width: 1, height: 1, channels: 3, background: "blue" } }).png().toBuffer()).toString("base64") },
+      },
     }
     const denied = await handleApiRequest({
       method: "PUT",
@@ -68,6 +81,11 @@ void test("requires host authentication and serves the complete invoice-core rou
     const issuer = await handleApiRequest({ method: "PUT", url: "/api/issuer", authorization, body: issuerBody }, runtime)
     assert.equal(issuer.status, 200)
     assert.equal((issuer.body as { fiscalIdentifier: string }).fiscalIdentifier, "RO12345674")
+    const issuerBranding = (issuer.body as { branding: { text: string; image: { pngBase64: string; width: number; height: number } } }).branding
+    assert.equal(issuerBranding.text, "Marca Exemplu")
+    assert.equal(issuerBranding.image.width, 1)
+    assert.equal(issuerBranding.image.height, 1)
+    assert.ok(issuerBranding.image.pngBase64.length > 0)
     const invoiceSeries = await handleApiRequest({
       method: "POST", url: "/api/document-series", authorization,
       body: { documentType: "invoice", series: "QWBE" },
@@ -234,13 +252,15 @@ void test("requires host authentication and serves the complete invoice-core rou
       body: undefined,
     }, runtime)
     assert.deepEqual(fetched.body, issued.body)
+    assert.equal(typeof (fetched.body as { issuer: { branding: { image: { pngBase64: string } } } }).issuer.branding.image.pngBase64, "string")
     const invoices = await handleApiRequest({
       method: "GET",
       url: "/api/invoices",
       authorization,
       body: undefined,
     }, runtime)
-    assert.deepEqual(invoices.body, { items: [issued.body], nextCursor: null })
+    assert.deepEqual(invoices.body, { items: [summaryOf(issued.body)], nextCursor: null })
+    assert.equal(JSON.stringify(invoices.body).includes("pngBase64"), false)
     assert.deepEqual(await handleApiRequest({
       method: "DELETE", url: `/api/invoices/${invoiceId}`, authorization, body: undefined,
     }, runtime), { status: 405, body: { error: "method_not_allowed" } })
@@ -316,10 +336,12 @@ void test("requires host authentication and serves the complete invoice-core rou
     assert.deepEqual(await handleApiRequest({
       method: "DELETE", url: `/api/drafts/${proformaDraftId}`, authorization, body: undefined,
     }, runtime), { status: 409, body: { error: "DomainConflict", code: "draft_already_issued" } })
-    assert.deepEqual((await handleApiRequest({ method: "GET", url: "/api/proformas", authorization, body: undefined }, runtime)).body, { items: [proforma.body], nextCursor: null })
+    const proformas = await handleApiRequest({ method: "GET", url: "/api/proformas", authorization, body: undefined }, runtime)
+    assert.deepEqual(proformas.body, { items: [summaryOf(proforma.body)], nextCursor: null })
+    assert.equal(JSON.stringify(proformas.body).includes("pngBase64"), false)
     assert.deepEqual((await handleApiRequest({ method: "GET",
       url: "/api/proformas?sourceApp=crm&sourceKind=offer&sourceId=offer-1", authorization, body: undefined }, runtime)).body,
-    { items: [proforma.body], nextCursor: null })
+    { items: [summaryOf(proforma.body)], nextCursor: null })
     assert.deepEqual((await handleApiRequest({ method: "GET", url: `/api/proformas/${proformaId}`, authorization, body: undefined }, runtime)).body, proforma.body)
     assert.equal((await handleApiRequest({ method: "GET", url: "/api/proformas/missing", authorization, body: undefined }, runtime)).status, 404)
     assert.equal((await handleApiRequest({ method: "POST", url: "/api/proformas/missing/invoice", authorization, idempotencyKey: "missing-proforma", body: {} }, runtime)).status, 404)
@@ -358,6 +380,18 @@ void test("requires host authentication and serves the complete invoice-core rou
     assert.equal(typeof ((await handleApiRequest({
       method: "GET", url: `/api/proformas/${proformaId}`, authorization, body: undefined,
     }, runtime)).body as { convertedInvoiceId: string | null }).convertedInvoiceId, "string")
+    assert.equal((await handleApiRequest({ method: "PUT", url: "/api/issuer", authorization,
+      body: { ...issuerBody, branding: { text: null, image: { dataBase64: "not-base64" } } } }, runtime)).status, 400)
+    const textBrand = await handleApiRequest({ method: "PUT", url: "/api/issuer", authorization,
+      body: { ...issuerBody, branding: { text: "  Marca text  ", image: null } } }, runtime)
+    assert.deepEqual((textBrand.body as { branding: unknown }).branding, { text: "Marca text", image: null })
+    const removedBrand = await handleApiRequest({ method: "PUT", url: "/api/issuer", authorization,
+      body: { ...issuerBody, branding: null } }, runtime)
+    assert.equal((removedBrand.body as { branding: unknown }).branding, null)
+    assert.equal(((await handleApiRequest({ method: "GET", url: "/api/issuer", authorization, body: undefined }, runtime))
+      .body as { branding: unknown }).branding, null)
+    assert.equal(typeof ((await handleApiRequest({ method: "GET", url: `/api/invoices/${invoiceId}`, authorization, body: undefined }, runtime))
+      .body as { issuer: { branding: { image: { pngBase64: string } } } }).issuer.branding.image.pngBase64, "string")
     const authoredBody = {
       customer: { partyType: "company", name: "Client CRM SRL", fiscalIdentifier: "RO87654329",
         address: { countryCode: "RO", city: "Iași", street: "Strada CRM 5" } },
@@ -382,7 +416,7 @@ void test("requires host authentication and serves the complete invoice-core rou
     { status: 409, body: { error: "DomainConflict", code: "idempotency_key_reused" } })
     assert.deepEqual((await handleApiRequest({ method: "GET",
       url: "/api/invoices?sourceApp=crm&sourceKind=contract&sourceId=contract-123", authorization, body: undefined }, runtime)).body,
-    { items: [directInvoice.body], nextCursor: null })
+    { items: [summaryOf(directInvoice.body)], nextCursor: null })
     assert.deepEqual((await handleApiRequest({ method: "GET",
       url: "/api/invoices?sourceApp=crm&sourceKind=contract&sourceId=missing", authorization, body: undefined }, runtime)).body, { items: [], nextCursor: null })
     assert.equal((await handleApiRequest({ method: "GET", url: "/api/invoices?limit=0", authorization, body: undefined }, runtime)).status, 400)
@@ -546,6 +580,7 @@ void test("carries document remarks through the HTTP contract and rejects invali
       address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" },
       defaultCurrency: "RON", defaultPaymentTermDays: 15,
       vatConfigurations: [{ code: "RO_STANDARD", rate: "21.00", effectiveFrom: "2025-08-01" }],
+      branding: null,
     })
     await call("POST", "/api/document-series", { documentType: "invoice", series: "QWBE" })
     await call("POST", "/api/document-series", { documentType: "proforma", series: "PRO" })

@@ -5,7 +5,6 @@ import { Effect } from "effect"
 import { PDFDocument } from "pdf-lib"
 
 import type { RenderableInvoice, RenderableProforma } from "../cube/invoicing/documents/index.ts"
-import { nameInitials } from "./pdf-layout.ts"
 import { createPdfRenderer, documentDateLine, formatAmount, formatRate, invoiceTemplateVersion, partyIdentifierLine, proformaTemplateVersion } from "./pdf-renderer.ts"
 
 const invoice: RenderableInvoice = {
@@ -19,6 +18,7 @@ const invoice: RenderableInvoice = {
   currency: "RON",
   notes: null,
   issuer: {
+    branding: null,
     name: "Știință și Tehnică SRL",
     fiscalIdentifier: "RO12345674",
     address: { countryCode: "RO", city: "Botoșani", street: "Strada Independenței 1" },
@@ -127,14 +127,6 @@ void test("compacts VAT rates without losing meaningful decimals", () => {
   assert.equal(formatRate("9"), "9")
 })
 
-void test("derives logo initials while skipping legal-form suffixes", () => {
-  assert.equal(nameInitials("QWBE Software S.R.L."), "QS")
-  assert.equal(nameInitials("Alpha Retail S.A."), "AR")
-  assert.equal(nameInitials("Știință și Tehnică SRL"), "ȘȘ")
-  assert.equal(nameInitials("SRL"), "S")
-  assert.equal(nameInitials(""), "?")
-})
-
 void test("keeps the redesigned template on a single page for a multi-rate invoice", async () => {
   const base = invoice.lines[0]
   assert.ok(base !== undefined)
@@ -175,7 +167,7 @@ void test("renders document remarks without truncation and keeps the proforma le
   assert.ok(base !== undefined)
   const crowded = await Effect.runPromise(renderer.render({
     ...invoice,
-    lines: Array.from({ length: 18 }, (_, index) => ({ ...base, description: `Poziția ${String(index + 1)}` })),
+    lines: Array.from({ length: 30 }, (_, index) => ({ ...base, description: `Poziția ${String(index + 1)}` })),
     notes: Array.from({ length: 10 }, (_, index) => `Paragraful ${String(index + 1)} cu observații detaliate.`).join("\n"),
   }))
   assert.ok((await PDFDocument.load(crowded.bytes, { updateMetadata: false })).getPageCount() > 1)

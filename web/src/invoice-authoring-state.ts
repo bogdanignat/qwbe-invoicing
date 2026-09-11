@@ -188,10 +188,14 @@ export const authoringDocumentPayload = (
   lines: ReadonlyArray<EditableInvoiceLine>,
 ): AuthoringDocumentInput => ({ ...createDraftPayload(form), currency: "RON", lines: lines.map(draftLinePayload) })
 
+const sameBuyerSnapshot = (left: BuyerSnapshot, right: BuyerSnapshot): boolean =>
+  (["partyType", "name", "fiscalIdentifier"] as const).every((key) => left[key] === right[key])
+  && (["countryCode", "city", "street", "county", "postalCode"] as const).every((key) => left.address[key] === right.address[key])
+
 export const authoringPayloadMatchesDraft = (payload: AuthoringDocumentInput, draft: DraftInvoice): boolean => {
   const sameBuyer = "customerId" in payload
     ? draft.customerId === payload.customerId
-    : draft.customerId === undefined && JSON.stringify(draft.customer) === JSON.stringify(payload.customer)
+    : draft.customerId === undefined && sameBuyerSnapshot(draft.customer, payload.customer)
   return sameBuyer && draft.series === payload.series && draft.issueDate === payload.issueDate
     && draft.dueDate === (payload.dueDate ?? null) && draft.currency === payload.currency
     && draft.notes === (payload.notes ?? null)

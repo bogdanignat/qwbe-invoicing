@@ -37,6 +37,12 @@ const context = (organizationId: string): RequestContextProvider => ({
 
 const clock: Clock = { now: Effect.succeed(new Date("2026-09-01T10:00:00.000Z")) }
 const each = { code: "C62", name: "unitate" } as const
+const branding = { normalize: () => Effect.succeed({ pngBase64: "iVBORw0KGgo=", width: 12, height: 6 }) }
+const summaryOf = <Document extends { readonly issuer: { readonly branding: unknown } }>(document: Document) => {
+  const issuer = { ...document.issuer }
+  delete issuer.branding
+  return { ...document, issuer }
+}
 let idempotencyCounter = 0
 const idempotent = <Input>(request: Input) => ({
   request,
@@ -57,6 +63,7 @@ void test("persists an issued snapshot across store recreation and isolates orga
       clock,
       ids: ids(),
       store: createSqliteStore(directory),
+      branding,
       cubeIdentity: "invoicing",
     })
     await Effect.runPromise(service.configureIssuer({
@@ -71,6 +78,7 @@ void test("persists an issued snapshot across store recreation and isolates orga
         rate: "21.00",
         effectiveFrom: "2025-08-01",
       }],
+      branding: { text: "  Marca A  ", image: { dataBase64: "iVBORw0KGgo=" } },
     }))
     await Effect.runPromise(service.addDocumentSeries({ documentType: "invoice", series: "QWBE" }))
     await Effect.runPromise(service.addDocumentSeries({ documentType: "invoice", series: "ALT" }))
@@ -118,6 +126,9 @@ void test("persists an issued snapshot across store recreation and isolates orga
       vatRateCode: "RO_STANDARD",
     }))
     const issued = await Effect.runPromise(service.issueInvoice(idempotent({ draftId: draft.id })))
+    assert.deepEqual(issued.issuer.branding, {
+      text: "Marca A", image: { pngBase64: "iVBORw0KGgo=", width: 12, height: 6 },
+    })
     const proformaSource = await Effect.runPromise(service.createDraft({
       customerId: customer.id, issueDate: "2026-09-01", dueDate: null, series: "QWBE",
       source: { app: "crm", kind: "offer", id: "offer-1" },
@@ -151,16 +162,20 @@ void test("persists an issued snapshot across store recreation and isolates orga
       clock,
       ids: ids(),
       store: createSqliteStore(directory),
+      branding,
       cubeIdentity: "invoicing",
     })
     assert.deepEqual(await Effect.runPromise(restarted.getIssuedInvoice(issued.id)), issued)
-    assert.deepEqual(await Effect.runPromise(restarted.listIssuedInvoices({ app: "crm", kind: "contract", id: "contract-1" })), { items: [issued], nextCursor: null })
+    assert.deepEqual((await Effect.runPromise(restarted.getIssuer())).branding, issued.issuer.branding)
+    assert.equal(JSON.stringify(await Effect.runPromise(restarted.listIssuedInvoices())).includes("pngBase64"), false)
+    assert.equal(JSON.stringify(await Effect.runPromise(restarted.listProformas())).includes("pngBase64"), false)
+    assert.deepEqual(await Effect.runPromise(restarted.listIssuedInvoices({ app: "crm", kind: "contract", id: "contract-1" })), { items: [summaryOf(issued)], nextCursor: null })
     assert.deepEqual(await Effect.runPromise(restarted.getIssuedInvoice(directInvoice.id)), directInvoice)
     assert.deepEqual(await Effect.runPromise(restarted.getProforma(proforma.id)), { ...proforma, convertedInvoiceId: converted.id })
     assert.deepEqual((await Effect.runPromise(restarted.listProformas())).items.find(({ id }) => id === proforma.id),
-      { ...proforma, convertedInvoiceId: converted.id })
+      summaryOf({ ...proforma, convertedInvoiceId: converted.id }))
     assert.deepEqual(await Effect.runPromise(restarted.listProformas({ app: "crm", kind: "offer", id: "offer-1" })),
-      { items: [{ ...proforma, convertedInvoiceId: converted.id }], nextCursor: null })
+      { items: [summaryOf({ ...proforma, convertedInvoiceId: converted.id })], nextCursor: null })
     assert.equal((await Effect.runPromise(restarted.getDraft(proformaSource.id))).status, "proforma_issued")
     assert.equal((await Effect.runPromise(restarted.getCustomer(customer.id))).defaultPaymentTermDays, 30)
     assert.deepEqual(await Effect.runPromise(restarted.listProductPresets()), { items: [preset], nextCursor: null })
@@ -194,12 +209,15 @@ void test("persists an issued snapshot across store recreation and isolates orga
       assert.throws(() => database.prepare("UPDATE issued_invoices SET issuer_postal_code = NULL WHERE id = ?")
         .run(issued.id))
       assert.throws(() => database.prepare("UPDATE issued_invoices SET source_id = 'changed' WHERE id = ?").run(issued.id))
+      assert.throws(() => database.prepare("UPDATE issued_invoices SET issuer_branding = NULL WHERE id = ?").run(issued.id))
       assert.throws(() => database.prepare("DELETE FROM issued_lines WHERE invoice_id = ?").run(issued.id))
       assert.throws(() => database.prepare("DELETE FROM issued_tax_breakdown WHERE invoice_id = ?").run(issued.id))
       assert.throws(() => database.prepare("DELETE FROM issued_invoices WHERE id = ?").run(issued.id))
       assert.throws(() => database.prepare("DELETE FROM invoice_drafts WHERE id = ?").run(draft.id))
       assert.throws(() => database.prepare("UPDATE proformas SET total_including_tax='0.00' WHERE id=?").run(proforma.id))
       assert.throws(() => database.prepare("UPDATE proformas SET source_id='changed' WHERE id=?").run(proforma.id))
+      assert.throws(() => database.prepare("UPDATE proformas SET issuer_branding=NULL WHERE id=?").run(proforma.id))
+      assert.throws(() => database.prepare("UPDATE issuers SET branding='not-json' WHERE organization_id='org-1'").run())
       assert.equal(database.prepare("SELECT sealed FROM proformas WHERE id=?").get(proforma.id)?.sealed, 1)
       assert.equal(database.prepare("SELECT actor_id FROM proforma_invoice_conversions WHERE proforma_id=?").get(proforma.id)?.actor_id, "user-1")
       assert.throws(() => database.prepare(`INSERT INTO proforma_lines(
@@ -248,10 +266,12 @@ void test("persists an issued snapshot across store recreation and isolates orga
       clock,
       ids: ids(),
       store: createSqliteStore(directory),
+      branding,
       cubeIdentity: "invoicing",
     })
     const failure = await Effect.runPromise(Effect.flip(otherOrganization.getIssuedInvoice(issued.id)))
     assert.equal(failure instanceof ResourceNotFound, true)
+    assert.equal(await Effect.runPromise(Effect.flip(otherOrganization.getIssuer())) instanceof ResourceNotFound, true)
     assert.equal(await Effect.runPromise(Effect.flip(otherOrganization.getProforma(proforma.id))) instanceof ResourceNotFound, true)
     assert.deepEqual(await Effect.runPromise(otherOrganization.listProductPresets()), { items: [], nextCursor: null })
     assert.equal(await Effect.runPromise(Effect.flip(otherOrganization.updateProductPreset({
@@ -323,13 +343,14 @@ void test("round-trips document remarks and keeps them immutable once issued", a
   try {
     applyMigrations(directory)
     const service = createInvoicingService({
-      context: context("org-1"), clock, ids: ids(), store: createSqliteStore(directory), cubeIdentity: "invoicing",
+      context: context("org-1"), clock, ids: ids(), store: createSqliteStore(directory), branding, cubeIdentity: "invoicing",
     })
     await Effect.runPromise(service.configureIssuer({
       name: "Exemplu SRL", fiscalIdentifier: "RO12345674",
       address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" },
       defaultCurrency: "RON", defaultPaymentTermDays: 15,
       vatConfigurations: [{ code: "RO_STANDARD", rate: "21.00", effectiveFrom: "2025-08-01" }],
+      branding: null,
     }))
     await Effect.runPromise(service.addDocumentSeries({ documentType: "invoice", series: "QWBE" }))
     await Effect.runPromise(service.addDocumentSeries({ documentType: "proforma", series: "PRO" }))
@@ -349,7 +370,7 @@ void test("round-trips document remarks and keeps them immutable once issued", a
       customer, series: "QWBE", proformaSeries: "PRO", issueDate: "2026-09-01", dueDate: null, currency: "RON", lines: [line], notes: remarks,
     })))
     const reopened = createSqliteStore(directory)
-    const readBack = createInvoicingService({ context: context("org-1"), clock, ids: ids(), store: reopened, cubeIdentity: "invoicing" })
+    const readBack = createInvoicingService({ context: context("org-1"), clock, ids: ids(), store: reopened, branding, cubeIdentity: "invoicing" })
     assert.equal((await Effect.runPromise(readBack.getIssuedInvoice(invoice.id))).notes, remarks)
     assert.equal((await Effect.runPromise(readBack.getProforma(proforma.id))).notes, remarks)
     assert.equal((await Effect.runPromise(readBack.listIssuedInvoices())).items[0]?.notes, remarks)
@@ -359,6 +380,8 @@ void test("round-trips document remarks and keeps them immutable once issued", a
     try {
       assert.throws(() => database.prepare("UPDATE issued_invoices SET notes = 'altceva' WHERE id = ?").run(invoice.id))
       assert.throws(() => database.prepare("UPDATE proformas SET notes = 'altceva' WHERE id = ?").run(proforma.id))
+      assert.throws(() => database.prepare("UPDATE issued_invoices SET issuer_branding = NULL WHERE id = ?").run(invoice.id))
+      assert.throws(() => database.prepare("UPDATE proformas SET issuer_branding = NULL WHERE id = ?").run(proforma.id))
       assert.throws(() => database.prepare("UPDATE invoice_drafts SET notes = ' cu spatii ' WHERE id = ?").run(open.id))
       assert.throws(() => database.prepare("UPDATE invoice_drafts SET notes = '' WHERE id = ?").run(open.id))
       database.prepare("UPDATE invoice_drafts SET notes = NULL WHERE id = ?").run(open.id)
