@@ -31,7 +31,8 @@ void test("SQLite registries page with a keyset cursor in issue-date, number and
     await Effect.runPromise(service.configureIssuer({
       name: "Exemplu SRL", fiscalIdentifier: "RO12345674", address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" },
       legalForm: "srl", tradeRegistryNumber: "J22/123/2020", iban: "RO49AAAA1B31007593840000", bankName: "Banca Română", socialCapital: "1000.00",
-      defaultCurrency: "RON", defaultPaymentTermDays: 15, vatConfigurations: [{ code: "RO_STANDARD", rate: "21.00", effectiveFrom: "2025-08-01" }], branding: null,
+      defaultCurrency: "RON", defaultPaymentTermDays: 15,
+      vatChange: { registered: true, effectiveFrom: "2025-08-01" }, branding: null,
     }))
     await Effect.runPromise(service.addDocumentSeries({ documentType: "invoice", series: "QWBE" }))
     const customer = { partyType: "company" as const, name: "Client SRL", fiscalIdentifier: "RO87654329", address: { countryCode: "RO", city: "Iași", street: "Strada 2" } }

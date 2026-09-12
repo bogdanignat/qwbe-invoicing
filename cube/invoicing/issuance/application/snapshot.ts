@@ -1,16 +1,18 @@
 import { Effect } from "effect"
 
 import type { InvoicingTransaction } from "../../application/ports.ts"
-import { copyIssuerSnapshot, copySource, missing } from "../../application/support.ts"
+import { checked, copyIssuerSnapshot, copySource, missing } from "../../application/support.ts"
 import { DomainConflict, ValidationFailure } from "../../contracts/failures.ts"
 import type { IdGenerator } from "../../contracts/host.ts"
 import type { DraftInvoice, IssuerSnapshot } from "../../domain/invoice.ts"
 import type { AuthoringDocumentInput } from "../../domain/inputs.ts"
 import { authorDocument } from "../../drafts/index.ts"
+import { validateVatForIssuance } from "../../registry/index.ts"
 
 type SnapshotContent = Omit<DraftInvoice, "id" | "status" | "customerId">
 
 export interface NumberedIdentity {
+  readonly actorId: string
   readonly id: string
   readonly series: string
   readonly number: number
@@ -32,7 +34,11 @@ export const issuanceSource = (
   input: AuthoringDocumentInput | { readonly draftId: string }, organizationId: string,
   transaction: InvoicingTransaction, ids: IdGenerator, kind: "invoice" | "proforma",
 ) => Effect.gen(function*() {
-  if (!("draftId" in input)) return { ...(yield* authorDocument(input, organizationId, transaction, ids)), draft: undefined }
+  if (!("draftId" in input)) {
+    const source = { ...(yield* authorDocument(input, organizationId, transaction, ids)), draft: undefined }
+    yield* checked(() => { validateVatForIssuance(source.issuer, source.document.issueDate, source.document.lines) })
+    return source
+  }
   const draft = yield* transaction.findDraft(organizationId, input.draftId)
   if (draft === undefined) return yield* Effect.fail(missing("draft", input.draftId))
   if (draft.status !== "draft") return yield* Effect.fail(new DomainConflict({
@@ -40,5 +46,7 @@ export const issuanceSource = (
   }))
   if (draft.lines.length === 0) return yield* Effect.fail(new ValidationFailure({ issues: [`${kind} must contain at least one line`] }))
   const issuer = yield* transaction.findIssuer(organizationId)
-  return issuer === undefined ? yield* Effect.fail(missing("issuer", organizationId)) : { document: draft, issuer, draft }
+  if (issuer === undefined) return yield* Effect.fail(missing("issuer", organizationId))
+  yield* checked(() => { validateVatForIssuance(issuer, draft.issueDate, draft.lines) })
+  return { document: draft, issuer, draft }
 })

@@ -7,32 +7,8 @@ import { today } from "./format.ts"
 import { invoicingClient, type IssuerInput } from "./invoicing-client.ts"
 import { beginBrandImageSelection, brandingDraftFromSaved, brandingImageSaveIssue, changeBrandImage, changeBrandText as changeBrandTextInDraft, createRevisionGuard, normalizeBrandText, removeBrandImage as removeBrandImageFromDraft, removeBranding as emptyBrandingDraft, validateBrandingDimensions, validateBrandingFile, validateBrandingFileInfo, type BrandingDraft, type RasterMime } from "./issuer-branding.ts"
 import { normalizeIssuerLegalDetails, type IssuerLegalDetails } from "./issuer-details.ts"
-import { inferRomanianVatDefaults, isNonVat, nearestConfiguredVat, normalizeRomanianCui, resolveVatValues, updateVatTimeline, vatRegistrationMismatch, vatTimelineMismatch, type VatValues } from "./vat-defaults.ts"
-
-const updateVatMismatch = (form: HTMLFormElement, registered: boolean): void => {
-  const message = vatRegistrationMismatch(formField(form, "countryCode"), formField(form, "fiscalIdentifier"), registered)
-  const fiscalIdentifier = form.elements.namedItem("fiscalIdentifier")
-  if (fiscalIdentifier instanceof HTMLInputElement) fiscalIdentifier.setCustomValidity(message ?? "")
-  const mismatch = form.querySelector<HTMLElement>("#vat-mismatch")
-  if (mismatch !== null) {
-    mismatch.hidden = message === undefined
-    if (message !== undefined) mismatch.textContent = message
-  }
-}
-
-const updateVatFields = (form: HTMLFormElement, registered: boolean, message: string): void => {
-  const code = form.elements.namedItem("vatRateCode")
-  const rate = form.elements.namedItem("vatRate")
-  const status = form.elements.namedItem("vatStatus")
-  if (!(code instanceof HTMLInputElement) || !(rate instanceof HTMLInputElement)) return
-  const resolved = resolveVatValues(registered, { code: code.value.trim(), rate: rate.value.trim() })
-  code.value = resolved.code
-  rate.value = resolved.rate
-  code.readOnly = !registered
-  rate.readOnly = !registered
-  if (status instanceof HTMLOutputElement) status.value = message
-  updateVatMismatch(form, registered)
-}
+import { fallbackVatRegistration, normalizeRomanianCui, shouldApplyVatInference, vatRegistrationHistory } from "./vat-defaults.ts"
+import { useVatCatalogue } from "./vat-hooks.ts"
 
 const decodeImageDimensions = async (blob: Blob): Promise<{ readonly width: number; readonly height: number }> => {
   if (typeof createImageBitmap === "function") {
@@ -59,15 +35,24 @@ const bytesToBase64 = (bytes: Uint8Array): string => {
 export const useIssuerSettings = (notify: (message: string) => void) => {
   const queryClient = useQueryClient()
   const issuerQuery = useQuery({ queryKey: ["issuer"], queryFn: ({ signal }) => runUiEffect(invoicingClient.getIssuer(), signal) })
+  const catalogueQuery = useVatCatalogue()
   const [brandingOverride, setBrandingOverride] = useState<BrandingDraft | undefined>()
   const [brandingError, setBrandingError] = useState<Error | null>(null)
   const [imageError, setImageError] = useState<Error | null>(null)
   const [issuerDetailsError, setIssuerDetailsError] = useState<Error | null>(null)
   const [imagePending, setImagePending] = useState(false)
   const [formVersion, setFormVersion] = useState(0)
+  const [vatOverride, setVatOverride] = useState<{ readonly registered: boolean; readonly effectiveFrom: string; readonly status: string }>()
+  const manualVat = useRef(false)
+  const latestFiscalIdentifier = useRef(issuerQuery.data?.fiscalIdentifier ?? "")
+  const vatInferenceGuard = useRef(createRevisionGuard())
   const fileGuard = useRef(createRevisionGuard())
   const editGuard = useRef(createRevisionGuard())
   const issuer = issuerQuery.data ?? undefined
+  const fallbackVat = issuer?.currentVat == null ? fallbackVatRegistration(issuer?.vatConfigurations ?? [], today()) : undefined
+  const savedVat = issuer?.currentVat ?? fallbackVat
+  const vatRegistered = vatOverride?.registered ?? savedVat?.registered ?? true
+  const vatEffectiveFrom = vatOverride?.effectiveFrom ?? savedVat?.effectiveFrom ?? today()
   const branding = brandingOverride ?? brandingDraftFromSaved(issuer?.branding ?? null)
 
   const saveIssuer = useMutation({
@@ -77,13 +62,34 @@ export const useIssuerSettings = (notify: (message: string) => void) => {
       await queryClient.invalidateQueries({ queryKey: ["issuer"] })
       if (editGuard.current.isCurrent(variables.revision)) {
         fileGuard.current.invalidate()
+        vatInferenceGuard.current.invalidate()
         setBrandingOverride(undefined)
         setBrandingError(null)
         setImageError(null)
         setIssuerDetailsError(null)
+        setVatOverride(undefined)
+        manualVat.current = false
         setFormVersion((value) => value + 1)
       }
       notify("Datele firmei au fost salvate.")
+    },
+  })
+  const inferVatRegistration = useMutation({
+    mutationFn: ({ inference }: { readonly inference: { readonly countryCode: string; readonly fiscalIdentifier: string }; readonly revision: number }) =>
+      runUiEffect(invoicingClient.getVatCatalogue(inference)),
+    onSuccess: ({ inferredRegistration }, { inference, revision }) => {
+      if (inferredRegistration === null || !shouldApplyVatInference({
+        requestedFiscalIdentifier: inference.fiscalIdentifier,
+        currentFiscalIdentifier: latestFiscalIdentifier.current,
+        requestIsCurrent: vatInferenceGuard.current.isCurrent(revision),
+        manuallySelectedVat: manualVat.current,
+      })) return
+      setVatOverride({
+        registered: inferredRegistration, effectiveFrom: today(),
+        status: inferredRegistration
+          ? "Prefix RO detectat: regimul plătitor de TVA este propus; îl poți schimba manual."
+          : "CUI fără prefix RO: regimul neplătitor de TVA este propus; îl poți schimba manual.",
+      })
     },
   })
 
@@ -161,20 +167,6 @@ export const useIssuerSettings = (notify: (message: string) => void) => {
     const postalCode = formField(form, "postalCode")
     const countryCode = "RO"
     const fiscalIdentifier = formField(form, "fiscalIdentifier")
-    const registration = form.elements.namedItem("vatRegistered")
-    const registered = registration instanceof HTMLInputElement && registration.checked
-    const vat = resolveVatValues(registered, { code: formField(form, "vatRateCode"), rate: formField(form, "vatRate") })
-    const existingConfigurations = issuer?.vatConfigurations ?? []
-    const vatConfigurations = updateVatTimeline(existingConfigurations, nearestConfiguredVat(existingConfigurations, today()), vat, formField(form, "taxEffectiveFrom"))
-    const mismatch = vatTimelineMismatch(countryCode, fiscalIdentifier, vatConfigurations)
-    const taxIdentifierInput = form.elements.namedItem("fiscalIdentifier")
-    if (taxIdentifierInput instanceof HTMLInputElement) taxIdentifierInput.setCustomValidity(mismatch ?? "")
-    if (mismatch !== undefined) {
-      const warning = form.querySelector<HTMLElement>("#vat-mismatch")
-      if (warning !== null) { warning.hidden = false; warning.textContent = mismatch }
-      if (taxIdentifierInput instanceof HTMLInputElement) taxIdentifierInput.reportValidity()
-      return
-    }
     let brandText: string | null
     try { brandText = normalizeBrandText(branding.text) } catch (cause) {
       setBrandingError(cause instanceof Error ? cause : new Error("Textul de brand este invalid."))
@@ -199,50 +191,53 @@ export const useIssuerSettings = (notify: (message: string) => void) => {
         name: formField(form, "name"), fiscalIdentifier,
         address: { countryCode, city: formField(form, "city"), street: formField(form, "street"), ...(county === "" ? {} : { county }), ...(postalCode === "" ? {} : { postalCode }) },
         ...legalDetails,
-        defaultCurrency: "RON", defaultPaymentTermDays: Number(formField(form, "defaultPaymentTermDays")), vatConfigurations,
+        defaultCurrency: "RON", defaultPaymentTermDays: Number(formField(form, "defaultPaymentTermDays")),
+        vatChange: { registered: vatRegistered, effectiveFrom: formField(form, "taxEffectiveFrom") },
         branding: brandText === null && image === null ? null : { text: brandText, image: image === null ? null : { dataBase64: image.dataBase64 } },
       },
     })
   }
 
-  const tax = nearestConfiguredVat(issuer?.vatConfigurations ?? [], today())
-  const countryCode = "RO"
   const fiscalIdentifier = issuer?.fiscalIdentifier ?? ""
-  const configuredVat: VatValues = { code: tax?.code ?? "RO_STANDARD", rate: tax?.rate ?? "21.00" }
-  const inferredVat = inferRomanianVatDefaults(countryCode, fiscalIdentifier)
-  const vatRegistered = issuer === undefined ? (inferredVat?.registered ?? true) : !isNonVat(configuredVat)
-  const vatMismatchMessage = issuer === undefined
-    ? vatRegistrationMismatch(countryCode, fiscalIdentifier, vatRegistered)
-    : vatTimelineMismatch(countryCode, fiscalIdentifier, issuer.vatConfigurations)
+  const catalogue = catalogueQuery.data
+  const vatHistory = catalogue === undefined || issuer === undefined ? [] : vatRegistrationHistory(issuer.vatConfigurations, catalogue)
 
   return {
-    issuerQuery, issuer, formKey: `${issuer?.organizationId ?? "new"}-${String(formVersion)}`,
-    tax, fiscalIdentifier, configuredVat, vatRegistered, vatMismatchMessage,
+    issuerQuery, catalogueQuery, issuer, formKey: `${issuer?.organizationId ?? "new"}-${String(formVersion)}`,
+    fiscalIdentifier, vatRegistered, vatEffectiveFrom, vatHistory,
     submit,
-    save: { pending: saveIssuer.isPending, error: issuerDetailsError ?? saveIssuer.error },
+    save: { pending: saveIssuer.isPending, error: issuerDetailsError ?? saveIssuer.error }, vatInferenceError: inferVatRegistration.error,
     branding: { ...branding, error: brandingError, imageError, discardRejectedImage, pending: imagePending, changeText: changeBrandText, selectImage: selectBrandImage, removeImage: removeBrandImage, removeAll: removeBranding },
-    normalizeFiscalIdentifier: (input: HTMLInputElement) => { input.setCustomValidity(""); input.value = normalizeRomanianCui(input.value) },
+    normalizeFiscalIdentifier: (input: HTMLInputElement) => {
+      input.setCustomValidity("")
+      input.value = normalizeRomanianCui(input.value)
+      latestFiscalIdentifier.current = input.value
+      vatInferenceGuard.current.invalidate()
+    },
     inferVat: (input: HTMLInputElement) => {
-      const form = input.form
-      const registration = form?.elements.namedItem("vatRegistered")
-      if (form === null || !(registration instanceof HTMLInputElement)) return
-      const inferred = inferRomanianVatDefaults(formField(form, "countryCode"), formField(form, "fiscalIdentifier"))
-      if (registration.dataset.manual === "true") { updateVatMismatch(form, registration.checked); return }
-      if (inferred === undefined) return
-      registration.checked = inferred.registered
-      updateVatFields(form, inferred.registered, inferred.registered ? "Prefix RO detectat: firma este propusă ca plătitoare de TVA." : "CUI fără prefix RO: firma este propusă ca neplătitoare de TVA, cu cotă 0%.")
+      if (input.form === null) return
+      latestFiscalIdentifier.current = input.value
+      inferVatRegistration.mutate({
+        inference: { countryCode: formField(input.form, "countryCode"), fiscalIdentifier: input.value },
+        revision: vatInferenceGuard.current.begin(),
+      })
     },
-    changeVatRegistration: (registration: HTMLInputElement) => {
-      const form = registration.form
-      if (form === null) return
-      registration.dataset.manual = "true"
-      const effectiveFrom = form.elements.namedItem("taxEffectiveFrom")
-      if (effectiveFrom instanceof HTMLInputElement) effectiveFrom.value = today()
-      updateVatFields(form, registration.checked, registration.checked ? "Firma a fost marcată explicit ca plătitoare de TVA." : "Firma a fost marcată explicit ca neplătitoare de TVA, cu cotă 0%.")
+    changeVatRegistration: (registered: boolean) => {
+      manualVat.current = true
+      vatInferenceGuard.current.invalidate()
+      setVatOverride({ registered, effectiveFrom: today(), status: registered
+        ? "Regimul plătitor de TVA a fost ales manual."
+        : "Regimul neplătitor de TVA a fost ales manual." })
     },
-    markVatEffectiveToday: (input: HTMLInputElement) => {
-      const effectiveFrom = input.form?.elements.namedItem("taxEffectiveFrom")
-      if (effectiveFrom instanceof HTMLInputElement) effectiveFrom.value = today()
+    changeVatEffectiveFrom: (effectiveFrom: string) => {
+      manualVat.current = true
+      vatInferenceGuard.current.invalidate()
+      setVatOverride({ registered: vatRegistered, effectiveFrom, status: vatOverride?.status ?? "Data schimbării regimului TVA a fost modificată." })
     },
+    vatStatus: vatOverride?.status ?? (fallbackVat?.timing === "scheduled"
+      ? `Regimul ${vatRegistered ? "plătitor" : "neplătitor"} de TVA este programat de la ${fallbackVat.effectiveFrom}.`
+      : fallbackVat?.timing === "expired"
+        ? `Ultimul regim ${vatRegistered ? "plătitor" : "neplătitor"} de TVA a expirat; alege data unei schimbări pentru reactivare.`
+        : vatRegistered ? "Firma este configurată ca plătitoare de TVA." : "Firma este configurată ca neplătitoare de TVA."),
   }
 }

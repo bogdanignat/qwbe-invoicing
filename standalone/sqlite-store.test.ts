@@ -15,7 +15,7 @@ import {
   type IdGenerator,
   type RequestContextProvider,
 } from "../cube/invoicing/index.ts"
-import { PersistenceFailure as PaymentsPersistenceFailure } from "../cube/payments/index.ts"
+import { PersistenceFailure as PaymentsPersistenceFailure, createPaymentsService } from "../cube/payments/index.ts"
 import { applyMigrations, databasePath } from "./migrations.ts"
 import { createSqlitePaymentsStore, createSqliteStore } from "./sqlite-store.ts"
 
@@ -25,7 +25,10 @@ const permissions = [
   "invoicing:invoice.draft",
   "invoicing:invoice.issue",
   "invoicing:proforma.issue",
+  "invoicing:invoice.void",
   "invoicing:settings.manage",
+  "payments:read",
+  "payments:payment.record",
 ]
 
 const context = (organizationId: string): RequestContextProvider => ({
@@ -58,10 +61,11 @@ void test("persists an issued snapshot across store recreation and isolates orga
   const directory = mkdtempSync(join(tmpdir(), "qwbe-sqlite-store-"))
   try {
     applyMigrations(directory)
+    const idGenerator = ids()
     const service = createInvoicingService({
       context: context("org-1"),
       clock,
-      ids: ids(),
+      ids: idGenerator,
       store: createSqliteStore(directory),
       branding,
       cubeIdentity: "invoicing",
@@ -77,12 +81,7 @@ void test("persists an issued snapshot across store recreation and isolates orga
       socialCapital: "1000.00",
       defaultCurrency: "RON",
       defaultPaymentTermDays: 15,
-      vatConfigurations: [{
-        code: "RO_STANDARD",
-
-        rate: "21.00",
-        effectiveFrom: "2025-08-01",
-      }],
+      vatChange: { registered: true, effectiveFrom: "2025-08-01" },
       branding: { text: "  Marca A  ", image: { dataBase64: "iVBORw0KGgo=" } },
     }))
     await Effect.runPromise(service.addDocumentSeries({ documentType: "invoice", series: "QWBE" }))
@@ -131,6 +130,14 @@ void test("persists an issued snapshot across store recreation and isolates orga
       vatRateCode: "RO_STANDARD",
     }))
     const issued = await Effect.runPromise(service.issueInvoice(idempotent({ draftId: draft.id })))
+    assert.equal(issued.actorId, "user-1")
+    const paymentService = createPaymentsService({
+      context: context("org-1"), clock, ids: idGenerator, store: createSqlitePaymentsStore(directory), cubeIdentity: "payments",
+    })
+    const paymentAttempt = idempotent({ invoiceId: issued.id, amount: "25", currency: "RON", paymentDate: "2026-09-01", method: "transfer" })
+    const payment = await Effect.runPromise(paymentService.recordPayment(paymentAttempt))
+    assert.equal(payment.payment.actorId, "user-1")
+    assert.deepEqual(await Effect.runPromise(paymentService.recordPayment(paymentAttempt)), payment)
     assert.deepEqual(issued.issuer.branding, {
       text: "Marca A", image: { pngBase64: "iVBORw0KGgo=", width: 12, height: 6 },
     })
@@ -142,6 +149,7 @@ void test("persists an issued snapshot across store recreation and isolates orga
       draftId: proformaSource.id, description: "Avans", quantity: "1", unitPrice: "50", unitOfMeasure: each, vatRateCode: "RO_STANDARD",
     }))
     const proforma = await Effect.runPromise(service.issueProforma(idempotent({ draftId: proformaSource.id, series: "PRO" })))
+    assert.equal(proforma.actorId, "user-1")
     assert.equal(proforma.convertedDraftId, null)
     assert.equal((await Effect.runPromise(service.getProforma(proforma.id))).convertedDraftId, null)
     assert.equal((await Effect.runPromise(service.listProformas())).items[0]?.convertedDraftId, null)
@@ -161,11 +169,15 @@ void test("persists an issued snapshot across store recreation and isolates orga
     assert.equal((await Effect.runPromise(service.getProforma(directProforma.id))).convertedInvoiceId, directInvoice.id)
     const duplicateDirect = await Effect.runPromise(Effect.flip(service.issueInvoiceFromProforma(idempotent({ proformaId: directProforma.id }))))
     assert.equal(duplicateDirect instanceof DomainConflict && duplicateDirect.code === "proforma_already_converted", true)
+    const correction = await Effect.runPromise(service.createCorrection(idempotent({
+      originalInvoiceId: issued.id, reason: "Corecție fiscală",
+    })))
+    assert.equal(correction.actorId, "user-1")
 
     const restarted = createInvoicingService({
       context: context("org-1"),
       clock,
-      ids: ids(),
+      ids: idGenerator,
       store: createSqliteStore(directory),
       branding,
       cubeIdentity: "invoicing",
@@ -216,6 +228,21 @@ void test("persists an issued snapshot across store recreation and isolates orga
       assert.throws(() => database.prepare("UPDATE issued_invoices SET source_id = 'changed' WHERE id = ?").run(issued.id))
       assert.throws(() => database.prepare("UPDATE issued_invoices SET issuer_branding = NULL WHERE id = ?").run(issued.id))
       assert.throws(() => database.prepare("UPDATE issued_invoices SET issuer_iban = '' WHERE id = ?").run(issued.id))
+      assert.throws(() => database.prepare("UPDATE issued_invoices SET actor_id = 'other' WHERE id = ?").run(issued.id))
+      assert.throws(() => database.prepare("UPDATE proformas SET actor_id = 'other' WHERE id = ?").run(proforma.id))
+      assert.throws(() => database.prepare("UPDATE correction_documents SET actor_id = 'other' WHERE id = ?").run(correction.id))
+      const trail = database.prepare("SELECT actor_id,action,target_kind,target_id FROM audit_events WHERE organization_id=? ORDER BY occurred_at,id")
+        .all("org-1").map((row) => ({ ...row }))
+      assert.ok(trail.some((event) => event.actor_id === "user-1" && event.action === "invoice.issued"
+        && event.target_kind === "invoice" && event.target_id === issued.id))
+      assert.ok(trail.some((event) => event.actor_id === "user-1" && event.action === "proforma.issued"
+        && event.target_kind === "proforma" && event.target_id === proforma.id))
+      assert.ok(trail.some((event) => event.actor_id === "user-1" && event.action === "payment.recorded"
+        && event.target_kind === "payment" && event.target_id === payment.payment.id))
+      assert.ok(trail.some((event) => event.actor_id === "user-1" && event.action === "correction.created"
+        && event.target_kind === "correction" && event.target_id === correction.id))
+      assert.throws(() => database.prepare("UPDATE audit_events SET actor_id='other' WHERE organization_id=?").run("org-1"))
+      assert.throws(() => database.prepare("DELETE FROM audit_events WHERE organization_id=?").run("org-1"))
       assert.throws(() => database.prepare("DELETE FROM issued_lines WHERE invoice_id = ?").run(issued.id))
       assert.throws(() => database.prepare("DELETE FROM issued_tax_breakdown WHERE invoice_id = ?").run(issued.id))
       assert.throws(() => database.prepare("DELETE FROM issued_invoices WHERE id = ?").run(issued.id))
@@ -362,7 +389,7 @@ void test("round-trips document remarks and keeps them immutable once issued", a
       legalForm: "srl", tradeRegistryNumber: "J22/123/2020", iban: "RO49AAAA1B31007593840000",
       bankName: "Banca Română", socialCapital: "1000.00",
       defaultCurrency: "RON", defaultPaymentTermDays: 15,
-      vatConfigurations: [{ code: "RO_STANDARD", rate: "21.00", effectiveFrom: "2025-08-01" }],
+      vatChange: { registered: true, effectiveFrom: "2025-08-01" },
       branding: null,
     }))
     await Effect.runPromise(service.addDocumentSeries({ documentType: "invoice", series: "QWBE" }))

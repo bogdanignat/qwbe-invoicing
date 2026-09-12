@@ -11,6 +11,7 @@ const issuer: Issuer = {
   iban: "RO49AAAA1B31007593840000", bankName: "Banca Exemplu cu denumire suficient de lungă", socialCapital: "",
   address: { countryCode: "RO", city: "Botoșani", street: "Strada 2" }, branding: null,
   defaultCurrency: "RON", defaultPaymentTermDays: 15, vatConfigurations: [],
+  currentVat: { registered: true, effectiveFrom: "2025-08-01" },
 }
 
 void test("renders issuer legal and payment details without an empty PFA capital line", async (context) => {

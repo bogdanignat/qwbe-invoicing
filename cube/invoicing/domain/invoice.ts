@@ -171,6 +171,7 @@ interface NumberedDocumentSnapshot extends DocumentContent {
   readonly series: string
   readonly number: number
   readonly issuedAt: string
+  readonly actorId: string
   readonly issuer: IssuerSnapshot
 }
 
@@ -191,6 +192,17 @@ export interface Proforma extends NumberedDocumentSnapshot {
 }
 
 export type ProformaSummary = Omit<Proforma, "issuer"> & { readonly issuer: IssuerCompanySnapshot }
+
+export interface AuditEvent {
+  readonly id: string
+  readonly organizationId: string
+  readonly actorId: string
+  readonly occurredAt: string
+  readonly action: string
+  readonly targetKind: string
+  readonly targetId: string
+  readonly reason?: string
+}
 
 export type ProformaConversion = Readonly<{
   proformaId: string

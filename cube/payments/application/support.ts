@@ -3,7 +3,7 @@ import { Effect } from "effect"
 import { PermissionDenied, ResourceNotFound, type PaymentsFailure } from "../contracts/failures.ts"
 import type { Clock, IdGenerator, RequestContext, RequestContextProvider, TransactionalStore } from "../contracts/host.ts"
 import { derivePaymentStatus, formatMinor, moneyMinor, sumPaymentsMinor, type Payment, type PaymentStatus } from "../domain/payments.ts"
-import type { InvoiceSnapshot, PaymentsTransaction } from "./ports.ts"
+import type { AuditEvent, InvoiceSnapshot, PaymentsTransaction } from "./ports.ts"
 
 export interface PaymentsDependencies {
   readonly context: RequestContextProvider
@@ -31,6 +31,12 @@ export const summarize = (invoice: InvoiceSnapshot, payments: ReadonlyArray<Paym
     paidAmount: formatMinor(paid < 0n ? 0n : paid), remainingAmount: formatMinor(remaining < 0n ? 0n : remaining),
   }
 }
+export const recordAuditEvent = (
+  transaction: PaymentsTransaction, context: RequestContext, dependencies: PaymentsDependencies, occurredAt: Date,
+  event: Pick<AuditEvent, "action" | "targetKind" | "targetId" | "reason">,
+) => Effect.flatMap(dependencies.ids.next, (id) => transaction.appendAuditEvent({
+  id, organizationId: context.organization.id, actorId: context.identity.id, occurredAt: occurredAt.toISOString(), ...event,
+}))
 export const missingInvoice = (id: string) => new ResourceNotFound({ resource: "invoice", id })
 export const missingPayment = (id: string) => new ResourceNotFound({ resource: "payment", id })
 

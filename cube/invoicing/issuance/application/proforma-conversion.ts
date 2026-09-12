@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 
 import { findIdempotencyReplay, idempotencyRecord, missingIdempotencyResult } from "../../application/idempotency.ts"
-import { checked, ensureChronology, missing, type Authorize, type OperationDependencies } from "../../application/support.ts"
+import { checked, missing, recordAuditEvent, type Authorize, type OperationDependencies } from "../../application/support.ts"
 import { DomainConflict, type InvoicingFailure } from "../../contracts/failures.ts"
 import type { InvoicingPermissions } from "../../contracts/permissions.ts"
 import type { ConvertProformaInput } from "../../domain/inputs.ts"
@@ -9,6 +9,7 @@ import type { Idempotent, IssuedInvoice } from "../../domain/invoice.ts"
 import { calendarDate } from "../../domain/validation.ts"
 import { validateIssuerForIssuance } from "../../registry/index.ts"
 import { fiscalYear, numberedSnapshot } from "./snapshot.ts"
+import { ensureChronology } from "./invoices.ts"
 
 const dayMs = 86_400_000
 const daysBetween = (from: string, to: string): number => Math.round((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${from}T00:00:00Z`)) / dayMs)
@@ -50,7 +51,7 @@ export const createProformaConversionOperations = (
         draftId: null, sourceProformaId: proforma.id, eFacturaStatus: "not_sent",
         ...numberedSnapshot({ ...proforma, issueDate, dueDate }, proforma.issuer, { id, series: proforma.invoiceSeries,
           number: yield* transaction.allocateDocumentNumber(context.organization.id, fiscalYear(issueDate), "invoice", proforma.invoiceSeries),
-          issuedAt: convertedAt }),
+          issuedAt: convertedAt, actorId: context.identity.id }),
       }
       yield* transaction.saveIssuedInvoice(invoice)
       yield* transaction.saveProformaInvoiceConversion({ proformaId: proforma.id, organizationId: context.organization.id,
@@ -58,6 +59,12 @@ export const createProformaConversionOperations = (
       yield* transaction.saveIdempotencyRecord(idempotencyRecord(
         context.organization.id, idempotency, operation, "invoice", invoice.id, convertedAt.toISOString(),
       ))
+      yield* recordAuditEvent(transaction, context, dependencies.ids, convertedAt, {
+        action: "proforma.converted", targetKind: "proforma", targetId: proforma.id,
+      })
+      yield* recordAuditEvent(transaction, context, dependencies.ids, convertedAt, {
+        action: "invoice.issued", targetKind: "invoice", targetId: invoice.id,
+      })
       return structuredClone(invoice)
     }))
   })

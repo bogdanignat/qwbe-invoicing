@@ -5,8 +5,9 @@ import { negateMoney, validateCreateCorrectionInput, type CorrectionDocument, ty
 import type { DocumentSource, Idempotent } from "../../domain/invoice.ts"
 import { calendarDate, validateDocumentSource } from "../../domain/validation.ts"
 import { findIdempotencyReplay, idempotencyRecord, missingIdempotencyResult } from "../../application/idempotency.ts"
-import { checked, copyBuyer, copyIssuerCompanySnapshot, copySource, ensureChronology, missing, type Authorize, type OperationDependencies } from "../../application/support.ts"
+import { checked, copyBuyer, copyIssuerCompanySnapshot, copySource, missing, recordAuditEvent, type Authorize, type OperationDependencies } from "../../application/support.ts"
 import { validateIssuerForIssuance } from "../../registry/index.ts"
+import { ensureChronology } from "./chronology.ts"
 const fy = (d: string): number => Number(d.slice(0, 4))
 export const createCorrectionOperations = (d: OperationDependencies, perms: InvoicingPermissions, auth: Authorize) => {
   const createCorrection = ({ request: input, idempotency }: Idempotent<CreateCorrectionInput>): Effect.Effect<CorrectionDocument, InvoicingFailure> => Effect.gen(function*() {
@@ -49,7 +50,8 @@ export const createCorrectionOperations = (d: OperationDependencies, perms: Invo
       const negLines = orig.lines.map((l) => ({ ...l, totalExcludingVat: negateMoney(l.totalExcludingVat), vatAmount: negateMoney(l.vatAmount), totalIncludingVat: negateMoney(l.totalIncludingVat) }))
       const negBreakdown = orig.vatBreakdown.map((t) => ({ ...t, vatBaseAmount: negateMoney(t.vatBaseAmount), vatAmount: negateMoney(t.vatAmount) }))
       const corr: CorrectionDocument = {
-        id, organizationId: ctx.organization.id, originalInvoiceId: orig.id, fiscalYear: fy(issueDate), series: orig.series, number, issueDate, issuedAt, reason: input.reason.trim(), currency: orig.currency,
+        id, organizationId: ctx.organization.id, originalInvoiceId: orig.id, fiscalYear: fy(issueDate), series: orig.series, number, issueDate, issuedAt,
+        reason: input.reason.trim(), actorId: ctx.identity.id, currency: orig.currency,
         ...(source === undefined ? {} : { source: copySource(source) }),
         issuer: copyIssuerCompanySnapshot(orig.issuer), customer: copyBuyer(orig.customer),
         lines: negLines, vatBreakdown: negBreakdown,
@@ -59,6 +61,9 @@ export const createCorrectionOperations = (d: OperationDependencies, perms: Invo
       yield* tx.saveIdempotencyRecord(idempotencyRecord(
         ctx.organization.id, idempotency, operation, "correction", corr.id, issuedAt,
       ))
+      yield* recordAuditEvent(tx, ctx, d.ids, now, {
+        action: "correction.created", targetKind: "correction", targetId: corr.id, reason: corr.reason,
+      })
       return structuredClone(corr)
     }))
   })

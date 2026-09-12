@@ -50,10 +50,11 @@ const withFixture = async (run: (fixture: Fixture) => Promise<void>, options: Fi
       return peer
     } }),
   }
-  const server = startServer({
+  const running = await startServer({
     host: "127.0.0.1", port: 0, dataDirectory: directory,
     nodeEnvironment: "test", authTokenFile: tokenFile, organizationId: "org-1",
   }, () => true, undefined, deps)
+  const { server } = running
   try {
     if (!server.listening) await once(server, "listening")
     const address = server.address() as AddressInfo
@@ -66,9 +67,7 @@ const withFixture = async (run: (fixture: Fixture) => Promise<void>, options: Fi
     })
   } finally {
     server.closeAllConnections()
-    await new Promise<void>((resolve, reject) => {
-      server.close((error) => { if (error === undefined) resolve(); else reject(error) })
-    })
+    await running.close()
     rmSync(directory, { recursive: true, force: true })
   }
 }

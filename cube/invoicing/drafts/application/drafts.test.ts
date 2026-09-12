@@ -13,16 +13,15 @@ void test("authors snapshot-owned drafts and recalculates every server-derived a
     context: contextProvider({ identity, organization: { id: "org-1" } }), clock: fixedClock,
     ids: sequentialIds(), store: memoryStore(state), branding: brandingNormalizer, cubeIdentity: "invoicing",
   })
-  await Effect.runPromise(service.configureIssuer({
+  const issuer = {
     name: "Exemplu SRL", fiscalIdentifier: "RO12345674",
     address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" },
     legalForm: "srl", tradeRegistryNumber: "J40/123/2020", socialCapital: "200.00", iban: "", bankName: "",
     defaultCurrency: "RON", defaultPaymentTermDays: 15,
-    branding: null, vatConfigurations: [
-      { code: "RO_STANDARD", rate: "19", effectiveFrom: "2020-01-01", effectiveTo: "2025-07-31" },
-      { code: "RO_STANDARD", rate: "21", effectiveFrom: "2025-08-01" },
-    ],
-  }))
+    branding: null, vatChange: { registered: true, effectiveFrom: "2025-01-01" },
+  } as const
+  await Effect.runPromise(service.configureIssuer(issuer))
+  await Effect.runPromise(service.configureIssuer({ ...issuer, vatChange: { registered: true, effectiveFrom: "2025-08-01" } }))
   await Effect.runPromise(service.addDocumentSeries({ documentType: "invoice", series: "QWBE" }))
   const saved = await Effect.runPromise(service.createCustomer({
     partyType: "company", name: "Original SRL", fiscalIdentifier: "RO87654329",
@@ -95,7 +94,7 @@ void test("captures, replaces and clears free-form remarks on a draft", async ()
     address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" },
     legalForm: "srl", tradeRegistryNumber: "J40/123/2020", socialCapital: "200.00", iban: "", bankName: "",
     defaultCurrency: "RON", defaultPaymentTermDays: 15,
-    branding: null, vatConfigurations: [{ code: "RO_STANDARD", rate: "21", effectiveFrom: "2025-08-01" }],
+    branding: null, vatChange: { registered: true, effectiveFrom: "2025-08-01" },
   }))
   await Effect.runPromise(service.addDocumentSeries({ documentType: "invoice", series: "QWBE" }))
   const buyer = {

@@ -33,17 +33,16 @@ if (command !== undefined) {
     if (command.name === "serve") {
       let acceptingTraffic = true
       const storageReady = cachedReadiness(() => databaseReady(config.dataDirectory), readinessIntervalMs)
-      const server = startServer(config, () => acceptingTraffic && storageReady())
+      const running = await startServer(config, () => acceptingTraffic && storageReady())
       const close = () => {
         if (!acceptingTraffic) return
         acceptingTraffic = false
         const deadline = setTimeout(() => {
-          server.closeAllConnections()
+          running.server.closeAllConnections()
           process.exitCode = 1
         }, 10_000)
-        server.close(() => {
-          clearTimeout(deadline)
-          process.exitCode = 0
+        void running.close().then(() => { clearTimeout(deadline); process.exitCode = 0 }, () => {
+          clearTimeout(deadline); process.exitCode = 1
         })
       }
       process.once("SIGINT", close)

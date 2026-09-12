@@ -1,10 +1,11 @@
 import { Effect } from "effect"
 
 import { findIdempotencyReplay, idempotencyRecord, missingIdempotencyResult } from "../../application/idempotency.ts"
-import { checked, documentPageQuery, ensureChronology, missing, pageOf, type Authorize, type OperationDependencies, type Page, type PageRequest } from "../../application/support.ts"
-import type { InvoicingFailure } from "../../contracts/failures.ts"
+import { checked, documentPageQuery, missing, pageOf, recordAuditEvent, type Authorize, type OperationDependencies, type Page, type PageRequest } from "../../application/support.ts"
+import { ValidationFailure, type InvoicingFailure, type PersistenceFailure } from "../../contracts/failures.ts"
 import type { InvoicingPermissions } from "../../contracts/permissions.ts"
-import type { DocumentSource, Idempotent, IssuedInvoice, IssuedInvoiceSummary } from "../../domain/invoice.ts"
+import type { DocumentSource, Idempotent, IssuedInvoice, IssuedInvoiceSummary, NumberedDocumentType } from "../../domain/invoice.ts"
+import type { InvoicingTransaction } from "../../application/ports.ts"
 import type { AuthoringDocumentInput } from "../../domain/inputs.ts"
 import { calendarDate, validateDocumentSource } from "../../domain/validation.ts"
 import { validateIssuerForIssuance } from "../../registry/index.ts"
@@ -17,6 +18,15 @@ export interface InvoiceOperations {
   readonly getIssuedInvoice: (id: string) => Effect.Effect<IssuedInvoice, InvoicingFailure>
   readonly listIssuedInvoices: (source?: DocumentSource, page?: PageRequest) => Effect.Effect<Page<IssuedInvoiceSummary>, InvoicingFailure>
 }
+
+export const ensureChronology = (tx: InvoicingTransaction, org: string, kind: NumberedDocumentType, series: string,
+  issueDate: string, today: string): Effect.Effect<void, ValidationFailure | PersistenceFailure> => Effect.gen(function*() {
+  if (issueDate > today) return yield* Effect.fail(new ValidationFailure({ issues: ["issueDate cannot be in the future"] }))
+  const latest = yield* tx.findLatestIssueDate(org, Number(issueDate.slice(0, 4)), kind, series)
+  if (latest !== undefined && issueDate < latest) return yield* Effect.fail(new ValidationFailure({
+    issues: [`issueDate cannot be before ${latest}, the last ${kind} issued in series ${series}`],
+  }))
+})
 
 export const createInvoiceOperations = (
   dependencies: OperationDependencies,
@@ -40,7 +50,7 @@ export const createInvoiceOperations = (
       const number = yield* transaction.allocateDocumentNumber(context.organization.id, fiscalYear(document.issueDate), "invoice", document.series)
       const invoice: IssuedInvoice = {
         draftId: draft?.id ?? null, sourceProformaId: null,
-        ...numberedSnapshot(document, issuer, { id: invoiceId, series: document.series, number, issuedAt }),
+        ...numberedSnapshot(document, issuer, { id: invoiceId, series: document.series, number, issuedAt, actorId: context.identity.id }),
         eFacturaStatus: "not_sent",
       }
       yield* transaction.saveIssuedInvoice(invoice)
@@ -48,6 +58,9 @@ export const createInvoiceOperations = (
       yield* transaction.saveIdempotencyRecord(idempotencyRecord(
         context.organization.id, idempotency, operation, "invoice", invoice.id, issuedAt.toISOString(),
       ))
+      yield* recordAuditEvent(transaction, context, dependencies.ids, issuedAt, {
+        action: "invoice.issued", targetKind: "invoice", targetId: invoice.id,
+      })
       return structuredClone(invoice)
     }))
   })

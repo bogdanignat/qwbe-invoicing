@@ -3,7 +3,25 @@ import test from "node:test"
 
 import { ValidationFailure } from "../../contracts/failures.ts"
 import { validateParty } from "../../domain/validation.ts"
-import { validateCustomer, validateIssuer } from "./validation.ts"
+import { normalizeBrandingText, validateCustomer, validateIssuer as validateIssuerOn } from "./validation.ts"
+
+const validateIssuer = (issuer: Parameters<typeof validateIssuerOn>[0]): void => { validateIssuerOn(issuer, "2026-09-12") }
+
+void test("normalizes branding text and rejects all Unicode Other categories", () => {
+  assert.equal(normalizeBrandingText(null), null)
+  assert.equal(normalizeBrandingText("   "), null)
+  assert.equal(normalizeBrandingText("  Știință & Tehnică 😀  "), "Știință & Tehnică 😀")
+  assert.equal(normalizeBrandingText("W".repeat(80)), "W".repeat(80))
+  assert.equal(normalizeBrandingText("😀".repeat(80)), "😀".repeat(80))
+  assert.throws(() => normalizeBrandingText("😀".repeat(81)), ValidationFailure)
+  const disallowed = [
+    ["control", "\u0000"], ["format", "\u200b"], ["surrogate", "\ud800"],
+    ["private use", "\ue000"], ["unassigned", "\u0378"],
+  ] as const
+  for (const [category, character] of disallowed) {
+    assert.throws(() => normalizeBrandingText(`Studio${character}X`), ValidationFailure, category)
+  }
+})
 
 void test("validates Romanian CUI, country, and issuer currency", () => {
   const party = {
@@ -50,14 +68,14 @@ void test("validates Romanian CUI, country, and issuer currency", () => {
     fiscalIdentifier: "RO45561046",
     vatConfigurations: [{ code: "RO_NON_VAT", rate: "21", effectiveFrom: "2026-01-01" }],
   }) }, hasIssue("vat configuration RO_NON_VAT rate must be 0"))
-  assert.throws(() => { validateIssuer({
+  assert.doesNotThrow(() => { validateIssuer({
     ...issuer,
     fiscalIdentifier: "RO45561046",
     vatConfigurations: [
       { code: "RO_STANDARD", rate: "21", effectiveFrom: "2026-01-01", effectiveTo: "2026-12-31" },
       { code: "RO_NON_VAT", rate: "0", effectiveFrom: "2027-01-01" },
     ],
-  }) }, hasIssue("fiscalIdentifier with RO prefix requires a VAT-registered vat configuration"))
+  }) })
   assert.doesNotThrow(() => { validateIssuer({
     ...issuer,
     fiscalIdentifier: "RO45561046",

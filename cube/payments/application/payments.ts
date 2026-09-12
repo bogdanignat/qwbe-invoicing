@@ -5,7 +5,7 @@ import { legacyPaymentsPermissions, paymentsPermissions } from "../contracts/per
 import { formatMinor, moneyMinor, validateRecordPaymentInput, type Idempotent, type Payment, type RecordPaymentInput } from "../domain/payments.ts"
 import { findReplay, idempotencyRecord, validateAttempt } from "./idempotency.ts"
 import { createReversePayment } from "./reversals.ts"
-import { createAuthorize, missingInvoice, replayed, summarize, type InvoicePaymentSummary, type PaymentsDependencies, type RecordPaymentResult } from "./support.ts"
+import { createAuthorize, missingInvoice, recordAuditEvent, replayed, summarize, type InvoicePaymentSummary, type PaymentsDependencies, type RecordPaymentResult } from "./support.ts"
 
 export const createPaymentsService = (dependencies: PaymentsDependencies) => {
   const permissions = paymentsPermissions(dependencies.cubeIdentity)
@@ -31,6 +31,9 @@ export const createPaymentsService = (dependencies: PaymentsDependencies) => {
       }
       yield* transaction.savePayment(payment)
       yield* transaction.saveIdempotencyRecord(idempotencyRecord(context.organization.id, idempotency, "record_payment", payment.id, payment.createdAt))
+      yield* recordAuditEvent(transaction, context, dependencies, now, {
+        action: "payment.recorded", targetKind: "payment", targetId: payment.id,
+      })
       return { payment, ...summarize(invoice, [...existing, payment], now) }
     }))
   })

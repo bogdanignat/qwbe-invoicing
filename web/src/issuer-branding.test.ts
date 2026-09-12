@@ -40,6 +40,18 @@ void test("normalizes optional brand text by Unicode code points and rejects con
   assert.throws(() => normalizeBrandText("QWBE\u0000"), /control/)
 })
 
+void test("rejects all Unicode Other categories rejected by issuer branding validation", () => {
+  const disallowed = [
+    ["control", "\u0000"], ["format", "\u200b"], ["surrogate", "\ud800"],
+    ["private use", "\ue000"], ["unassigned", "\u0378"],
+  ] as const
+  for (const [category, character] of disallowed) {
+    assert.throws(() => normalizeBrandText(`Studio${character}X`), /control/, category)
+  }
+  assert.equal(normalizeBrandText("  Știință & Tehnică 😀  "), "Știință & Tehnică 😀")
+  assert.equal(normalizeBrandText("W".repeat(80)), "W".repeat(80))
+})
+
 void test("invalidates stale file selections, saves, removes, and resets", () => {
   const guard = createRevisionGuard()
   const first = guard.begin()

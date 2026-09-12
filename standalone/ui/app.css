@@ -139,9 +139,9 @@ input:hover, select:hover, textarea:hover { border-color: var(--color-invoice-co
 .branding-fields legend { margin-bottom: .8rem; color: var(--color-invoice-label); font-size: .82rem; font-weight: 800; }
 .branding-fields > [data-slot="button"] { justify-self: start; }
 .branding-preview { display: flex; flex-wrap: wrap; align-items: center; gap: 1rem; padding: .85rem; border-radius: var(--radius-invoice-control); background: var(--color-invoice-surface-subtle); }
-.issuer-brand { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; margin: .55rem 0 1rem; }
+.issuer-brand { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; min-width: 0; margin: .55rem 0 1rem; }
 .issuer-brand img { display: block; width: auto; max-width: 180px; height: auto; max-height: 72px; object-fit: contain; }
-.issuer-brand p { margin: 0; color: var(--color-invoice-ink); font-family: var(--font-invoice-display); font-size: 1.05rem; font-weight: 700; line-height: 1.25; white-space: pre-wrap; }
+.issuer-brand p { min-width: 0; margin: 0; color: var(--color-invoice-ink); font-family: var(--font-invoice-display); font-size: 1.05rem; font-weight: 700; line-height: 1.25; white-space: pre-wrap; overflow-wrap: anywhere; }
 .inline-form { display: grid; grid-template-columns: minmax(170px, 2fr) repeat(3, minmax(100px, .7fr)) auto; gap: .75rem; align-items: end; margin-top: 1.4rem; padding-top: 1.25rem; border-top: 1px solid var(--color-invoice-border); }
 .form-grid.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .segmented-fieldset { min-width: 0; margin: 0 0 1rem; padding: 0; border: 0; }

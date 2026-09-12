@@ -4,8 +4,8 @@ import { apiBlob, apiRequest, type ApiFailure } from "./api.ts"
 import {
   decodeCorrection, decodeCorrections, decodeCustomer, decodeCustomerPage, decodeDeleted, decodeDraft, decodeDraftPage,
   decodeDocumentSeries, decodeDocumentSeriesList, decodeInvoice, decodeInvoicePage, decodeIssuer, decodePaymentSummary,
-  decodeProductPreset, decodeProductPresetPage, decodeProforma, decodeProformaPage, decodeUnitOfMeasures,
-  type Address, type BuyerSnapshot, type CorrectionDocument, type Customer, type DocumentSeries, type DocumentSource, type DocumentType, type DraftInvoice, type IssuedInvoice, type IssuedInvoiceSummary, type Issuer, type LegalForm, type PageRequest, type PaymentSummary, type ProductPreset, type Proforma, type ProformaSummary, type UnitOfMeasure, type VatConfiguration,
+  decodeProductPreset, decodeProductPresetPage, decodeProforma, decodeProformaPage, decodeUnitOfMeasures, decodeVatCatalogue,
+  type Address, type BuyerSnapshot, type CorrectionDocument, type Customer, type DocumentSeries, type DocumentSource, type DocumentType, type DraftInvoice, type IssuedInvoice, type IssuedInvoiceSummary, type Issuer, type LegalForm, type PageRequest, type PaymentSummary, type ProductPreset, type Proforma, type ProformaSummary, type UnitOfMeasure, type VatCatalogue, type VatRate,
 } from "./models.ts"
 
 const ignored = (): undefined => undefined
@@ -43,7 +43,7 @@ export interface IssuerInput {
   readonly socialCapital: string
   readonly defaultCurrency: string
   readonly defaultPaymentTermDays: number
-  readonly vatConfigurations: ReadonlyArray<VatConfiguration>
+  readonly vatChange: { readonly registered: boolean; readonly effectiveFrom: string }
   readonly branding: {
     readonly text: string | null
     readonly image: { readonly dataBase64: string } | null
@@ -100,6 +100,10 @@ export const invoicingClient = {
     Effect.catchAll((failure) => failure.status === 404 ? Effect.succeed(null) : Effect.fail(failure)),
   ),
   saveIssuer: (body: IssuerInput) => apiRequest("/api/issuer", decodeIssuer, { method: "PUT", body }),
+  getVatCatalogue: (inference?: { readonly countryCode: string; readonly fiscalIdentifier: string }) => apiRequest(
+    inference === undefined ? "/api/vat-regimes" : `/api/vat-regimes?${new URLSearchParams(inference).toString()}`,
+    decodeVatCatalogue,
+  ),
   listDocumentSeries: () => apiRequest("/api/document-series", decodeDocumentSeriesList),
   createDocumentSeries: (body: CreateDocumentSeriesInput) => apiRequest("/api/document-series", decodeDocumentSeries, { method: "POST", body }),
   createDraft: (body: CreateDraftInput) => apiRequest("/api/drafts", decodeDraft, { method: "POST", body }),
@@ -133,4 +137,4 @@ export const invoicingClient = {
   createCorrection: (id: string, body: Readonly<Record<string, unknown>>, idempotencyKey: string) => apiRequest(`/api/invoices/${encoded(id)}/corrections`, decodeCorrection, { method: "POST", body, idempotencyKey }),
 } as const
 
-export type { Customer, DocumentSeries, DraftInvoice, IssuedInvoice, IssuedInvoiceSummary, Issuer, PageRequest, ProductPreset, Proforma, ProformaSummary }
+export type { Customer, DocumentSeries, DraftInvoice, IssuedInvoice, IssuedInvoiceSummary, Issuer, PageRequest, ProductPreset, Proforma, ProformaSummary, VatCatalogue, VatRate }

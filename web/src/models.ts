@@ -77,11 +77,28 @@ export interface VatConfiguration {
   readonly effectiveTo?: string
 }
 
+export interface VatRegistration {
+  readonly registered: boolean
+  readonly effectiveFrom: string
+  readonly effectiveTo?: string
+}
+
+export interface VatRate extends VatConfiguration {
+  readonly kind: "standard" | "reduced" | "non_vat"
+  readonly label: string
+}
+
+export interface VatCatalogue {
+  readonly rates: ReadonlyArray<VatRate>
+  readonly inferredRegistration: boolean | null
+}
+
 export interface Issuer extends IssuerSnapshot {
   readonly organizationId: string
   readonly defaultCurrency: string
   readonly defaultPaymentTermDays: number
   readonly vatConfigurations: ReadonlyArray<VatConfiguration>
+  readonly currentVat: VatRegistration | null
 }
 
 export type DocumentType = "invoice" | "proforma"
@@ -142,6 +159,7 @@ export interface VatBreakdown {
 }
 
 export interface IssuedInvoice {
+  readonly actorId: string
   readonly id: string
   readonly draftId: string | null
   readonly sourceProformaId: string | null
@@ -165,6 +183,7 @@ export interface IssuedInvoice {
 export type IssuedInvoiceSummary = Omit<IssuedInvoice, "issuer"> & { readonly issuer: IssuerCompanySnapshot }
 
 export interface Proforma {
+  readonly actorId: string
   readonly id: string
   readonly sourceDraftId: string | null
   readonly source?: DocumentSource
@@ -191,6 +210,7 @@ export interface Proforma {
 export type ProformaSummary = Omit<Proforma, "issuer"> & { readonly issuer: IssuerCompanySnapshot }
 
 export interface Payment {
+  readonly actorId: string
   readonly id: string
   readonly kind: "payment" | "reversal"
   readonly reversesPaymentId?: string
@@ -211,6 +231,7 @@ export interface PaymentSummary {
 }
 
 export interface CorrectionDocument {
+  readonly actorId: string
   readonly id: string
   readonly source?: DocumentSource
   readonly series: string
@@ -385,6 +406,26 @@ const decodeVatConfiguration: Decoder<VatConfiguration> = (input) => {
   }
 }
 
+const decodeVatRegistration: Decoder<VatRegistration> = (input) => {
+  const value = object(input)
+  if (typeof value.registered !== "boolean") throw new Error("invalid registered")
+  const effectiveTo = optionalText(value.effectiveTo, "effectiveTo")
+  return { registered: value.registered, effectiveFrom: text(value.effectiveFrom, "effectiveFrom"), ...(effectiveTo === undefined ? {} : { effectiveTo }) }
+}
+
+const decodeVatRate: Decoder<VatRate> = (input) => {
+  const value = object(input)
+  const kind = text(value.kind, "kind")
+  if (kind !== "standard" && kind !== "reduced" && kind !== "non_vat") throw new Error("invalid VAT kind")
+  return { ...decodeVatConfiguration(value), kind, label: text(value.label, "label") }
+}
+
+export const decodeVatCatalogue: Decoder<VatCatalogue> = (input) => {
+  const value = object(input)
+  if (value.inferredRegistration !== null && typeof value.inferredRegistration !== "boolean") throw new Error("invalid inferredRegistration")
+  return { rates: array(value.rates, decodeVatRate, "rates"), inferredRegistration: value.inferredRegistration }
+}
+
 export const decodeDocumentSeries: Decoder<DocumentSeries> = (input) => {
   const value = object(input)
   const documentType = text(value.documentType, "documentType")
@@ -403,6 +444,7 @@ export const decodeIssuer: Decoder<Issuer> = (input) => {
     defaultCurrency: text(value.defaultCurrency, "defaultCurrency"),
     defaultPaymentTermDays: integer(value.defaultPaymentTermDays, "defaultPaymentTermDays"),
     vatConfigurations: array(value.vatConfigurations, decodeVatConfiguration, "vatConfigurations"),
+    currentVat: value.currentVat === null ? null : decodeVatRegistration(value.currentVat),
   }
 }
 
@@ -450,6 +492,7 @@ const decodeInvoiceWithIssuer = <Value extends IssuerCompanySnapshot>(input: unk
   const value = object(input)
   const source = optionalDocumentSource(value.source)
   return {
+    actorId: text(value.actorId, "actorId"),
     id: text(value.id, "id"), draftId: nullableText(value.draftId, "draftId"),
     sourceProformaId: nullableText(value.sourceProformaId, "sourceProformaId"),
     ...(source === undefined ? {} : { source }),
@@ -472,6 +515,7 @@ const decodeProformaWithIssuer = <Value extends IssuerCompanySnapshot>(input: un
   const value = object(input)
   const source = optionalDocumentSource(value.source)
   return {
+    actorId: text(value.actorId, "actorId"),
     id: text(value.id, "id"), sourceDraftId: nullableText(value.sourceDraftId, "sourceDraftId"),
     ...(source === undefined ? {} : { source }),
     invoiceSeries: text(value.invoiceSeries, "invoiceSeries"),
@@ -500,6 +544,7 @@ const decodePayment: Decoder<Payment> = (input) => {
   if (kind !== "payment" && kind !== "reversal") throw new Error("invalid payment kind")
   const reversesPaymentId = optionalText(value.reversesPaymentId, "reversesPaymentId")
   return {
+    actorId: text(value.actorId, "actorId"),
     id: text(value.id, "id"), kind, ...(reversesPaymentId === undefined ? {} : { reversesPaymentId }),
     amount: text(value.amount, "amount"), currency: text(value.currency, "currency"),
     paymentDate: text(value.paymentDate, "paymentDate"), method: text(value.method, "method"),
@@ -522,6 +567,7 @@ export const decodeCorrection: Decoder<CorrectionDocument> = (input) => {
   const value = object(input)
   const source = optionalDocumentSource(value.source)
   return {
+    actorId: text(value.actorId, "actorId"),
     id: text(value.id, "id"), ...(source === undefined ? {} : { source }),
     series: text(value.series, "series"), number: integer(value.number, "number"),
     issueDate: text(value.issueDate, "issueDate"), reason: text(value.reason, "reason"), issuer: decodeIssuedIssuerCompanySnapshot(value.issuer),

@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 
 import { findIdempotencyReplay, idempotencyRecord, missingIdempotencyResult } from "../../application/idempotency.ts"
-import { checked, documentPageQuery, ensureChronology, missing, pageOf, type Authorize, type OperationDependencies, type Page, type PageRequest } from "../../application/support.ts"
+import { checked, documentPageQuery, missing, pageOf, recordAuditEvent, type Authorize, type OperationDependencies, type Page, type PageRequest } from "../../application/support.ts"
 import type { InvoicingFailure } from "../../contracts/failures.ts"
 import type { InvoicingPermissions } from "../../contracts/permissions.ts"
 import type { DocumentSource, Idempotent, Proforma, ProformaSummary } from "../../domain/invoice.ts"
@@ -9,6 +9,7 @@ import type { AuthoringProformaInput, IssueProformaInput } from "../../domain/in
 import { calendarDate, validateDocumentSource } from "../../domain/validation.ts"
 import { validateIssuerForIssuance } from "../../registry/index.ts"
 import { fiscalYear, issuanceSource, numberedSnapshot } from "./snapshot.ts"
+import { ensureChronology } from "./invoices.ts"
 
 export interface ProformaOperations {
   readonly issueProforma: (input: Idempotent<AuthoringProformaInput | IssueProformaInput>) => Effect.Effect<Proforma, InvoicingFailure>
@@ -42,13 +43,16 @@ export const createProformaOperations = (
         sourceDraftId: draft?.id ?? null, invoiceSeries: document.series, convertedDraftId: null, convertedInvoiceId: null,
         ...numberedSnapshot(document, issuer, { id, series: series.series,
           number: yield* transaction.allocateDocumentNumber(context.organization.id, fiscalYear(document.issueDate), "proforma", series.series),
-          issuedAt }),
+          issuedAt, actorId: context.identity.id }),
       }
       yield* transaction.saveProforma(proforma)
       if (draft !== undefined) yield* transaction.saveDraft({ ...draft, status: "proforma_issued" })
       yield* transaction.saveIdempotencyRecord(idempotencyRecord(
         context.organization.id, idempotency, operation, "proforma", proforma.id, issuedAt.toISOString(),
       ))
+      yield* recordAuditEvent(transaction, context, dependencies.ids, issuedAt, {
+        action: "proforma.issued", targetKind: "proforma", targetId: proforma.id,
+      })
       return structuredClone(proforma)
     }))
   })

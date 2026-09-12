@@ -8,13 +8,9 @@ export type IssueProformaInput = { readonly draftId: string; readonly series: st
 export type ConvertProformaInput = { readonly proformaId: string }
 
 export interface RawIssuerBrandingImage { readonly dataBase64: string }
-export interface RawIssuerBranding {
-  readonly text: string | null
-  readonly image: RawIssuerBrandingImage | null
-}
-export type ConfigureIssuerInput = Omit<IssuerProfile, "organizationId" | "branding"> & {
-  readonly branding: RawIssuerBranding | null
-}
+export interface RawIssuerBranding { readonly text:string|null; readonly image:RawIssuerBrandingImage|null }
+export interface VatChange{ readonly registered:boolean; readonly effectiveFrom:string }
+export type ConfigureIssuerInput = Omit<IssuerProfile,"organizationId"|"branding"|"vatConfigurations"> & { readonly branding:RawIssuerBranding|null; readonly vatChange:VatChange }
 
 export type CustomerInput = BuyerSnapshot & { readonly defaultPaymentTermDays?: number }
 export type CreateCustomerInput = CustomerInput
@@ -22,9 +18,7 @@ export type UpdateCustomerInput = CustomerInput & { readonly id: string }
 export type ProductPresetInput = Pick<ProductPreset, "description" | "unitPrice" | "unitOfMeasure">
 export type UpdateProductPresetInput = ProductPresetInput & { readonly id: string }
 
-export type BuyerSource =
-  | { readonly customerId: string; readonly customer?: never }
-  | { readonly customer: BuyerSnapshot; readonly customerId?: never }
+export type BuyerSource = { readonly customerId: string; readonly customer?: never } | { readonly customer: BuyerSnapshot; readonly customerId?: never }
 
 export interface RawDocumentLine {
   readonly description: string

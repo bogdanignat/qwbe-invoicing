@@ -17,7 +17,7 @@ void test("the HTTP host exchanges the API token for a cookie session", async ()
   writeFileSync(tokenFile, token, { mode: 0o600 })
   applyMigrations(directory)
   let docsAttempts = 0
-  const server = startServer({
+  const running = await startServer({
     host: "127.0.0.1",
     port: 0,
     dataDirectory: directory,
@@ -29,6 +29,7 @@ void test("the HTTP host exchanges the API token for a cookie session", async ()
     if (docsAttempts === 1) throw new Error("simulated docs render failure")
     return apiDocsResponse()
   })
+  const { server } = running
 
   try {
     if (!server.listening) await once(server, "listening")
@@ -81,7 +82,7 @@ void test("the HTTP host exchanges the API token for a cookie session", async ()
     const replay = await fetch(`${origin}/api/session`, { headers: { cookie } })
     assert.equal(replay.status, 401)
   } finally {
-    await new Promise<void>((resolve, reject) => { server.close((error) => { if (error === undefined) resolve(); else reject(error) }) })
+    await running.close()
     rmSync(directory, { recursive: true, force: true })
   }
 })

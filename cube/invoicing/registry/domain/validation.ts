@@ -5,6 +5,7 @@ import type { CustomerInput, ProductPresetInput } from "../../domain/inputs.ts"
 import { normalizeUnitOfMeasure } from "../../domain/unit-of-measures.ts"
 import { isValidRomanianCui, maximumPaymentTermDays, validateBuyer, validateDate, validateParty } from "../../domain/validation.ts"
 import { normalizeIssuerDetails } from "./issuer-details.ts"
+import { currentVatRegistration } from "./vat-regime.ts"
 
 export const resolveVatConfiguration = (
   issuer: IssuerProfile,
@@ -74,15 +75,16 @@ const validateVatConfigurations = (configurations: ReadonlyArray<VatConfiguratio
   }
   const ordered = [...configurations].sort((left, right) => left.effectiveFrom.localeCompare(right.effectiveFrom))
   ordered.forEach((value, index) => {
-    const previous = ordered[index - 1]
-    if (previous !== undefined && (previous.effectiveTo === undefined || value.effectiveFrom <= previous.effectiveTo)) {
+    if (ordered.slice(0, index).some((previous) => (
+      previous.code === value.code || previous.code === "RO_NON_VAT" || value.code === "RO_NON_VAT"
+    ) && (previous.effectiveTo === undefined || value.effectiveFrom <= previous.effectiveTo))) {
       issues.push("vat configurations have overlapping effective ranges")
     }
   })
   if (issues.length > 0) throw new ValidationFailure({ issues })
 }
 
-export const validateIssuer = (issuer: IssuerProfile): void => {
+export const validateIssuerProfile = (issuer: Omit<IssuerProfile, "vatConfigurations">): void => {
   validateParty(issuer)
   normalizeIssuerDetails(issuer)
   const issues: Array<string> = []
@@ -92,20 +94,18 @@ export const validateIssuer = (issuer: IssuerProfile): void => {
     || issuer.defaultPaymentTermDays > maximumPaymentTermDays) {
     issues.push(`defaultPaymentTermDays must be an integer between 0 and ${String(maximumPaymentTermDays)}`)
   }
-  try { validateVatConfigurations(issuer.vatConfigurations) } catch (error) {
-    if (error instanceof ValidationFailure) issues.push(...error.issues)
-  }
-  const latest = [...issuer.vatConfigurations]
-    .sort((left, right) => right.effectiveFrom.localeCompare(left.effectiveFrom))[0]
-  if (latest !== undefined) {
-    const nonVat = latest.code === "RO_NON_VAT" && Number(latest.rate) === 0
-    const ro = issuer.fiscalIdentifier.startsWith("RO")
-    if (ro && nonVat) {
-      issues.push("fiscalIdentifier with RO prefix requires a VAT-registered vat configuration")
-    }
-    if (!ro && !nonVat) {
-      issues.push("fiscalIdentifier without RO prefix requires RO_NON_VAT with rate 0")
-    }
-  }
   if (issues.length > 0) throw new ValidationFailure({ issues })
+}
+
+export const validateIssuer = (issuer: IssuerProfile, currentDate: string): void => {
+  validateIssuerProfile(issuer)
+  validateVatConfigurations(issuer.vatConfigurations)
+  const active = currentVatRegistration(issuer.vatConfigurations, currentDate)
+  if (active !== undefined) {
+    const nonVat = !active.registered
+    if (issuer.fiscalIdentifier.startsWith("RO") === nonVat) throw new ValidationFailure({
+      issues: [nonVat ? "fiscalIdentifier with RO prefix requires a VAT-registered vat configuration"
+        : "fiscalIdentifier without RO prefix requires RO_NON_VAT with rate 0"],
+    })
+  }
 }

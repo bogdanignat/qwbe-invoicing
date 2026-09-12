@@ -1,9 +1,9 @@
 import { Effect } from "effect"
 
-import { ResourceNotFound, ValidationFailure, type InvoicingFailure, type PersistenceFailure } from "../contracts/failures.ts"
+import { ResourceNotFound, ValidationFailure, type InvoicingFailure } from "../contracts/failures.ts"
 import type { BrandingNormalizer, Clock, IdGenerator, RequestContext, TransactionalStore } from "../contracts/host.ts"
-import type { BuyerSnapshot, DocumentSource, IssuerCompanySnapshot, IssuerSnapshot, NumberedDocumentType, PartySnapshot } from "../domain/invoice.ts"
-import type { DocumentCursor, DraftCursor, InvoicingTransaction, NameCursor, PageQuery } from "./ports.ts"
+import type { AuditEvent, BuyerSnapshot, DocumentSource, IssuerCompanySnapshot, IssuerSnapshot, PartySnapshot } from "../domain/invoice.ts"
+import type { DocumentCursor, DraftCursor, InvoicingTransaction, NameCursor, PageQuery, TransactionFailure } from "./ports.ts"
 
 export type { DocumentCursor, DraftCursor, NameCursor, PageQuery } from "./ports.ts"
 
@@ -17,59 +17,40 @@ export interface OperationDependencies {
 }
 
 export const checked = <Value>(operation: () => Value): Effect.Effect<Value, ValidationFailure> => Effect.try({
-  try: operation,
-  catch: (error) => error instanceof ValidationFailure
-    ? error
-    : new ValidationFailure({ issues: ["invalid invoicing input"] }),
+  try: operation, catch: (error) => error instanceof ValidationFailure
+    ? error : new ValidationFailure({ issues: ["invalid invoicing input"] }),
 })
 
 export const missing = (resource: string, id: string) => new ResourceNotFound({ resource, id })
 
+export const recordAuditEvent = (
+  transaction: InvoicingTransaction, context: RequestContext, ids: IdGenerator, occurredAt: Date,
+  event: Pick<AuditEvent, "action" | "targetKind" | "targetId" | "reason">,
+): Effect.Effect<void, TransactionFailure> => Effect.flatMap(ids.next, (id) => transaction.appendAuditEvent({
+  id, organizationId: context.organization.id, actorId: context.identity.id, occurredAt: occurredAt.toISOString(), ...event,
+}))
+
 export const copyParty = (party: PartySnapshot): PartySnapshot => ({
-  name: party.name,
-  fiscalIdentifier: party.fiscalIdentifier.trim().toUpperCase(),
-  address: { ...party.address },
+  name: party.name, fiscalIdentifier: party.fiscalIdentifier.trim().toUpperCase(), address: { ...party.address },
 })
 
 export const copyBuyer = (buyer: BuyerSnapshot): BuyerSnapshot => ({
-  ...copyParty(buyer),
-  partyType: buyer.partyType,
+  ...copyParty(buyer), partyType: buyer.partyType,
 })
 
 export const copyIssuerCompanySnapshot = (issuer: IssuerCompanySnapshot): IssuerCompanySnapshot => ({
-  ...copyParty(issuer),
-  legalForm: issuer.legalForm, tradeRegistryNumber: issuer.tradeRegistryNumber,
+  ...copyParty(issuer), legalForm: issuer.legalForm, tradeRegistryNumber: issuer.tradeRegistryNumber,
   iban: issuer.iban, bankName: issuer.bankName, socialCapital: issuer.socialCapital,
 })
 
 export const copyIssuerSnapshot = (issuer: IssuerSnapshot): IssuerSnapshot => ({
-  ...copyIssuerCompanySnapshot(issuer),
-  branding: issuer.branding === null ? null : structuredClone(issuer.branding),
-})
-
-// Codul fiscal art. 319 (20): the invoice date is the issue date and numbers are sequential per series,
-// so a document cannot be dated in the future or before the last document numbered in its series.
-export const ensureChronology = (
-  transaction: InvoicingTransaction, organizationId: string, documentType: NumberedDocumentType, series: string,
-  issueDate: string, today: string,
-): Effect.Effect<void, ValidationFailure | PersistenceFailure> => Effect.gen(function*() {
-  if (issueDate > today) return yield* Effect.fail(new ValidationFailure({ issues: ["issueDate cannot be in the future"] }))
-  const latest = yield* transaction.findLatestIssueDate(organizationId, Number(issueDate.slice(0, 4)), documentType, series)
-  if (latest !== undefined && issueDate < latest) {
-    return yield* Effect.fail(new ValidationFailure({ issues: [`issueDate cannot be before ${latest}, the last ${documentType} issued in series ${series}`] }))
-  }
+  ...copyIssuerCompanySnapshot(issuer), branding: issuer.branding === null ? null : structuredClone(issuer.branding),
 })
 
 // Keyset pagination. The application decodes the opaque cursor into a typed key, the store
 // filters with it, and the application encodes the key of the last returned item.
-export interface PageRequest {
-  readonly limit?: number
-  readonly cursor?: string
-}
-export interface Page<Item> {
-  readonly items: ReadonlyArray<Item>
-  readonly nextCursor: string | null
-}
+export interface PageRequest { readonly limit?: number; readonly cursor?: string }
+export interface Page<Item> { readonly items: ReadonlyArray<Item>; readonly nextCursor: string | null }
 
 export const defaultPageSize = 100
 export const maximumPageSize = 200
@@ -78,11 +59,7 @@ const invalidCursor = () => new ValidationFailure({ issues: ["cursor is invalid"
 
 const decodeCursor = (cursor: string): Readonly<Record<string, unknown>> => {
   let parsed: unknown
-  try {
-    parsed = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8"))
-  } catch {
-    throw invalidCursor()
-  }
+  try { parsed = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")) } catch { throw invalidCursor() }
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) throw invalidCursor()
   return parsed as Readonly<Record<string, unknown>>
 }
@@ -100,9 +77,9 @@ const cursorInteger = (value: unknown): number => {
 
 const pageLimit = (request: PageRequest | undefined): number => {
   const limit = request?.limit ?? defaultPageSize
-  if (!Number.isInteger(limit) || limit < 1 || limit > maximumPageSize) {
-    throw new ValidationFailure({ issues: [`limit must be an integer between 1 and ${String(maximumPageSize)}`] })
-  }
+  if (!Number.isInteger(limit) || limit < 1 || limit > maximumPageSize) throw new ValidationFailure({
+    issues: [`limit must be an integer between 1 and ${String(maximumPageSize)}`],
+  })
   return limit
 }
 
@@ -131,7 +108,5 @@ export const pageOf = <Item>(
 }
 
 export const copySource = (source: DocumentSource): DocumentSource => ({
-  app: source.app,
-  kind: source.kind,
-  id: source.id,
+  app: source.app, kind: source.kind, id: source.id,
 })
