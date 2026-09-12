@@ -4,24 +4,25 @@ import { DocumentSeriesCard } from "../components/DocumentSeriesCard.tsx"
 import { Page } from "../components/Page.tsx"
 import { SettingsHelpDialog } from "../components/SettingsHelpDialog.tsx"
 import { Button } from "../components/ui/Button.tsx"
-import { today } from "../format.ts"
 import { useIssuerSettings } from "../issuer-settings-hooks.ts"
 import { romanianCuiPattern } from "../vat-defaults.ts"
 
 export const SettingsView = ({ notify }: { readonly notify: (message: string) => void }) => {
   const state = useIssuerSettings(notify)
-  if (state.issuerQuery.isPending) return <Loading />
+  if (state.issuerQuery.isPending || state.catalogueQuery.isPending) return <Loading />
   if (state.issuerQuery.error !== null) return <Page title="Date firmă" eyebrow="Configurare emitent"><ErrorAlert error={state.issuerQuery.error} /></Page>
+  if (state.catalogueQuery.error !== null) return <Page title="Date firmă" eyebrow="Configurare emitent"><ErrorAlert error={state.catalogueQuery.error} /></Page>
   const issuer = state.issuer
   return <Page title="Date firmă" eyebrow="Configurare emitent">
     <div className="settings-help-row"><SettingsHelpDialog /></div>
     <section className="card form-card">
       {state.save.error === null ? null : <ErrorAlert error={state.save.error} />}
+      {state.vatInferenceError === null ? null : <ErrorAlert error={state.vatInferenceError} />}
       <form key={state.formKey} onSubmit={state.submit}>
         <fieldset className="issuer-settings-fields" disabled={state.save.pending}>
         <div className="form-grid two">
           <label>Denumire legală<input name="name" defaultValue={issuer?.name ?? ""} required /></label>
-          <label>CUI / identificator fiscal<input name="fiscalIdentifier" defaultValue={state.fiscalIdentifier} pattern={romanianCuiPattern} maxLength={12} title="CUI românesc valid, cu sau fără prefixul RO" aria-describedby="issuer-cui-hint vat-mismatch" onInput={(event) => { state.normalizeFiscalIdentifier(event.currentTarget) }} onBlur={(event) => { state.inferVat(event.currentTarget) }} required /></label>
+          <label>CUI / identificator fiscal<input name="fiscalIdentifier" defaultValue={state.fiscalIdentifier} pattern={romanianCuiPattern} maxLength={12} title="CUI românesc valid, cu sau fără prefixul RO" aria-describedby="issuer-cui-hint" onInput={(event) => { state.normalizeFiscalIdentifier(event.currentTarget) }} onBlur={(event) => { state.inferVat(event.currentTarget) }} required /></label>
           <label>Formă juridică<select name="legalForm" defaultValue={issuer?.legalForm ?? ""} required><option value="" disabled>Selectează forma juridică</option><option value="srl">SRL</option><option value="pfa">PFA</option></select></label>
           <label>Nr. Registrul Comerțului <span className="optional">necesar la emitere</span><input name="tradeRegistryNumber" defaultValue={issuer?.tradeRegistryNumber ?? ""} maxLength={32} placeholder="J2022000067070" /></label>
           <label>Țară<select name="countryCode" defaultValue="RO" required><option value="RO">România (RO)</option></select></label>
@@ -51,14 +52,12 @@ export const SettingsView = ({ notify }: { readonly notify: (message: string) =>
         <div className="form-grid two">
           <label>Monedă implicită<select name="defaultCurrency" defaultValue="RON" required><option value="RON">Leu românesc (RON)</option></select></label>
           <label>Termen de plată (zile)<input name="defaultPaymentTermDays" type="number" min="0" max="3650" defaultValue={issuer?.defaultPaymentTermDays ?? 15} required /></label>
-          <label className="checkbox-label"><input name="vatRegistered" type="checkbox" defaultChecked={state.vatRegistered} data-manual={issuer === undefined ? undefined : "true"} onChange={(event) => { state.changeVatRegistration(event.currentTarget) }} /> Plătitoare de TVA</label>
-          <label>Cod TVA<input name="vatRateCode" defaultValue={state.configuredVat.code} readOnly={!state.vatRegistered} aria-describedby="vat-hint" onInput={(event) => { state.markVatEffectiveToday(event.currentTarget) }} required /></label>
-          <label>Cotă TVA (%)<input name="vatRate" inputMode="decimal" defaultValue={state.configuredVat.rate} readOnly={!state.vatRegistered} aria-describedby="vat-hint" onInput={(event) => { state.markVatEffectiveToday(event.currentTarget) }} required /></label>
-          <label>Noua configurație TVA valabilă de la<input name="taxEffectiveFrom" type="date" defaultValue={state.tax?.effectiveFrom ?? today()} required /></label>
+          <label className="checkbox-label"><input name="vatRegistered" type="checkbox" checked={state.vatRegistered} onChange={(event) => { state.changeVatRegistration(event.currentTarget.checked) }} /> Plătitoare de TVA</label>
+          <label>Schimbarea regimului se aplică de la<input name="taxEffectiveFrom" type="date" value={state.vatEffectiveFrom} onChange={(event) => { state.changeVatEffectiveFrom(event.currentTarget.value) }} required /></label>
         </div>
-        <p className="hint" id="vat-hint">Prefixul RO și bifa „Plătitoare de TVA” trebuie să corespundă. Configurația nu poate fi salvată cât timp sunt în contradicție.</p>
-        <p className="status-note warning" id="vat-mismatch" role="status" aria-live="polite" hidden={state.vatMismatchMessage === undefined}>{state.vatMismatchMessage}</p>
-        <output name="vatStatus" className="sr-only" aria-live="polite">{state.vatRegistered ? "Firma este configurată ca plătitoare de TVA." : "Firma este configurată ca neplătitoare de TVA, cu cotă 0%."}</output>
+        <p className="hint" id="vat-hint">Prefixul RO al CUI-ului și regimul TVA ales trebuie să corespundă. Serverul validează concordanța și construiește calendarul cotelor.</p>
+        <output name="vatStatus" className="status-note" aria-live="polite">{state.vatStatus}</output>
+        {state.vatHistory.length === 0 ? null : <div><h3>Istoric regim TVA</h3><ul>{state.vatHistory.map((item) => <li key={`${item.effectiveFrom}-${item.effectiveTo ?? "prezent"}`}>{item.registered ? "Plătitor TVA" : "Neplătitor TVA"}: {item.rates}; {item.effectiveFrom} – {item.effectiveTo ?? "prezent"}</li>)}</ul></div>}
         {state.branding.imageError === null ? null : <p className="status-note warning" id="issuer-brand-save-warning">Sigla selectată nu este validă. Alege alt fișier sau renunță la fișierul respins înainte de salvare.</p>}
         <div className="form-actions"><Button type="submit" aria-describedby={state.branding.imageError === null ? undefined : "issuer-brand-save-warning"} disabled={state.save.pending || state.branding.pending}>{state.save.pending ? "Se salvează…" : "Salvează datele firmei"}</Button></div>
         </fieldset>

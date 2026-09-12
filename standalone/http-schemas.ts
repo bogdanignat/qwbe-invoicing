@@ -7,7 +7,8 @@ const optional = <S extends Schema.Schema.All>(schema: S) => Schema.optionalWith
 const optionalString = optional(Schema.String)
 const nullableString = Schema.NullOr(Schema.String)
 const optionalNullableString = optional(nullableString)
-const bodyObject = { message: () => "request body must be a JSON object" }
+const allErrors = { parseOptions: { errors: "all" as const } }
+const bodyObject = { ...allErrors, message: () => "request body must be a JSON object" }
 const FiscalIdentifierInput = Schema.transform(Schema.String, Schema.String, {
   strict: true, decode: (value) => value.trim().toUpperCase(), encode: (value) => value,
 })
@@ -90,12 +91,28 @@ export const VatConfiguration = Schema.Struct({
   effectiveTo: optionalString,
 })
 
-const VatConfigurationInput = Schema.Struct({
-  code: Schema.String,
-  rate: Schema.String,
+export const VatRegistration = Schema.Struct({
+  registered: Schema.Boolean,
   effectiveFrom: Schema.String,
   effectiveTo: optionalString,
+})
+export const VatChange = Schema.Struct({
+  registered: Schema.Boolean,
+  effectiveFrom: Schema.String,
 }).annotations(bodyObject)
+export const VatRate = Schema.Struct({
+  code: Schema.String, rate: Schema.String,
+  kind: Schema.Literal("standard", "reduced", "non_vat"), label: Schema.String,
+  effectiveFrom: Schema.String, effectiveTo: optionalString,
+})
+export const VatCatalogue = Schema.Struct({
+  rates: Schema.Array(VatRate), inferredRegistration: Schema.NullOr(Schema.Boolean),
+})
+export const VatInferenceQuery = Schema.Struct({ countryCode: optionalString, fiscalIdentifier: optionalString }).pipe(
+  Schema.filter((value) => (value.countryCode === undefined) === (value.fiscalIdentifier === undefined), {
+    message: () => "countryCode and fiscalIdentifier must be supplied together",
+  }),
+)
 
 export const IssuerInput = Schema.Struct({
   name: Schema.String,
@@ -108,7 +125,7 @@ export const IssuerInput = Schema.Struct({
   socialCapital: Schema.String,
   defaultCurrency: Schema.String,
   defaultPaymentTermDays: Schema.Int,
-  vatConfigurations: Schema.Array(VatConfigurationInput),
+  vatChange: VatChange,
   branding: IssuerBrandingInput,
 }).annotations(bodyObject)
 
@@ -125,6 +142,7 @@ export const Issuer = Schema.Struct({
   defaultCurrency: Schema.String,
   defaultPaymentTermDays: Schema.Int,
   vatConfigurations: Schema.Array(VatConfiguration),
+  currentVat: Schema.NullOr(VatRegistration),
   branding: IssuerBranding,
 })
 
@@ -162,8 +180,8 @@ const PageLimit = Schema.String.pipe(
 export const PageQuery = Schema.Struct({
   limit: optional(PageLimit),
   cursor: optional(Schema.String.annotations({ description: "Opaque nextCursor of the previous page." })),
-})
-export const ListQuery = Schema.Struct({ ...SourceQueryFields.fields, ...PageQuery.fields }).pipe(requireCompleteSource)
+}).annotations(allErrors)
+export const ListQuery = Schema.Struct({ ...SourceQueryFields.fields, ...PageQuery.fields }).annotations(allErrors).pipe(requireCompleteSource)
 const pageOf = <A, I, R>(item: Schema.Schema<A, I, R>) => Schema.Struct({ items: Schema.Array(item), nextCursor: Schema.NullOr(Schema.String) })
 
 export const Customer = Schema.Struct({
@@ -237,6 +255,7 @@ export const DraftInvoice = Schema.Struct({
 export const DraftInvoicePage = pageOf(DraftInvoice)
 
 export const IssuedInvoice = Schema.Struct({
+  actorId: Schema.String,
   id: Schema.String,
   draftId: nullableString,
   sourceProformaId: nullableString,
@@ -330,6 +349,7 @@ export const PaymentSummary = Schema.Struct({
 
 export const CorrectionInput = Schema.Struct({ reason: Schema.String, issueDate: optionalString, source: optional(DocumentSource) }).annotations(bodyObject)
 export const Correction = Schema.Struct({
+  actorId: Schema.String,
   id: Schema.String,
   organizationId: Schema.String,
   originalInvoiceId: Schema.String,
@@ -361,6 +381,7 @@ export const Artifact = Schema.Struct({
   generatedAt: Schema.String,
 })
 export const Proforma = Schema.Struct({
+  actorId: Schema.String,
   id: Schema.String,
   sourceDraftId: nullableString,
   invoiceSeries: Schema.String,
@@ -408,14 +429,12 @@ export const LoginInput = Schema.Struct({ token: Schema.String })
 export const AuthenticatedSession = Schema.Struct({ authenticated: Schema.Literal(true), csrfToken: Schema.String })
 export const LoggedOutSession = Schema.Struct({ authenticated: Schema.Literal(false) })
 
-const errorUnion = (status: number, ...members: ReadonlyArray<Schema.Schema.Any>) =>
-  Schema.Union(...members.map((member) => member.annotations(HttpApiSchema.annotations({ status }))))
-const tagged = (status: number, ...tags: ReadonlyArray<string>) =>
-  errorUnion(status, ...tags.map((error) => Schema.Struct({ error: Schema.Literal(error) })))
-export const ValidationError = errorUnion(
-  400,
-  Schema.Struct({ error: Schema.Literal("ValidationFailure"), issues: Schema.Array(Schema.String) }),
-)
+const withStatus = <A, I, R>(status: number, schema: Schema.Schema<A, I, R>) =>
+  schema.annotations(HttpApiSchema.annotations({ status }))
+const tagged = <const Tag extends string>(status: number, tag: Tag) =>
+  withStatus(status, Schema.Struct({ error: Schema.Literal(tag) }))
+export const ValidationError = withStatus(400,
+  Schema.Struct({ error: Schema.Literal("ValidationFailure"), issues: Schema.Array(Schema.String) }))
 export const InvalidJsonError = tagged(400, "invalid_json")
 export const InvalidCredentialsRequestError = tagged(400, "invalid_credentials")
 export const AuthenticationRequiredError = tagged(401, "AuthenticationRequired")
@@ -426,17 +445,16 @@ export const CsrfError = tagged(403, "csrf_validation_failed")
 export const OriginForbiddenError = tagged(403, "origin_not_allowed")
 export const ResourceNotFoundError = tagged(404, "ResourceNotFound")
 export const DocumentNotFoundError = tagged(404, "DocumentNotFound")
-export const DomainConflictError = errorUnion(
-  409,
-  Schema.Struct({ error: Schema.Literal("DomainConflict"), code: Schema.String }),
-)
+export const DomainConflictError = withStatus(409, Schema.Struct({ error: Schema.Literal("DomainConflict"), code: Schema.String }))
 export const ArtifactConflictError = tagged(409, "ArtifactConflict")
 export const PayloadTooLargeError = tagged(413, "request_body_too_large")
 export const TooManyAttemptsError = Schema.Struct({ error: Schema.Literal("too_many_attempts") }).annotations(
   HttpApiSchema.annotations({ status: 429, description: "Authentication cooldown is active. Retry-After is an integer delay of 1-30 seconds." }),
 )
-export const InvoicingInternalError = tagged(500, "PersistenceFailure", "internal_failure")
-export const DocumentsInternalError = tagged(500, "DocumentPersistenceFailure", "DocumentRenderingFailure", "internal_failure")
+export const InvoicingInternalError = Schema.Union(tagged(500, "PersistenceFailure"), tagged(500, "internal_failure"))
+export const DocumentsInternalError = Schema.Union(
+  tagged(500, "DocumentPersistenceFailure"), tagged(500, "DocumentRenderingFailure"), tagged(500, "internal_failure"),
+)
 export const SessionInternalError = tagged(500, "internal_failure")
-export const BusinessUnavailableError = tagged(503, "OrganizationContextMissing", "not_ready")
+export const BusinessUnavailableError = Schema.Union(tagged(503, "OrganizationContextMissing"), tagged(503, "not_ready"))
 export const ReadinessError = tagged(503, "not_ready")

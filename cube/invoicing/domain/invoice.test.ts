@@ -67,7 +67,7 @@ void test("resolves exactly one effective-dated issuer tax configuration", () =>
       { code: "RO_STANDARD", rate: "21.00", effectiveFrom: "2025-08-01" },
     ],
   }
-  validateIssuer(issuer)
+  validateIssuer(issuer, "2026-09-12")
   assert.equal(resolveVatConfiguration(issuer, "RO_STANDARD", "2025-07-31").rate, "19.00")
   assert.equal(resolveVatConfiguration(issuer, "RO_STANDARD", "2025-08-01").rate, "21.00")
   assert.throws(

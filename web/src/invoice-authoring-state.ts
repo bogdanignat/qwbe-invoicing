@@ -1,7 +1,7 @@
 import type { AuthoringDocumentInput, CreateDraftInput, DraftLineInput, UpdateDraftInput } from "./invoicing-client.ts"
 import {
   invoiceDocumentSeries, proformaDocumentSeries,
-  type BuyerSnapshot, type Customer, type DocumentSeries, type DraftInvoice, type Issuer, type PartyType, type ProductPreset,
+  type BuyerSnapshot, type Customer, type DocumentSeries, type DraftInvoice, type Issuer, type PartyType, type ProductPreset, type UnitOfMeasure,
 } from "./models.ts"
 
 export type BuyerMode = "saved" | "one-time"
@@ -42,6 +42,13 @@ export interface EditableInvoiceLine extends DraftLineInput {
   readonly key: string
   readonly lineId?: string
 }
+
+export const preferredUnitOfMeasure = (units: ReadonlyArray<UnitOfMeasure>): UnitOfMeasure =>
+  units.find(({ code }) => code === "C62") ?? units[0] ?? { code: "C62", name: "unitate" }
+
+export const newEditableInvoiceLine = (
+  key: string, vatRateCode: string, unitOfMeasure: UnitOfMeasure,
+): EditableInvoiceLine => ({ key, description: "", quantity: "1", unitPrice: "", unitOfMeasure, vatRateCode })
 
 export const addCalendarDays = (date: string, days: number): string => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isSafeInteger(days) || days < 0) return ""
@@ -262,11 +269,15 @@ const lineMatches = (line: EditableInvoiceLine, persisted: DraftInvoice["lines"]
   && line.unitPrice === persisted.unitPrice && line.unitOfMeasure.code === persisted.unitOfMeasure.code
   && line.unitOfMeasure.name === persisted.unitOfMeasure.name && line.vatRateCode === persisted.vatRateCode
 
-export const pendingLineOperations = (lines: ReadonlyArray<EditableInvoiceLine>, draft: DraftInvoice): ReadonlyArray<LineSaveOperation> =>
+export const pendingLineOperations = (
+  lines: ReadonlyArray<EditableInvoiceLine>, draft: DraftInvoice, forcedUpdateLineIds: ReadonlyArray<string> = [],
+): ReadonlyArray<LineSaveOperation> =>
   lines.flatMap((line): ReadonlyArray<LineSaveOperation> => {
     if (line.lineId === undefined) return [{ kind: "create", line }]
     const persisted = draft.lines.find((item) => item.id === line.lineId)
-    return persisted !== undefined && lineMatches(line, persisted) ? [] : [{ kind: "update", line, lineId: line.lineId }]
+    return persisted !== undefined && lineMatches(line, persisted) && !forcedUpdateLineIds.includes(line.lineId)
+      ? []
+      : [{ kind: "update", line, lineId: line.lineId }]
   })
 
 export const linesMatchDraft = (lines: ReadonlyArray<EditableInvoiceLine>, draft: DraftInvoice): boolean =>
@@ -278,6 +289,22 @@ export interface AuthoringReadiness {
   readonly hasLines: boolean
   readonly canIssue: boolean
 }
+
+export interface AuthoringTaxReadiness {
+  readonly canIssue: boolean
+  readonly synchronized: boolean
+  readonly warning: string | null
+}
+
+export const authoringTaxReadiness = (
+  readiness: AuthoringReadiness, staleTax: boolean,
+): AuthoringTaxReadiness => ({
+  canIssue: readiness.canIssue && !staleTax,
+  synchronized: readiness.synchronized && !staleTax,
+  warning: staleTax
+    ? "Configurația TVA s-a schimbat. Actualizează și salvează configurația TVA a liniilor afectate înainte de emitere."
+    : null,
+})
 
 export const authoringReadiness = (
   form: InvoiceAuthoringForm,

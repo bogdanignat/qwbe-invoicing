@@ -26,7 +26,7 @@ void test("strict issuer reads refuse corrupt or noncanonical profile, invoice, 
     const profile = { name: "Test SRL", fiscalIdentifier: "RO12345674", address: { countryCode: "RO", city: "Iași", street: "Test 1" },
       legalForm: "srl" as const, tradeRegistryNumber: "J40/123/2020", socialCapital: "200.00", bankName: "Banca Test", iban: "RO49AAAA1B31007593840000",
       branding: null, defaultCurrency: "RON", defaultPaymentTermDays: 15,
-      vatConfigurations: [{ code: "RO_STANDARD", rate: "21", effectiveFrom: "2025-08-01" }],
+      vatChange: { registered: true, effectiveFrom: "2025-08-01" },
     }
     await Effect.runPromise(service.configureIssuer(profile))
     await Effect.runPromise(service.addDocumentSeries({ documentType: "invoice", series: "INV" }))

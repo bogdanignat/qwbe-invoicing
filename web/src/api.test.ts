@@ -156,26 +156,60 @@ void test("saves typed issuer branding input and decodes the canonical PNG", asy
   const input = {
     name: "QWBE", fiscalIdentifier: "RO2", address: { countryCode: "RO", city: "Botoșani", street: "Strada 2" },
     legalForm: "srl" as const, tradeRegistryNumber: "J07/123/2020", iban: "RO49AAAA1B31007593840000", bankName: "Banca", socialCapital: "200.00",
-    defaultCurrency: "RON", defaultPaymentTermDays: 15, vatConfigurations: [],
+    defaultCurrency: "RON", defaultPaymentTermDays: 15,
+    vatChange: { registered: true, effectiveFrom: "2025-08-01" },
     branding: { text: "QWBE", image: { dataBase64: "jpeg-input" } },
   }
+  const { vatChange, ...issuerResponse } = input
   try {
     globalThis.fetch = (request, init) => {
       const path = requestPath(request)
       calls.push({ path, init: init ?? {} })
       const body = path === "/api/session"
         ? { authenticated: true, csrfToken: "csrf-token" }
-        : { ...input, organizationId: "org-1", branding: { text: "QWBE", image: { pngBase64: "png-output", width: 120, height: 40 } } }
+        : { ...issuerResponse, organizationId: "org-1", vatConfigurations: [
+          { code: "RO_STANDARD", rate: "21.00", effectiveFrom: "2025-08-01" },
+          { code: "RO_REDUCED", rate: "11.00", effectiveFrom: "2025-08-01" },
+        ], currentVat: vatChange,
+        branding: { text: "QWBE", image: { pngBase64: "png-output", width: 120, height: 40 } } }
       return Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } }))
     }
     await runUiEffect(loginApiSession("secret-token"))
     const saved = await runUiEffect(invoicingClient.saveIssuer(input))
     assert.equal(saved.branding?.image?.pngBase64, "png-output")
+    assert.deepEqual(saved.currentVat, { registered: true, effectiveFrom: "2025-08-01" })
     const saveCall = calls[1]
     assert.ok(saveCall)
     assert.equal(saveCall.path, "/api/issuer")
     assert.equal(saveCall.init.method, "PUT")
     assert.deepEqual(JSON.parse(saveCall.init.body as string), input)
+  } finally {
+    await runUiEffect(clearApiSession)
+    globalThis.fetch = originalFetch
+  }
+})
+
+void test("loads VAT regimes with optional complete issuer inference", async () => {
+  const originalFetch = globalThis.fetch
+  const calls: Array<string> = []
+  try {
+    globalThis.fetch = (input) => {
+      const path = requestPath(input); calls.push(path)
+      const body = path === "/api/session"
+        ? { authenticated: true, csrfToken: "csrf-token" }
+        : { rates: [
+          { code: "RO_STANDARD", rate: "21.00", kind: "standard", label: "TVA standard 21%", effectiveFrom: "2025-08-01" },
+          { code: "RO_REDUCED", rate: "11.00", kind: "reduced", label: "TVA redus 11%", effectiveFrom: "2025-08-01" },
+        ], inferredRegistration: path.includes("fiscalIdentifier") ? true : null }
+      return Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } }))
+    }
+    await runUiEffect(loginApiSession("secret-token"))
+    assert.equal((await runUiEffect(invoicingClient.getVatCatalogue())).inferredRegistration, null)
+    assert.equal((await runUiEffect(invoicingClient.getVatCatalogue({ countryCode: "RO", fiscalIdentifier: "RO12345674" }))).inferredRegistration, true)
+    assert.deepEqual(calls.slice(1), [
+      "/api/vat-regimes",
+      "/api/vat-regimes?countryCode=RO&fiscalIdentifier=RO12345674",
+    ])
   } finally {
     await runUiEffect(clearApiSession)
     globalThis.fetch = originalFetch
@@ -353,7 +387,8 @@ void test("calls direct and draft issuance, proforma invoice, registry, detail, 
     totalExcludingVat: "0.00", vatTotal: "0.00", totalIncludingVat: "0.00",
   }
   const proforma = {
-    ...draft, id: "proforma-1", sourceDraftId: "draft-1", series: "PRO", number: 7, issuedAt: "2026-09-01T10:00:00.000Z",
+    ...draft, id: "proforma-1", sourceDraftId: "draft-1", series: "PRO", number: 7,
+    issuedAt: "2026-09-01T10:00:00.000Z", actorId: "user-1",
     issuer: { name: "QWBE", fiscalIdentifier: "RO2", address: { countryCode: "RO", city: "Botoșani", street: "Strada 2" }, legalForm: "srl", tradeRegistryNumber: "J07/123/2020", iban: "", bankName: "", socialCapital: "200.00", branding: null },
     invoiceSeries: "QWBE", convertedDraftId: null, convertedInvoiceId: null,
   }

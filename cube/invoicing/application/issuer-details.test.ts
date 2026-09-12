@@ -4,12 +4,13 @@ import { Effect } from "effect"
 import { ValidationFailure, type InvoicingFailure } from "../contracts/failures.ts"
 import type { ConfigureIssuerInput } from "../domain/inputs.ts"
 import { createInvoicingService } from "./invoicing.ts"
-import { brandingNormalizer, contextProvider, each, emptyState, fixedClock, identity, idempotent, memoryStore, sequentialIds, vatConfigurations } from "./memory-store.test-support.ts"
+import { brandingNormalizer, contextProvider, each, emptyState, fixedClock, identity, idempotent, memoryStore, sequentialIds } from "./memory-store.test-support.ts"
 
 const input: ConfigureIssuerInput = {
   name: "Emitent SRL", fiscalIdentifier: "RO12345674", address: { countryCode: "RO", city: "Iași", street: "Strada 1" },
   legalForm: "srl", tradeRegistryNumber: "J40/123/2020", socialCapital: "200.00", iban: "", bankName: "",
-  branding: null, defaultCurrency: "RON", defaultPaymentTermDays: 15, vatConfigurations,
+  branding: null, defaultCurrency: "RON", defaultPaymentTermDays: 15,
+  vatChange: { registered: true, effectiveFrom: "2025-08-01" },
 }
 const document = {
   customer: { partyType: "individual" as const, name: "Client", fiscalIdentifier: "", address: input.address },

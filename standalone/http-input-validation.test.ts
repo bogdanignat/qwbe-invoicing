@@ -8,8 +8,8 @@ import { OpenApi } from "@effect/platform"
 import { Either, ParseResult, Schema } from "effect"
 
 import { ValidationFailure } from "../cube/invoicing/index.ts"
-import * as A from "./api-inputs.ts"
-import { handleApiRequest } from "./api.ts"
+import * as A from "./api-inputs.test-support.ts"
+import { handleApiRequest } from "./api.test-support.ts"
 import { createRequestAuthenticator } from "./auth.ts"
 import { applicationHttpApi } from "./http-api.ts"
 import * as S from "./http-schemas.ts"
@@ -26,7 +26,7 @@ const issuer = { name: "Furnizor", fiscalIdentifier: " ro12345674 ", address: cu
   legalForm: "srl" as const, tradeRegistryNumber: " j22/123/2020 ", iban: " ro49 aaaa 1b31 0075 9384 0000 ",
   bankName: " Banca Română ", socialCapital: "1000",
   defaultCurrency: "RON", defaultPaymentTermDays: 15,
-  vatConfigurations: [{ code: "RO_STANDARD", rate: "21.00", effectiveFrom: "2025-08-01" }], branding: null }
+  vatChange: { registered: true, effectiveFrom: "2025-08-01" }, branding: null }
 
 interface InputCase {
   readonly name: string
@@ -173,9 +173,9 @@ void test("nested object and array errors all survive with indexed paths", () =>
     "lines.0.quantity", "lines.0.unitOfMeasure.code", "lines.0.unitOfMeasure.name", "lines.1.unitPrice", "lines.1.vatRateCode",
   ])
   assert.deepEqual(issues, schemaIssues(S.AuthoringDocumentInput, raw))
-  const badIssuer = { ...issuer, address: { countryCode: 0, city: null },
-    vatConfigurations: [{ code: 1, rate: 21, effectiveFrom: false }, null] }
-  assert.equal(issuesOf(() => A.issuerInput(badIssuer)).length, 7)
+  const badIssuer = { ...issuer, address: { ...issuer.address, countryCode: 0, city: null },
+    vatChange: { registered: "yes", effectiveFrom: false } }
+  assert.equal(issuesOf(() => A.issuerInput(badIssuer)).length, 4)
   assert.deepEqual(issuesOf(() => A.issuerInput(badIssuer)), schemaIssues(S.IssuerInput, badIssuer))
 })
 
@@ -211,6 +211,17 @@ void test("source query requires all three fields exactly once and maps them to 
     const duplicate = new URLSearchParams(complete)
     duplicate.append(key, "duplicate")
     assert.deepEqual(issuesOf(() => A.sourceFilter(duplicate)), ["sourceApp, sourceKind, and sourceId must be supplied exactly once and together"])
+  }
+})
+
+void test("VAT inference query accepts neither or both fields and rejects partial input", () => {
+  assert.deepEqual(Schema.decodeUnknownSync(S.VatInferenceQuery)({}), {})
+  const complete = { countryCode: "RO", fiscalIdentifier: "RO12345674" }
+  assert.deepEqual(Schema.decodeUnknownSync(S.VatInferenceQuery)(complete), complete)
+  for (const partial of [{ countryCode: "RO" }, { fiscalIdentifier: "RO12345674" }]) {
+    assert.deepEqual(schemaIssues(S.VatInferenceQuery, partial), [
+      "countryCode and fiscalIdentifier must be supplied together",
+    ])
   }
 })
 

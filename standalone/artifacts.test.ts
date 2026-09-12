@@ -47,7 +47,7 @@ const issueFixture = async (directory: string): Promise<{ readonly invoiceId: st
     socialCapital: "1000.00",
     defaultCurrency: "RON",
     defaultPaymentTermDays: 15,
-    vatConfigurations: [{ code: "RO_STANDARD", rate: "21", effectiveFrom: "2025-08-01" }],
+    vatChange: { registered: true, effectiveFrom: "2025-08-01" },
     branding: null,
   }))
   await Effect.runPromise(service.addDocumentSeries({ documentType: "invoice", series: "QWBE" }))

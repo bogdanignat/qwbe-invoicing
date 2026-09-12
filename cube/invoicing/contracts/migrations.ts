@@ -5,6 +5,7 @@ import evolutionMigrations from "./evolution-migrations.json" with { type: "json
 import proformaMigrations from "./proforma-migrations.json" with { type: "json" }
 import presetMigrations from "./preset-migrations.json" with { type: "json" }
 import documentNotesMigrations from "./document-notes-migrations.json" with { type: "json" }
+import auditMigrations from "./audit-migrations.json" with { type: "json" }
 export interface InvoicingMigration {
   readonly name: string
   readonly statements: ReadonlyArray<string>
@@ -18,4 +19,5 @@ export const invoicingMigrations: ReadonlyArray<InvoicingMigration> = [
   ...proformaMigrations as ReadonlyArray<InvoicingMigration>,
   ...presetMigrations,
   ...documentNotesMigrations,
+  ...auditMigrations,
 ]

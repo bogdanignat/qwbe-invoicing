@@ -20,7 +20,7 @@ export const cube = {
     name: identity,
     tables: `issuers issuer_tax_configurations document_series customers product_presets invoice_drafts draft_lines invoice_sequences
       issued_invoices issued_lines issued_tax_breakdown proformas proforma_lines proforma_tax_breakdown proforma_conversions
-       proforma_invoice_conversions correction_documents correction_lines correction_tax_breakdown idempotency_records`.split(/\s+/),
+       proforma_invoice_conversions correction_documents correction_lines correction_tax_breakdown idempotency_records audit_events`.split(/\s+/),
     requiresAuth: true,
     permissions: declaredPermissions.map((name) => ({ name, roles: ["admin"] })),
   },

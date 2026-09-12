@@ -1,128 +1,107 @@
-export interface VatValues {
-  readonly code: string
-  readonly rate: string
-}
+import type { Issuer, VatCatalogue, VatConfiguration, VatRate } from "./models.ts"
 
-export interface VatInference {
-  readonly registered: boolean
-  readonly values: VatValues
-}
-
-export interface EffectiveVat extends VatValues {
-  readonly effectiveFrom: string
-  readonly effectiveTo?: string
-}
-
-interface DraftTaxLine {
-  readonly vatRateCode: string
-  readonly vatRate: string
-}
-
-const STANDARD_VAT: VatValues = { code: "RO_STANDARD", rate: "21.00" }
-const NON_VAT: VatValues = { code: "RO_NON_VAT", rate: "0.00" }
+interface DraftTaxLine { readonly vatRateCode: string; readonly vatRate: string }
+interface SavedDraftTaxLine extends DraftTaxLine { readonly id: string }
 
 export const romanianCuiPattern = "(?:RO)?[1-9][0-9]{1,9}"
 export const normalizeRomanianCui = (value: string): string => value.trim().toUpperCase()
 
-export const inferRomanianVatDefaults = (
-  countryCode: string,
-  fiscalIdentifier: string,
-): VatInference | undefined => {
-  if (countryCode.trim().toUpperCase() !== "RO") return undefined
-  const identifier = normalizeRomanianCui(fiscalIdentifier)
-  if (/^RO\d+$/.test(identifier)) return { registered: true, values: STANDARD_VAT }
-  if (/^\d+$/.test(identifier)) return { registered: false, values: NON_VAT }
-  return undefined
-}
+export const shouldApplyVatInference = (input: {
+  readonly requestedFiscalIdentifier: string
+  readonly currentFiscalIdentifier: string
+  readonly requestIsCurrent: boolean
+  readonly manuallySelectedVat: boolean
+}): boolean => input.requestIsCurrent
+  && !input.manuallySelectedVat
+  && normalizeRomanianCui(input.requestedFiscalIdentifier) === normalizeRomanianCui(input.currentFiscalIdentifier)
 
-export const vatRegistrationMismatch = (
-  countryCode: string,
-  fiscalIdentifier: string,
-  registered: boolean,
-): string | undefined => {
-  const inferred = inferRomanianVatDefaults(countryCode, fiscalIdentifier)
-  if (inferred === undefined || inferred.registered === registered) return undefined
-  return inferred.registered
-    ? "CUI-ul cu prefix RO nu poate fi salvat ca neplătitor de TVA. Elimină prefixul RO sau bifează opțiunea."
-    : "CUI-ul fără prefix RO nu poate fi salvat ca plătitor de TVA. Adaugă prefixul RO sau debifează opțiunea."
-}
-
-export const resolveVatValues = (registered: boolean, entered: VatValues): VatValues => {
-  if (!registered) return NON_VAT
-  return isNonVat(entered) ? STANDARD_VAT : entered
-}
+const activeOn = (value: { readonly effectiveFrom: string; readonly effectiveTo?: string }, date: string): boolean =>
+  value.effectiveFrom <= date && (value.effectiveTo === undefined || date <= value.effectiveTo)
 
 const scaledRate = (rate: string): bigint | undefined => {
   const match = /^(\d{1,3})(?:\.(\d{1,2}))?$/.exec(rate.trim())
-  if (match === null) return undefined
-  return BigInt(match[1] as string) * 100n + BigInt((match[2] ?? "").padEnd(2, "0"))
+  return match === null ? undefined : BigInt(match[1] as string) * 100n + BigInt((match[2] ?? "").padEnd(2, "0"))
+}
+const sameRate = (left: string, right: string): boolean => scaledRate(left) !== undefined && scaledRate(left) === scaledRate(right)
+
+export const issuerVatRegistrationOn = (issuer: Issuer, date: string): boolean | undefined => {
+  const active = issuer.vatConfigurations.filter((configuration) => activeOn(configuration, date))
+  if (active.length === 0) return undefined
+  return !active.some(({ code, rate }) => code === "RO_NON_VAT" && sameRate(rate, "0"))
 }
 
-const sameRate = (left: string, right: string): boolean => {
-  const scaledLeft = scaledRate(left)
-  return scaledLeft !== undefined && scaledLeft === scaledRate(right)
+export interface FallbackVatRegistration {
+  readonly registered: boolean
+  readonly effectiveFrom: string
+  readonly timing: "scheduled" | "expired"
 }
 
-export const isNonVat = (vat: VatValues): boolean => vat.code === NON_VAT.code && sameRate(vat.rate, NON_VAT.rate)
-
-export const vatTimelineMismatch = (
-  countryCode: string,
-  fiscalIdentifier: string,
-  configurations: ReadonlyArray<EffectiveVat>,
-): string | undefined => {
-  const latest = [...configurations].sort((left, right) => right.effectiveFrom.localeCompare(left.effectiveFrom))[0]
-  return latest === undefined ? undefined : vatRegistrationMismatch(countryCode, fiscalIdentifier, !isNonVat(latest))
+export const fallbackVatRegistration = (
+  configurations: ReadonlyArray<VatConfiguration>, date: string,
+): FallbackVatRegistration | undefined => {
+  const scheduled = configurations
+    .filter(({ effectiveFrom }) => effectiveFrom > date)
+    .sort((left, right) => left.effectiveFrom.localeCompare(right.effectiveFrom))[0]
+  const expired = configurations
+    .filter(({ effectiveTo }) => effectiveTo !== undefined && effectiveTo < date)
+    .sort((left, right) => (right.effectiveTo as string).localeCompare(left.effectiveTo as string))[0]
+  const selected = scheduled ?? expired
+  if (selected === undefined) return undefined
+  const active = configurations.filter((configuration) => activeOn(configuration, selected.effectiveFrom))
+  return {
+    registered: !active.some(({ code, rate }) => code === "RO_NON_VAT" && sameRate(rate, "0")),
+    effectiveFrom: selected.effectiveFrom,
+    timing: scheduled === undefined ? "expired" : "scheduled",
+  }
 }
 
-export const currentEffectiveVat = (
-  configurations: ReadonlyArray<EffectiveVat>,
-  date: string,
-): EffectiveVat | undefined => configurations.find((configuration) =>
-  configuration.effectiveFrom <= date
-  && (configuration.effectiveTo === undefined || date <= configuration.effectiveTo))
-
-export const nearestConfiguredVat = (
-  configurations: ReadonlyArray<EffectiveVat>,
-  date: string,
-): EffectiveVat | undefined => {
-  const current = currentEffectiveVat(configurations, date)
-  if (current !== undefined) return current
-  const ordered = [...configurations].sort((left, right) => left.effectiveFrom.localeCompare(right.effectiveFrom))
-  return ordered.find((configuration) => configuration.effectiveFrom > date) ?? ordered.at(-1)
+export const vatRatesForIssuer = (catalogue: VatCatalogue, issuer: Issuer, date: string): ReadonlyArray<VatRate> => {
+  const registered = issuerVatRegistrationOn(issuer, date)
+  return catalogue.rates.filter((rate) => activeOn(rate, date)
+    && (registered === true ? rate.kind !== "non_vat" : registered === false ? rate.kind === "non_vat" : false))
 }
 
-const previousDay = (date: string): string => {
-  const value = new Date(`${date}T00:00:00.000Z`)
-  value.setUTCDate(value.getUTCDate() - 1)
-  return value.toISOString().slice(0, 10)
-}
-
-export const updateVatTimeline = (
-  configurations: ReadonlyArray<EffectiveVat>,
-  selected: EffectiveVat | undefined,
-  next: VatValues,
-  effectiveFrom: string,
-): ReadonlyArray<EffectiveVat> => {
-  if (selected !== undefined
-    && selected.effectiveFrom === effectiveFrom
-    && selected.code === next.code
-    && sameRate(selected.rate, next.rate)) return configurations
-  const kept = [...configurations]
-    .filter((configuration) => configuration.effectiveFrom < effectiveFrom)
-    .sort((left, right) => left.effectiveFrom.localeCompare(right.effectiveFrom))
-  const previous = kept.at(-1)
-  const closed = previous === undefined ? kept : kept.map((configuration) => configuration === previous
-    ? { ...configuration, effectiveTo: previousDay(effectiveFrom) }
-    : configuration)
-  return [...closed, { ...next, effectiveFrom }]
-}
+export const defaultVatCode = (catalogue: VatCatalogue, issuer: Issuer, date: string): string =>
+  vatRatesForIssuer(catalogue, issuer, date).find(({ kind }) => kind === "standard")?.code
+  ?? vatRatesForIssuer(catalogue, issuer, date)[0]?.code
+  ?? ""
 
 export const hasStaleDraftTax = (
-  issueDate: string,
-  lines: ReadonlyArray<DraftTaxLine>,
-  configurations: ReadonlyArray<EffectiveVat>,
-): boolean => lines.some((line) => !configurations.some((configuration) =>
-  configuration.code === line.vatRateCode
-  && sameRate(configuration.rate, line.vatRate)
-  && configuration.effectiveFrom <= issueDate
-  && (configuration.effectiveTo === undefined || issueDate <= configuration.effectiveTo)))
+  issueDate: string, lines: ReadonlyArray<DraftTaxLine>, catalogue: VatCatalogue, issuer: Issuer,
+): boolean => {
+  const rates = vatRatesForIssuer(catalogue, issuer, issueDate)
+  return lines.some((line) => !rates.some(({ code, rate }) => code === line.vatRateCode && sameRate(rate, line.vatRate)))
+}
+
+export const staleDraftLineIds = (
+  issueDate: string, lines: ReadonlyArray<SavedDraftTaxLine>, catalogue: VatCatalogue, issuer: Issuer,
+): ReadonlyArray<string> => {
+  const rates = vatRatesForIssuer(catalogue, issuer, issueDate)
+  return lines
+    .filter((line) => !rates.some(({ code, rate }) => code === line.vatRateCode && sameRate(rate, line.vatRate)))
+    .map(({ id }) => id)
+}
+
+export interface VatHistoryItem {
+  readonly effectiveFrom: string
+  readonly effectiveTo?: string
+  readonly registered: boolean
+  readonly rates: string
+}
+
+export const vatRegistrationHistory = (
+  configurations: ReadonlyArray<VatConfiguration>, catalogue: VatCatalogue,
+): ReadonlyArray<VatHistoryItem> => {
+  const groups = new Map<string, Array<VatConfiguration>>()
+  for (const configuration of configurations) {
+    const key = `${configuration.effectiveFrom}:${configuration.effectiveTo ?? ""}`
+    groups.set(key, [...(groups.get(key) ?? []), configuration])
+  }
+  return [...groups.values()].map((group) => {
+    const first = group[0] as VatConfiguration
+    const registered = !group.some(({ code, rate }) => code === "RO_NON_VAT" && sameRate(rate, "0"))
+    const rates = group.map((configuration) => catalogue.rates.find((rate) => rate.code === configuration.code
+      && sameRate(rate.rate, configuration.rate))?.label ?? `${configuration.rate}%`).join(", ")
+    return { effectiveFrom: first.effectiveFrom, ...(first.effectiveTo === undefined ? {} : { effectiveTo: first.effectiveTo }), registered, rates }
+  }).sort((left, right) => right.effectiveFrom.localeCompare(left.effectiveFrom))
+}

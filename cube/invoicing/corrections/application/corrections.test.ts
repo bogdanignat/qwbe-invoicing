@@ -4,7 +4,7 @@ import test from "node:test"
 import { Effect } from "effect"
 
 import { createInvoicingService } from "../../application/invoicing.ts"
-import { brandingNormalizer, contextProvider, each, emptyState, expectConflict, fixedClock, identity, idempotent, memoryStore, sequentialIds, vatConfigurations } from "../../application/memory-store.test-support.ts"
+import { brandingNormalizer, contextProvider, each, emptyState, expectConflict, fixedClock, identity, idempotent, memoryStore, sequentialIds } from "../../application/memory-store.test-support.ts"
 import { PermissionDenied, ResourceNotFound, ValidationFailure } from "../../contracts/index.ts"
 
 void test("corrects an issued invoice exactly once with a negated immutable snapshot", async () => {
@@ -17,7 +17,7 @@ void test("corrects an issued invoice exactly once with a negated immutable snap
     name: "Exemplu SRL", fiscalIdentifier: "RO12345674",
     address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" },
     legalForm: "srl", tradeRegistryNumber: "J40/123/2020", socialCapital: "200.00", iban: "", bankName: "",
-    defaultCurrency: "RON", defaultPaymentTermDays: 15, vatConfigurations, branding: null,
+    defaultCurrency: "RON", defaultPaymentTermDays: 15, vatChange: { registered: true, effectiveFrom: "2025-08-01" }, branding: null,
   }))
   await Effect.runPromise(service.addDocumentSeries({ documentType: "invoice", series: "QWBE" }))
   const customer = { partyType: "company" as const, name: "Client SRL", fiscalIdentifier: "RO87654329",
@@ -44,6 +44,7 @@ void test("corrects an issued invoice exactly once with a negated immutable snap
   assert.equal(correction.fiscalYear, 2026)
   assert.equal(correction.issueDate, "2026-09-01")
   assert.equal(correction.reason, "Eroare de cantitate")
+  assert.equal(correction.actorId, identity.id)
   assert.deepEqual(correction.source, { app: "shop", kind: "order", id: "order-7" })
   assert.equal(correction.totalExcludingVat, "-125.00")
   assert.equal(correction.vatTotal, "-26.25")
@@ -59,6 +60,9 @@ void test("corrects an issued invoice exactly once with a negated immutable snap
 
   const replay = await Effect.runPromise(service.createCorrection(attempt))
   assert.deepEqual(replay, correction)
+  assert.deepEqual(state.auditEvents.slice(-1).map(({ action, actorId, targetId, reason }) => ({ action, actorId, targetId, reason })), [{
+    action: "correction.created", actorId: identity.id, targetId: correction.id, reason: correction.reason,
+  }])
   await expectConflict(service.createCorrection(idempotent({ originalInvoiceId: invoice.id, reason: "Din nou" })), "invoice_already_corrected")
   assert.deepEqual(await Effect.runPromise(service.getCorrection(correction.id)), correction)
   assert.deepEqual(await Effect.runPromise(service.listCorrections(invoice.id)), [correction])

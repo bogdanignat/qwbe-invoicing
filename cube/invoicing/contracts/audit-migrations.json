@@ -1,0 +1,18 @@
+[
+  {
+    "name": "016-fiscal-audit",
+    "statements": [
+      "ALTER TABLE issued_invoices ADD COLUMN actor_id TEXT NOT NULL CHECK(length(actor_id) BETWEEN 1 AND 255)",
+      "ALTER TABLE proformas ADD COLUMN actor_id TEXT NOT NULL CHECK(length(actor_id) BETWEEN 1 AND 255)",
+      "ALTER TABLE correction_documents ADD COLUMN actor_id TEXT NOT NULL CHECK(length(actor_id) BETWEEN 1 AND 255)",
+      "CREATE TRIGGER issued_invoices_actor_no_update BEFORE UPDATE OF actor_id ON issued_invoices BEGIN SELECT RAISE(ABORT,'issued invoice actor is immutable');END",
+      "CREATE TRIGGER proformas_actor_no_update BEFORE UPDATE OF actor_id ON proformas BEGIN SELECT RAISE(ABORT,'proforma actor is immutable');END",
+      "CREATE TRIGGER correction_documents_actor_no_update BEFORE UPDATE OF actor_id ON correction_documents BEGIN SELECT RAISE(ABORT,'correction actor is immutable');END",
+      "CREATE TABLE audit_events(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,actor_id TEXT NOT NULL CHECK(length(actor_id) BETWEEN 1 AND 255),occurred_at TEXT NOT NULL,action TEXT NOT NULL CHECK(length(action) BETWEEN 1 AND 100),target_kind TEXT NOT NULL CHECK(length(target_kind) BETWEEN 1 AND 100),target_id TEXT NOT NULL CHECK(length(target_id) BETWEEN 1 AND 255),reason TEXT CHECK(reason IS NULL OR length(reason) BETWEEN 1 AND 500))STRICT",
+      "CREATE INDEX audit_events_target ON audit_events(organization_id,target_kind,target_id,occurred_at)",
+      "CREATE INDEX audit_events_time ON audit_events(organization_id,occurred_at)",
+      "CREATE TRIGGER audit_events_no_update BEFORE UPDATE ON audit_events BEGIN SELECT RAISE(ABORT,'audit events are append-only');END",
+      "CREATE TRIGGER audit_events_no_delete BEFORE DELETE ON audit_events BEGIN SELECT RAISE(ABORT,'audit events are append-only');END"
+    ]
+  }
+]

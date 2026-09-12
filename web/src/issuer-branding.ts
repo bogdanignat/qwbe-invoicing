@@ -41,7 +41,7 @@ export const normalizeBrandText = (value: string): string | null => {
   const normalized = value.trim()
   if (normalized === "") return null
   if (Array.from(normalized).length > issuerBrandTextMaxCodePoints) throw new Error("Textul de brand poate avea maximum 80 de caractere.")
-  if (/\p{Cc}/u.test(normalized)) throw new Error("Textul de brand nu poate conține caractere de control.")
+  if (/\p{C}/u.test(normalized)) throw new Error("Textul de brand nu poate conține caractere de control.")
   return normalized
 }
 

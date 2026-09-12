@@ -1,17 +1,16 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { OpenApi } from "@effect/platform"
+import { HttpApi, OpenApi } from "@effect/platform"
 import { Schema } from "effect"
 
 import { makeApiDocsResponse } from "./api-docs.ts"
-import { applicationRoutes, matchApplicationRoute } from "./api-route-adapter.ts"
 import { applicationHttpApi, operationNames } from "./http-api.ts"
 import * as S from "./http-schemas.ts"
 
 const inventory = [
   "GET /api/issuer", "PUT /api/issuer", "GET /api/document-series", "POST /api/document-series",
-  "GET /api/unit-of-measures",
+  "GET /api/unit-of-measures", "GET /api/vat-regimes",
   "GET /api/customers", "GET /api/customers/:id", "POST /api/customers", "PUT /api/customers/:id", "DELETE /api/customers/:id",
   "GET /api/product-presets", "POST /api/product-presets", "PUT /api/product-presets/:id", "DELETE /api/product-presets/:id",
   "GET /api/drafts", "GET /api/drafts/:id", "POST /api/drafts", "PUT /api/drafts/:id", "DELETE /api/drafts/:id",
@@ -25,31 +24,18 @@ const inventory = [
   "GET /api/session", "POST /api/session", "DELETE /api/session",
 ].sort()
 
-void test("the contract exposes exactly the current 44 operations", () => {
-  assert.equal(operationNames.length, 44)
-  assert.equal(new Set(operationNames).size, 44)
-  assert.equal(applicationRoutes.length, 44)
-  assert.equal(new Set(applicationRoutes.map((route) => route.operationId)).size, 44)
+void test("the contract exposes exactly the current 45 operations", () => {
+  const applicationRoutes: Array<{ readonly method: string, readonly operationId: string, readonly path: string }> = []
+  HttpApi.reflect(applicationHttpApi, { onGroup() {}, onEndpoint({ endpoint }) {
+    applicationRoutes.push({ method: endpoint.method, operationId: endpoint.name, path: endpoint.path })
+  } })
+  assert.equal(operationNames.length, 45)
+  assert.equal(new Set(operationNames).size, 45)
+  assert.equal(applicationRoutes.length, 45)
+  assert.equal(new Set(applicationRoutes.map((route) => route.operationId)).size, 45)
+  assert.ok(operationNames.includes("listVatRegimes"))
   assert.deepEqual(applicationRoutes.map((route) => `${route.method} ${route.path}`).sort(), inventory)
   assert.equal(applicationRoutes.some((route) => route.path === "/api"), false)
-})
-
-void test("the reflected matcher handles precedence, raw IDs, 405, and 404", () => {
-  assert.deepEqual(matchApplicationRoute("GET", "/api/invoices"), {
-    kind: "matched", operationId: "listIssuedInvoices", pathParams: {},
-  })
-  assert.deepEqual(matchApplicationRoute("GET", "/api/invoices/a%2Fb"), {
-    kind: "matched", operationId: "getIssuedInvoice", pathParams: { id: "a%2Fb" },
-  })
-  assert.deepEqual(matchApplicationRoute("GET", "/api/invoices/x/pdf"), {
-    kind: "matched", operationId: "downloadInvoicePdf", pathParams: { invoiceId: "x" },
-  })
-  assert.deepEqual(matchApplicationRoute("POST", "/api/proformas/x/pdf"), {
-    kind: "matched", operationId: "renderProformaPdf", pathParams: { proformaId: "x" },
-  })
-  assert.deepEqual(matchApplicationRoute("PATCH", "/api/session"), { kind: "method_not_allowed" })
-  assert.deepEqual(matchApplicationRoute("GET", "/api/invoices/x/pdf/extra"), { kind: "not_found" })
-  assert.deepEqual(matchApplicationRoute("GET", "/api"), { kind: "not_found" })
 })
 
 void test("dueDate contracts accept absent, null, or string input and encode explicit null responses", () => {
@@ -68,9 +54,18 @@ void test("dueDate contracts accept absent, null, or string input and encode exp
   assert.equal(Schema.encodeSync(S.DraftInvoice)(draft).status, "proforma_issued")
   assert.equal(Schema.encodeSync(S.Proforma)({ ...draft, id: "proforma-1", sourceDraftId: "draft-1", invoiceSeries: "QWBE",
     convertedDraftId: null, convertedInvoiceId: null,
-    number: 1, issuedAt: "2026-09-01T00:00:00.000Z", issuer: { name: "Furnizor", fiscalIdentifier: "RO12345674", branding: null,
+    number: 1, issuedAt: "2026-09-01T00:00:00.000Z", actorId: "user-1", issuer: { name: "Furnizor", fiscalIdentifier: "RO12345674", branding: null,
       legalForm: "srl", tradeRegistryNumber: "J22/123/2020", iban: "RO49AAAA1B31007593840000", bankName: "Banca", socialCapital: "1000.00",
       address: { countryCode: "RO", city: "Iași", street: "Strada 2" } } }).convertedDraftId, null)
+})
+
+void test("VAT catalogue response exposes legal rates and nullable inference", () => {
+  const response = { rates: [
+    { code: "RO_STANDARD", rate: "21.00", kind: "standard", label: "TVA standard 21%", effectiveFrom: "2025-08-01" },
+    { code: "RO_REDUCED", rate: "11.00", kind: "reduced", label: "TVA redus 11%", effectiveFrom: "2025-08-01" },
+  ], inferredRegistration: null }
+  assert.deepEqual(Schema.encodeSync(S.VatCatalogue)(Schema.decodeUnknownSync(S.VatCatalogue)(response)), response)
+  assert.throws(() => Schema.decodeUnknownSync(S.VatCatalogue)({ ...response, inferredRegistration: "yes" }))
 })
 
 void test("customer payment terms and monetary product presets have explicit wire types", () => {
@@ -133,7 +128,7 @@ void test("OpenAPI 3.1 mirrors paths, PDF encoding, and authentication metadata"
     assert.ok(operation, `${method.toUpperCase()} ${path} is absent`)
     assert.deepEqual(Object.keys(operation.responses).sort(), [...new Set([...base, ...extras])].sort())
   }
-  for (const path of ["/api/document-series", "/api/unit-of-measures", "/api/invoices/{invoiceId}/corrections"]) {
+  for (const path of ["/api/document-series", "/api/unit-of-measures", "/api/vat-regimes", "/api/invoices/{invoiceId}/corrections"]) {
     expectStatuses("get", path)
   }
   for (const path of ["/api/customers", "/api/product-presets", "/api/drafts", "/api/invoices", "/api/proformas"]) {

@@ -6,7 +6,7 @@ import test from "node:test"
 
 import sharp from "sharp"
 
-import { handleApiRequest } from "./api.ts"
+import { handleApiRequest } from "./api.test-support.ts"
 import { createRequestAuthenticator } from "./auth.ts"
 import { applyMigrations } from "./migrations.ts"
 
@@ -51,12 +51,7 @@ void test("requires host authentication and serves the complete invoice-core rou
       socialCapital: "1000",
       defaultCurrency: "RON",
       defaultPaymentTermDays: 15,
-      vatConfigurations: [{
-        code: "RO_STANDARD",
-
-        rate: "21.00",
-        effectiveFrom: "2025-08-01",
-      }],
+      vatChange: { registered: true, effectiveFrom: "2025-08-01" },
       branding: {
         text: "  Marca Exemplu  ",
         image: { dataBase64: (await sharp({ create: { width: 1, height: 1, channels: 3, background: "blue" } }).png().toBuffer()).toString("base64") },
@@ -71,21 +66,31 @@ void test("requires host authentication and serves the complete invoice-core rou
     assert.equal(denied.status, 401)
 
     const authorization = `Bearer ${token}`
+    const vatCatalogue = await handleApiRequest({ method: "GET", url: "/api/vat-regimes", authorization, body: undefined }, runtime)
+    assert.equal(vatCatalogue.status, 200)
+    const rates = (vatCatalogue.body as { rates: ReadonlyArray<{ code: string; rate: string }> }).rates
+    assert.ok(rates.some((rate) => rate.code === "RO_STANDARD" && rate.rate === "21.00"))
+    assert.ok(rates.some((rate) => rate.code === "RO_REDUCED" && rate.rate === "11.00"))
+    const inferred = await handleApiRequest({ method: "GET",
+      url: "/api/vat-regimes?countryCode=RO&fiscalIdentifier=RO12345674", authorization, body: undefined }, runtime)
+    assert.equal((inferred.body as { inferredRegistration: boolean | null }).inferredRegistration, true)
+    assert.equal((await handleApiRequest({ method: "GET", url: "/api/vat-regimes?countryCode=RO",
+      authorization, body: undefined }, runtime)).status, 400)
     const mismatchedIssuer = await handleApiRequest({
       method: "PUT",
       url: "/api/issuer",
       authorization,
-      body: { ...issuerBody, fiscalIdentifier: "12345674" },
+      body: { ...issuerBody, vatChange: { registered: true, effectiveFrom: "invalid" } },
     }, runtime)
     assert.equal(mismatchedIssuer.status, 400)
-    assert.deepEqual((mismatchedIssuer.body as { issues: ReadonlyArray<string> }).issues, [
-      "fiscalIdentifier without RO prefix requires RO_NON_VAT with rate 0",
-    ])
+    assert.ok((mismatchedIssuer.body as { issues: ReadonlyArray<string> }).issues.some((issue) => issue.includes("effectiveFrom")))
     const issuerAfterRejectedSave = await handleApiRequest({ method: "GET", url: "/api/issuer", authorization, body: undefined }, runtime)
     assert.equal(issuerAfterRejectedSave.status, 404)
     const issuer = await handleApiRequest({ method: "PUT", url: "/api/issuer", authorization, body: issuerBody }, runtime)
     assert.equal(issuer.status, 200)
     assert.equal((issuer.body as { fiscalIdentifier: string }).fiscalIdentifier, "RO12345674")
+    assert.deepEqual((issuer.body as { currentVat: unknown }).currentVat,
+      { registered: true, effectiveFrom: "2025-08-01" })
     const canonicalIssuerDetails = {
       legalForm: "srl", tradeRegistryNumber: "J22/123/2020", iban: "RO49AAAA1B31007593840000",
       bankName: "Banca Română", socialCapital: "1000.00",
@@ -131,7 +136,7 @@ void test("requires host authentication and serves the complete invoice-core rou
       method: "PUT",
       url: "/api/issuer",
       authorization,
-      body: { ...issuerBody, fiscalIdentifier: "12345674" },
+      body: { ...issuerBody, vatChange: { registered: true, effectiveFrom: "invalid" } },
     }, runtime)
     assert.equal(rejectedUpdate.status, 400)
     const issuerAfterRejectedUpdate = await handleApiRequest({ method: "GET", url: "/api/issuer", authorization, body: undefined }, runtime)
@@ -262,6 +267,7 @@ void test("requires host authentication and serves the complete invoice-core rou
     }, runtime)
     assert.equal(issued.status, 200)
     assert.equal((issued.body as { totalIncludingVat: string }).totalIncludingVat, "121.00")
+    assert.equal((issued.body as { actorId: string }).actorId, "standalone-owner")
     assert.equal((issued.body as { customer: { name: string } }).customer.name, "Maria Ionescu")
     const invoiceId = (issued.body as { id: string }).id
     const fetched = await handleApiRequest({
@@ -297,6 +303,7 @@ void test("requires host authentication and serves the complete invoice-core rou
     }, runtime)
     assert.equal(payment.status, 200)
     assert.equal((payment.body as { status: string }).status, "partially_paid")
+    assert.equal((payment.body as { payment: { actorId: string } }).payment.actorId, "standalone-owner")
     assert.deepEqual(await handleApiRequest({ method: "POST", url: `/api/invoices/${invoiceId}/payments`, authorization, idempotencyKey: "payment-1",
       body: { amount: "50.00", currency: "RON", paymentDate: "2026-09-02", method: "transfer" } }, runtime), payment)
     const mistaken = await handleApiRequest({ method: "POST", url: `/api/invoices/${invoiceId}/payments`, authorization, idempotencyKey: "payment-2",
@@ -306,6 +313,7 @@ void test("requires host authentication and serves the complete invoice-core rou
       idempotencyKey: "reversal-1", body: { reason: "Înregistrată de două ori" } }, runtime)
     assert.equal(reversal.status, 200)
     assert.equal((reversal.body as { payment: { kind: string; reversesPaymentId: string } }).payment.kind, "reversal")
+    assert.equal((reversal.body as { payment: { actorId: string } }).payment.actorId, "standalone-owner")
     assert.equal((await handleApiRequest({ method: "POST", url: `/api/invoices/${invoiceId}/payments/${mistakenId}/reversal`, authorization,
       idempotencyKey: "reversal-2", body: {} }, runtime)).status, 409)
     const payments = await handleApiRequest({
@@ -340,6 +348,7 @@ void test("requires host authentication and serves the complete invoice-core rou
       method: "POST", url: `/api/drafts/${proformaDraftId}/proformas`, authorization, idempotencyKey: "draft-proforma-1", body: { series: "PRO" },
     }, runtime)
     assert.equal(proforma.status, 200)
+    assert.equal((proforma.body as { actorId: string }).actorId, "standalone-owner")
     assert.deepEqual((proforma.body as { source?: unknown }).source, { app: "crm", kind: "offer", id: "offer-1" })
     assert.equal((proforma.body as { dueDate: string | null }).dueDate, null)
     assert.equal((proforma.body as { convertedDraftId: string | null }).convertedDraftId, null)
@@ -389,6 +398,7 @@ void test("requires host authentication and serves the complete invoice-core rou
       method: "POST", url: `/api/proformas/${proformaId}/invoice`, authorization, idempotencyKey: "convert-proforma-1", body: {},
     }, runtime)
     assert.equal(converted.status, 200)
+    assert.equal((converted.body as { actorId: string }).actorId, "standalone-owner")
     assert.equal((converted.body as { dueDate: string | null }).dueDate, null)
     assert.equal((converted.body as { draftId: string | null }).draftId, null)
     assert.equal((converted.body as { sourceProformaId: string | null }).sourceProformaId, proformaId)
@@ -426,6 +436,7 @@ void test("requires host authentication and serves the complete invoice-core rou
       idempotencyKey: "invalid-unit", body: { ...authoredBody, lines: [{ ...authoredBody.lines[0], unitOfMeasure: { code: "NOPE", name: "inventată" } }] } }, runtime)).status, 400)
     const directInvoice = await handleApiRequest({ method: "POST", url: "/api/invoices", authorization, idempotencyKey: "direct-invoice-1", body: authoredBody }, runtime)
     assert.equal(directInvoice.status, 200)
+    assert.equal((directInvoice.body as { actorId: string }).actorId, "standalone-owner")
     assert.equal((directInvoice.body as { draftId: string | null }).draftId, null)
     assert.deepEqual((directInvoice.body as { source?: unknown }).source, authoredBody.source)
     assert.deepEqual((await handleApiRequest({ method: "POST", url: "/api/invoices", authorization,
@@ -447,6 +458,7 @@ void test("requires host authentication and serves the complete invoice-core rou
     const directProforma = await handleApiRequest({ method: "POST", url: "/api/proformas", authorization,
       idempotencyKey: "direct-proforma-1", body: { ...authoredBody, issueDate: "2026-09-05", proformaSeries: "PRO" } }, runtime)
     assert.equal(directProforma.status, 200)
+    assert.equal((directProforma.body as { actorId: string }).actorId, "standalone-owner")
     assert.equal((directProforma.body as { sourceDraftId: string | null }).sourceDraftId, null)
     const directProformaId = (directProforma.body as { id: string }).id
     assert.equal((await handleApiRequest({ method: "POST", url: `/api/proformas/${directProformaId}/invoice`, authorization,
@@ -461,6 +473,7 @@ void test("requires host authentication and serves the complete invoice-core rou
         source: { app: "erp", kind: "return", id: "return-1" } },
     }, runtime)
     assert.equal(correction.status, 200)
+    assert.equal((correction.body as { actorId: string }).actorId, "standalone-owner")
     assert.equal((correction.body as { totalIncludingVat: string }).totalIncludingVat, "-121.00")
     assert.deepEqual((correction.body as { source?: unknown }).source, { app: "erp", kind: "return", id: "return-1" })
     const corrections = await handleApiRequest({
@@ -600,7 +613,7 @@ void test("carries document remarks through the HTTP contract and rejects invali
       legalForm: "srl", tradeRegistryNumber: "J22/123/2020", iban: "RO49AAAA1B31007593840000",
       bankName: "Banca Română", socialCapital: "1000.00",
       defaultCurrency: "RON", defaultPaymentTermDays: 15,
-      vatConfigurations: [{ code: "RO_STANDARD", rate: "21.00", effectiveFrom: "2025-08-01" }],
+      vatChange: { registered: true, effectiveFrom: "2025-08-01" },
       branding: null,
     })
     await call("POST", "/api/document-series", { documentType: "invoice", series: "QWBE" })

@@ -267,11 +267,15 @@ the backup taken before the upgrade, then start the previous image. The full pro
 
 Authenticated routes live under `/api` and require `Authorization: Bearer <token>`.
 The Swagger page is at `/api` (behind the browser session) and the OpenAPI 3.1 document is
-generated from the same Effect `HttpApi` contract that serves the routes.
+generated from the same Effect `HttpApi` contract served by `HttpApiBuilder`.
+The builder handles routing, decoding and response encoding; input errors retain
+the existing `400 ValidationFailure` envelope. The server disposes its Effect
+handler on shutdown.
 
 | Area | Routes |
 |---|---|
 | Issuer | `GET`, `PUT /api/issuer` |
+| VAT catalogue | `GET /api/vat-regimes`, optionally with both `countryCode` and `fiscalIdentifier` |
 | Series | `GET`, `POST /api/document-series` |
 | Customers | `GET`, `POST /api/customers`, `GET`, `PUT`, `DELETE /api/customers/:id` |
 | Product presets | `GET`, `POST /api/product-presets`, `PUT`, `DELETE /api/product-presets/:id` |
@@ -282,6 +286,31 @@ generated from the same Effect `HttpApi` contract that serves the routes.
 | Corrections | `GET`, `POST /api/invoices/:id/corrections`, `GET /api/corrections/:id` |
 | Proformas | `POST /api/proformas`, `POST /api/drafts/:id/proformas`, `GET /api/proformas`, `GET /api/proformas/:id`, `POST /api/proformas/:id/invoice`, `POST`, `GET /api/proformas/:id/pdf` |
 | Health | `GET /health/live`, `GET /health/ready` (no auth) |
+
+Issuer configuration accepts `vatChange: { registered, effectiveFrom }` instead
+of a caller-authored `vatConfigurations` history. The server builds that history
+and returns it with `currentVat` (null when no registration is currently active).
+The catalogue supplies date-effective line rates separately from issuer registration;
+CUI inference is a suggestion, and configuration checks CUI/regime consistency
+on the current Europe/Bucharest date, not against a future scheduled transition.
+Draft issuance rejects stale VAT without consuming a document number; saving a
+stale draft refreshes affected lines even when their VAT code is unchanged. Issued
+documents, external snapshots and proforma conversions retain their frozen values.
+
+Numbered invoices, proformas and corrections expose a trusted `actorId`. Their
+issuance, issuer/series configuration, payments and reversals append fiscal events
+inside the business transaction; idempotent retries do not append duplicates.
+`audit_events` rejects updates/deletes. There is no audit browsing endpoint yet.
+Payments remains a separate cube with `payments:*` permissions; recording a payment
+is optional and is not required to issue an invoice. Document/PDF and session
+databases remain separate, and `eFacturaStatus` is retained.
+
+**Development migration:** `016-fiscal-audit` adds required actor columns without
+fabricating actors for old rows. Use a fresh development database; a populated
+pre-audit database may reject the migration and must be explicitly recreated.
+The migration never deletes existing databases automatically. Use the existing
+`migrate --json` dry-run, `migrate --apply --json`, repeated dry-run and `doctor --json`
+workflow on the new data directory; no backfill or legacy-snapshot fallback is provided.
 
 Registries (`GET /api/customers`, `/api/product-presets`, `/api/drafts`, `/api/invoices`, `/api/proformas`)
 are paged: the response is `{ "items": [...], "nextCursor": "..." | null }`, `?limit=` takes 1 to 200

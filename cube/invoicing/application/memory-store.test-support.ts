@@ -12,7 +12,7 @@ import {
   type TransactionalStore,
   type BrandingNormalizer,
 } from "../contracts/index.ts"
-import type { IdempotencyRecord, ProformaConversion } from "../domain/invoice.ts"
+import type { AuditEvent, IdempotencyRecord, ProformaConversion } from "../domain/invoice.ts"
 import type { DraftInvoice, InvoicingTransaction, IssuedInvoice, Proforma } from "./invoicing.ts"
 import type { DocumentCursor, DraftCursor, NameCursor, PageQuery } from "./ports.ts"
 
@@ -52,6 +52,7 @@ export interface MemoryState {
   sequences: Map<string, number>
   corrections: Map<string, Parameters<InvoicingTransaction["saveCorrection"]>[0]>
   idempotency: Map<string, IdempotencyRecord>
+  auditEvents: Array<AuditEvent>
 }
 
 const cloneState = (state: MemoryState): MemoryState => structuredClone(state)
@@ -182,6 +183,7 @@ export const memoryStore = (state: MemoryState): TransactionalStore<InvoicingTra
       ),
       findIdempotencyRecord: (organizationId, key) => Effect.succeed(working.idempotency.get(`${organizationId}:${key}`)),
       saveIdempotencyRecord: (record) => Effect.sync(() => { working.idempotency.set(`${record.organizationId}:${record.key}`, record) }),
+      appendAuditEvent: (event: AuditEvent) => Effect.sync(() => { working.auditEvents.push(event) }),
     }
     return Effect.tap(use(transaction), () => Effect.sync(() => {
       state.issuers = working.issuers
@@ -196,6 +198,7 @@ export const memoryStore = (state: MemoryState): TransactionalStore<InvoicingTra
       state.sequences = working.sequences
       state.corrections = working.corrections
       state.idempotency = working.idempotency
+      state.auditEvents = working.auditEvents
     }))
   }),
 })
@@ -263,4 +266,5 @@ export const emptyState = (): MemoryState => ({
   sequences: new Map(),
   corrections: new Map(),
   idempotency: new Map(),
+  auditEvents: [],
 })

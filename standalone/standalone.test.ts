@@ -31,12 +31,13 @@ void test("migration apply is idempotent", () => {
       "013-document-notes",
       "014-issuer-branding",
       "015-issuer-details",
+      "016-fiscal-audit",
       "documents/000-foundation",
       "documents/001-artifacts",
       "documents/002-proforma-artifacts",
       "sessions/000-browser-sessions",
     ])
-    assert.equal(applyMigrations(directory).changed, 20)
+    assert.equal(applyMigrations(directory).changed, 21)
     assert.equal(applyMigrations(directory).changed, 0)
     assert.equal(databaseReady(directory), true)
   } finally {
@@ -61,9 +62,16 @@ void test("migrations leave every database in write-ahead logging mode with the 
       const triggers = new Set(database.prepare("SELECT name FROM sqlite_master WHERE type = 'trigger'").all().map((row) => String(row.name)))
       for (const expected of ["issued_invoices_no_update", "issued_invoices_no_delete", "issued_lines_no_update", "issued_lines_no_delete",
         "issued_tax_breakdown_no_update", "issued_tax_breakdown_no_delete", "correction_documents_no_update", "correction_documents_no_delete",
-        "proformas_no_delete", "proformas_no_content_update", "idempotency_records_no_update", "idempotency_records_no_delete"]) {
+        "proformas_no_delete", "proformas_no_content_update", "idempotency_records_no_update", "idempotency_records_no_delete",
+        "issued_invoices_actor_no_update", "proformas_actor_no_update", "correction_documents_actor_no_update",
+        "audit_events_no_update", "audit_events_no_delete"]) {
         assert.ok(triggers.has(expected), `${expected} must exist after all migrations`)
       }
+      for (const table of ["issued_invoices", "proformas", "correction_documents"]) {
+        const actor = database.prepare("SELECT type,\"notnull\" AS required,dflt_value FROM pragma_table_info(?) WHERE name='actor_id'").get(table)
+        assert.deepEqual(actor === undefined ? undefined : { ...actor }, { type: "TEXT", required: 1, dflt_value: null }, table)
+      }
+      assert.match(String(database.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='audit_events'").get()?.sql), /STRICT$/)
       for (const [table, column] of [["issuers", "branding"], ["issued_invoices", "issuer_branding"], ["proformas", "issuer_branding"]] as const) {
         assert.ok(database.prepare("SELECT 1 FROM pragma_table_info(?) WHERE name=?").get(table, column), `${table}.${column}`)
       }

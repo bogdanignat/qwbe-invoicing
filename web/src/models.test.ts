@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { decodeCorrection, decodeCustomer, decodeDocumentSeries, decodeDocumentSeriesList, decodeDraft, decodeDrafts, decodeInvoice, decodeIssuer, decodePaymentSummary, decodeProductPreset, decodeProductPresetPage, decodeProductPresets, decodeProforma, decodeProformas, decodeUnitOfMeasures, invoiceDocumentSeries, proformaDocumentSeries } from "./models.ts"
+import { decodeCorrection, decodeCustomer, decodeDocumentSeries, decodeDocumentSeriesList, decodeDraft, decodeDrafts, decodeInvoice, decodeIssuer, decodePaymentSummary, decodeProductPreset, decodeProductPresetPage, decodeProductPresets, decodeProforma, decodeProformas, decodeUnitOfMeasures, decodeVatCatalogue, invoiceDocumentSeries, proformaDocumentSeries } from "./models.ts"
 const each = { code: "C62", name: "unitate" } as const
 
 void test("decodes optional address and payment fields without leaking null", () => {
@@ -12,8 +12,8 @@ void test("decodes optional address and payment fields without leaking null", ()
     id: "customer-1", organizationId: "org-1", partyType: "company", name: "Client", fiscalIdentifier: "RO1",
     address: { countryCode: "RO", city: "Botoșani", street: "Strada 1" },
   })
-  assert.deepEqual(decodePaymentSummary({ invoiceId: "invoice-1", status: "paid", paidAmount: "121.00", remainingAmount: "0.00", payments: [{ id: "payment-1", kind: "payment", amount: "121.00", currency: "RON", paymentDate: "2026-08-31", method: "transfer", externalReference: null }] }).payments[0], {
-    id: "payment-1", kind: "payment", amount: "121.00", currency: "RON", paymentDate: "2026-08-31", method: "transfer",
+  assert.deepEqual(decodePaymentSummary({ invoiceId: "invoice-1", status: "paid", paidAmount: "121.00", remainingAmount: "0.00", payments: [{ id: "payment-1", kind: "payment", actorId: "user-1", amount: "121.00", currency: "RON", paymentDate: "2026-08-31", method: "transfer", externalReference: null }] }).payments[0], {
+    id: "payment-1", kind: "payment", actorId: "user-1", amount: "121.00", currency: "RON", paymentDate: "2026-08-31", method: "transfer",
   })
 })
 
@@ -21,6 +21,8 @@ void test("rejects malformed external API values and unknown payment statuses", 
   assert.throws(() => decodeCustomer(null), /expected object/)
   assert.throws(() => decodeCustomer({ id: 1 }), /invalid/)
   assert.throws(() => decodePaymentSummary({ invoiceId: "invoice-1", status: "settled", paidAmount: "0.00", remainingAmount: "1.00", payments: [] }), /invalid payment status/)
+  assert.throws(() => decodePaymentSummary({ invoiceId: "invoice-1", status: "paid", paidAmount: "1.00", remainingAmount: "0.00",
+    payments: [{ id: "payment-1", kind: "payment", amount: "1.00", currency: "RON", paymentDate: "2026-08-31", method: "transfer" }] }), /invalid actorId/)
 })
 
 void test("decodes customer payment terms and product presets", () => {
@@ -49,8 +51,12 @@ void test("requires integer issuer terms and decodes tax configuration", () => {
     legalForm: "srl", tradeRegistryNumber: "J07/123/2020", iban: "", bankName: "", socialCapital: "200.00",
     branding: null, defaultCurrency: "RON", defaultPaymentTermDays: 15,
     vatConfigurations: [{ code: "RO_STANDARD", rate: "21.00", effectiveFrom: "2026-01-01", effectiveTo: null }],
+    currentVat: { registered: true, effectiveFrom: "2026-01-01", effectiveTo: null },
   }
   assert.equal(decodeIssuer(input).vatConfigurations[0]?.effectiveTo, undefined)
+  assert.deepEqual(decodeIssuer(input).currentVat, { registered: true, effectiveFrom: "2026-01-01" })
+  assert.throws(() => decodeIssuer({ ...input, currentVat: undefined }))
+  assert.throws(() => decodeIssuer({ ...input, currentVat: { registered: "yes", effectiveFrom: "2026-01-01" } }))
   assert.throws(() => decodeIssuer({ ...input, defaultPaymentTermDays: "15" }), /invalid defaultPaymentTermDays/)
 })
 
@@ -75,7 +81,7 @@ void test("decodes document series and requires supported document types", () =>
 })
 
 const commercialDocument = {
-  id: "proforma-1", sourceDraftId: "draft-1", organizationId: "org-1", series: "PRO", number: 7,
+  id: "proforma-1", sourceDraftId: "draft-1", organizationId: "org-1", series: "PRO", number: 7, actorId: "user-1",
   issueDate: "2026-09-01", dueDate: null, issuedAt: "2026-09-01T10:00:00.000Z", currency: "RON", notes: null,
   issuer: { name: "QWBE", fiscalIdentifier: "RO2", address: { countryCode: "RO", city: "Botoșani", street: "Strada 2" }, legalForm: "srl", tradeRegistryNumber: "J07/123/2020", iban: "", bankName: "", socialCapital: "200.00", branding: null },
   customer: { partyType: "company", name: "Client", fiscalIdentifier: "RO1", address: { countryCode: "RO", city: "Iași", street: "Strada 1" } },
@@ -87,12 +93,14 @@ const commercialDocument = {
 
 void test("strictly decodes nullable commercial dates and proforma conversion state", () => {
   assert.equal(decodeProforma(commercialDocument).dueDate, null)
+  assert.equal(decodeProforma(commercialDocument).actorId, "user-1")
   assert.equal(decodeProformas([{ ...commercialDocument, convertedDraftId: "draft-2" }])[0]?.convertedDraftId, "draft-2")
   assert.equal(decodeProformas([{ ...commercialDocument, sourceDraftId: null, convertedInvoiceId: "invoice-2" }])[0]?.convertedInvoiceId, "invoice-2")
   assert.throws(() => decodeProforma({ ...commercialDocument, dueDate: undefined }), /invalid dueDate/)
   assert.throws(() => decodeProforma({ ...commercialDocument, dueDate: 15 }), /invalid dueDate/)
   assert.throws(() => decodeProforma({ ...commercialDocument, convertedDraftId: undefined }), /invalid convertedDraftId/)
   assert.throws(() => decodeProforma({ ...commercialDocument, convertedDraftId: 2 }), /invalid convertedDraftId/)
+  assert.throws(() => decodeProforma({ ...commercialDocument, actorId: undefined }), /invalid actorId/)
   assert.equal(decodeDraft({ ...commercialDocument, status: "draft", customerId: "customer-1" }).dueDate, null)
   assert.throws(() => decodeDraft({ ...commercialDocument, status: "draft", customerId: "customer-1", dueDate: undefined }), /invalid dueDate/)
   assert.equal(decodeInvoice({ ...commercialDocument, draftId: null, sourceProformaId: "proforma-1", eFacturaStatus: "not_sent" }).sourceProformaId, "proforma-1")
@@ -107,7 +115,7 @@ void test("strictly requires and decodes issuer branding on details while summar
     organizationId: "org-1", name: "QWBE", fiscalIdentifier: "RO2",
     address: { countryCode: "RO", city: "Botoșani", street: "Strada 2" },
     legalForm: "srl", tradeRegistryNumber: "J07/123/2020", iban: "", bankName: "", socialCapital: "200.00",
-    defaultCurrency: "RON", defaultPaymentTermDays: 15, vatConfigurations: [],
+    defaultCurrency: "RON", defaultPaymentTermDays: 15, vatConfigurations: [], currentVat: null,
   }
   const image = { pngBase64: "iVBORw0KGgo=", width: 120, height: 40 }
   assert.equal(decodeIssuer({ ...issuerInput, branding: null }).branding, null)
@@ -147,10 +155,24 @@ void test("requires the series fixed on a draft", () => {
 
 void test("strictly decodes correction issuers as company snapshots without branding", () => {
   const issuer = { name: "QWBE", fiscalIdentifier: "RO2", address: commercialDocument.issuer.address, legalForm: "srl", tradeRegistryNumber: "J07/123/2020", iban: "", bankName: "", socialCapital: "200.00" }
-  const decoded = decodeCorrection({ id: "correction-1", series: "QWBE", number: 9, issueDate: "2026-09-02", reason: "Storno", currency: "RON", totalIncludingVat: "-121.00", issuer })
+  const decoded = decodeCorrection({ id: "correction-1", series: "QWBE", number: 9, issueDate: "2026-09-02", actorId: "user-1", reason: "Storno", currency: "RON", totalIncludingVat: "-121.00", issuer })
   assert.deepEqual(decoded.issuer, issuer)
+  assert.equal(decoded.actorId, "user-1")
   assert.equal("branding" in decoded.issuer, false)
-  assert.throws(() => decodeCorrection({ id: "correction-1", series: "QWBE", number: 9, issueDate: "2026-09-02", reason: "Storno", currency: "RON", totalIncludingVat: "-121.00" }), /expected object/)
+  assert.throws(() => decodeCorrection({ id: "correction-1", series: "QWBE", number: 9, issueDate: "2026-09-02",
+    reason: "Storno", currency: "RON", totalIncludingVat: "-121.00", issuer }), /invalid actorId/)
+  assert.throws(() => decodeCorrection({ id: "correction-1", series: "QWBE", number: 9, issueDate: "2026-09-02",
+    actorId: "user-1", reason: "Storno", currency: "RON", totalIncludingVat: "-121.00" }), /expected object/)
+})
+
+void test("decodes VAT catalogue legal periods and nullable inference", () => {
+  const catalogue = decodeVatCatalogue({ rates: [
+    { code: "RO_STANDARD", rate: "19.00", kind: "standard", label: "TVA standard 19%", effectiveFrom: "2025-01-01", effectiveTo: "2025-07-31" },
+    { code: "RO_STANDARD", rate: "21.00", kind: "standard", label: "TVA standard 21%", effectiveFrom: "2025-08-01" },
+  ], inferredRegistration: null })
+  assert.equal(catalogue.rates[0]?.effectiveTo, "2025-07-31")
+  assert.equal(catalogue.inferredRegistration, null)
+  assert.throws(() => decodeVatCatalogue({ ...catalogue, inferredRegistration: "yes" }), /invalid inferredRegistration/)
 })
 
 void test("decodes inline individual buyers and complete server totals", () => {

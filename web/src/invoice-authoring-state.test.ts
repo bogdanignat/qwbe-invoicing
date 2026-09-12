@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { addCalendarDays, applyProductPreset, authoringAccess, authoringDocumentPayload, authoringPayloadMatchesDraft, authoringReadiness, authoringSeriesOptions, createDraftPayload, documentNotesIssue, documentNotesMaxLength, draftLinePayload, draftLinesForEditing, editDueDate, formFromDraft, headerMatchesDraft, initialBuyerSelection, linesMatchDraft, newAuthoringForm, pendingLineOperations, selectBuyerMode, selectIssueDate, selectedSavedCustomer, selectSavedCustomer, switchBuyerMode, switchPartyType, updateDraftPayload, type InvoiceAuthoringForm } from "./invoice-authoring-state.ts"
+import { addCalendarDays, applyProductPreset, authoringAccess, authoringDocumentPayload, authoringPayloadMatchesDraft, authoringReadiness, authoringSeriesOptions, authoringTaxReadiness, createDraftPayload, documentNotesIssue, documentNotesMaxLength, draftLinePayload, draftLinesForEditing, editDueDate, formFromDraft, headerMatchesDraft, initialBuyerSelection, linesMatchDraft, newAuthoringForm, newEditableInvoiceLine, pendingLineOperations, preferredUnitOfMeasure, selectBuyerMode, selectIssueDate, selectedSavedCustomer, selectSavedCustomer, switchBuyerMode, switchPartyType, updateDraftPayload, type InvoiceAuthoringForm } from "./invoice-authoring-state.ts"
 import type { Customer, DraftInvoice, Issuer, ProductPreset } from "./models.ts"
 const each = { code: "C62", name: "unitate" } as const
 
@@ -22,6 +22,7 @@ const issuer: Issuer = {
   address: { countryCode: "RO", city: "Botoșani", street: "Strada 2" },
   legalForm: "srl", tradeRegistryNumber: "J07/123/2020", iban: "", bankName: "", socialCapital: "200.00",
   branding: null, defaultCurrency: "RON", defaultPaymentTermDays: 15, vatConfigurations: [],
+  currentVat: { registered: true, effectiveFrom: "2025-08-01" },
 }
 
 const customer: Customer = {
@@ -124,6 +125,25 @@ void test("copies a product preset into an editable line without retaining a liv
   })
 })
 
+void test("builds new lines from extracted authoring defaults", () => {
+  const hour = { code: "HUR", name: "oră" }
+  assert.equal(preferredUnitOfMeasure([hour, each]), each)
+  assert.equal(preferredUnitOfMeasure([hour]), hour)
+  assert.deepEqual(newEditableInvoiceLine("local-1", "RO_STANDARD", each), {
+    key: "local-1", description: "", quantity: "1", unitPrice: "", unitOfMeasure: each, vatRateCode: "RO_STANDARD",
+  })
+})
+
+void test("blocks stale-tax issuance instead of offering a bypass confirmation", () => {
+  const ready = { editable: true, synchronized: true, hasLines: true, canIssue: true }
+  assert.deepEqual(authoringTaxReadiness(ready, false), { canIssue: true, synchronized: true, warning: null })
+  assert.deepEqual(authoringTaxReadiness(ready, true), {
+    canIssue: false,
+    synchronized: false,
+    warning: "Configurația TVA s-a schimbat. Actualizează și salvează configurația TVA a liniilor afectate înainte de emitere.",
+  })
+})
+
 void test("prepares invoice and proforma series independently for authoring", () => {
   assert.deepEqual(authoringSeriesOptions([
     { organizationId: "org-1", documentType: "proforma", series: "PRO" },
@@ -198,6 +218,29 @@ void test("selects only remaining new or changed lines for a resumed save", () =
   const queued = { key: "local-2", description: "Transport", quantity: "1", unitPrice: "20", unitOfMeasure: each, vatRateCode: "RO_STANDARD" }
   assert.deepEqual(pendingLineOperations([persisted, queued], withLine).map((operation) => operation.kind), ["create"])
   assert.deepEqual(pendingLineOperations([{ ...persisted, unitPrice: "110" }, queued], withLine).map((operation) => operation.kind), ["update", "create"])
+})
+
+void test("forces a stale same-code saved line update and stops resending after server refresh", () => {
+  const stale = { ...draft, lines: [{ id: "line-1", description: "Serviciu", quantity: "1.0000", unitPrice: "100.00", unitOfMeasure: each, vatRateCode: "RO_STANDARD", vatRate: "19.00", totalExcludingVat: "100.00", vatAmount: "19.00", totalIncludingVat: "119.00" }] }
+  const editable = draftLinesForEditing(stale)
+  assert.deepEqual(pendingLineOperations(editable, stale, ["line-1"]).map((operation) => operation.kind), ["update"])
+  const refreshed = { ...stale, lines: [{ ...stale.lines[0] as NonNullable<typeof stale.lines[0]>, vatRate: "21.00", vatAmount: "21.00", totalIncludingVat: "121.00" }] }
+  assert.deepEqual(pendingLineOperations(draftLinesForEditing(refreshed), refreshed, []), [])
+  const readiness = authoringReadiness(formFromDraft(refreshed), draftLinesForEditing(refreshed), refreshed, false)
+  assert.equal(authoringTaxReadiness(readiness, false).canIssue, true)
+})
+
+void test("does not resend an unchanged valid saved line when no forced update is requested", () => {
+  const valid = { ...draft, lines: [{ id: "line-1", description: "Serviciu", quantity: "1.0000", unitPrice: "100.00", unitOfMeasure: each, vatRateCode: "RO_STANDARD", vatRate: "21.00", totalExcludingVat: "100.00", vatAmount: "21.00", totalIncludingVat: "121.00" }] }
+  assert.deepEqual(pendingLineOperations(draftLinesForEditing(valid), valid, []), [])
+})
+
+void test("retries only the remaining forced stale line after a partial multi-line save", () => {
+  const line = { description: "Serviciu", quantity: "1.0000", unitPrice: "100.00", unitOfMeasure: each, vatRateCode: "RO_STANDARD", vatRate: "19.00", totalExcludingVat: "100.00", vatAmount: "19.00", totalIncludingVat: "119.00" }
+  const initial = { ...draft, lines: [{ ...line, id: "line-1" }, { ...line, id: "line-2", description: "Transport" }] }
+  assert.deepEqual(pendingLineOperations(draftLinesForEditing(initial), initial, ["line-1", "line-2"]).map((operation) => operation.line.lineId), ["line-1", "line-2"])
+  const afterFirstSave = { ...initial, lines: [{ ...initial.lines[0] as NonNullable<typeof initial.lines[0]>, vatRate: "21.00" }, initial.lines[1] as NonNullable<typeof initial.lines[1]>] }
+  assert.deepEqual(pendingLineOperations(draftLinesForEditing(afterFirstSave), afterFirstSave, ["line-2"]).map((operation) => operation.line.lineId), ["line-2"])
 })
 
 void test("compares saved remarks before allowing a direct issuance payload", () => {

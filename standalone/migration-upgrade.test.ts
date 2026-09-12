@@ -56,12 +56,12 @@ const seedVersionSix = (directory: string) => {
   }
 }
 
-// Historical upgrade fixtures exercise migrations through 014 only. T1293 deliberately supports
-// fresh databases, not populated legacy databases, so those fixtures mark 015 outside their scope.
+// Historical populated fixtures stop before fresh-only NOT NULL migrations; development databases are recreated.
 const excludeFreshOnlyIssuerDetails = (directory: string): void => {
   const database = new DatabaseSync(databasePath(directory))
   try {
     database.prepare("INSERT INTO schema_migrations(name,applied_at)VALUES('015-issuer-details','2026-01-01')").run()
+    database.prepare("INSERT INTO schema_migrations(name,applied_at)VALUES('016-fiscal-audit','2026-01-01')").run()
   } finally { database.close() }
 }
 
@@ -80,7 +80,8 @@ void test("upgrades a populated version-six database without rewriting migration
       assert.deepEqual(migrations, ["000-foundation", "001-invoice-core", "002-invoice-payments", "003-invoice-corrections",
         "004-invoice-delete-last", "005-allow-e-factura-status-update", "006-customer-soft-delete", "007-complete-invoice-authoring",
          "008-proforma-workflow", "009-proforma-direct-invoice", "010-product-presets-payment-terms",
-         "011-external-api-snapshots", "012-payment-idempotency", "013-document-notes", "014-issuer-branding", "015-issuer-details"])
+         "011-external-api-snapshots", "012-payment-idempotency", "013-document-notes", "014-issuer-branding", "015-issuer-details",
+         "016-fiscal-audit"])
       const columns = database.prepare("PRAGMA table_info(invoice_drafts)").all()
       assert.equal(columns.some((row) => row.name === "customer_id" && row.notnull === 0), true)
       assert.equal(columns.some((row) => row.name === "due_date" && row.notnull === 0), true)
@@ -171,6 +172,26 @@ void test("015 is fresh-only and rolls back instead of inventing issuer-detail b
     try {
       assert.equal(unchanged.prepare("SELECT 1 FROM schema_migrations WHERE name='015-issuer-details'").get(), undefined)
       assert.equal(unchanged.prepare("SELECT 1 FROM pragma_table_info('issuers') WHERE name='legal_form'").get(), undefined)
+    } finally { unchanged.close() }
+  } finally { rmSync(directory, { recursive: true, force: true }) }
+})
+
+void test("016 uses SQLite fresh-only NOT NULL ALTER behavior and rolls back without actor backfill", () => {
+  const directory = mkdtempSync(join(tmpdir(), "qwbe-audit-upgrade-"))
+  try {
+    seedVersionSix(directory)
+    excludeFreshOnlyIssuerDetails(directory)
+    applyMigrations(directory)
+    const database = new DatabaseSync(databasePath(directory))
+    try {
+      database.prepare("DELETE FROM schema_migrations WHERE name='016-fiscal-audit'").run()
+    } finally { database.close() }
+    assert.throws(() => applyMigrations(directory), /Cannot add a NOT NULL column with default value NULL/)
+    const unchanged = new DatabaseSync(databasePath(directory), { readOnly: true })
+    try {
+      assert.equal(unchanged.prepare("SELECT 1 FROM schema_migrations WHERE name='016-fiscal-audit'").get(), undefined)
+      assert.equal(unchanged.prepare("SELECT 1 FROM pragma_table_info('issued_invoices') WHERE name='actor_id'").get(), undefined)
+      assert.equal(unchanged.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='audit_events'").get(), undefined)
     } finally { unchanged.close() }
   } finally { rmSync(directory, { recursive: true, force: true }) }
 })
