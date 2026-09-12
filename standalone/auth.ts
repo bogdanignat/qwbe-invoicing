@@ -20,6 +20,9 @@ const bearerToken = (authorization: string | undefined): string | undefined => {
   return token.length > 0 ? token : undefined
 }
 
+export const hasBearerCredential = (authorization: string | undefined): boolean =>
+  bearerToken(authorization) !== undefined
+
 const matches = (actual: string, expected: string): boolean => {
   const actualBytes = Buffer.from(actual)
   const expectedBytes = Buffer.from(expected)

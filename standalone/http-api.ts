@@ -65,20 +65,42 @@ const idempotentHeaders = Schema.Struct({
 
 type Endpoint<N extends string, M extends HttpMethod, P, U, B, H, S, E, R, RE> =
   HttpApiEndpoint.HttpApiEndpoint<N, M, P, U, B, H, S, E, R, RE>
+const retryAfterHeader = {
+  description: "Cooldown remaining in whole seconds.",
+  required: true,
+  schema: { type: "integer", minimum: 1, maximum: 30 },
+} as const
+const addRetryAfterHeader = (operation: Record<string, unknown>): Record<string, unknown> => {
+  const responses = operation.responses as Readonly<Record<string, Readonly<Record<string, unknown>>>>
+  const throttled = responses["429"]
+  if (throttled === undefined) return operation
+  const headers = throttled.headers as Readonly<Record<string, unknown>> | undefined
+  return {
+    ...operation,
+    responses: {
+      ...responses,
+      "429": { ...throttled, headers: { ...headers, "Retry-After": retryAfterHeader } },
+    },
+  }
+}
 const invoicingBase = <N extends string, M extends HttpMethod, P, U, B, H, Success, E, R, RE>(
   endpoint: Endpoint<N, M, P, U, B, H, Success, E, R, RE>,
 ) => endpoint
   .addError(S.PermissionDeniedError)
   .addError(S.InvoicingInternalError)
   .addError(S.BusinessUnavailableError)
+  .addError(S.TooManyAttemptsError)
   .middleware(ApiAuthentication)
+  .annotate(OpenApi.Transform, addRetryAfterHeader)
 const documentsBase = <N extends string, M extends HttpMethod, P, U, B, H, Success, E, R, RE>(
   endpoint: Endpoint<N, M, P, U, B, H, Success, E, R, RE>,
 ) => endpoint
   .addError(S.DocumentsPermissionDeniedError)
   .addError(S.DocumentsInternalError)
   .addError(S.BusinessUnavailableError)
+  .addError(S.TooManyAttemptsError)
   .middleware(ApiAuthentication)
+  .annotate(OpenApi.Transform, addRetryAfterHeader)
 const body = <N extends string, M extends HttpMethod, P, U, B, H, Success, E, R, RE>(
   endpoint: Endpoint<N, M, P, U, B, H, Success, E, R, RE>,
 ) => endpoint.setHeaders(csrfHeaders)
@@ -160,9 +182,11 @@ const sessions = HttpApiGroup.make("sessions")
     .middleware(SessionAuthentication))
   .add(HttpApiEndpoint.post("createSession", "/session").setPayload(S.LoginInput).addSuccess(S.AuthenticatedSession)
     .addError(S.InvalidJsonError).addError(S.InvalidCredentialsRequestError).addError(S.InvalidCredentialsError)
+    .addError(S.TooManyAttemptsError)
     .addError(S.OriginForbiddenError)
     .addError(S.PayloadTooLargeError)
-    .addError(S.SessionInternalError).addError(S.ReadinessError))
+    .addError(S.SessionInternalError).addError(S.ReadinessError)
+    .annotate(OpenApi.Transform, addRetryAfterHeader))
   .add(HttpApiEndpoint.del("deleteSession", "/session").setHeaders(requiredCsrfHeaders).addSuccess(S.LoggedOutSession)
     .addError(S.CsrfError).addError(S.SessionInternalError).addError(S.ReadinessError)
     .middleware(SessionAuthentication))

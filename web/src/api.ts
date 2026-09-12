@@ -21,6 +21,7 @@ const failureMessages: Readonly<Record<string, string>> = {
   AuthenticationRequired: "Sesiunea a expirat. Introdu din nou tokenul API.",
   csrf_validation_failed: "Sesiunea nu a putut valida cererea. Reîncarcă pagina și încearcă din nou.",
   invalid_credentials: "Tokenul API este incorect.",
+  too_many_attempts: "Prea multe încercări. Așteaptă puțin și încearcă din nou.",
   origin_not_allowed: "Originea cererii de autentificare nu este permisă.",
   ResourceNotFound: "Resursa cerută nu mai există. Reîncarcă pagina și încearcă din nou.",
   customer_has_open_drafts: "Clientul are drafturi deschise.",

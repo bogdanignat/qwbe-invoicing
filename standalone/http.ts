@@ -1,10 +1,13 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http"
 
+import { Effect, Either } from "effect"
+
 import { apiDocsResponse } from "./api-docs.ts"
 import { handleApiRequest } from "./api.ts"
-import { createRequestAuthenticator } from "./auth.ts"
+import { createRequestAuthenticator, hasBearerCredential } from "./auth.ts"
 import { createBrowserSession } from "./browser-session.ts"
 import type { RuntimeConfig } from "./config.ts"
+import { createLoginThrottle, loginPeerKey, type SecurityLogger } from "./login-throttle.ts"
 import { databaseReady } from "./migrations.ts"
 import { cachedReadiness, readinessIntervalMs } from "./readiness.ts"
 import { staticUiResponse } from "./static-ui.ts"
@@ -73,14 +76,35 @@ const loginToken = (body: unknown): string | undefined => {
   return typeof token === "string" && token.trim().length > 0 ? token : undefined
 }
 
+interface ServerDependencies {
+  readonly now?: () => number
+  readonly monotonicNow?: () => number
+  readonly securityLogger?: SecurityLogger
+  readonly peerKey?: (request: IncomingMessage) => string | undefined
+}
+
 export const startServer = (
   config: RuntimeConfig,
   isReady: () => boolean = cachedReadiness(() => databaseReady(config.dataDirectory), readinessIntervalMs),
   renderApiDocs: () => Promise<Awaited<ReturnType<typeof apiDocsResponse>>> = apiDocsResponse,
+  dependencies: ServerDependencies = {},
 ): Server => {
   const authenticate = createRequestAuthenticator(config)
-  const browserSession = createBrowserSession(config)
+  const now = dependencies.now ?? Date.now
+  const browserSession = createBrowserSession(config, now)
+  const throttle = createLoginThrottle({
+    now,
+    ...(dependencies.monotonicNow === undefined ? {} : { monotonicNow: dependencies.monotonicNow }),
+    ...(dependencies.securityLogger === undefined ? {} : { logger: dependencies.securityLogger }),
+  })
   const server = createServer((request, response) => {
+    const peer = loginPeerKey(dependencies.peerKey === undefined ? request.socket.remoteAddress : dependencies.peerKey(request))
+    const rejectCooldown = (): boolean => {
+      const retryAfter = throttle.check(peer)
+      if (retryAfter === 0) return false
+      send(response, 429, { error: "too_many_attempts" }, { "retry-after": String(retryAfter) })
+      return true
+    }
     void (async () => {
       const path = request.url === undefined ? undefined : new URL(request.url, "http://localhost").pathname
       if (path === "/api" && request.method === "GET") {
@@ -113,7 +137,11 @@ export const startServer = (
           const csrfToken = header(request.headers["x-csrf-token"])
           if (path === "/api/session") {
             if (request.method === "POST") {
+              if (rejectCooldown()) return
               const token = loginToken(await readBody(request))
+              // A request may have been waiting on its body while other attempts
+              // activated a cooldown. Recheck at the credential verification seam.
+              if (rejectCooldown()) return
               if (token === undefined) {
                 send(response, 400, { error: "invalid_credentials" })
                 return
@@ -124,9 +152,11 @@ export const startServer = (
                 return
               }
               if (login.kind === "unauthorized") {
+                throttle.failed(peer)
                 send(response, 401, { error: "invalid_credentials" }, { "set-cookie": browserSession.clearCookie })
                 return
               }
+              throttle.succeeded(peer)
               send(response, 200, { authenticated: true, csrfToken: login.csrfToken }, { "set-cookie": login.setCookie })
               return
             }
@@ -157,6 +187,8 @@ export const startServer = (
             return
           }
           let authorization = header(request.headers.authorization)
+          const explicitCredential = hasBearerCredential(authorization)
+          if (explicitCredential && rejectCooldown()) return
           if (authorization === undefined) {
             const sessionAuthorization = browserSession.authorize({
               cookie,
@@ -172,13 +204,31 @@ export const startServer = (
             if (sessionAuthorization.kind === "authorized") authorization = sessionAuthorization.authorization
           }
           const idempotencyKey = header(request.headers["idempotency-key"])
+          const body = await readBody(request)
+          if (explicitCredential && rejectCooldown()) return
+          let requestAuthenticate = authenticate
+          if (explicitCredential) {
+            // The standalone credential provider is synchronous and local. Keep
+            // admission, credential validation and accounting in this same turn,
+            // before awaiting business I/O; otherwise concurrent requests race.
+            const authenticated = Effect.runSync(Effect.either(authenticate(authorization).current))
+            if (Either.isLeft(authenticated)) {
+              const invalid = authenticated.left._tag === "AuthenticationRequired"
+              if (invalid) throttle.failed(peer)
+              send(response, invalid ? 401 : 503, { error: authenticated.left._tag })
+              return
+            }
+            throttle.succeeded(peer)
+            const context = authenticated.right
+            requestAuthenticate = () => ({ current: Effect.succeed(context) })
+          }
           const result = await handleApiRequest({
             method: request.method ?? "GET",
             url: request.url ?? path,
             authorization,
             ...(idempotencyKey === undefined ? {} : { idempotencyKey }),
-            body: await readBody(request),
-          }, { authenticate, dataDirectory: config.dataDirectory })
+            body,
+          }, { authenticate: requestAuthenticate, dataDirectory: config.dataDirectory })
           const responseHeaders = result.status === 401 && authorization === undefined && cookie !== undefined
             ? { ...result.headers, "set-cookie": browserSession.clearCookie }
             : result.headers

@@ -314,16 +314,31 @@ fails, so it can gate a deployment.
 
 ## Security model
 
-- The API token is the only credential. It is read from a file, never printed, never stored
-  in the image.
+- The single API token is the shared owner/admin credential for the installation. Every
+  holder receives owner access as actor `standalone-owner`; standalone mode has no users or
+  separate authorization levels yet. The token is read from a file, never printed and never
+  stored in the image. Rotate it by replacing the secret file and restarting the process;
+  the changed credential hash invalidates existing browser sessions.
 - The browser UI exchanges the token once for a revocable, opaque 30-day session held in an
   `HttpOnly`, `SameSite=Strict` cookie (`Secure` under HTTPS and in production). The token
   never reaches browser JavaScript, storage or the URL. State-changing requests carry a
   per-session CSRF token.
-- Permissions are explicit per operation: read, manage customers, draft, issue invoices,
-  issue proformas, void, record payments, manage settings.
+- Failed browser unlocks and failed Bearer authentication are throttled in memory by the
+  normalized direct socket peer address; forwarded headers are not trusted. The protection
+  is instance-local. The first five failures have no cooldown; from the sixth failure,
+  cooldowns are 1, 2, 4, 8, 16 and then at most 30 seconds.
+  Entries expire after 15 minutes of inactivity, are capped at 10,000 with LRU eviction and
+  reset on process restart; successful authentication resets the peer entry. Cookie-session
+  requests are unaffected. Valid traffic is unaffected in normal state, but a valid Bearer
+  request can receive `429 {"error":"too_many_attempts"}` with `Retry-After` while its shared
+  peer is cooling down.
+- NATs and proxies aggregate callers under one peer, creating an explicit risk of temporary
+  shared lockout; there is no trusted-proxy configuration. Throttle logs contain neither
+  secrets nor raw IP addresses and emit at most once per key per cooldown interval. This is
+  login-throttling, not complete DDoS protection; enforce broad request-rate and network
+  controls at the reverse proxy.
 - Issued documents are immutable; PDFs are content-addressed and verified on read.
-- The container is read-only and non-root. TLS, rate limiting and network exposure are the
+- The container is read-only and non-root. TLS and network exposure are the
   reverse proxy's job; the included Caddy profile sets HSTS and the usual hardening headers.
 
 ## Repository layout
