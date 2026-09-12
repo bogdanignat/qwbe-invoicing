@@ -157,6 +157,7 @@ const AuthoringSession = ({ initialDraft, issuer, customers, invoiceSeries, prof
     {[...backgroundErrors, authoringPresets.error].filter((error): error is Error => error !== null).map((error, index) => <ErrorAlert key={`${error.message}-${String(index)}`} error={error} />)}
     {mutationError === null ? null : <ErrorAlert error={mutationError} />}
     {initialDraft === undefined && draft !== undefined && save.error !== null ? <p className="status-note warning" role="status">Draftul a fost creat și păstrat în această pagină. Corectează eroarea și apasă din nou „Salvează draftul”; vor fi retrimise numai liniile rămase sau modificate.</p> : null}
+    {authoringCustomers.issuerWarning === undefined ? null : <p className="status-note warning" role="status">{authoringCustomers.issuerWarning} Salvarea draftului rămâne disponibilă; API-ul verifică emiterea.</p>}
     {staleTax ? <p className="status-note warning" role="status" aria-live="polite">Configurația TVA s-a schimbat. Salvează antetul sau liniile afectate și verifică totalurile înainte de emitere.</p> : null}
     <form className="authoring-form" onSubmit={submit}>
       <div className="authoring-main">

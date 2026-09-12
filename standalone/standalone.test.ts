@@ -30,12 +30,13 @@ void test("migration apply is idempotent", () => {
       "012-payment-idempotency",
       "013-document-notes",
       "014-issuer-branding",
+      "015-issuer-details",
       "documents/000-foundation",
       "documents/001-artifacts",
       "documents/002-proforma-artifacts",
       "sessions/000-browser-sessions",
     ])
-    assert.equal(applyMigrations(directory).changed, 19)
+    assert.equal(applyMigrations(directory).changed, 20)
     assert.equal(applyMigrations(directory).changed, 0)
     assert.equal(databaseReady(directory), true)
   } finally {
@@ -66,9 +67,21 @@ void test("migrations leave every database in write-ahead logging mode with the 
       for (const [table, column] of [["issuers", "branding"], ["issued_invoices", "issuer_branding"], ["proformas", "issuer_branding"]] as const) {
         assert.ok(database.prepare("SELECT 1 FROM pragma_table_info(?) WHERE name=?").get(table, column), `${table}.${column}`)
       }
+      for (const table of ["issuers", "issued_invoices", "proformas", "correction_documents"]) {
+        const columns = new Set(database.prepare("SELECT name FROM pragma_table_info(?)").all(table).map((row) => String(row.name)))
+        const prefix = table === "issuers" ? "" : "issuer_"
+        for (const column of ["legal_form", "trade_registry_number", "iban", "bank_name", "social_capital"]) {
+          assert.ok(columns.has(`${prefix}${column}`), `${table}.${prefix}${column}`)
+        }
+      }
+      for (const table of ["issuers", "issued_invoices", "proformas", "correction_documents"]) {
+        assert.match(String(database.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name=?").get(table)?.sql),
+          /legal_form TEXT NOT NULL CHECK\(.*legal_form IN\('srl','pfa'\)\)/)
+      }
       for (const trigger of ["issued_invoices_no_update", "proformas_no_content_update"]) {
-        assert.ok(String(database.prepare("SELECT sql FROM sqlite_master WHERE type='trigger' AND name=?").get(trigger)?.sql)
-          .includes("issuer_branding"), trigger)
+        const sql = String(database.prepare("SELECT sql FROM sqlite_master WHERE type='trigger' AND name=?").get(trigger)?.sql)
+        assert.ok(sql.includes("issuer_branding"), trigger)
+        assert.ok(sql.includes("issuer_legal_form"), trigger)
       }
     } finally {
       database.close()

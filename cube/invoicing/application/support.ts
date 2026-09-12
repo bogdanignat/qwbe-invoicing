@@ -2,7 +2,7 @@ import { Effect } from "effect"
 
 import { ResourceNotFound, ValidationFailure, type InvoicingFailure, type PersistenceFailure } from "../contracts/failures.ts"
 import type { BrandingNormalizer, Clock, IdGenerator, RequestContext, TransactionalStore } from "../contracts/host.ts"
-import type { BuyerSnapshot, DocumentSource, IssuerSnapshot, NumberedDocumentType, PartySnapshot } from "../domain/invoice.ts"
+import type { BuyerSnapshot, DocumentSource, IssuerCompanySnapshot, IssuerSnapshot, NumberedDocumentType, PartySnapshot } from "../domain/invoice.ts"
 import type { DocumentCursor, DraftCursor, InvoicingTransaction, NameCursor, PageQuery } from "./ports.ts"
 
 export type { DocumentCursor, DraftCursor, NameCursor, PageQuery } from "./ports.ts"
@@ -36,8 +36,14 @@ export const copyBuyer = (buyer: BuyerSnapshot): BuyerSnapshot => ({
   partyType: buyer.partyType,
 })
 
-export const copyIssuerSnapshot = (issuer: IssuerSnapshot): IssuerSnapshot => ({
+export const copyIssuerCompanySnapshot = (issuer: IssuerCompanySnapshot): IssuerCompanySnapshot => ({
   ...copyParty(issuer),
+  legalForm: issuer.legalForm, tradeRegistryNumber: issuer.tradeRegistryNumber,
+  iban: issuer.iban, bankName: issuer.bankName, socialCapital: issuer.socialCapital,
+})
+
+export const copyIssuerSnapshot = (issuer: IssuerSnapshot): IssuerSnapshot => ({
+  ...copyIssuerCompanySnapshot(issuer),
   branding: issuer.branding === null ? null : structuredClone(issuer.branding),
 })
 

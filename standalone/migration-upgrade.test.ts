@@ -56,10 +56,20 @@ const seedVersionSix = (directory: string) => {
   }
 }
 
+// Historical upgrade fixtures exercise migrations through 014 only. T1293 deliberately supports
+// fresh databases, not populated legacy databases, so those fixtures mark 015 outside their scope.
+const excludeFreshOnlyIssuerDetails = (directory: string): void => {
+  const database = new DatabaseSync(databasePath(directory))
+  try {
+    database.prepare("INSERT INTO schema_migrations(name,applied_at)VALUES('015-issuer-details','2026-01-01')").run()
+  } finally { database.close() }
+}
+
 void test("upgrades a populated version-six database without rewriting migration history", () => {
   const directory = mkdtempSync(join(tmpdir(), "qwbe-upgrade-"))
   try {
     seedVersionSix(directory)
+    excludeFreshOnlyIssuerDetails(directory)
     assert.equal(applyMigrations(directory).changed, 12)
     const database = new DatabaseSync(databasePath(directory))
     try {
@@ -70,7 +80,7 @@ void test("upgrades a populated version-six database without rewriting migration
       assert.deepEqual(migrations, ["000-foundation", "001-invoice-core", "002-invoice-payments", "003-invoice-corrections",
         "004-invoice-delete-last", "005-allow-e-factura-status-update", "006-customer-soft-delete", "007-complete-invoice-authoring",
          "008-proforma-workflow", "009-proforma-direct-invoice", "010-product-presets-payment-terms",
-         "011-external-api-snapshots", "012-payment-idempotency", "013-document-notes", "014-issuer-branding"])
+         "011-external-api-snapshots", "012-payment-idempotency", "013-document-notes", "014-issuer-branding", "015-issuer-details"])
       const columns = database.prepare("PRAGMA table_info(invoice_drafts)").all()
       assert.equal(columns.some((row) => row.name === "customer_id" && row.notnull === 0), true)
       assert.equal(columns.some((row) => row.name === "due_date" && row.notnull === 0), true)
@@ -146,6 +156,25 @@ void test("upgrades a populated version-six database without rewriting migration
   }
 })
 
+void test("015 is fresh-only and rolls back instead of inventing issuer-detail backfill", () => {
+  const directory = mkdtempSync(join(tmpdir(), "qwbe-issuer-details-upgrade-"))
+  try {
+    seedVersionSix(directory)
+    excludeFreshOnlyIssuerDetails(directory)
+    applyMigrations(directory)
+    const database = new DatabaseSync(databasePath(directory))
+    try {
+      database.prepare("DELETE FROM schema_migrations WHERE name='015-issuer-details'").run()
+    } finally { database.close() }
+    assert.throws(() => applyMigrations(directory), /Cannot add a NOT NULL column with default value NULL/)
+    const unchanged = new DatabaseSync(databasePath(directory), { readOnly: true })
+    try {
+      assert.equal(unchanged.prepare("SELECT 1 FROM schema_migrations WHERE name='015-issuer-details'").get(), undefined)
+      assert.equal(unchanged.prepare("SELECT 1 FROM pragma_table_info('issuers') WHERE name='legal_form'").get(), undefined)
+    } finally { unchanged.close() }
+  } finally { rmSync(directory, { recursive: true, force: true }) }
+})
+
 void test("009 preserves legacy proforma-to-draft conversion audit", () => {
   const directory = mkdtempSync(join(tmpdir(), "qwbe-proforma-upgrade-"))
   try {
@@ -170,6 +199,7 @@ void test("009 preserves legacy proforma-to-draft conversion audit", () => {
         INSERT INTO proforma_conversions VALUES('proforma-1','org-1','legacy-result','user-1','2026-09-02T10:00:00.000Z');
       `)
     } finally { database.close() }
+    excludeFreshOnlyIssuerDetails(directory)
     assert.ok(applyMigrations(directory).changed > 0)
     const upgraded = new DatabaseSync(databasePath(directory), { readOnly: true })
     try {
@@ -234,8 +264,9 @@ void test("013 adds nullable remarks guarded by the content-immutability trigger
       assert.equal(triggers.length, 2)
       for (const trigger of triggers) assert.ok(String(trigger.sql).includes("notes"), String(trigger.name))
       database.exec(`
-        INSERT INTO issuers(organization_id,legal_name,tax_identifier,country_code,city,street,county,postal_code,default_currency,default_payment_term_days)
-          VALUES('org-1','Furnizor SRL','RO12345674','RO','Iași','Strada 1',NULL,NULL,'RON',15);
+        INSERT INTO issuers(organization_id,legal_name,tax_identifier,country_code,city,street,county,postal_code,default_currency,default_payment_term_days,
+          legal_form,trade_registry_number,iban,bank_name,social_capital)
+          VALUES('org-1','Furnizor SRL','RO12345674','RO','Iași','Strada 1',NULL,NULL,'RON',15,'srl','J22/123/2020','','','1000.00');
         INSERT INTO document_series VALUES('org-1','invoice','INV'),('org-1','proforma','PRO');
         INSERT INTO invoice_drafts(id,organization_id,customer_id,customer_party_type,customer_legal_name,customer_tax_identifier,
           customer_country_code,customer_city,customer_street,customer_county,customer_postal_code,series,issue_date,due_date,currency,status,notes)

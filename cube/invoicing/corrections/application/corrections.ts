@@ -5,7 +5,8 @@ import { negateMoney, validateCreateCorrectionInput, type CorrectionDocument, ty
 import type { DocumentSource, Idempotent } from "../../domain/invoice.ts"
 import { calendarDate, validateDocumentSource } from "../../domain/validation.ts"
 import { findIdempotencyReplay, idempotencyRecord, missingIdempotencyResult } from "../../application/idempotency.ts"
-import { checked, copyBuyer, copyParty, copySource, ensureChronology, missing, type Authorize, type OperationDependencies } from "../../application/support.ts"
+import { checked, copyBuyer, copyIssuerCompanySnapshot, copySource, ensureChronology, missing, type Authorize, type OperationDependencies } from "../../application/support.ts"
+import { validateIssuerForIssuance } from "../../registry/index.ts"
 const fy = (d: string): number => Number(d.slice(0, 4))
 export const createCorrectionOperations = (d: OperationDependencies, perms: InvoicingPermissions, auth: Authorize) => {
   const createCorrection = ({ request: input, idempotency }: Idempotent<CreateCorrectionInput>): Effect.Effect<CorrectionDocument, InvoicingFailure> => Effect.gen(function*() {
@@ -23,6 +24,7 @@ export const createCorrectionOperations = (d: OperationDependencies, perms: Invo
       }
       const orig = yield* tx.findIssuedInvoice(ctx.organization.id, input.originalInvoiceId)
       if (orig === undefined) return yield* Effect.fail(missing("invoice", input.originalInvoiceId))
+      yield* checked(() => { validateIssuerForIssuance(orig.issuer) })
       const existing = yield* tx.listCorrections(ctx.organization.id, input.originalInvoiceId)
       if (existing.length > 0) {
         return yield* Effect.fail(new DomainConflict({
@@ -49,7 +51,7 @@ export const createCorrectionOperations = (d: OperationDependencies, perms: Invo
       const corr: CorrectionDocument = {
         id, organizationId: ctx.organization.id, originalInvoiceId: orig.id, fiscalYear: fy(issueDate), series: orig.series, number, issueDate, issuedAt, reason: input.reason.trim(), currency: orig.currency,
         ...(source === undefined ? {} : { source: copySource(source) }),
-        issuer: copyParty(orig.issuer), customer: copyBuyer(orig.customer),
+        issuer: copyIssuerCompanySnapshot(orig.issuer), customer: copyBuyer(orig.customer),
         lines: negLines, vatBreakdown: negBreakdown,
         totalExcludingVat: negateMoney(orig.totalExcludingVat), vatTotal: negateMoney(orig.vatTotal), totalIncludingVat: negateMoney(orig.totalIncludingVat),
       }

@@ -34,8 +34,8 @@ import {
   wrapText,
 } from "./pdf-layout.ts"
 
-export const invoiceTemplateVersion = "invoice-v5"
-export const proformaTemplateVersion = "proforma-v4"
+export const invoiceTemplateVersion = "invoice-v6"
+export const proformaTemplateVersion = "proforma-v5"
 
 const regularFontPath = fileURLToPath(new URL("./assets/fonts/DejaVuSans.ttf", import.meta.url))
 const boldFontPath = fileURLToPath(new URL("./assets/fonts/DejaVuSans-Bold.ttf", import.meta.url))
@@ -106,6 +106,14 @@ const partyAddressLines = (party: RenderableParty): ReadonlyArray<string> => {
   ].filter((line) => line !== "")
 }
 
+export const issuerLegalLines = (issuer: RenderableDocument["issuer"]): ReadonlyArray<string> => [
+  `Formă juridică: ${issuer.legalForm.toUpperCase()}`,
+  issuer.tradeRegistryNumber === "" ? "" : `Nr. registrul comerțului: ${issuer.tradeRegistryNumber}`,
+  issuer.socialCapital === "" ? "" : `Capital social: ${formatAmount(issuer.socialCapital)} RON`,
+  issuer.bankName === "" ? "" : `Bancă: ${issuer.bankName}`,
+  issuer.iban === "" ? "" : `IBAN: ${issuer.iban}`,
+].filter((line) => line !== "")
+
 type RenderableDocument = RenderableInvoice | RenderableProforma
 type RenderableLine = RenderableInvoice["lines"][number]
 
@@ -143,7 +151,8 @@ const drawBrand = (sheet: Sheet, branding: RenderableDocument["issuer"]["brandin
 const drawPartyColumn = (
   sheet: Sheet,
   party: RenderableParty,
-  options: { readonly label: string; readonly x: number; readonly width: number; readonly top: number; readonly align: "left" | "right" },
+  options: { readonly label: string; readonly x: number; readonly width: number; readonly top: number; readonly align: "left" | "right";
+    readonly details?: ReadonlyArray<string> },
 ): number => {
   const shared = { x: options.x, width: options.width, align: options.align }
   let cursor = putLines(sheet.page, [options.label], {
@@ -170,6 +179,10 @@ const drawPartyColumn = (
       font: sheet.fonts.regular,
       leading: 11,
     })
+  }
+  if (options.details !== undefined) {
+    const details = options.details.flatMap((line) => wrapText(sheet.fonts.regular, 7.5, options.width, line))
+    cursor = putLines(sheet.page, details, { ...shared, top: cursor, size: 7.5, font: sheet.fonts.regular, leading: 9.5 })
   }
   const address = partyAddressLines(party).flatMap((line) => wrapText(sheet.fonts.regular, 8, options.width, line))
   return putLines(sheet.page, address, {
@@ -244,6 +257,7 @@ const drawHeader = (sheet: Sheet, document: RenderableDocument, isProforma: bool
     width: headerLeftWidth,
     top: afterLogo,
     align: "left",
+    details: issuerLegalLines(document.issuer),
   })
   const midBottom = drawDocumentColumn(sheet, document, isProforma)
   const rightBottom = drawPartyColumn(sheet, document.customer, {

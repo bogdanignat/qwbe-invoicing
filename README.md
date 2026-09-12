@@ -51,6 +51,22 @@ a rewrite.
   Drafts show the current brand; issued invoices and proformas freeze it in their
   issuer snapshot and PDF, including proforma-to-invoice conversion. Document lists
   omit branding images. Legal issuer details remain independent of the brand.
+  The issuer must explicitly select **SRL** or **PFA**. `PUT /api/issuer` requires
+  `legalForm` (`srl`/`pfa`) and the string keys `tradeRegistryNumber`, `socialCapital`,
+  `iban`, `bankName`; empty strings allow an incomplete profile to be saved.
+  Issuing either invoices or proformas requires a trade register number for both
+  forms (a product rule for PFA), and social capital for SRL. IBAN and bank are optional.
+  Capital is exact nonnegative RON text: at most 18 integer digits and two decimals,
+  normalized to two decimal places without floating-point conversion. This is not
+  a check of statutory minimum capital. RegCom validation accepts legacy and current
+  ONRC shapes, not registry existence; IBAN validation checks structure, mod-97 and
+  the Romanian 24-character length, not account existence or a complete foreign-country registry.
+  These values are frozen into documents and retained in summaries, conversions and
+  corrections; PDF and UI omit empty optional lines. Existing cached PDFs are not
+  regenerated merely because a template version changes.
+  Migration `015-issuer-details` uses the existing migration runner on a fresh
+  development database. Populated old-schema databases are not backfilled: use a
+  new isolated data directory or explicitly recreate the disposable development database.
 - **Customers** (optional register): companies with a valid CUI/CIF, or natural persons with
   an optional CNP. A document can also be issued to a one-time buyer typed directly in the
   editor, so the register and draft persistence are conveniences, not prerequisites. A saved

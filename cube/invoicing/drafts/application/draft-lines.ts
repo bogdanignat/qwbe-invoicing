@@ -6,7 +6,7 @@ import type { InvoicingPermissions } from "../../contracts/permissions.ts"
 import { calculateLine } from "../../domain/calculation.ts"
 import type { DraftInvoice } from "../../domain/invoice.ts"
 import type { AddDraftLineInput, UpdateDraftLineInput } from "../../domain/inputs.ts"
-import { resolveVatConfiguration } from "../../domain/validation.ts"
+import { resolveVatConfiguration } from "../../registry/index.ts"
 import { findEditable, withTotals } from "./authoring.ts"
 
 export interface DraftLineOperations {

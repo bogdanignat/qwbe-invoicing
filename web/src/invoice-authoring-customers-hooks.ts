@@ -1,6 +1,7 @@
 import type { Dispatch, SetStateAction } from "react"
 
 import { editDueDate, selectBuyerMode, selectIssueDate, selectedSavedCustomer, selectSavedCustomer, type BuyerMode, type InvoiceAuthoringForm } from "./invoice-authoring-state.ts"
+import { issuerIssuanceWarning } from "./issuer-details.ts"
 import type { Customer, Issuer } from "./models.ts"
 
 interface AuthoringCustomerInput {
@@ -30,5 +31,5 @@ export const useInvoiceAuthoringCustomers = (input: AuthoringCustomerInput) => {
   const chooseBuyerMode = (buyerMode: BuyerMode): void => {
     input.setForm((form) => selectBuyerMode(form, buyerMode, input.customers, input.issuer, input.deriveDueDate))
   }
-  return { chooseCustomer, chooseIssueDate, chooseDueDate, chooseBuyerMode }
+  return { chooseCustomer, chooseIssueDate, chooseDueDate, chooseBuyerMode, issuerWarning: issuerIssuanceWarning(input.issuer) }
 }

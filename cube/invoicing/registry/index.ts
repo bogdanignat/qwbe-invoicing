@@ -29,5 +29,6 @@ export const createRegistryOperations = (
   ...createProductPresetOperations(dependencies, permissions, authorize),
 })
 
-export { normalizeProductPreset, validateCustomer, validateIssuer } from "./domain/validation.ts"
+export { normalizeProductPreset, resolveVatConfiguration, validateCustomer, validateIssuer } from "./domain/validation.ts"
+export { normalizeIssuerDetails, validateIssuerForIssuance } from "./domain/issuer-details.ts"
 export type { CustomerOperations, IssuerOperations, ProductPresetOperations }

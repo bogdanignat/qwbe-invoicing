@@ -44,6 +44,11 @@ void test("requires host authentication and serves the complete invoice-core rou
       name: "Exemplu SRL",
       fiscalIdentifier: " ro12345674 ",
       address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" },
+      legalForm: "srl",
+      tradeRegistryNumber: " j22/123/2020 ",
+      iban: " ro49 aaaa 1b31 0075 9384 0000 ",
+      bankName: " Banca Română ",
+      socialCapital: "1000",
       defaultCurrency: "RON",
       defaultPaymentTermDays: 15,
       vatConfigurations: [{
@@ -81,6 +86,19 @@ void test("requires host authentication and serves the complete invoice-core rou
     const issuer = await handleApiRequest({ method: "PUT", url: "/api/issuer", authorization, body: issuerBody }, runtime)
     assert.equal(issuer.status, 200)
     assert.equal((issuer.body as { fiscalIdentifier: string }).fiscalIdentifier, "RO12345674")
+    const canonicalIssuerDetails = {
+      legalForm: "srl", tradeRegistryNumber: "J22/123/2020", iban: "RO49AAAA1B31007593840000",
+      bankName: "Banca Română", socialCapital: "1000.00",
+    } as const
+    const detailsOf = (body: unknown) => {
+      const value = body as Record<keyof typeof canonicalIssuerDetails, unknown>
+      return Object.fromEntries(Object.keys(canonicalIssuerDetails).map((key) => [key, value[key as keyof typeof canonicalIssuerDetails]]))
+    }
+    assert.deepEqual(detailsOf(issuer.body), canonicalIssuerDetails)
+    const missingLegalForm = { ...issuerBody } as Record<string, unknown>
+    Reflect.deleteProperty(missingLegalForm, "legalForm")
+    assert.equal((await handleApiRequest({ method: "PUT", url: "/api/issuer", authorization,
+      body: missingLegalForm }, runtime)).status, 400)
     const issuerBranding = (issuer.body as { branding: { text: string; image: { pngBase64: string; width: number; height: number } } }).branding
     assert.equal(issuerBranding.text, "Marca Exemplu")
     assert.equal(issuerBranding.image.width, 1)
@@ -118,6 +136,7 @@ void test("requires host authentication and serves the complete invoice-core rou
     assert.equal(rejectedUpdate.status, 400)
     const issuerAfterRejectedUpdate = await handleApiRequest({ method: "GET", url: "/api/issuer", authorization, body: undefined }, runtime)
     assert.equal((issuerAfterRejectedUpdate.body as { fiscalIdentifier: string }).fiscalIdentifier, "RO12345674")
+    assert.deepEqual(detailsOf(issuerAfterRejectedUpdate.body), canonicalIssuerDetails)
     const customer = await handleApiRequest({
       method: "POST",
       url: "/api/customers",
@@ -578,6 +597,8 @@ void test("carries document remarks through the HTTP contract and rejects invali
     await call("PUT", "/api/issuer", {
       name: "Exemplu SRL", fiscalIdentifier: "RO12345674",
       address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" },
+      legalForm: "srl", tradeRegistryNumber: "J22/123/2020", iban: "RO49AAAA1B31007593840000",
+      bankName: "Banca Română", socialCapital: "1000.00",
       defaultCurrency: "RON", defaultPaymentTermDays: 15,
       vatConfigurations: [{ code: "RO_STANDARD", rate: "21.00", effectiveFrom: "2025-08-01" }],
       branding: null,

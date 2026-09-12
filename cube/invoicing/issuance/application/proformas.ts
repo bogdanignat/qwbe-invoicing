@@ -7,6 +7,7 @@ import type { InvoicingPermissions } from "../../contracts/permissions.ts"
 import type { DocumentSource, Idempotent, Proforma, ProformaSummary } from "../../domain/invoice.ts"
 import type { AuthoringProformaInput, IssueProformaInput } from "../../domain/inputs.ts"
 import { calendarDate, validateDocumentSource } from "../../domain/validation.ts"
+import { validateIssuerForIssuance } from "../../registry/index.ts"
 import { fiscalYear, issuanceSource, numberedSnapshot } from "./snapshot.ts"
 
 export interface ProformaOperations {
@@ -30,6 +31,7 @@ export const createProformaOperations = (
         return replay === undefined ? yield* Effect.fail(missingIdempotencyResult("proforma")) : structuredClone(replay)
       }
       const { document, issuer, draft } = yield* issuanceSource(input, context.organization.id, transaction, dependencies.ids, "proforma")
+      yield* checked(() => { validateIssuerForIssuance(issuer) })
       const id = yield* dependencies.ids.next
       const issuedAt = yield* dependencies.clock.now
       const proformaSeries = "draftId" in input ? input.series : input.proformaSeries

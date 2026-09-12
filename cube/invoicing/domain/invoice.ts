@@ -27,7 +27,17 @@ export interface IssuerBranding {
   readonly image: IssuerBrandingImage | null
 }
 
-export interface IssuerSnapshot extends PartySnapshot {
+export type LegalForm = "srl" | "pfa"
+
+export interface IssuerCompanySnapshot extends PartySnapshot {
+  readonly legalForm: LegalForm
+  readonly tradeRegistryNumber: string
+  readonly iban: string
+  readonly bankName: string
+  readonly socialCapital: string
+}
+
+export interface IssuerSnapshot extends IssuerCompanySnapshot {
   readonly branding: IssuerBranding | null
 }
 
@@ -171,7 +181,7 @@ export interface IssuedInvoice extends NumberedDocumentSnapshot {
   readonly eFacturaStatus: EFacturaStatus
 }
 
-export type IssuedInvoiceSummary = Omit<IssuedInvoice, "issuer"> & { readonly issuer: PartySnapshot }
+export type IssuedInvoiceSummary = Omit<IssuedInvoice, "issuer"> & { readonly issuer: IssuerCompanySnapshot }
 
 export interface Proforma extends NumberedDocumentSnapshot {
   readonly sourceDraftId: string | null
@@ -180,7 +190,7 @@ export interface Proforma extends NumberedDocumentSnapshot {
   readonly convertedInvoiceId: string | null
 }
 
-export type ProformaSummary = Omit<Proforma, "issuer"> & { readonly issuer: PartySnapshot }
+export type ProformaSummary = Omit<Proforma, "issuer"> & { readonly issuer: IssuerCompanySnapshot }
 
 export type ProformaConversion = Readonly<{
   proformaId: string

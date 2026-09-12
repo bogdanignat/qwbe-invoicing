@@ -44,6 +44,11 @@ export interface RenderableBuyer extends RenderableParty {
 }
 
 export interface RenderableIssuer extends RenderableParty {
+  readonly legalForm: "srl" | "pfa"
+  readonly tradeRegistryNumber: string
+  readonly iban: string
+  readonly bankName: string
+  readonly socialCapital: string
   readonly branding: {
     readonly text: string | null
     readonly image: { readonly pngBase64: string; readonly width: number; readonly height: number } | null

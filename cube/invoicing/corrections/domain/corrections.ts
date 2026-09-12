@@ -1,5 +1,5 @@
 import { ValidationFailure } from "../../contracts/failures.ts"
-import type { BuyerSnapshot, DocumentSource, DraftLine, PartySnapshot, VatBreakdown } from "../../domain/invoice.ts"
+import type { BuyerSnapshot, DocumentSource, DraftLine, IssuerCompanySnapshot, VatBreakdown } from "../../domain/invoice.ts"
 export interface CreateCorrectionInput {
   readonly originalInvoiceId: string
   readonly reason: string
@@ -12,7 +12,7 @@ export interface CorrectionDocument {
   readonly fiscalYear: number; readonly series: string; readonly number: number
   readonly issueDate: string; readonly issuedAt: string; readonly reason: string
   readonly currency: string
-  readonly issuer: PartySnapshot
+  readonly issuer: IssuerCompanySnapshot
   readonly customer: BuyerSnapshot
   readonly lines: ReadonlyArray<DraftLine>
   readonly vatBreakdown: ReadonlyArray<VatBreakdown>

@@ -22,5 +22,34 @@
       "DROP TRIGGER proformas_no_content_update",
       "CREATE TRIGGER proformas_no_content_update BEFORE UPDATE OF id,source_draft_id,organization_id,fiscal_year,document_type,series,invoice_series,number,issue_date,due_date,issued_at,currency,issuer_legal_name,issuer_tax_identifier,issuer_country_code,issuer_city,issuer_street,issuer_county,issuer_postal_code,issuer_branding,customer_party_type,customer_legal_name,customer_tax_identifier,customer_country_code,customer_city,customer_street,customer_county,customer_postal_code,total_excluding_tax,tax_total,total_including_tax,notes ON proformas BEGIN SELECT RAISE(ABORT,'proformas are immutable');END"
     ]
+  },
+  {
+    "name": "015-issuer-details",
+    "statements": [
+      "ALTER TABLE issuers ADD COLUMN legal_form TEXT NOT NULL CHECK(legal_form IN('srl','pfa'))",
+      "ALTER TABLE issuers ADD COLUMN trade_registry_number TEXT NOT NULL",
+      "ALTER TABLE issuers ADD COLUMN iban TEXT NOT NULL",
+      "ALTER TABLE issuers ADD COLUMN bank_name TEXT NOT NULL",
+      "ALTER TABLE issuers ADD COLUMN social_capital TEXT NOT NULL",
+      "ALTER TABLE issued_invoices ADD COLUMN issuer_legal_form TEXT NOT NULL CHECK(issuer_legal_form IN('srl','pfa'))",
+      "ALTER TABLE issued_invoices ADD COLUMN issuer_trade_registry_number TEXT NOT NULL",
+      "ALTER TABLE issued_invoices ADD COLUMN issuer_iban TEXT NOT NULL",
+      "ALTER TABLE issued_invoices ADD COLUMN issuer_bank_name TEXT NOT NULL",
+      "ALTER TABLE issued_invoices ADD COLUMN issuer_social_capital TEXT NOT NULL",
+      "ALTER TABLE proformas ADD COLUMN issuer_legal_form TEXT NOT NULL CHECK(issuer_legal_form IN('srl','pfa'))",
+      "ALTER TABLE proformas ADD COLUMN issuer_trade_registry_number TEXT NOT NULL",
+      "ALTER TABLE proformas ADD COLUMN issuer_iban TEXT NOT NULL",
+      "ALTER TABLE proformas ADD COLUMN issuer_bank_name TEXT NOT NULL",
+      "ALTER TABLE proformas ADD COLUMN issuer_social_capital TEXT NOT NULL",
+      "ALTER TABLE correction_documents ADD COLUMN issuer_legal_form TEXT NOT NULL CHECK(issuer_legal_form IN('srl','pfa'))",
+      "ALTER TABLE correction_documents ADD COLUMN issuer_trade_registry_number TEXT NOT NULL",
+      "ALTER TABLE correction_documents ADD COLUMN issuer_iban TEXT NOT NULL",
+      "ALTER TABLE correction_documents ADD COLUMN issuer_bank_name TEXT NOT NULL",
+      "ALTER TABLE correction_documents ADD COLUMN issuer_social_capital TEXT NOT NULL",
+      "DROP TRIGGER issued_invoices_no_update",
+      "CREATE TRIGGER issued_invoices_no_update BEFORE UPDATE OF id,draft_id,source_proforma_id,organization_id,fiscal_year,document_type,series,number,issue_date,due_date,issued_at,currency,issuer_legal_name,issuer_tax_identifier,issuer_country_code,issuer_city,issuer_street,issuer_county,issuer_postal_code,issuer_legal_form,issuer_trade_registry_number,issuer_iban,issuer_bank_name,issuer_social_capital,issuer_branding,customer_party_type,customer_legal_name,customer_tax_identifier,customer_country_code,customer_city,customer_street,customer_county,customer_postal_code,total_excluding_tax,tax_total,total_including_tax,notes ON issued_invoices BEGIN SELECT RAISE(ABORT,'issued invoices are immutable except e_factura_status');END",
+      "DROP TRIGGER proformas_no_content_update",
+      "CREATE TRIGGER proformas_no_content_update BEFORE UPDATE OF id,source_draft_id,organization_id,fiscal_year,document_type,series,invoice_series,number,issue_date,due_date,issued_at,currency,issuer_legal_name,issuer_tax_identifier,issuer_country_code,issuer_city,issuer_street,issuer_county,issuer_postal_code,issuer_legal_form,issuer_trade_registry_number,issuer_iban,issuer_bank_name,issuer_social_capital,issuer_branding,customer_party_type,customer_legal_name,customer_tax_identifier,customer_country_code,customer_city,customer_street,customer_county,customer_postal_code,total_excluding_tax,tax_total,total_including_tax,notes ON proformas BEGIN SELECT RAISE(ABORT,'proformas are immutable');END"
+    ]
   }
 ]

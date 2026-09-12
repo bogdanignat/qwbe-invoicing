@@ -22,6 +22,7 @@ void test("issues deterministic immutable invoice snapshots through the public s
     name: "Exemplu SRL",
     fiscalIdentifier: "RO12345674",
     address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" },
+    legalForm: "srl", tradeRegistryNumber: "J40/123/2020", socialCapital: "200.00", iban: "", bankName: "",
     defaultCurrency: "RON",
     defaultPaymentTermDays: 15,
     vatConfigurations, branding: null,
@@ -91,12 +92,14 @@ void test("issues deterministic immutable invoice snapshots through the public s
   const listed = await Effect.runPromise(service.listIssuedInvoices())
   assert.equal("branding" in (listed.items[0]?.issuer ?? {}), false)
   assert.deepEqual(listed.items[0]?.issuer, { name: issued.issuer.name, fiscalIdentifier: issued.issuer.fiscalIdentifier,
-    address: issued.issuer.address })
+    address: issued.issuer.address, legalForm: "srl", tradeRegistryNumber: "J40/123/2020",
+    socialCapital: "200.00", iban: "", bankName: "" })
 
   await Effect.runPromise(service.configureIssuer({
     name: "Exemplu Renamed SRL",
     fiscalIdentifier: "RO12345674",
     address: { countryCode: "RO", city: "Botoșani", street: "Altă stradă 3" },
+    legalForm: "srl", tradeRegistryNumber: "J40/123/2020", socialCapital: "200.00", iban: "", bankName: "",
     defaultCurrency: "RON",
     defaultPaymentTermDays: 30,
     vatConfigurations, branding: null,
@@ -141,6 +144,7 @@ void test("failed invoice and proforma issuance rolls back both the document and
     name: "Exemplu SRL",
     fiscalIdentifier: "RO12345674",
     address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" },
+    legalForm: "srl", tradeRegistryNumber: "J40/123/2020", socialCapital: "200.00", iban: "", bankName: "",
     defaultCurrency: "RON",
     defaultPaymentTermDays: 15,
     vatConfigurations, branding: null,
@@ -196,6 +200,7 @@ void test("issues immutable proformas from saved drafts", async () => {
   await Effect.runPromise(service.configureIssuer({
     name: "Exemplu SRL", fiscalIdentifier: "RO12345674",
     address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" },
+    legalForm: "srl", tradeRegistryNumber: "J40/123/2020", socialCapital: "200.00", iban: "", bankName: "",
     defaultCurrency: "RON", defaultPaymentTermDays: 15, vatConfigurations, branding: null,
   }))
   await Effect.runPromise(service.addDocumentSeries({ documentType: "invoice", series: "SAME" }))
@@ -243,6 +248,7 @@ void test("issues authored documents without drafts and invoices a proforma snap
     clock: fixedClock, ids: sequentialIds(), store: memoryStore(state), branding: brandingNormalizer, cubeIdentity: "invoicing" })
   await Effect.runPromise(service.configureIssuer({ name: "Exemplu SRL", fiscalIdentifier: "RO12345674",
     address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" }, defaultCurrency: "RON",
+    legalForm: "srl", tradeRegistryNumber: "J40/123/2020", socialCapital: "200.00", iban: "", bankName: "",
     defaultPaymentTermDays: 15, vatConfigurations, branding: { text: "Marca A", image: null } }))
   await Effect.runPromise(service.addDocumentSeries({ documentType: "invoice", series: "INV" }))
   await Effect.runPromise(service.addDocumentSeries({ documentType: "proforma", series: "PRO" }))
@@ -260,6 +266,7 @@ void test("issues authored documents without drafts and invoices a proforma snap
   assert.equal(state.drafts.size, 0)
   await Effect.runPromise(service.configureIssuer({ name: "Exemplu SRL", fiscalIdentifier: "RO12345674",
     address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" }, defaultCurrency: "RON",
+    legalForm: "srl", tradeRegistryNumber: "J40/123/2020", socialCapital: "200.00", iban: "", bankName: "",
     defaultPaymentTermDays: 15, vatConfigurations, branding: { text: "Marca B", image: null } }))
   const converted = await Effect.runPromise(service.issueInvoiceFromProforma(idempotent({ proformaId: proforma.id })))
   assert.equal(converted.draftId, null)
@@ -297,6 +304,7 @@ void test("numbers documents chronologically per series and dates proforma conve
     clock: fixedClock, ids: sequentialIds(), store: memoryStore(state), branding: brandingNormalizer, cubeIdentity: "invoicing" })
   await Effect.runPromise(service.configureIssuer({ name: "Exemplu SRL", fiscalIdentifier: "RO12345674",
     address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" }, defaultCurrency: "RON",
+    legalForm: "srl", tradeRegistryNumber: "J40/123/2020", socialCapital: "200.00", iban: "", bankName: "",
     defaultPaymentTermDays: 15, vatConfigurations, branding: null }))
   await Effect.runPromise(service.addDocumentSeries({ documentType: "invoice", series: "INV" }))
   await Effect.runPromise(service.addDocumentSeries({ documentType: "proforma", series: "PRO" }))
@@ -327,6 +335,7 @@ void test("freezes draft remarks into every issued snapshot and carries them thr
     clock: fixedClock, ids: sequentialIds(), store: memoryStore(state), branding: brandingNormalizer, cubeIdentity: "invoicing" })
   await Effect.runPromise(service.configureIssuer({ name: "Exemplu SRL", fiscalIdentifier: "RO12345674",
     address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" }, defaultCurrency: "RON",
+    legalForm: "srl", tradeRegistryNumber: "J40/123/2020", socialCapital: "200.00", iban: "", bankName: "",
     defaultPaymentTermDays: 15, vatConfigurations, branding: null }))
   await Effect.runPromise(service.addDocumentSeries({ documentType: "invoice", series: "INV" }))
   await Effect.runPromise(service.addDocumentSeries({ documentType: "proforma", series: "PRO" }))

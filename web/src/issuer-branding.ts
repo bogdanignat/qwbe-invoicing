@@ -24,6 +24,9 @@ export const changeBrandImage = (draft: BrandingDraft, image: BrandingImageDraft
 export const removeBrandImage = (draft: BrandingDraft): BrandingDraft => ({ ...draft, image: null })
 export const removeBranding = (): BrandingDraft => ({ text: "", image: null })
 
+export const brandingImageSaveIssue = (pending: boolean, error: Error | null): string | null =>
+  pending ? "Așteaptă validarea imaginii înainte de salvare." : error?.message ?? null
+
 export const brandingDraftFromSaved = (branding: IssuerBranding | null): BrandingDraft => ({
   text: branding?.text ?? "",
   image: branding?.image === null || branding?.image === undefined ? null : {

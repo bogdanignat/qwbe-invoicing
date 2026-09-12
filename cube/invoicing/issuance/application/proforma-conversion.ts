@@ -1,12 +1,13 @@
 import { Effect } from "effect"
 
 import { findIdempotencyReplay, idempotencyRecord, missingIdempotencyResult } from "../../application/idempotency.ts"
-import { ensureChronology, missing, type Authorize, type OperationDependencies } from "../../application/support.ts"
+import { checked, ensureChronology, missing, type Authorize, type OperationDependencies } from "../../application/support.ts"
 import { DomainConflict, type InvoicingFailure } from "../../contracts/failures.ts"
 import type { InvoicingPermissions } from "../../contracts/permissions.ts"
 import type { ConvertProformaInput } from "../../domain/inputs.ts"
 import type { Idempotent, IssuedInvoice } from "../../domain/invoice.ts"
 import { calendarDate } from "../../domain/validation.ts"
+import { validateIssuerForIssuance } from "../../registry/index.ts"
 import { fiscalYear, numberedSnapshot } from "./snapshot.ts"
 
 const dayMs = 86_400_000
@@ -33,6 +34,7 @@ export const createProformaConversionOperations = (
       }
       const proforma = yield* transaction.findProforma(context.organization.id, input.proformaId)
       if (proforma === undefined) return yield* Effect.fail(missing("proforma", input.proformaId))
+      yield* checked(() => { validateIssuerForIssuance(proforma.issuer) })
       if ((yield* transaction.findProformaConversion(context.organization.id, proforma.id))
         || (yield* transaction.findProformaInvoiceConversion(context.organization.id, proforma.id))) {
         return yield* Effect.fail(new DomainConflict({ code: "proforma_already_converted", message: "Proforma was already converted" }))

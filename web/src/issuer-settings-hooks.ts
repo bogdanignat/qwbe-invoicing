@@ -5,7 +5,8 @@ import { runUiEffect } from "./api.ts"
 import { formField, type FormSubmitEvent } from "./form.ts"
 import { today } from "./format.ts"
 import { invoicingClient, type IssuerInput } from "./invoicing-client.ts"
-import { beginBrandImageSelection, brandingDraftFromSaved, changeBrandImage, changeBrandText as changeBrandTextInDraft, createRevisionGuard, normalizeBrandText, removeBrandImage as removeBrandImageFromDraft, removeBranding as emptyBrandingDraft, validateBrandingDimensions, validateBrandingFile, validateBrandingFileInfo, type BrandingDraft, type RasterMime } from "./issuer-branding.ts"
+import { beginBrandImageSelection, brandingDraftFromSaved, brandingImageSaveIssue, changeBrandImage, changeBrandText as changeBrandTextInDraft, createRevisionGuard, normalizeBrandText, removeBrandImage as removeBrandImageFromDraft, removeBranding as emptyBrandingDraft, validateBrandingDimensions, validateBrandingFile, validateBrandingFileInfo, type BrandingDraft, type RasterMime } from "./issuer-branding.ts"
+import { normalizeIssuerLegalDetails, type IssuerLegalDetails } from "./issuer-details.ts"
 import { inferRomanianVatDefaults, isNonVat, nearestConfiguredVat, normalizeRomanianCui, resolveVatValues, updateVatTimeline, vatRegistrationMismatch, vatTimelineMismatch, type VatValues } from "./vat-defaults.ts"
 
 const updateVatMismatch = (form: HTMLFormElement, registered: boolean): void => {
@@ -60,6 +61,8 @@ export const useIssuerSettings = (notify: (message: string) => void) => {
   const issuerQuery = useQuery({ queryKey: ["issuer"], queryFn: ({ signal }) => runUiEffect(invoicingClient.getIssuer(), signal) })
   const [brandingOverride, setBrandingOverride] = useState<BrandingDraft | undefined>()
   const [brandingError, setBrandingError] = useState<Error | null>(null)
+  const [imageError, setImageError] = useState<Error | null>(null)
+  const [issuerDetailsError, setIssuerDetailsError] = useState<Error | null>(null)
   const [imagePending, setImagePending] = useState(false)
   const [formVersion, setFormVersion] = useState(0)
   const fileGuard = useRef(createRevisionGuard())
@@ -69,12 +72,15 @@ export const useIssuerSettings = (notify: (message: string) => void) => {
 
   const saveIssuer = useMutation({
     mutationFn: ({ input }: { readonly input: IssuerInput; readonly revision: number }) => runUiEffect(invoicingClient.saveIssuer(input)),
-    onSuccess: (saved, variables) => {
+    onSuccess: async (saved, variables) => {
       queryClient.setQueryData(["issuer"], saved)
+      await queryClient.invalidateQueries({ queryKey: ["issuer"] })
       if (editGuard.current.isCurrent(variables.revision)) {
         fileGuard.current.invalidate()
         setBrandingOverride(undefined)
         setBrandingError(null)
+        setImageError(null)
+        setIssuerDetailsError(null)
         setFormVersion((value) => value + 1)
       }
       notify("Datele firmei au fost salvate.")
@@ -91,7 +97,7 @@ export const useIssuerSettings = (notify: (message: string) => void) => {
     if (file === undefined) return
     const selection = beginBrandImageSelection(fileGuard.current, editGuard.current)
     setImagePending(true)
-    setBrandingError(null)
+    setImageError(null)
     try {
       validateBrandingFileInfo(file.type, file.size)
       const bytes = new Uint8Array(await file.arrayBuffer())
@@ -108,7 +114,11 @@ export const useIssuerSettings = (notify: (message: string) => void) => {
         height: dimensions.height,
       }))
     } catch (cause) {
-      if (fileGuard.current.isCurrent(selection)) setBrandingError(cause instanceof Error ? cause : new Error("Imaginea nu a putut fi citită."))
+      if (fileGuard.current.isCurrent(selection)) {
+        const error = cause instanceof Error ? cause : new Error("Imaginea nu a putut fi citită.")
+        setImageError(error)
+        notify(`Sigla nu a fost încărcată: ${error.message}`)
+      }
     } finally {
       if (fileGuard.current.isCurrent(selection)) setImagePending(false)
     }
@@ -119,7 +129,12 @@ export const useIssuerSettings = (notify: (message: string) => void) => {
     editGuard.current.invalidate()
     setImagePending(false)
     setBrandingError(null)
+    setImageError(null)
     setBrandingOverride((current) => removeBrandImageFromDraft(current ?? brandingDraftFromSaved(issuer?.branding ?? null)))
+  }
+
+  const discardRejectedImage = (): void => {
+    setImageError(null)
   }
 
   const removeBranding = (): void => {
@@ -127,13 +142,21 @@ export const useIssuerSettings = (notify: (message: string) => void) => {
     editGuard.current.invalidate()
     setImagePending(false)
     setBrandingError(null)
+    setImageError(null)
     setBrandingOverride(emptyBrandingDraft())
   }
 
   const submit = (event: FormSubmitEvent): void => {
     event.preventDefault()
-    if (imagePending) { setBrandingError(new Error("Așteaptă validarea imaginii înainte de salvare.")); return }
     const form = event.currentTarget
+    const imageIssue = brandingImageSaveIssue(imagePending, imageError)
+    if (imageIssue !== null) {
+      notify(`Datele nu au fost salvate: ${imageIssue}`)
+      const imageInput = form.querySelector<HTMLInputElement>("#issuer-brand-image")
+      imageInput?.focus()
+      imageInput?.scrollIntoView({ block: "center" })
+      return
+    }
     const county = formField(form, "county")
     const postalCode = formField(form, "postalCode")
     const countryCode = "RO"
@@ -157,13 +180,25 @@ export const useIssuerSettings = (notify: (message: string) => void) => {
       setBrandingError(cause instanceof Error ? cause : new Error("Textul de brand este invalid."))
       return
     }
+    let legalDetails: IssuerLegalDetails
+    try {
+      legalDetails = normalizeIssuerLegalDetails({
+        legalForm: formField(form, "legalForm"), tradeRegistryNumber: formField(form, "tradeRegistryNumber"),
+        iban: formField(form, "iban"), bankName: formField(form, "bankName"), socialCapital: formField(form, "socialCapital"),
+      })
+    } catch (cause) {
+      setIssuerDetailsError(cause instanceof Error ? cause : new Error("Datele juridice sunt invalide."))
+      return
+    }
     const image = branding.image
     setBrandingError(null)
+    setIssuerDetailsError(null)
     saveIssuer.mutate({
       revision: editGuard.current.current(),
       input: {
         name: formField(form, "name"), fiscalIdentifier,
         address: { countryCode, city: formField(form, "city"), street: formField(form, "street"), ...(county === "" ? {} : { county }), ...(postalCode === "" ? {} : { postalCode }) },
+        ...legalDetails,
         defaultCurrency: "RON", defaultPaymentTermDays: Number(formField(form, "defaultPaymentTermDays")), vatConfigurations,
         branding: brandText === null && image === null ? null : { text: brandText, image: image === null ? null : { dataBase64: image.dataBase64 } },
       },
@@ -184,8 +219,8 @@ export const useIssuerSettings = (notify: (message: string) => void) => {
     issuerQuery, issuer, formKey: `${issuer?.organizationId ?? "new"}-${String(formVersion)}`,
     tax, fiscalIdentifier, configuredVat, vatRegistered, vatMismatchMessage,
     submit,
-    save: { pending: saveIssuer.isPending, error: saveIssuer.error },
-    branding: { ...branding, error: brandingError, pending: imagePending, changeText: changeBrandText, selectImage: selectBrandImage, removeImage: removeBrandImage, removeAll: removeBranding },
+    save: { pending: saveIssuer.isPending, error: issuerDetailsError ?? saveIssuer.error },
+    branding: { ...branding, error: brandingError, imageError, discardRejectedImage, pending: imagePending, changeText: changeBrandText, selectImage: selectBrandImage, removeImage: removeBrandImage, removeAll: removeBranding },
     normalizeFiscalIdentifier: (input: HTMLInputElement) => { input.setCustomValidity(""); input.value = normalizeRomanianCui(input.value) },
     inferVat: (input: HTMLInputElement) => {
       const form = input.form

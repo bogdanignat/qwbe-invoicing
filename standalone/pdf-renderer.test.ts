@@ -5,7 +5,7 @@ import { Effect } from "effect"
 import { PDFDocument } from "pdf-lib"
 
 import type { RenderableInvoice, RenderableProforma } from "../cube/invoicing/documents/index.ts"
-import { createPdfRenderer, documentDateLine, formatAmount, formatRate, invoiceTemplateVersion, partyIdentifierLine, proformaTemplateVersion } from "./pdf-renderer.ts"
+import { createPdfRenderer, documentDateLine, formatAmount, formatRate, invoiceTemplateVersion, issuerLegalLines, partyIdentifierLine, proformaTemplateVersion } from "./pdf-renderer.ts"
 
 const invoice: RenderableInvoice = {
   id: "invoice-1",
@@ -19,6 +19,11 @@ const invoice: RenderableInvoice = {
   notes: null,
   issuer: {
     branding: null,
+    legalForm: "srl",
+    tradeRegistryNumber: "J22/123/2020",
+    iban: "RO49AAAA1B31007593840000",
+    bankName: "Banca Română",
+    socialCapital: "1000.00",
     name: "Știință și Tehnică SRL",
     fiscalIdentifier: "RO12345674",
     address: { countryCode: "RO", city: "Botoșani", street: "Strada Independenței 1" },
@@ -60,6 +65,19 @@ void test("renders deterministic valid PDFs with Romanian glyphs and fixed metad
   assert.equal(parsed.getTitle(), "Factura QWBE 7")
   assert.equal(parsed.getAuthor(), "Știință și Tehnică SRL")
   assert.equal(parsed.getCreationDate()?.toISOString(), invoice.issuedAt)
+})
+
+void test("renders canonical issuer legal details and omits empty optional detail lines", async () => {
+  assert.deepEqual(issuerLegalLines(invoice.issuer), [
+    "Formă juridică: SRL", "Nr. registrul comerțului: J22/123/2020", "Capital social: 1.000,00 RON",
+    "Bancă: Banca Română", "IBAN: RO49AAAA1B31007593840000",
+  ])
+  assert.deepEqual(issuerLegalLines({ ...invoice.issuer, tradeRegistryNumber: "", socialCapital: "", bankName: "", iban: "" }),
+    ["Formă juridică: SRL"])
+  const longDetails = { ...invoice, issuer: { ...invoice.issuer, tradeRegistryNumber: "J".repeat(32),
+    bankName: "Bancă foarte lungă ".repeat(7).slice(0, 120), iban: "RO49" + "A".repeat(30) } }
+  const rendered = await Effect.runPromise(createPdfRenderer().render(longDetails))
+  assert.ok((await PDFDocument.load(rendered.bytes, { updateMetadata: false })).getPageCount() >= 1)
 })
 
 void test("renders an individual buyer with a CNP label and omits an empty identifier", async () => {

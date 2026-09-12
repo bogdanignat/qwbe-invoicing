@@ -16,6 +16,7 @@ void test("authors snapshot-owned drafts and recalculates every server-derived a
   await Effect.runPromise(service.configureIssuer({
     name: "Exemplu SRL", fiscalIdentifier: "RO12345674",
     address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" },
+    legalForm: "srl", tradeRegistryNumber: "J40/123/2020", socialCapital: "200.00", iban: "", bankName: "",
     defaultCurrency: "RON", defaultPaymentTermDays: 15,
     branding: null, vatConfigurations: [
       { code: "RO_STANDARD", rate: "19", effectiveFrom: "2020-01-01", effectiveTo: "2025-07-31" },
@@ -92,6 +93,7 @@ void test("captures, replaces and clears free-form remarks on a draft", async ()
   await Effect.runPromise(service.configureIssuer({
     name: "Exemplu SRL", fiscalIdentifier: "RO12345674",
     address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" },
+    legalForm: "srl", tradeRegistryNumber: "J40/123/2020", socialCapital: "200.00", iban: "", bankName: "",
     defaultCurrency: "RON", defaultPaymentTermDays: 15,
     branding: null, vatConfigurations: [{ code: "RO_STANDARD", rate: "21", effectiveFrom: "2025-08-01" }],
   }))

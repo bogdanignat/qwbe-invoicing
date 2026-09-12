@@ -23,6 +23,8 @@ const line = { description: "Servicii", quantity: "1", unitPrice: "10.00",
 const draft = { customerId: "customer-1", series: "QWBE", issueDate: "2026-09-01" }
 const authoring = { ...draft, currency: "RON", lines: [line] }
 const issuer = { name: "Furnizor", fiscalIdentifier: " ro12345674 ", address: customer.address,
+  legalForm: "srl" as const, tradeRegistryNumber: " j22/123/2020 ", iban: " ro49 aaaa 1b31 0075 9384 0000 ",
+  bankName: " Banca Română ", socialCapital: "1000",
   defaultCurrency: "RON", defaultPaymentTermDays: 15,
   vatConfigurations: [{ code: "RO_STANDARD", rate: "21.00", effectiveFrom: "2025-08-01" }], branding: null }
 
@@ -60,6 +62,19 @@ void test("issuer transport requires the raw branding shape", () => {
     { text: "Marcă", image: { dataBase64: "aGVsbG8=" } })
   assert.throws(() => { A.issuerInput({ ...issuer, branding: undefined }) }, ValidationFailure)
   assert.throws(() => { A.issuerInput({ ...issuer, branding: { text: null, image: { pngBase64: "x", width: 1, height: 1 } } }) }, ValidationFailure)
+})
+
+void test("issuer transport requires explicit legal form and preserves legal-detail input for domain validation", () => {
+  const decoded = A.issuerInput(issuer)
+  assert.equal(decoded.legalForm, "srl")
+  assert.equal(decoded.tradeRegistryNumber, issuer.tradeRegistryNumber)
+  assert.equal(decoded.iban, issuer.iban)
+  assert.equal(decoded.bankName, issuer.bankName)
+  assert.equal(decoded.socialCapital, issuer.socialCapital)
+  for (const value of [undefined, null, "SRL", "sa"]) {
+    const raw = { ...issuer, legalForm: value }
+    assert.deepEqual(issuesOf(() => A.issuerInput(raw)), schemaIssues(S.IssuerInput, raw))
+  }
 })
 
 const issuesOf = (decode: () => unknown): ReadonlyArray<string> => {

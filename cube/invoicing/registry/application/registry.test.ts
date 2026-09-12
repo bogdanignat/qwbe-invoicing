@@ -11,6 +11,7 @@ import { PermissionDenied } from "../../contracts/failures.ts"
 const issuerInput = (branding: Parameters<ReturnType<typeof createInvoicingService>["configureIssuer"]>[0]["branding"]) => ({
   name: "Exemplu SRL", fiscalIdentifier: "RO12345674",
   address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" },
+  legalForm: "srl" as const, tradeRegistryNumber: "J40/123/2020", socialCapital: "200.00", iban: "", bankName: "",
   defaultCurrency: "RON", defaultPaymentTermDays: 15,
   vatConfigurations: [{ code: "RO_STANDARD", rate: "21", effectiveFrom: "2025-08-01" }], branding,
 })

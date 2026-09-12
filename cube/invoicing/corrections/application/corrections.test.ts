@@ -16,6 +16,7 @@ void test("corrects an issued invoice exactly once with a negated immutable snap
   await Effect.runPromise(service.configureIssuer({
     name: "Exemplu SRL", fiscalIdentifier: "RO12345674",
     address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" },
+    legalForm: "srl", tradeRegistryNumber: "J40/123/2020", socialCapital: "200.00", iban: "", bankName: "",
     defaultCurrency: "RON", defaultPaymentTermDays: 15, vatConfigurations, branding: null,
   }))
   await Effect.runPromise(service.addDocumentSeries({ documentType: "invoice", series: "QWBE" }))
@@ -50,7 +51,8 @@ void test("corrects an issued invoice exactly once with a negated immutable snap
   assert.equal(correction.lines[0]?.totalIncludingVat, "-151.25")
   assert.deepEqual(correction.vatBreakdown, [{ code: "RO_STANDARD", rate: "21.00", vatBaseAmount: "-125.00", vatAmount: "-26.25" }])
   assert.deepEqual(correction.issuer, { name: invoice.issuer.name, fiscalIdentifier: invoice.issuer.fiscalIdentifier,
-    address: invoice.issuer.address })
+    address: invoice.issuer.address, legalForm: "srl", tradeRegistryNumber: "J40/123/2020",
+    socialCapital: "200.00", iban: "", bankName: "" })
   assert.deepEqual(correction.customer, invoice.customer)
   assert.equal(state.sequences.get("org-1:2026:invoice:QWBE"), 2)
   assert.equal(state.sequences.get("org-1:2026:correction:QWBE"), undefined)
