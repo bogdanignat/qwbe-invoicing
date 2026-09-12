@@ -120,7 +120,7 @@ void test("OpenAPI 3.1 mirrors paths, PDF encoding, and authentication metadata"
     | Readonly<Record<string, { readonly schema: unknown }>> | undefined
   assert.deepEqual(proformaPdfContent?.["application/pdf"]?.schema, { type: "string", format: "binary" })
 
-  const common = ["200", "400", "401", "403", "500", "503"]
+  const common = ["200", "400", "401", "403", "429", "500", "503"]
   const expectStatuses = (
     method: "get" | "post" | "put" | "delete",
     path: string,
@@ -161,15 +161,42 @@ void test("OpenAPI 3.1 mirrors paths, PDF encoding, and authentication metadata"
     ["post", "/api/proformas/{proformaId}/pdf"],
   ] as const) expectStatuses(method, path, ["404", "409", "413"])
   expectStatuses("get", "/api/session", [], ["200", "400", "401", "500", "503"])
-  expectStatuses("post", "/api/session", ["413"])
+  expectStatuses("post", "/api/session", ["413", "429"])
   expectStatuses("delete", "/api/session", [], ["200", "400", "401", "403", "500", "503"])
+  const throttledLogin = spec.paths["/api/session"].post.responses[429]
+  assert.match(throttledLogin?.description ?? "", /Retry-After/)
+  assert.deepEqual(throttledLogin?.content?.["application/json"]?.schema, {
+    type: "object",
+    required: ["error"],
+    properties: { error: { type: "string", enum: ["too_many_attempts"] } },
+    additionalProperties: false,
+    description: "Authentication cooldown is active. Retry-After is an integer delay of 1-30 seconds.",
+  })
+  let throttledOperations = 0
+  for (const item of Object.values(spec.paths)) {
+    for (const operation of Object.values(item)) {
+      const response = operation.responses[429] as (typeof operation.responses[number] & {
+        readonly headers?: Readonly<Record<string, unknown>>
+      }) | undefined
+      if (response === undefined) continue
+      throttledOperations += 1
+      assert.deepEqual(response.headers, {
+        "Retry-After": {
+          description: "Cooldown remaining in whole seconds.",
+          required: true,
+          schema: { type: "integer", minimum: 1, maximum: 30 },
+        },
+      }, operation.operationId)
+    }
+  }
+  assert.equal(throttledOperations, operationNames.length - 2)
 
   const tagStatuses = new Map<string, Set<string>>()
   for (const item of Object.values(spec.paths)) {
     for (const operation of Object.values(item)) {
       for (const [status, response] of Object.entries(operation.responses)) {
         const json = JSON.stringify(response)
-        for (const tag of ["ValidationFailure", "invalid_json", "invalid_credentials", "AuthenticationRequired", "PermissionDenied", "DocumentsPermissionDenied", "csrf_validation_failed", "origin_not_allowed", "ResourceNotFound", "DocumentNotFound", "DomainConflict", "ArtifactConflict", "request_body_too_large", "PersistenceFailure", "DocumentPersistenceFailure", "DocumentRenderingFailure", "internal_failure", "OrganizationContextMissing", "not_ready"]) {
+        for (const tag of ["ValidationFailure", "invalid_json", "invalid_credentials", "AuthenticationRequired", "PermissionDenied", "DocumentsPermissionDenied", "csrf_validation_failed", "origin_not_allowed", "ResourceNotFound", "DocumentNotFound", "DomainConflict", "ArtifactConflict", "request_body_too_large", "too_many_attempts", "PersistenceFailure", "DocumentPersistenceFailure", "DocumentRenderingFailure", "internal_failure", "OrganizationContextMissing", "not_ready"]) {
           if (!json.includes(tag)) continue
           const statuses = tagStatuses.get(tag) ?? new Set<string>()
           statuses.add(status)
@@ -183,7 +210,7 @@ void test("OpenAPI 3.1 mirrors paths, PDF encoding, and authentication metadata"
     AuthenticationRequired: ["401"], PermissionDenied: ["403"], DocumentsPermissionDenied: ["403"],
     csrf_validation_failed: ["403"], origin_not_allowed: ["403"], ResourceNotFound: ["404"],
     DocumentNotFound: ["404"], DomainConflict: ["409"], ArtifactConflict: ["409"],
-    request_body_too_large: ["413"], PersistenceFailure: ["500"], DocumentPersistenceFailure: ["500"],
+    request_body_too_large: ["413"], too_many_attempts: ["429"], PersistenceFailure: ["500"], DocumentPersistenceFailure: ["500"],
     DocumentRenderingFailure: ["500"], internal_failure: ["500"], OrganizationContextMissing: ["503"],
     not_ready: ["503"],
   }

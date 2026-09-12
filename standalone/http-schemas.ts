@@ -432,6 +432,9 @@ export const DomainConflictError = errorUnion(
 )
 export const ArtifactConflictError = tagged(409, "ArtifactConflict")
 export const PayloadTooLargeError = tagged(413, "request_body_too_large")
+export const TooManyAttemptsError = Schema.Struct({ error: Schema.Literal("too_many_attempts") }).annotations(
+  HttpApiSchema.annotations({ status: 429, description: "Authentication cooldown is active. Retry-After is an integer delay of 1-30 seconds." }),
+)
 export const InvoicingInternalError = tagged(500, "PersistenceFailure", "internal_failure")
 export const DocumentsInternalError = tagged(500, "DocumentPersistenceFailure", "DocumentRenderingFailure", "internal_failure")
 export const SessionInternalError = tagged(500, "internal_failure")

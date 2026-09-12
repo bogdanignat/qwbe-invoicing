@@ -100,6 +100,21 @@ void test("localizes invalid session credentials", async () => {
   }
 })
 
+void test("localizes authentication throttling without exposing limiter details", async () => {
+  const originalFetch = globalThis.fetch
+  try {
+    globalThis.fetch = () => Promise.resolve(new Response(JSON.stringify({ error: "too_many_attempts" }), {
+      status: 429,
+      headers: { "content-type": "application/json", "retry-after": "8" },
+    }))
+    await assert.rejects(runUiEffect(loginApiSession("wrong-token")), (error) =>
+      error instanceof ApiFailure && error.status === 429 && error.message === "Prea multe încercări. Așteaptă puțin și încearcă din nou.")
+  } finally {
+    await runUiEffect(clearApiSession)
+    globalThis.fetch = originalFetch
+  }
+})
+
 void test("interrupts the Effect fetch when React Query aborts", async () => {
   const originalFetch = globalThis.fetch
   let fetchAborted = false
