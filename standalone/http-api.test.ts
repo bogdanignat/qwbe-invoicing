@@ -69,6 +69,7 @@ void test("dueDate contracts accept absent, null, or string input and encode exp
   assert.equal(Schema.encodeSync(S.Proforma)({ ...draft, id: "proforma-1", sourceDraftId: "draft-1", invoiceSeries: "QWBE",
     convertedDraftId: null, convertedInvoiceId: null,
     number: 1, issuedAt: "2026-09-01T00:00:00.000Z", issuer: { name: "Furnizor", fiscalIdentifier: "RO12345674", branding: null,
+      legalForm: "srl", tradeRegistryNumber: "J22/123/2020", iban: "RO49AAAA1B31007593840000", bankName: "Banca", socialCapital: "1000.00",
       address: { countryCode: "RO", city: "Iași", street: "Strada 2" } } }).convertedDraftId, null)
 })
 

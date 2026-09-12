@@ -1,5 +1,5 @@
 import { ValidationFailure } from "../contracts/failures.ts"
-import type { BuyerSnapshot, DocumentSeries, DocumentSource, IssuerProfile, PartySnapshot, VatConfiguration } from "./invoice.ts"
+import type { BuyerSnapshot, DocumentSeries, DocumentSource, PartySnapshot } from "./invoice.ts"
 
 export const maximumPaymentTermDays = 3650
 
@@ -106,19 +106,4 @@ export const validateDocumentNotes = (notes: string | null | undefined): void =>
   const issues: Array<string> = []
   freeText("notes", notes, 500, issues, true)
   if (issues.length > 0) throw new ValidationFailure({ issues })
-}
-
-export const resolveVatConfiguration = (
-  issuer: IssuerProfile,
-  code: string,
-  issueDate: string,
-): VatConfiguration => {
-  const matches = issuer.vatConfigurations.filter((configuration) =>
-    configuration.code === code
-    && configuration.effectiveFrom <= issueDate
-    && (configuration.effectiveTo === undefined || issueDate <= configuration.effectiveTo))
-  if (matches.length !== 1) {
-    throw new ValidationFailure({ issues: [`vatRateCode ${code} must resolve to exactly one configuration on ${issueDate}`] })
-  }
-  return matches[0] as VatConfiguration
 }

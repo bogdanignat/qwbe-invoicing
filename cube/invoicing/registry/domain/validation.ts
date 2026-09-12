@@ -4,6 +4,22 @@ import type { IssuerProfile, VatConfiguration } from "../../domain/invoice.ts"
 import type { CustomerInput, ProductPresetInput } from "../../domain/inputs.ts"
 import { normalizeUnitOfMeasure } from "../../domain/unit-of-measures.ts"
 import { isValidRomanianCui, maximumPaymentTermDays, validateBuyer, validateDate, validateParty } from "../../domain/validation.ts"
+import { normalizeIssuerDetails } from "./issuer-details.ts"
+
+export const resolveVatConfiguration = (
+  issuer: IssuerProfile,
+  code: string,
+  issueDate: string,
+): VatConfiguration => {
+  const matches = issuer.vatConfigurations.filter((configuration) =>
+    configuration.code === code
+    && configuration.effectiveFrom <= issueDate
+    && (configuration.effectiveTo === undefined || issueDate <= configuration.effectiveTo))
+  if (matches.length !== 1) {
+    throw new ValidationFailure({ issues: [`vatRateCode ${code} must resolve to exactly one configuration on ${issueDate}`] })
+  }
+  return matches[0] as VatConfiguration
+}
 
 export const validateCustomer = (customer: CustomerInput): void => {
   validateBuyer(customer)
@@ -68,6 +84,7 @@ const validateVatConfigurations = (configurations: ReadonlyArray<VatConfiguratio
 
 export const validateIssuer = (issuer: IssuerProfile): void => {
   validateParty(issuer)
+  normalizeIssuerDetails(issuer)
   const issues: Array<string> = []
   if (!isValidRomanianCui(issuer.fiscalIdentifier)) issues.push("fiscalIdentifier must be a valid Romanian CUI")
   if (issuer.defaultCurrency !== "RON") issues.push("defaultCurrency must be RON")

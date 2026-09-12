@@ -11,7 +11,9 @@ import { createPdfRenderer } from "./pdf-renderer.ts"
 const invoice: RenderableInvoice = {
   id: "brand-invoice", organizationId: "org", series: "F", number: 1,
   issueDate: "2026-09-10", dueDate: null, issuedAt: "2026-09-10T10:00:00Z", currency: "RON", notes: null,
-  issuer: { name: "Legal Issuer SRL", fiscalIdentifier: "RO12345674", address: { countryCode: "RO", city: "Iași", street: "Strada 1" }, branding: null },
+  issuer: { name: "Legal Issuer SRL", fiscalIdentifier: "RO12345674", address: { countryCode: "RO", city: "Iași", street: "Strada 1" },
+    legalForm: "srl", tradeRegistryNumber: "J22/123/2020", iban: "RO49AAAA1B31007593840000",
+    bankName: "Banca Română", socialCapital: "1000.00", branding: null },
   customer: { name: "Client SRL", fiscalIdentifier: "RO87654329", partyType: "company", address: { countryCode: "RO", city: "Iași", street: "Strada 2" } },
   lines: [{ description: "Servicii", quantity: "1", unitPrice: "100", unitOfMeasure: { code: "HUR", name: "oră" }, vatRate: "21", totalExcludingVat: "100", vatAmount: "21", totalIncludingVat: "121" }],
   vatBreakdown: [{ rate: "21", vatBaseAmount: "100", vatAmount: "21" }], totalExcludingVat: "100", vatTotal: "21", totalIncludingVat: "121",
@@ -26,7 +28,7 @@ void test("renders none, custom text, image and both deterministically in invoic
   for (const branding of [null, { text, image: null }, { text: null, image }, { text, image }]) {
     const source = { ...invoice, issuer: { ...invoice.issuer, branding } }
     const proforma: RenderableProforma = { ...source, sourceDraftId: null, invoiceSeries: "F", convertedDraftId: null, convertedInvoiceId: null }
-    for (const [render, version] of [[() => renderer.render(source), "invoice-v5"], [() => renderer.renderProforma(proforma), "proforma-v4"]] as const) {
+    for (const [render, version] of [[() => renderer.render(source), "invoice-v6"], [() => renderer.renderProforma(proforma), "proforma-v5"]] as const) {
       const first = await Effect.runPromise(render())
       assert.equal(first.templateVersion, version)
       assert.deepEqual(first.bytes, (await Effect.runPromise(render())).bytes)

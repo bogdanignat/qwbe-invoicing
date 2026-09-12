@@ -45,6 +45,15 @@ export const Party = Schema.Struct({
   address: Address,
 })
 
+export const IssuerCompany = Schema.Struct({
+  ...Party.fields,
+  legalForm: Schema.Literal("srl", "pfa"),
+  tradeRegistryNumber: Schema.String,
+  iban: Schema.String,
+  bankName: Schema.String,
+  socialCapital: Schema.String,
+})
+
 const BrandingTextInput = Schema.NullOr(Schema.String)
 const IssuerBrandingInput = Schema.NullOr(Schema.Struct({
   text: BrandingTextInput,
@@ -59,7 +68,7 @@ const IssuerBranding = Schema.NullOr(Schema.Struct({
   text: Schema.NullOr(Schema.String),
   image: Schema.NullOr(IssuerBrandingImage),
 }))
-export const IssuerParty = Schema.Struct({ ...Party.fields, branding: IssuerBranding })
+export const IssuerParty = Schema.Struct({ ...IssuerCompany.fields, branding: IssuerBranding })
 
 export const Buyer = Schema.Struct({
   partyType: Schema.Literal("company", "individual"),
@@ -92,6 +101,11 @@ export const IssuerInput = Schema.Struct({
   name: Schema.String,
   fiscalIdentifier: FiscalIdentifierInput,
   address: Address,
+  legalForm: Schema.Literal("srl", "pfa"),
+  tradeRegistryNumber: Schema.String,
+  iban: Schema.String,
+  bankName: Schema.String,
+  socialCapital: Schema.String,
   defaultCurrency: Schema.String,
   defaultPaymentTermDays: Schema.Int,
   vatConfigurations: Schema.Array(VatConfigurationInput),
@@ -102,6 +116,11 @@ export const Issuer = Schema.Struct({
   name: Schema.String,
   fiscalIdentifier: Schema.String,
   address: Address,
+  legalForm: Schema.Literal("srl", "pfa"),
+  tradeRegistryNumber: Schema.String,
+  iban: Schema.String,
+  bankName: Schema.String,
+  socialCapital: Schema.String,
   organizationId: Schema.String,
   defaultCurrency: Schema.String,
   defaultPaymentTermDays: Schema.Int,
@@ -240,7 +259,7 @@ export const IssuedInvoice = Schema.Struct({
   eFacturaStatus: Schema.Literal("not_sent", "pending", "sent", "accepted", "rejected"),
 })
 
-export const IssuedInvoiceSummary = Schema.Struct({ ...IssuedInvoice.fields, issuer: Party })
+export const IssuedInvoiceSummary = Schema.Struct({ ...IssuedInvoice.fields, issuer: IssuerCompany })
 export const IssuedInvoicePage = pageOf(IssuedInvoiceSummary)
 
 const BuyerSelection = Schema.Struct({ customerId: optionalString, customer: optional(BuyerInput) })
@@ -322,7 +341,7 @@ export const Correction = Schema.Struct({
   issuedAt: Schema.String,
   reason: Schema.String,
   currency: Schema.String,
-  issuer: Party,
+  issuer: IssuerCompany,
   customer: Buyer,
   lines: Schema.Array(DraftLine),
   vatBreakdown: Schema.Array(VatBreakdown),
@@ -364,7 +383,7 @@ export const Proforma = Schema.Struct({
   vatTotal: Schema.String,
   totalIncludingVat: Schema.String,
 })
-export const ProformaSummary = Schema.Struct({ ...Proforma.fields, issuer: Party })
+export const ProformaSummary = Schema.Struct({ ...Proforma.fields, issuer: IssuerCompany })
 export const ProformaPage = pageOf(ProformaSummary)
 export const IssueProformaInput = Schema.Struct({ series: Schema.String }).annotations(bodyObject)
 // Effect's empty Struct also accepts primitives and arrays; retain the JSON-object

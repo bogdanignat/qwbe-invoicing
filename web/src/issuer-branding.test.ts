@@ -1,10 +1,18 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { beginBrandImageSelection, brandingDraftFromSaved, changeBrandImage, changeBrandText, createRevisionGuard, detectRasterMime, issuerBrandImageMaxBytes, normalizeBrandText, removeBrandImage, removeBranding, validateBrandingDimensions, validateBrandingFile } from "./issuer-branding.ts"
+import { beginBrandImageSelection, brandingDraftFromSaved, brandingImageSaveIssue, changeBrandImage, changeBrandText, createRevisionGuard, detectRasterMime, issuerBrandImageMaxBytes, normalizeBrandText, removeBrandImage, removeBranding, validateBrandingDimensions, validateBrandingFile } from "./issuer-branding.ts"
 
 const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
 const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xe0])
+
+void test("prevents silent saving while a logo is pending or rejected", () => {
+  assert.equal(brandingImageSaveIssue(false, null), null)
+  assert.equal(brandingImageSaveIssue(true, null), "Așteaptă validarea imaginii înainte de salvare.")
+  const rejected = new Error("Imaginea poate avea maximum 256 KiB.")
+  assert.equal(brandingImageSaveIssue(false, rejected), rejected.message)
+  assert.equal(brandingImageSaveIssue(true, rejected), "Așteaptă validarea imaginii înainte de salvare.")
+})
 
 void test("allows only matching PNG and JPEG MIME and magic bytes within 256 KiB", () => {
   assert.equal(detectRasterMime(png), "image/png")

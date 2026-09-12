@@ -7,6 +7,7 @@ import type { InvoicingPermissions } from "../../contracts/permissions.ts"
 import type { DocumentSource, Idempotent, IssuedInvoice, IssuedInvoiceSummary } from "../../domain/invoice.ts"
 import type { AuthoringDocumentInput } from "../../domain/inputs.ts"
 import { calendarDate, validateDocumentSource } from "../../domain/validation.ts"
+import { validateIssuerForIssuance } from "../../registry/index.ts"
 import { fiscalYear, issuanceSource, numberedSnapshot } from "./snapshot.ts"
 
 export type IssueInvoiceInput = Idempotent<AuthoringDocumentInput | { readonly draftId: string }>
@@ -32,6 +33,7 @@ export const createInvoiceOperations = (
         return replay === undefined ? yield* Effect.fail(missingIdempotencyResult("invoice")) : structuredClone(replay)
       }
       const { document, issuer, draft } = yield* issuanceSource(input, context.organization.id, transaction, dependencies.ids, "invoice")
+      yield* checked(() => { validateIssuerForIssuance(issuer) })
       const invoiceId = yield* dependencies.ids.next
       const issuedAt = yield* dependencies.clock.now
       yield* ensureChronology(transaction, context.organization.id, "invoice", document.series, document.issueDate, calendarDate(issuedAt))

@@ -70,6 +70,11 @@ void test("persists an issued snapshot across store recreation and isolates orga
       name: "Exemplu SRL",
       fiscalIdentifier: "RO12345674",
       address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1", postalCode: "710000" },
+      legalForm: "srl",
+      tradeRegistryNumber: "J22/123/2020",
+      iban: "RO49AAAA1B31007593840000",
+      bankName: "Banca Română",
+      socialCapital: "1000.00",
       defaultCurrency: "RON",
       defaultPaymentTermDays: 15,
       vatConfigurations: [{
@@ -210,6 +215,7 @@ void test("persists an issued snapshot across store recreation and isolates orga
         .run(issued.id))
       assert.throws(() => database.prepare("UPDATE issued_invoices SET source_id = 'changed' WHERE id = ?").run(issued.id))
       assert.throws(() => database.prepare("UPDATE issued_invoices SET issuer_branding = NULL WHERE id = ?").run(issued.id))
+      assert.throws(() => database.prepare("UPDATE issued_invoices SET issuer_iban = '' WHERE id = ?").run(issued.id))
       assert.throws(() => database.prepare("DELETE FROM issued_lines WHERE invoice_id = ?").run(issued.id))
       assert.throws(() => database.prepare("DELETE FROM issued_tax_breakdown WHERE invoice_id = ?").run(issued.id))
       assert.throws(() => database.prepare("DELETE FROM issued_invoices WHERE id = ?").run(issued.id))
@@ -217,6 +223,7 @@ void test("persists an issued snapshot across store recreation and isolates orga
       assert.throws(() => database.prepare("UPDATE proformas SET total_including_tax='0.00' WHERE id=?").run(proforma.id))
       assert.throws(() => database.prepare("UPDATE proformas SET source_id='changed' WHERE id=?").run(proforma.id))
       assert.throws(() => database.prepare("UPDATE proformas SET issuer_branding=NULL WHERE id=?").run(proforma.id))
+      assert.throws(() => database.prepare("UPDATE proformas SET issuer_social_capital='0.00' WHERE id=?").run(proforma.id))
       assert.throws(() => database.prepare("UPDATE issuers SET branding='not-json' WHERE organization_id='org-1'").run())
       assert.equal(database.prepare("SELECT sealed FROM proformas WHERE id=?").get(proforma.id)?.sealed, 1)
       assert.equal(database.prepare("SELECT actor_id FROM proforma_invoice_conversions WHERE proforma_id=?").get(proforma.id)?.actor_id, "user-1")
@@ -238,22 +245,26 @@ void test("persists an issued snapshot across store recreation and isolates orga
         customer_postal_code,series,issue_date,due_date,currency,'proforma_issued' FROM invoice_drafts WHERE id=?`).run(proformaSource.id)
       assert.throws(() => database.prepare(`INSERT INTO proformas(id,source_draft_id,organization_id,fiscal_year,document_type,
         series,number,issue_date,due_date,issued_at,currency,issuer_legal_name,issuer_tax_identifier,issuer_country_code,
-        issuer_city,issuer_street,issuer_county,issuer_postal_code,customer_party_type,customer_legal_name,
+        issuer_city,issuer_street,issuer_county,issuer_postal_code,issuer_legal_form,issuer_trade_registry_number,
+        issuer_iban,issuer_bank_name,issuer_social_capital,customer_party_type,customer_legal_name,
         customer_tax_identifier,customer_country_code,customer_city,customer_street,customer_county,customer_postal_code,
         total_excluding_tax,tax_total,total_including_tax,sealed,invoice_series)
         SELECT 'wrong-series-proforma','wrong-series-source',
         organization_id,fiscal_year,document_type,'QWBE',number+10,issue_date,due_date,issued_at,currency,issuer_legal_name,
-        issuer_tax_identifier,issuer_country_code,issuer_city,issuer_street,issuer_county,issuer_postal_code,customer_party_type,
+        issuer_tax_identifier,issuer_country_code,issuer_city,issuer_street,issuer_county,issuer_postal_code,issuer_legal_form,
+        issuer_trade_registry_number,issuer_iban,issuer_bank_name,issuer_social_capital,customer_party_type,
         customer_legal_name,customer_tax_identifier,customer_country_code,customer_city,customer_street,customer_county,
         customer_postal_code,total_excluding_tax,tax_total,total_including_tax,0,invoice_series FROM proformas WHERE id=?`).run(proforma.id))
       assert.throws(() => database.prepare(`INSERT INTO proformas(id,source_draft_id,organization_id,fiscal_year,document_type,
         series,number,issue_date,due_date,issued_at,currency,issuer_legal_name,issuer_tax_identifier,issuer_country_code,
-        issuer_city,issuer_street,issuer_county,issuer_postal_code,customer_party_type,customer_legal_name,
+        issuer_city,issuer_street,issuer_county,issuer_postal_code,issuer_legal_form,issuer_trade_registry_number,
+        issuer_iban,issuer_bank_name,issuer_social_capital,customer_party_type,customer_legal_name,
         customer_tax_identifier,customer_country_code,customer_city,customer_street,customer_county,customer_postal_code,
         total_excluding_tax,tax_total,total_including_tax,sealed,invoice_series)
         SELECT 'missing-series-proforma','wrong-series-source',
         organization_id,fiscal_year,document_type,'MISSING',number+11,issue_date,due_date,issued_at,currency,issuer_legal_name,
-        issuer_tax_identifier,issuer_country_code,issuer_city,issuer_street,issuer_county,issuer_postal_code,customer_party_type,
+        issuer_tax_identifier,issuer_country_code,issuer_city,issuer_street,issuer_county,issuer_postal_code,issuer_legal_form,
+        issuer_trade_registry_number,issuer_iban,issuer_bank_name,issuer_social_capital,customer_party_type,
         customer_legal_name,customer_tax_identifier,customer_country_code,customer_city,customer_street,customer_county,
         customer_postal_code,total_excluding_tax,tax_total,total_including_tax,0,invoice_series FROM proformas WHERE id=?`).run(proforma.id))
     } finally {
@@ -348,6 +359,8 @@ void test("round-trips document remarks and keeps them immutable once issued", a
     await Effect.runPromise(service.configureIssuer({
       name: "Exemplu SRL", fiscalIdentifier: "RO12345674",
       address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" },
+      legalForm: "srl", tradeRegistryNumber: "J22/123/2020", iban: "RO49AAAA1B31007593840000",
+      bankName: "Banca Română", socialCapital: "1000.00",
       defaultCurrency: "RON", defaultPaymentTermDays: 15,
       vatConfigurations: [{ code: "RO_STANDARD", rate: "21.00", effectiveFrom: "2025-08-01" }],
       branding: null,

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { decodeCustomer, decodeDocumentSeries, decodeDocumentSeriesList, decodeDraft, decodeDrafts, decodeInvoice, decodeIssuer, decodePaymentSummary, decodeProductPreset, decodeProductPresetPage, decodeProductPresets, decodeProforma, decodeProformas, decodeUnitOfMeasures, invoiceDocumentSeries, proformaDocumentSeries } from "./models.ts"
+import { decodeCorrection, decodeCustomer, decodeDocumentSeries, decodeDocumentSeriesList, decodeDraft, decodeDrafts, decodeInvoice, decodeIssuer, decodePaymentSummary, decodeProductPreset, decodeProductPresetPage, decodeProductPresets, decodeProforma, decodeProformas, decodeUnitOfMeasures, invoiceDocumentSeries, proformaDocumentSeries } from "./models.ts"
 const each = { code: "C62", name: "unitate" } as const
 
 void test("decodes optional address and payment fields without leaking null", () => {
@@ -46,6 +46,7 @@ void test("requires integer issuer terms and decodes tax configuration", () => {
   const input = {
     organizationId: "org-1", name: "QWBE", fiscalIdentifier: "RO2",
     address: { countryCode: "RO", city: "Botoșani", street: "Strada 2" },
+    legalForm: "srl", tradeRegistryNumber: "J07/123/2020", iban: "", bankName: "", socialCapital: "200.00",
     branding: null, defaultCurrency: "RON", defaultPaymentTermDays: 15,
     vatConfigurations: [{ code: "RO_STANDARD", rate: "21.00", effectiveFrom: "2026-01-01", effectiveTo: null }],
   }
@@ -76,7 +77,7 @@ void test("decodes document series and requires supported document types", () =>
 const commercialDocument = {
   id: "proforma-1", sourceDraftId: "draft-1", organizationId: "org-1", series: "PRO", number: 7,
   issueDate: "2026-09-01", dueDate: null, issuedAt: "2026-09-01T10:00:00.000Z", currency: "RON", notes: null,
-  issuer: { name: "QWBE", fiscalIdentifier: "RO2", address: { countryCode: "RO", city: "Botoșani", street: "Strada 2" }, branding: null },
+  issuer: { name: "QWBE", fiscalIdentifier: "RO2", address: { countryCode: "RO", city: "Botoșani", street: "Strada 2" }, legalForm: "srl", tradeRegistryNumber: "J07/123/2020", iban: "", bankName: "", socialCapital: "200.00", branding: null },
   customer: { partyType: "company", name: "Client", fiscalIdentifier: "RO1", address: { countryCode: "RO", city: "Iași", street: "Strada 1" } },
   lines: [{ id: "line-1", description: "Serviciu", quantity: "1.0000", unitPrice: "100.00", unitOfMeasure: each, vatRateCode: "RO_STANDARD", vatRate: "21.00", totalExcludingVat: "100.00", vatAmount: "21.00", totalIncludingVat: "121.00" }],
   vatBreakdown: [{ code: "RO_STANDARD", rate: "21.00", vatBaseAmount: "100.00", vatAmount: "21.00" }],
@@ -105,6 +106,7 @@ void test("strictly requires and decodes issuer branding on details while summar
   const issuerInput = {
     organizationId: "org-1", name: "QWBE", fiscalIdentifier: "RO2",
     address: { countryCode: "RO", city: "Botoșani", street: "Strada 2" },
+    legalForm: "srl", tradeRegistryNumber: "J07/123/2020", iban: "", bankName: "", socialCapital: "200.00",
     defaultCurrency: "RON", defaultPaymentTermDays: 15, vatConfigurations: [],
   }
   const image = { pngBase64: "iVBORw0KGgo=", width: 120, height: 40 }
@@ -116,9 +118,16 @@ void test("strictly requires and decodes issuer branding on details while summar
   assert.throws(() => decodeIssuer({ ...issuerInput, branding: {} }), /invalid branding.text/)
   assert.throws(() => decodeIssuer({ ...issuerInput, branding: { text: null, image: { ...image, width: 0 } } }), /invalid issuer branding image/)
   assert.throws(() => decodeProforma({ ...commercialDocument, issuer: { ...commercialDocument.issuer, branding: undefined } }), /expected object/)
-  const summary = decodeProformas([{ ...commercialDocument, issuer: { name: "QWBE", fiscalIdentifier: "RO2", address: commercialDocument.issuer.address } }])[0]
+  const summaryIssuer = { name: "QWBE", fiscalIdentifier: "RO2", address: commercialDocument.issuer.address, legalForm: "srl", tradeRegistryNumber: "J07/123/2020", iban: "", bankName: "", socialCapital: "200.00" }
+  const summary = decodeProformas([{ ...commercialDocument, issuer: summaryIssuer }])[0]
   assert.ok(summary)
   assert.equal("branding" in summary.issuer, false)
+  assert.equal(summary.issuer.tradeRegistryNumber, "J07/123/2020")
+  for (const field of ["legalForm", "tradeRegistryNumber", "iban", "bankName", "socialCapital"] as const) {
+    assert.throws(() => decodeIssuer({ ...issuerInput, branding: null, [field]: undefined }), new RegExp(`invalid ${field}`))
+  }
+  assert.equal(decodeIssuer({ ...issuerInput, branding: null, tradeRegistryNumber: "", socialCapital: "" }).tradeRegistryNumber, "")
+  assert.throws(() => decodeProforma({ ...commercialDocument, issuer: { ...commercialDocument.issuer, tradeRegistryNumber: "" } }), /invalid issued issuer/)
 })
 
 void test("requires the series fixed on a draft", () => {
@@ -134,6 +143,14 @@ void test("requires the series fixed on a draft", () => {
   assert.throws(() => decodeDraft({ ...draft, notes: undefined }), /invalid notes/)
   assert.throws(() => decodeDraft({ ...draft, notes: 7 }), /invalid notes/)
   assert.equal(decodeDraft({ ...draft, notes: "Observatie" }).notes, "Observatie")
+})
+
+void test("strictly decodes correction issuers as company snapshots without branding", () => {
+  const issuer = { name: "QWBE", fiscalIdentifier: "RO2", address: commercialDocument.issuer.address, legalForm: "srl", tradeRegistryNumber: "J07/123/2020", iban: "", bankName: "", socialCapital: "200.00" }
+  const decoded = decodeCorrection({ id: "correction-1", series: "QWBE", number: 9, issueDate: "2026-09-02", reason: "Storno", currency: "RON", totalIncludingVat: "-121.00", issuer })
+  assert.deepEqual(decoded.issuer, issuer)
+  assert.equal("branding" in decoded.issuer, false)
+  assert.throws(() => decodeCorrection({ id: "correction-1", series: "QWBE", number: 9, issueDate: "2026-09-02", reason: "Storno", currency: "RON", totalIncludingVat: "-121.00" }), /expected object/)
 })
 
 void test("decodes inline individual buyers and complete server totals", () => {

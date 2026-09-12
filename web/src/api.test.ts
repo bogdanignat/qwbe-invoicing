@@ -140,6 +140,7 @@ void test("saves typed issuer branding input and decodes the canonical PNG", asy
   const calls: Array<{ readonly path: string; readonly init: RequestInit }> = []
   const input = {
     name: "QWBE", fiscalIdentifier: "RO2", address: { countryCode: "RO", city: "Botoșani", street: "Strada 2" },
+    legalForm: "srl" as const, tradeRegistryNumber: "J07/123/2020", iban: "RO49AAAA1B31007593840000", bankName: "Banca", socialCapital: "200.00",
     defaultCurrency: "RON", defaultPaymentTermDays: 15, vatConfigurations: [],
     branding: { text: "QWBE", image: { dataBase64: "jpeg-input" } },
   }
@@ -338,7 +339,7 @@ void test("calls direct and draft issuance, proforma invoice, registry, detail, 
   }
   const proforma = {
     ...draft, id: "proforma-1", sourceDraftId: "draft-1", series: "PRO", number: 7, issuedAt: "2026-09-01T10:00:00.000Z",
-    issuer: { name: "QWBE", fiscalIdentifier: "RO2", address: { countryCode: "RO", city: "Botoșani", street: "Strada 2" }, branding: null },
+    issuer: { name: "QWBE", fiscalIdentifier: "RO2", address: { countryCode: "RO", city: "Botoșani", street: "Strada 2" }, legalForm: "srl", tradeRegistryNumber: "J07/123/2020", iban: "", bankName: "", socialCapital: "200.00", branding: null },
     invoiceSeries: "QWBE", convertedDraftId: null, convertedInvoiceId: null,
   }
   const invoice = { ...proforma, id: "invoice-1", draftId: null, sourceProformaId: "proforma-1", series: "QWBE", number: 8, eFacturaStatus: "not_sent" }

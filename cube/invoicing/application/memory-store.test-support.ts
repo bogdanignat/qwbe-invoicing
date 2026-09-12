@@ -32,7 +32,9 @@ const afterName = (name: string, id: string, after: NameCursor): boolean =>
   name.localeCompare(after.name) > 0 || (name.localeCompare(after.name) === 0 && id > after.id)
 const withoutIssuerBranding = <Document extends IssuedInvoice | Proforma>(document: Document) => {
   const issuer = { name: document.issuer.name, fiscalIdentifier: document.issuer.fiscalIdentifier,
-    address: structuredClone(document.issuer.address) }
+    address: structuredClone(document.issuer.address), legalForm: document.issuer.legalForm,
+    tradeRegistryNumber: document.issuer.tradeRegistryNumber, socialCapital: document.issuer.socialCapital,
+    iban: document.issuer.iban, bankName: document.issuer.bankName }
   return { ...document, issuer }
 }
 

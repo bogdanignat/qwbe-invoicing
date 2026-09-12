@@ -2,8 +2,8 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import { ValidationFailure } from "../contracts/failures.ts"
-import { resolveVatConfiguration, validateBuyer, validateDate, validateDocumentSeries } from "./validation.ts"
-import { validateIssuer } from "../registry/domain/validation.ts"
+import { validateBuyer, validateDate, validateDocumentSeries } from "./validation.ts"
+import { resolveVatConfiguration, validateIssuer } from "../registry/domain/validation.ts"
 
 void test("validates supported document types and fiscal series format", () => {
   assert.doesNotThrow(() => { validateDocumentSeries({ organizationId: "org-1", documentType: "invoice", series: "QWBE_01" }) })
@@ -54,6 +54,11 @@ void test("resolves exactly one effective-dated issuer tax configuration", () =>
     name: "Exemplu SRL",
     fiscalIdentifier: "RO12345674",
     address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" },
+    legalForm: "srl" as const,
+    tradeRegistryNumber: "J40/123/2020",
+    socialCapital: "200.00",
+    iban: "",
+    bankName: "",
     defaultCurrency: "RON",
     defaultPaymentTermDays: 15,
     branding: null,
