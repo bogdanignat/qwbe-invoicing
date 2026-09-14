@@ -138,6 +138,7 @@ export interface DraftInvoice {
   readonly customer: BuyerSnapshot
   readonly customerId?: string
   readonly source?: DocumentSource
+  readonly sourceProformaId: string | null
   readonly series: string
   readonly issueDate: string
   readonly dueDate: string | null
@@ -187,7 +188,6 @@ export interface Proforma {
   readonly id: string
   readonly sourceDraftId: string | null
   readonly source?: DocumentSource
-  readonly invoiceSeries: string
   readonly organizationId: string
   readonly series: string
   readonly number: number
@@ -477,7 +477,7 @@ export const decodeDraft: Decoder<DraftInvoice> = (input) => {
   return {
     id: text(value.id, "id"), organizationId: text(value.organizationId, "organizationId"),
     customer: decodeBuyer(value.customer), ...(customerId === undefined ? {} : { customerId }),
-    ...(source === undefined ? {} : { source }),
+    ...(source === undefined ? {} : { source }), sourceProformaId: nullableText(value.sourceProformaId, "sourceProformaId"),
     series: text(value.series, "series"),
     issueDate: text(value.issueDate, "issueDate"), dueDate: nullableText(value.dueDate, "dueDate"),
     currency: text(value.currency, "currency"), notes: nullableText(value.notes, "notes"), status,
@@ -518,7 +518,6 @@ const decodeProformaWithIssuer = <Value extends IssuerCompanySnapshot>(input: un
     actorId: text(value.actorId, "actorId"),
     id: text(value.id, "id"), sourceDraftId: nullableText(value.sourceDraftId, "sourceDraftId"),
     ...(source === undefined ? {} : { source }),
-    invoiceSeries: text(value.invoiceSeries, "invoiceSeries"),
     organizationId: text(value.organizationId, "organizationId"), series: text(value.series, "series"),
     number: integer(value.number, "number"), issueDate: text(value.issueDate, "issueDate"),
     dueDate: nullableText(value.dueDate, "dueDate"), issuedAt: text(value.issuedAt, "issuedAt"),

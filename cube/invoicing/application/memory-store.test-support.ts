@@ -12,7 +12,8 @@ import {
   type TransactionalStore,
   type BrandingNormalizer,
 } from "../contracts/index.ts"
-import type { AuditEvent, IdempotencyRecord, ProformaConversion } from "../domain/invoice.ts"
+import type { AuditEvent, IdempotencyRecord } from "../domain/invoice.ts"
+import type { ProformaConversion } from "../issuance/domain/proforma.ts"
 import type { DraftInvoice, InvoicingTransaction, IssuedInvoice, Proforma } from "./invoicing.ts"
 import type { DocumentCursor, DraftCursor, NameCursor, PageQuery } from "./ports.ts"
 
@@ -32,7 +33,7 @@ const afterName = (name: string, id: string, after: NameCursor): boolean =>
   name.localeCompare(after.name) > 0 || (name.localeCompare(after.name) === 0 && id > after.id)
 const withoutIssuerBranding = <Document extends IssuedInvoice | Proforma>(document: Document) => {
   const issuer = { name: document.issuer.name, fiscalIdentifier: document.issuer.fiscalIdentifier,
-    address: structuredClone(document.issuer.address), legalForm: document.issuer.legalForm,
+    address: structuredClone(document.issuer.address), legalForm: document.issuer.legalForm, vatRegistered: document.issuer.vatRegistered,
     tradeRegistryNumber: document.issuer.tradeRegistryNumber, socialCapital: document.issuer.socialCapital,
     iban: document.issuer.iban, bankName: document.issuer.bankName }
   return { ...document, issuer }
@@ -60,6 +61,14 @@ const cloneState = (state: MemoryState): MemoryState => structuredClone(state)
 export const memoryStore = (state: MemoryState): TransactionalStore<InvoicingTransaction> => ({
   transaction: (use) => Effect.suspend(() => {
     const working = cloneState(state)
+    const draftView = (draft: DraftInvoice): DraftInvoice => ({ ...draft,
+      sourceProformaId: [...working.conversions.values()].find((conversion) =>
+        conversion.organizationId === draft.organizationId && conversion.resultingDraftId === draft.id)?.proformaId ?? null })
+    const proformaView = (proforma: Proforma): Proforma => ({ ...proforma,
+      convertedDraftId: working.conversions.get(proforma.id)?.resultingDraftId ?? null,
+      convertedInvoiceId: working.invoiceConversions.get(proforma.id)?.resultingInvoiceId
+        ?? [...working.issued.values()].find((invoice) => invoice.organizationId === proforma.organizationId
+          && invoice.sourceProformaId === proforma.id)?.id ?? null })
     const transaction: InvoicingTransaction = {
       saveIssuer: (issuer) => Effect.sync(() => { working.issuers.set(issuer.organizationId, issuer) }),
       findIssuer: (organizationId) => Effect.succeed(working.issuers.get(organizationId)),
@@ -109,17 +118,21 @@ export const memoryStore = (state: MemoryState): TransactionalStore<InvoicingTra
         if (working.productPresets.get(id)?.organizationId === organizationId) working.productPresets.delete(id)
       }),
       saveDraft: (draft) => Effect.sync(() => { working.drafts.set(draft.id, draft) }),
-      findDraft: (organizationId, id) => Effect.succeed(
-        working.drafts.get(id)?.organizationId === organizationId ? working.drafts.get(id) : undefined,
-      ),
+      findDraft: (organizationId, id) => Effect.sync(() => {
+        const draft = working.drafts.get(id)
+        return draft?.organizationId === organizationId ? draftView(draft) : undefined
+      }),
       listDrafts: (organizationId, page, source) => Effect.succeed(paged([...working.drafts.values()]
         .filter((draft) => draft.organizationId === organizationId && draft.status === "draft" && sameSource(draft, source))
-        .sort((a, b) => b.issueDate.localeCompare(a.issueDate) || a.id.localeCompare(b.id)), page, afterDraft)),
+         .sort((a, b) => b.issueDate.localeCompare(a.issueDate) || a.id.localeCompare(b.id)), page, afterDraft).map(draftView)),
       deleteDraft: (organizationId, id) => Effect.sync(() => {
         const draft = working.drafts.get(id)
         if (draft === undefined || draft.organizationId !== organizationId || draft.status !== "draft") {
           throw new DomainConflict({ code: "draft_not_editable", message: "Draft cannot be deleted" })
         }
+        if (draftView(draft).sourceProformaId !== null) throw new DomainConflict({
+          code: "derived_draft_cannot_be_deleted", message: "A draft linked to a proforma cannot be deleted",
+        })
         working.drafts.delete(id)
       }),
       findLatestIssueDate: (organizationId, fiscalYear, documentType, series) => Effect.sync(() => {
@@ -151,25 +164,23 @@ export const memoryStore = (state: MemoryState): TransactionalStore<InvoicingTra
       saveProforma: (proforma) => Effect.sync(() => { working.proformas.set(proforma.id, proforma) }),
       findProforma: (organizationId, id) => Effect.sync(() => {
         const value = working.proformas.get(id)
-        const conversion = working.conversions.get(id)
-        return value?.organizationId === organizationId
-          ? { ...value, convertedDraftId: conversion?.resultingDraftId ?? null,
-            convertedInvoiceId: working.invoiceConversions.get(id)?.resultingInvoiceId ?? null }
-          : undefined
+        return value?.organizationId === organizationId ? proformaView(value) : undefined
       }),
       listProformas: (organizationId, page, source) => Effect.succeed(paged([...working.proformas.values()]
         .filter((value) => value.organizationId === organizationId && sameSource(value, source))
-        .map((value) => ({ ...value, convertedDraftId: working.conversions.get(value.id)?.resultingDraftId ?? null,
-          convertedInvoiceId: working.invoiceConversions.get(value.id)?.resultingInvoiceId ?? null }))
+        .map(proformaView)
         .sort((a, b) => b.issueDate.localeCompare(a.issueDate) || b.number - a.number || a.id.localeCompare(b.id)), page, afterDocument)
         .map(withoutIssuerBranding)),
       findProformaConversion: (organizationId, proformaId) => Effect.succeed(
         working.conversions.get(proformaId)?.organizationId === organizationId ? working.conversions.get(proformaId) : undefined,
       ),
+      saveProformaConversion: (conversion) => working.conversions.has(conversion.proformaId) || working.invoiceConversions.has(conversion.proformaId)
+        ? Effect.fail(new DomainConflict({ code: "proforma_already_converted", message: "Proforma was already converted" }))
+        : Effect.sync(() => { working.conversions.set(conversion.proformaId, conversion) }),
       findProformaInvoiceConversion: (organizationId, proformaId) => Effect.succeed(
         working.invoiceConversions.get(proformaId)?.organizationId === organizationId ? working.invoiceConversions.get(proformaId) : undefined,
       ),
-      saveProformaInvoiceConversion: (conversion) => working.invoiceConversions.has(conversion.proformaId)
+      saveProformaInvoiceConversion: (conversion) => working.invoiceConversions.has(conversion.proformaId) || working.conversions.has(conversion.proformaId)
         ? Effect.fail(new DomainConflict({ code: "proforma_already_converted", message: "Proforma was already converted" }))
         : Effect.sync(() => { working.invoiceConversions.set(conversion.proformaId, conversion) }),
       saveCorrection: (correction) => Effect.sync(() => { working.corrections.set(correction.id, correction) }),

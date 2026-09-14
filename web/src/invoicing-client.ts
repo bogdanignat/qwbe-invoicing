@@ -83,7 +83,15 @@ export type AuthoringDocumentInput = CreateDraftInput & {
   readonly lines: ReadonlyArray<DraftLineInput>
 }
 
-export type AuthoringProformaInput = AuthoringDocumentInput & { readonly proformaSeries: string }
+export type AuthoringProformaInput = BuyerSource & {
+  readonly proformaSeries: string
+  readonly issueDate: string
+  readonly dueDate?: string | null
+  readonly currency: "RON"
+  readonly notes?: string | null
+  readonly source?: DocumentSource
+  readonly lines: ReadonlyArray<DraftLineInput>
+}
 
 export const invoicingClient = {
   listCustomers: (page?: PageRequest) => apiRequest(paged("/api/customers", page), decodeCustomerPage),
@@ -116,11 +124,11 @@ export const invoicingClient = {
   deleteDraftLine: (id: string, lineId: string) => apiRequest(`/api/drafts/${encoded(id)}/lines/${encoded(lineId)}`, decodeDraft, { method: "DELETE" }),
   issueDraft: (id: string, idempotencyKey: string) => apiRequest(`/api/drafts/${encoded(id)}/issue`, decodeInvoice, { method: "POST", body: {}, idempotencyKey }),
   issueInvoice: (body: AuthoringDocumentInput, idempotencyKey: string) => apiRequest("/api/invoices", decodeInvoice, { method: "POST", body, idempotencyKey }),
-  issueDraftProforma: (draftId: string, series: string, idempotencyKey: string) => apiRequest(`/api/drafts/${encoded(draftId)}/proformas`, decodeProforma, { method: "POST", body: { series }, idempotencyKey }),
   issueProforma: (body: AuthoringProformaInput, idempotencyKey: string) => apiRequest("/api/proformas", decodeProforma, { method: "POST", body, idempotencyKey }),
   listProformas: (page?: PageRequest) => apiRequest(paged("/api/proformas", page), decodeProformaPage),
   getProforma: (id: string) => apiRequest(`/api/proformas/${encoded(id)}`, decodeProforma),
-  issueInvoiceFromProforma: (id: string, idempotencyKey: string) => apiRequest(`/api/proformas/${encoded(id)}/invoice`, decodeInvoice, { method: "POST", body: {}, idempotencyKey }),
+  issueInvoiceFromProforma: (id: string, invoiceSeries: string, idempotencyKey: string) => apiRequest(`/api/proformas/${encoded(id)}/invoice`, decodeInvoice, { method: "POST", body: { invoiceSeries }, idempotencyKey }),
+  createDraftFromProforma: (id: string, invoiceSeries: string, idempotencyKey: string) => apiRequest(`/api/proformas/${encoded(id)}/draft-invoice`, decodeDraft, { method: "POST", body: { invoiceSeries }, idempotencyKey }),
   getInvoiceBundle: (id: string): Effect.Effect<InvoiceBundle, ApiFailure> => Effect.all({
     invoice: apiRequest(`/api/invoices/${encoded(id)}`, decodeInvoice),
     paymentSummary: apiRequest(`/api/invoices/${encoded(id)}/payments`, decodePaymentSummary),

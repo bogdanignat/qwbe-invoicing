@@ -45,6 +45,7 @@ export interface RenderableBuyer extends RenderableParty {
 
 export interface RenderableIssuer extends RenderableParty {
   readonly legalForm: "srl" | "pfa"
+  readonly vatRegistered: boolean
   readonly tradeRegistryNumber: string
   readonly iban: string
   readonly bankName: string
@@ -95,7 +96,6 @@ export type RenderableInvoice = RenderableNumberedDocument
 
 export interface RenderableProforma extends RenderableNumberedDocument {
   readonly sourceDraftId: string | null
-  readonly invoiceSeries: string
   readonly convertedDraftId: string | null
   readonly convertedInvoiceId: string | null
 }

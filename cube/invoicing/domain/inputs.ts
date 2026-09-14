@@ -4,9 +4,6 @@ import type { UnitOfMeasure } from "./unit-of-measures.ts"
 // Request shapes accepted by the components; the persisted model lives in invoice.ts.
 export type ConfigureDocumentSeriesInput = Pick<DocumentSeries, "documentType" | "series">
 
-export type IssueProformaInput = { readonly draftId: string; readonly series: string }
-export type ConvertProformaInput = { readonly proformaId: string }
-
 export interface RawIssuerBrandingImage { readonly dataBase64: string }
 export interface RawIssuerBranding { readonly text:string|null; readonly image:RawIssuerBrandingImage|null }
 export interface VatChange{ readonly registered:boolean; readonly effectiveFrom:string }
@@ -37,8 +34,6 @@ export type AuthoringDocumentInput = BuyerSource & {
   readonly notes?: string | null
   readonly lines: ReadonlyArray<RawDocumentLine>
 }
-
-export type AuthoringProformaInput = AuthoringDocumentInput & { readonly proformaSeries: string }
 
 export type CreateDraftInput = BuyerSource & {
   readonly source?: DocumentSource

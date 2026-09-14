@@ -105,6 +105,6 @@ export const useInvoiceAuthoringDraft = (input: DraftEditingInput) => {
       if (line.lineId === undefined) { input.setLines((current) => current.filter((item) => item.key !== line.key)); return }
       if (window.confirm(`Ștergi linia „${line.description}” din draft?`)) removeLine.mutate(line)
     },
-    deleteDraft: () => { if (window.confirm("Ștergi definitiv acest draft?")) removeDraft.mutate() },
+    deleteDraft: () => { if (draft?.sourceProformaId === null && window.confirm("Ștergi definitiv acest draft?")) removeDraft.mutate() },
   }
 }

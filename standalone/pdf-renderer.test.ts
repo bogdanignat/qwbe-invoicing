@@ -19,6 +19,7 @@ const invoice: RenderableInvoice = {
   notes: null,
   issuer: {
     branding: null,
+    vatRegistered: true,
     legalForm: "srl",
     tradeRegistryNumber: "J22/123/2020",
     iban: "RO49AAAA1B31007593840000",
@@ -69,15 +70,31 @@ void test("renders deterministic valid PDFs with Romanian glyphs and fixed metad
 
 void test("renders canonical issuer legal details and omits empty optional detail lines", async () => {
   assert.deepEqual(issuerLegalLines(invoice.issuer), [
-    "Formă juridică: SRL", "Nr. registrul comerțului: J22/123/2020", "Capital social: 1.000,00 RON",
+    "Formă juridică: SRL", "Plătitor de TVA", "Nr. registrul comerțului: J22/123/2020", "Capital social: 1.000,00 RON",
     "Bancă: Banca Română", "IBAN: RO49AAAA1B31007593840000",
   ])
   assert.deepEqual(issuerLegalLines({ ...invoice.issuer, tradeRegistryNumber: "", socialCapital: "", bankName: "", iban: "" }),
-    ["Formă juridică: SRL"])
+    ["Formă juridică: SRL", "Plătitor de TVA"])
   const longDetails = { ...invoice, issuer: { ...invoice.issuer, tradeRegistryNumber: "J".repeat(32),
     bankName: "Bancă foarte lungă ".repeat(7).slice(0, 120), iban: "RO49" + "A".repeat(30) } }
   const rendered = await Effect.runPromise(createPdfRenderer().render(longDetails))
   assert.ok((await PDFDocument.load(rendered.bytes, { updateMetadata: false })).getPageCount() >= 1)
+})
+
+void test("labels the frozen issuer VAT status for SRL and PFA without inventing an exemption", async () => {
+  for (const legalForm of ["srl", "pfa"] as const) {
+    for (const vatRegistered of [true, false]) {
+      const issuer = { ...invoice.issuer, legalForm, vatRegistered, socialCapital: legalForm === "pfa" ? "" : "1000.00" }
+      const lines = issuerLegalLines(issuer)
+      assert.equal(lines[1], vatRegistered ? "Plătitor de TVA" : "Neplătitor de TVA")
+      assert.equal(lines.some((line) => /scutit|scutire|\b310\b/i.test(line)), false)
+      assert.equal(lines.some((line) => line.startsWith("Capital social:")), legalForm === "srl")
+      // Even with zero VAT and a misleading CUI prefix, the renderer must use only the snapshot flag.
+      const rendered = await Effect.runPromise(createPdfRenderer().render({ ...invoice, issuer,
+        vatTotal: "0.00", lines: invoice.lines.map((line) => ({ ...line, vatRate: "0.00", vatAmount: "0.00" })) }))
+      assert.equal((await PDFDocument.load(rendered.bytes, { updateMetadata: false })).getPageCount(), 1)
+    }
+  }
 })
 
 void test("renders an individual buyer with a CNP label and omits an empty identifier", async () => {
@@ -110,7 +127,6 @@ void test("renders deterministic non-fiscal proformas and omits a null due date"
     ...invoice,
     id: "proforma-1",
     sourceDraftId: "draft-1",
-    invoiceSeries: "QWBE",
     convertedDraftId: null,
     convertedInvoiceId: null,
     dueDate: null,
@@ -191,7 +207,7 @@ void test("renders document remarks without truncation and keeps the proforma le
   assert.ok((await PDFDocument.load(crowded.bytes, { updateMetadata: false })).getPageCount() > 1)
 
   const proforma: RenderableProforma = {
-    ...invoice, id: "proforma-1", sourceDraftId: null, invoiceSeries: "QWBE",
+    ...invoice, id: "proforma-1", sourceDraftId: null,
     convertedDraftId: null, convertedInvoiceId: null, notes: "Ofertă valabilă 30 de zile.",
   }
   const rendered = await Effect.runPromise(renderer.renderProforma(proforma))

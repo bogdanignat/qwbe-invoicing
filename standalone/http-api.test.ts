@@ -20,19 +20,20 @@ const inventory = [
   "GET /api/invoices", "GET /api/invoices/:id", "POST /api/invoices/:invoiceId/pdf", "GET /api/invoices/:invoiceId/pdf",
   "POST /api/invoices",
   "POST /api/drafts/:draftId/proformas", "GET /api/proformas", "GET /api/proformas/:id",
-  "POST /api/proformas", "POST /api/proformas/:id/invoice", "POST /api/proformas/:proformaId/pdf", "GET /api/proformas/:proformaId/pdf",
+  "POST /api/proformas", "POST /api/proformas/:id/invoice", "POST /api/proformas/:id/draft-invoice",
+  "POST /api/proformas/:proformaId/pdf", "GET /api/proformas/:proformaId/pdf",
   "GET /api/session", "POST /api/session", "DELETE /api/session",
 ].sort()
 
-void test("the contract exposes exactly the current 45 operations", () => {
+void test("the contract exposes exactly the current 46 operations", () => {
   const applicationRoutes: Array<{ readonly method: string, readonly operationId: string, readonly path: string }> = []
   HttpApi.reflect(applicationHttpApi, { onGroup() {}, onEndpoint({ endpoint }) {
     applicationRoutes.push({ method: endpoint.method, operationId: endpoint.name, path: endpoint.path })
   } })
-  assert.equal(operationNames.length, 45)
-  assert.equal(new Set(operationNames).size, 45)
-  assert.equal(applicationRoutes.length, 45)
-  assert.equal(new Set(applicationRoutes.map((route) => route.operationId)).size, 45)
+  assert.equal(operationNames.length, 46)
+  assert.equal(new Set(operationNames).size, 46)
+  assert.equal(applicationRoutes.length, 46)
+  assert.equal(new Set(applicationRoutes.map((route) => route.operationId)).size, 46)
   assert.ok(operationNames.includes("listVatRegimes"))
   assert.deepEqual(applicationRoutes.map((route) => `${route.method} ${route.path}`).sort(), inventory)
   assert.equal(applicationRoutes.some((route) => route.path === "/api"), false)
@@ -45,18 +46,44 @@ void test("dueDate contracts accept absent, null, or string input and encode exp
   assert.equal(Schema.decodeUnknownSync(S.DraftInput)({ ...base, dueDate: "2026-09-15" }).dueDate, "2026-09-15")
   assert.throws(() => Schema.decodeUnknownSync(S.DraftInput)({ ...base, dueDate: 15 }))
   const draft = {
-    id: "draft-1", organizationId: "org-1", customer: { partyType: "individual", name: "Ion", fiscalIdentifier: "",
+    id: "draft-1", organizationId: "org-1", sourceProformaId: null, customer: { partyType: "individual", name: "Ion", fiscalIdentifier: "",
       address: { countryCode: "RO", city: "Iași", street: "Strada 1" } }, series: "QWBE", issueDate: "2026-09-01",
     dueDate: null, currency: "RON", notes: null, status: "proforma_issued", lines: [], vatBreakdown: [], totalExcludingVat: "0.00",
     vatTotal: "0.00", totalIncludingVat: "0.00",
   } as const
   assert.equal(Schema.encodeSync(S.DraftInvoice)(draft).dueDate, null)
   assert.equal(Schema.encodeSync(S.DraftInvoice)(draft).status, "proforma_issued")
-  assert.equal(Schema.encodeSync(S.Proforma)({ ...draft, id: "proforma-1", sourceDraftId: "draft-1", invoiceSeries: "QWBE",
+  assert.equal(Schema.encodeSync(S.Proforma)({ ...draft, id: "proforma-1", sourceDraftId: "draft-1",
     convertedDraftId: null, convertedInvoiceId: null,
-    number: 1, issuedAt: "2026-09-01T00:00:00.000Z", actorId: "user-1", issuer: { name: "Furnizor", fiscalIdentifier: "RO12345674", branding: null,
+    number: 1, issuedAt: "2026-09-01T00:00:00.000Z", actorId: "user-1", issuer: { name: "Furnizor", fiscalIdentifier: "RO12345674", vatRegistered: false, branding: null,
       legalForm: "srl", tradeRegistryNumber: "J22/123/2020", iban: "RO49AAAA1B31007593840000", bankName: "Banca", socialCapital: "1000.00",
       address: { countryCode: "RO", city: "Iași", street: "Strada 2" } } }).convertedDraftId, null)
+})
+
+void test("proforma authoring and conversion expose only their dedicated series fields", () => {
+  const buyer = { customerId: "customer-1", issueDate: "2026-09-01", currency: "RON" as const, lines: [] }
+  const authored = Schema.decodeUnknownSync(S.AuthoringProformaInput)({
+    ...buyer, proformaSeries: "PRO", series: "LEGACY", invoiceSeries: "INV", draftId: "spoof",
+  })
+  assert.deepEqual(authored, { ...buyer, proformaSeries: "PRO" })
+  assert.throws(() => Schema.decodeUnknownSync(S.AuthoringProformaInput)({ ...buyer, series: "PRO" }))
+  assert.deepEqual(Schema.decodeUnknownSync(S.ConvertProformaInput)({ invoiceSeries: "INV", proformaId: "spoof" }),
+    { invoiceSeries: "INV" })
+  assert.throws(() => Schema.decodeUnknownSync(S.ConvertProformaInput)({}))
+})
+
+void test("issuer VAT status is required on document responses but absent from issuer configuration", () => {
+  const company = {
+    name: "Furnizor SRL", fiscalIdentifier: "RO12345674", legalForm: "srl" as const,
+    tradeRegistryNumber: "J22/123/2020", iban: "RO49AAAA1B31007593840000", bankName: "Banca", socialCapital: "1000.00",
+    address: { countryCode: "RO", city: "Iași", street: "Strada 2" },
+  }
+  assert.doesNotThrow(() => Schema.decodeUnknownSync(S.IssuerInput)({
+    ...company, defaultCurrency: "RON", defaultPaymentTermDays: 15,
+    vatChange: { registered: false, effectiveFrom: "2026-09-01" }, branding: null,
+  }))
+  assert.deepEqual(Schema.encodeSync(S.IssuerCompanySnapshot)({ ...company, vatRegistered: false }), { ...company, vatRegistered: false })
+  assert.throws(() => Schema.decodeUnknownSync(S.IssuerCompanySnapshot)(company))
 })
 
 void test("VAT catalogue response exposes legal rates and nullable inference", () => {
@@ -96,10 +123,21 @@ void test("OpenAPI 3.1 mirrors paths, PDF encoding, and authentication metadata"
     | Readonly<Record<string, { readonly schema?: { readonly properties?: { readonly status?: { readonly enum?: unknown } } } }>>
     | undefined
   assert.deepEqual(draftContent?.["application/json"]?.schema?.properties?.status?.enum, ["draft", "issued", "proforma_issued"])
+  interface JsonSchema { readonly properties?: Readonly<Record<string, unknown>>; readonly required?: ReadonlyArray<string> }
+  interface Content { readonly content?: Readonly<Record<string, { readonly schema?: JsonSchema }>> }
+  interface Operation { readonly requestBody?: Content; readonly responses: Readonly<Record<number, Content>> }
+  const specJson = spec as unknown as { readonly paths: Readonly<Record<string, { readonly get?: Operation; readonly post?: Operation }>> }
+  const conversionRequest = specJson.paths["/api/proformas/{id}/draft-invoice"]?.post?.requestBody?.content?.["application/json"]?.schema
+  assert.deepEqual(conversionRequest?.required, ["invoiceSeries"])
+  const proformaResponseSchema = specJson.paths["/api/proformas/{id}"]?.get?.responses[200]?.content?.["application/json"]?.schema
+  assert.equal(Object.hasOwn(proformaResponseSchema?.properties ?? {}, "invoiceSeries"), false)
+  const draftResponseSchema = specJson.paths["/api/drafts/{id}"]?.get?.responses[200]?.content?.["application/json"]?.schema
+  assert.ok(draftResponseSchema?.required?.includes("sourceProformaId"))
   assert.ok(spec.paths["/api/customers"].post?.parameters.some((parameter) => parameter.name === "x-csrf-token"))
   assert.ok(spec.paths["/api/session"].delete?.parameters.some((parameter) => parameter.name === "x-csrf-token" && parameter.required))
   for (const path of ["/api/drafts/{draftId}/issue", "/api/invoices", "/api/drafts/{draftId}/proformas",
-    "/api/proformas", "/api/proformas/{id}/invoice", "/api/invoices/{invoiceId}/corrections"]) {
+    "/api/proformas", "/api/proformas/{id}/invoice", "/api/proformas/{id}/draft-invoice",
+    "/api/invoices/{invoiceId}/corrections"]) {
     assert.ok(spec.paths[path]?.post?.parameters.some((parameter) => parameter.name === "idempotency-key" && parameter.required),
       `${path} must require Idempotency-Key`)
   }
@@ -153,6 +191,7 @@ void test("OpenAPI 3.1 mirrors paths, PDF encoding, and authentication metadata"
     ["delete", "/api/drafts/{draftId}/lines/{lineId}"], ["post", "/api/drafts/{draftId}/issue"],
     ["post", "/api/invoices/{invoiceId}/corrections"], ["post", "/api/invoices/{invoiceId}/pdf"],
     ["post", "/api/drafts/{draftId}/proformas"], ["post", "/api/proformas/{id}/invoice"],
+    ["post", "/api/proformas/{id}/draft-invoice"],
     ["post", "/api/proformas/{proformaId}/pdf"],
   ] as const) expectStatuses(method, path, ["404", "409", "413"])
   expectStatuses("get", "/api/session", [], ["200", "400", "401", "500", "503"])

@@ -23,7 +23,6 @@ export type InvoiceAuthoringPageState =
       readonly vatCatalogue: VatCatalogue
       readonly customers: ReadonlyArray<Customer>
       readonly invoiceSeries: ReadonlyArray<string>
-      readonly proformaSeries: ReadonlyArray<string>
       readonly unitOfMeasures: ReadonlyArray<UnitOfMeasure>
       readonly backgroundErrors: ReadonlyArray<Error>
     }
@@ -73,7 +72,7 @@ export const useInvoiceAuthoringPage = (id: string | undefined): InvoiceAuthorin
     kind: "ready", sessionKey: draft.data?.id ?? "new",
     ...(draft.data === undefined ? {} : { initialDraft: draft.data }),
     issuer: issuer.data, vatCatalogue: vatCatalogue.data, customers: customers.data?.items ?? [],
-    invoiceSeries: seriesOptions.invoice, proformaSeries: seriesOptions.proforma,
+    invoiceSeries: seriesOptions.invoice,
     unitOfMeasures: unitOfMeasures.data ?? [],
     backgroundErrors: [customers.error, issuer.error, vatCatalogue.error, series.error, unitOfMeasures.error, draft.error]
       .filter((error): error is Error => error !== null),

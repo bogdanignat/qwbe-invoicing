@@ -4,12 +4,13 @@ import type { InvoicingTransaction } from "../../application/ports.ts"
 import { checked, copyIssuerSnapshot, copySource, missing } from "../../application/support.ts"
 import { DomainConflict, ValidationFailure } from "../../contracts/failures.ts"
 import type { IdGenerator } from "../../contracts/host.ts"
-import type { DraftInvoice, IssuerSnapshot } from "../../domain/invoice.ts"
+import type { DraftInvoice, IssuerProfile, IssuerSnapshot } from "../../domain/invoice.ts"
 import type { AuthoringDocumentInput } from "../../domain/inputs.ts"
 import { authorDocument } from "../../drafts/index.ts"
-import { validateVatForIssuance } from "../../registry/index.ts"
+import { currentVatRegistration, validateVatForIssuance } from "../../registry/index.ts"
+import type { AuthoringProformaInput } from "../domain/proforma.ts"
 
-type SnapshotContent = Omit<DraftInvoice, "id" | "status" | "customerId">
+type SnapshotContent = Omit<DraftInvoice, "id" | "status" | "customerId" | "sourceProformaId">
 
 export interface NumberedIdentity {
   readonly actorId: string
@@ -21,6 +22,13 @@ export interface NumberedIdentity {
 
 export const fiscalYear = (isoDate: string): number => Number(isoDate.slice(0, 4))
 
+const issuerAtIssuance = (issuer: IssuerProfile, document: SnapshotContent) => checked((): IssuerSnapshot => {
+  validateVatForIssuance(issuer, document.issueDate, document.lines)
+  const registration = currentVatRegistration(issuer.vatConfigurations, document.issueDate)
+  if (registration === undefined) throw new ValidationFailure({ issues: [`issuer VAT registration must be configured on ${document.issueDate}`] })
+  return copyIssuerSnapshot({ ...issuer, vatRegistered: registration.registered })
+})
+
 export const numberedSnapshot = (draft: SnapshotContent, issuer: IssuerSnapshot, identity: NumberedIdentity) => ({
   ...identity, issuedAt: identity.issuedAt.toISOString(), organizationId: draft.organizationId,
   ...(draft.source === undefined ? {} : { source: copySource(draft.source) }),
@@ -31,22 +39,24 @@ export const numberedSnapshot = (draft: SnapshotContent, issuer: IssuerSnapshot,
 })
 
 export const issuanceSource = (
-  input: AuthoringDocumentInput | { readonly draftId: string }, organizationId: string,
+  input: AuthoringDocumentInput | AuthoringProformaInput | { readonly draftId: string }, organizationId: string,
   transaction: InvoicingTransaction, ids: IdGenerator, kind: "invoice" | "proforma",
 ) => Effect.gen(function*() {
   if (!("draftId" in input)) {
-    const source = { ...(yield* authorDocument(input, organizationId, transaction, ids)), draft: undefined }
-    yield* checked(() => { validateVatForIssuance(source.issuer, source.document.issueDate, source.document.lines) })
-    return source
+    const payload = "proformaSeries" in input ? { ...input, series: input.proformaSeries } : input
+    const source = { ...(yield* authorDocument(payload, organizationId, transaction, ids, kind)), draft: undefined }
+    return { ...source, issuer: yield* issuerAtIssuance(source.issuer, source.document) }
   }
   const draft = yield* transaction.findDraft(organizationId, input.draftId)
   if (draft === undefined) return yield* Effect.fail(missing("draft", input.draftId))
+  if (kind === "proforma" && draft.sourceProformaId !== null) return yield* Effect.fail(new DomainConflict({
+    code: "derived_draft_cannot_issue_proforma", message: "A draft linked to a proforma can only become an invoice",
+  }))
   if (draft.status !== "draft") return yield* Effect.fail(new DomainConflict({
     code: kind === "invoice" ? "invoice_already_issued" : "draft_already_issued", message: "Draft was already used",
   }))
   if (draft.lines.length === 0) return yield* Effect.fail(new ValidationFailure({ issues: [`${kind} must contain at least one line`] }))
   const issuer = yield* transaction.findIssuer(organizationId)
   if (issuer === undefined) return yield* Effect.fail(missing("issuer", organizationId))
-  yield* checked(() => { validateVatForIssuance(issuer, draft.issueDate, draft.lines) })
-  return { document: draft, issuer, draft }
+  return { document: draft, issuer: yield* issuerAtIssuance(issuer, draft), draft }
 })

@@ -17,6 +17,7 @@ import { InvoiceDetailView } from "./views/InvoiceDetailView.tsx"
 import { InvoicesView } from "./views/InvoicesView.tsx"
 import { NewInvoiceView } from "./views/NewInvoiceView.tsx"
 import { ProformaDetailView } from "./views/ProformaDetailView.tsx"
+import { ProformaAuthoringView } from "./views/ProformaAuthoringView.tsx"
 import { ProformasView } from "./views/ProformasView.tsx"
 import { ProductPresetsView } from "./views/ProductPresetsView.tsx"
 import { SettingsView } from "./views/SettingsView.tsx"
@@ -87,12 +88,13 @@ export const App = () => {
       case "invoices": content = <InvoicesView />; break
       case "invoice-new": content = <NewInvoiceView notify={notify} />; break
       case "proformas": content = <ProformasView />; break
+      case "proforma-new": content = <ProformaAuthoringView />; break
       case "customers": content = <CustomersView notify={notify} />; break
       case "products": content = <ProductPresetsView notify={notify} />; break
       case "settings": content = <SettingsView notify={notify} />; break
       case "draft": content = <DraftView id={matched.id} notify={notify} />; break
-      case "invoice": content = <InvoiceDetailView id={matched.id} notify={notify} />; break
-      case "proforma": content = <ProformaDetailView id={matched.id} />; break
+      case "invoice": content = <InvoiceDetailView key={matched.id} id={matched.id} notify={notify} />; break
+      case "proforma": content = <ProformaDetailView key={matched.id} id={matched.id} />; break
       case "unlock": content = <InvoicesView />; break
       case "not-found": content = <Page title="Pagina nu există" eyebrow="404"><p>Ruta cerută nu este disponibilă.</p><ButtonLink href="/invoices">Înapoi la facturi</ButtonLink></Page>; break
     }

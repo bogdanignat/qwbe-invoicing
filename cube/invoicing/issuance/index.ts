@@ -32,3 +32,5 @@ export const createIssuanceOperations = (
 export type { InvoiceOperations, IssueInvoiceInput } from "./application/invoices.ts"
 export type { ProformaConversionOperations } from "./application/proforma-conversion.ts"
 export type { ProformaOperations } from "./application/proformas.ts"
+export type { Proforma, ProformaSummary, ProformaConversion, ProformaInvoiceConversion,
+  IssueProformaInput, ConvertProformaInput, AuthoringProformaInput } from "./domain/proforma.ts"

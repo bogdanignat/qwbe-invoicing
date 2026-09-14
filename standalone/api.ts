@@ -193,7 +193,8 @@ const invoicingGroup = (runtime: ApiRuntime) => {
     .handle("listProformas", ({ urlParams }) => sourceFilter(urlParams).pipe(Effect.flatMap((source) => use((s) => s.invoicing.listProformas(source, urlParams))), Effect.mapError(errors("ValidationFailure"))))
     .handle("issueProforma", ({ payload, headers }) => idempotent(headers["idempotency-key"], "issue_proforma_direct", payload).pipe(Effect.flatMap((input) => use((s) => s.invoicing.issueProforma(input))), Effect.mapError(errors("ValidationFailure", "ResourceNotFound", "DomainConflict"))))
     .handle("getProforma", ({ path }) => use((s) => s.invoicing.getProforma(path.id)).pipe(Effect.mapError(errors("ResourceNotFound"))))
-    .handle("issueInvoiceFromProforma", ({ path, headers }) => idempotent(headers["idempotency-key"], "issue_invoice_from_proforma", { proformaId: path.id }).pipe(Effect.flatMap((input) => use((s) => s.invoicing.issueInvoiceFromProforma(input))), Effect.mapError(errors("ValidationFailure", "ResourceNotFound", "DomainConflict")))))
+    .handle("issueInvoiceFromProforma", ({ path, payload, headers }) => idempotent(headers["idempotency-key"], "issue_invoice_from_proforma", { proformaId: path.id, ...payload }).pipe(Effect.flatMap((input) => use((s) => s.invoicing.issueInvoiceFromProforma(input))), Effect.mapError(errors("ValidationFailure", "ResourceNotFound", "DomainConflict"))))
+    .handle("createDraftInvoiceFromProforma", ({ path, payload, headers }) => idempotent(headers["idempotency-key"], "create_draft_invoice_from_proforma", { proformaId: path.id, ...payload }).pipe(Effect.flatMap((input) => use((s) => s.invoicing.createDraftInvoiceFromProforma(input))), Effect.mapError(errors("ValidationFailure", "ResourceNotFound", "DomainConflict")))))
 }
 
 const documentsGroup = (runtime: ApiRuntime) => {

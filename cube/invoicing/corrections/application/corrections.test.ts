@@ -52,7 +52,7 @@ void test("corrects an issued invoice exactly once with a negated immutable snap
   assert.equal(correction.lines[0]?.totalIncludingVat, "-151.25")
   assert.deepEqual(correction.vatBreakdown, [{ code: "RO_STANDARD", rate: "21.00", vatBaseAmount: "-125.00", vatAmount: "-26.25" }])
   assert.deepEqual(correction.issuer, { name: invoice.issuer.name, fiscalIdentifier: invoice.issuer.fiscalIdentifier,
-    address: invoice.issuer.address, legalForm: "srl", tradeRegistryNumber: "J40/123/2020",
+    address: invoice.issuer.address, legalForm: "srl", vatRegistered: true, tradeRegistryNumber: "J40/123/2020",
     socialCapital: "200.00", iban: "", bankName: "" })
   assert.deepEqual(correction.customer, invoice.customer)
   assert.equal(state.sequences.get("org-1:2026:invoice:QWBE"), 2)

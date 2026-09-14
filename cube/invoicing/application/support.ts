@@ -39,7 +39,7 @@ export const copyBuyer = (buyer: BuyerSnapshot): BuyerSnapshot => ({
 })
 
 export const copyIssuerCompanySnapshot = (issuer: IssuerCompanySnapshot): IssuerCompanySnapshot => ({
-  ...copyParty(issuer), legalForm: issuer.legalForm, tradeRegistryNumber: issuer.tradeRegistryNumber,
+  ...copyParty(issuer), legalForm: issuer.legalForm, vatRegistered: issuer.vatRegistered, tradeRegistryNumber: issuer.tradeRegistryNumber,
   iban: issuer.iban, bankName: issuer.bankName, socialCapital: issuer.socialCapital,
 })
 

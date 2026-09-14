@@ -47,5 +47,6 @@ export const createInvoicingService = (dependencies: InvoicingDependencies): Inv
   }
 }
 
-export type { DraftInvoice, IssuedInvoice, Proforma } from "../domain/invoice.ts"
+export type { DraftInvoice, IssuedInvoice } from "../domain/invoice.ts"
+export type { Proforma } from "../issuance/index.ts"
 export type { InvoicingTransaction } from "./ports.ts"

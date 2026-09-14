@@ -4,8 +4,10 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import test from "node:test"
 
+import { Effect } from "effect"
 import sharp from "sharp"
 
+import { invoicingPermissions } from "../cube/invoicing/index.ts"
 import { handleApiRequest } from "./api.test-support.ts"
 import { createRequestAuthenticator } from "./auth.ts"
 import { applyMigrations } from "./migrations.ts"
@@ -212,6 +214,7 @@ void test("requires host authentication and serves the complete invoice-core rou
     assert.equal((draft.body as { customer: { partyType: string } }).customer.partyType, "individual")
     assert.equal((draft.body as { totalIncludingVat: string }).totalIncludingVat, "0.00")
     assert.equal((draft.body as { dueDate: string | null }).dueDate, null)
+    assert.equal((draft.body as { sourceProformaId: string | null }).sourceProformaId, null)
     const invalidDueDate = await handleApiRequest({
       method: "POST", url: "/api/drafts", authorization,
       body: { customerId, issueDate: "2026-09-01", series: "QWBE", dueDate: 7 },
@@ -352,6 +355,7 @@ void test("requires host authentication and serves the complete invoice-core rou
     assert.deepEqual((proforma.body as { source?: unknown }).source, { app: "crm", kind: "offer", id: "offer-1" })
     assert.equal((proforma.body as { dueDate: string | null }).dueDate, null)
     assert.equal((proforma.body as { convertedDraftId: string | null }).convertedDraftId, null)
+    assert.equal(Object.hasOwn(proforma.body as object, "invoiceSeries"), false)
     const proformaId = (proforma.body as { id: string }).id
     assert.deepEqual(await handleApiRequest({
       method: "POST", url: `/api/drafts/${proformaDraftId}/proformas`, authorization, idempotencyKey: "draft-proforma-2", body: { series: "PRO" },
@@ -372,8 +376,11 @@ void test("requires host authentication and serves the complete invoice-core rou
     { items: [summaryOf(proforma.body)], nextCursor: null })
     assert.deepEqual((await handleApiRequest({ method: "GET", url: `/api/proformas/${proformaId}`, authorization, body: undefined }, runtime)).body, proforma.body)
     assert.equal((await handleApiRequest({ method: "GET", url: "/api/proformas/missing", authorization, body: undefined }, runtime)).status, 404)
-    assert.equal((await handleApiRequest({ method: "POST", url: "/api/proformas/missing/invoice", authorization, idempotencyKey: "missing-proforma", body: {} }, runtime)).status, 404)
+    assert.equal((await handleApiRequest({ method: "POST", url: "/api/proformas/missing/invoice", authorization, idempotencyKey: "missing-proforma",
+      body: { invoiceSeries: "QWBE" } }, runtime)).status, 404)
     assert.equal((await handleApiRequest({ method: "POST", url: `/api/proformas/${proformaId}/invoice`, authorization, body: [] }, runtime)).status, 400)
+    assert.equal((await handleApiRequest({ method: "POST", url: `/api/proformas/${proformaId}/invoice`, authorization,
+      idempotencyKey: "missing-conversion-series", body: {} }, runtime)).status, 400)
     assert.equal((await handleApiRequest({ method: "POST", url: "/api/proformas/missing/pdf", authorization, body: {} }, runtime)).status, 404)
     assert.equal((await handleApiRequest({ method: "GET", url: "/api/proformas/missing/pdf", authorization, body: undefined }, runtime)).status, 404)
     assert.equal((await handleApiRequest({ method: "POST", url: `/api/proformas/${proformaId}/pdf`, authorization, body: [] }, runtime)).status, 400)
@@ -395,7 +402,8 @@ void test("requires host authentication and serves the complete invoice-core rou
     assert.equal(proformaPdf.headers["content-type"], "application/pdf")
     assert.equal(Buffer.from((proformaPdf.body as Uint8Array).subarray(0, 5)).toString("ascii"), "%PDF-")
     const converted = await handleApiRequest({
-      method: "POST", url: `/api/proformas/${proformaId}/invoice`, authorization, idempotencyKey: "convert-proforma-1", body: {},
+      method: "POST", url: `/api/proformas/${proformaId}/invoice`, authorization, idempotencyKey: "convert-proforma-1",
+      body: { invoiceSeries: "QWBE" },
     }, runtime)
     assert.equal(converted.status, 200)
     assert.equal((converted.body as { actorId: string }).actorId, "standalone-owner")
@@ -404,7 +412,8 @@ void test("requires host authentication and serves the complete invoice-core rou
     assert.equal((converted.body as { sourceProformaId: string | null }).sourceProformaId, proformaId)
     assert.deepEqual((converted.body as { source?: unknown }).source, { app: "crm", kind: "offer", id: "offer-1" })
     assert.deepEqual(await handleApiRequest({
-      method: "POST", url: `/api/proformas/${proformaId}/invoice`, authorization, idempotencyKey: "convert-proforma-2", body: {},
+      method: "POST", url: `/api/proformas/${proformaId}/invoice`, authorization, idempotencyKey: "convert-proforma-2",
+      body: { invoiceSeries: "QWBE" },
     }, runtime), { status: 409, body: { error: "DomainConflict", code: "proforma_already_converted" } })
     assert.equal(typeof ((await handleApiRequest({
       method: "GET", url: `/api/proformas/${proformaId}`, authorization, body: undefined,
@@ -456,13 +465,68 @@ void test("requires host authentication and serves the complete invoice-core rou
       idempotencyKey: "direct-invoice-1", body: { ...authoredBody, issueDate: "2026-09-05", proformaSeries: "PRO" } }, runtime),
     { status: 409, body: { error: "DomainConflict", code: "idempotency_key_reused" } })
     const directProforma = await handleApiRequest({ method: "POST", url: "/api/proformas", authorization,
-      idempotencyKey: "direct-proforma-1", body: { ...authoredBody, issueDate: "2026-09-05", proformaSeries: "PRO" } }, runtime)
+      idempotencyKey: "direct-proforma-1", body: { ...authoredBody, series: undefined, issueDate: "2026-09-05", proformaSeries: "PRO" } }, runtime)
     assert.equal(directProforma.status, 200)
     assert.equal((directProforma.body as { actorId: string }).actorId, "standalone-owner")
     assert.equal((directProforma.body as { sourceDraftId: string | null }).sourceDraftId, null)
+    assert.equal(Object.hasOwn(directProforma.body as object, "invoiceSeries"), false)
     const directProformaId = (directProforma.body as { id: string }).id
+    assert.deepEqual(await handleApiRequest({ method: "POST", url: "/api/proformas", authorization,
+      idempotencyKey: "direct-proforma-1", body: { ...authoredBody, series: undefined, issueDate: "2026-09-05", proformaSeries: "PRO" } }, runtime), directProforma)
+    assert.deepEqual(await handleApiRequest({ method: "POST", url: "/api/proformas", authorization,
+      idempotencyKey: "direct-proforma-1", body: { ...authoredBody, series: undefined, issueDate: "2026-09-04", proformaSeries: "PRO" } }, runtime),
+    { status: 409, body: { error: "DomainConflict", code: "idempotency_key_reused" } })
+    assert.deepEqual((await handleApiRequest({ method: "GET", url: `/api/proformas/${directProformaId}`, authorization,
+      body: undefined }, runtime)).body, directProforma.body)
     assert.equal((await handleApiRequest({ method: "POST", url: `/api/proformas/${directProformaId}/invoice`, authorization,
-      idempotencyKey: "direct-proforma-conversion", body: {} }, runtime)).status, 200)
+      idempotencyKey: "direct-proforma-conversion", body: { invoiceSeries: "QWBE" } }, runtime)).status, 200)
+    const draftBranchProforma = await handleApiRequest({ method: "POST", url: "/api/proformas", authorization,
+      idempotencyKey: "draft-branch-proforma", body: { ...authoredBody, series: undefined, source: undefined,
+        issueDate: "2026-09-05", proformaSeries: "PRO" } }, runtime)
+    assert.equal(draftBranchProforma.status, 200)
+    const draftBranchProformaId = (draftBranchProforma.body as { id: string }).id
+    const otherOrganizationRuntime = { ...runtime, authenticate: createRequestAuthenticator({
+      host: "127.0.0.1", port: 3000, dataDirectory: directory, nodeEnvironment: "test", authTokenFile: tokenFile,
+      organizationId: "org-2",
+    }) }
+    assert.equal((await handleApiRequest({ method: "GET", url: `/api/proformas/${draftBranchProformaId}`,
+      authorization, body: undefined }, otherOrganizationRuntime)).status, 404)
+    assert.equal((await handleApiRequest({ method: "POST", url: `/api/proformas/${draftBranchProformaId}/draft-invoice`,
+      authorization, idempotencyKey: "other-tenant-conversion", body: { invoiceSeries: "QWBE" } }, otherOrganizationRuntime)).status, 404)
+    const permissions = invoicingPermissions("invoicing")
+    const withoutDraftPermissionRuntime = { ...runtime, authenticate: () => ({ current: Effect.succeed({
+      identity: { id: "restricted-user", username: "restricted", roles: [],
+        permissions: [permissions.read, permissions.issueInvoices, permissions.issueProformas] },
+      organization: { id: "org-1" },
+    }) }) }
+    assert.equal((await handleApiRequest({ method: "POST", url: `/api/proformas/${draftBranchProformaId}/draft-invoice`,
+      authorization, idempotencyKey: "forbidden-draft-conversion", body: { invoiceSeries: "QWBE" } }, withoutDraftPermissionRuntime)).status, 403)
+    const derivedDraft = await handleApiRequest({ method: "POST", url: `/api/proformas/${draftBranchProformaId}/draft-invoice`,
+      authorization, idempotencyKey: "draft-branch-conversion", body: { invoiceSeries: "QWBE" } }, runtime)
+    assert.equal(derivedDraft.status, 200)
+    assert.equal((derivedDraft.body as { sourceProformaId: string | null }).sourceProformaId, draftBranchProformaId)
+    const derivedDraftId = (derivedDraft.body as { id: string }).id
+    assert.deepEqual(await handleApiRequest({ method: "POST", url: `/api/proformas/${draftBranchProformaId}/draft-invoice`,
+      authorization, idempotencyKey: "draft-branch-conversion", body: { invoiceSeries: "QWBE" } }, runtime), derivedDraft)
+    assert.deepEqual(await handleApiRequest({ method: "POST", url: `/api/proformas/${draftBranchProformaId}/draft-invoice`,
+      authorization, idempotencyKey: "draft-branch-conversion", body: { invoiceSeries: "OTHER" } }, runtime),
+    { status: 409, body: { error: "DomainConflict", code: "idempotency_key_reused" } })
+    assert.deepEqual(await handleApiRequest({ method: "DELETE", url: `/api/drafts/${derivedDraftId}`, authorization, body: undefined }, runtime),
+      { status: 409, body: { error: "DomainConflict", code: "derived_draft_cannot_be_deleted" } })
+    const editedDerivedDraft = await handleApiRequest({ method: "PUT", url: `/api/drafts/${derivedDraftId}`, authorization,
+      body: { customerId, issueDate: "2026-09-05", dueDate: "2026-09-20", notes: "Revizuită înainte de emitere" } }, runtime)
+    assert.equal(editedDerivedDraft.status, 200)
+    assert.equal((editedDerivedDraft.body as { sourceProformaId: string | null }).sourceProformaId, draftBranchProformaId)
+    const issuedDerivedDraft = await handleApiRequest({ method: "POST", url: `/api/drafts/${derivedDraftId}/issue`, authorization,
+      idempotencyKey: "issue-draft-branch", body: {} }, runtime)
+    assert.equal(issuedDerivedDraft.status, 200)
+    assert.equal((issuedDerivedDraft.body as { draftId: string | null }).draftId, derivedDraftId)
+    assert.equal((issuedDerivedDraft.body as { sourceProformaId: string | null }).sourceProformaId, draftBranchProformaId)
+    const convertedDraftFact = await handleApiRequest({ method: "GET", url: `/api/proformas/${draftBranchProformaId}`,
+      authorization, body: undefined }, runtime)
+    assert.equal((convertedDraftFact.body as { convertedDraftId: string | null }).convertedDraftId, derivedDraftId)
+    assert.equal((convertedDraftFact.body as { convertedInvoiceId: string | null }).convertedInvoiceId,
+      (issuedDerivedDraft.body as { id: string }).id)
     assert.deepEqual((await handleApiRequest({ method: "GET", url: "/api/drafts", authorization, body: undefined }, runtime)).body, { items: [], nextCursor: null })
     const correction = await handleApiRequest({
       method: "POST",
@@ -652,7 +716,9 @@ void test("carries document remarks through the HTTP contract and rejects invali
     const proforma = await call("POST", "/api/proformas", { ...authored, proformaSeries: "PRO", notes: remarks }, "notes-direct-proforma")
     assert.equal(notesOf(proforma), remarks)
     const proformaId = (proforma.body as { id: string }).id
-    assert.equal(notesOf(await call("POST", `/api/proformas/${proformaId}/invoice`, {}, "notes-conversion")), remarks)
+    const converted = await call("POST", `/api/proformas/${proformaId}/invoice`, { invoiceSeries: "QWBE" }, "notes-conversion")
+    assert.equal(converted.status, 200)
+    assert.equal(notesOf(converted), remarks)
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }

@@ -228,13 +228,37 @@ td a { text-decoration-color: var(--color-invoice-link-decoration); text-underli
 .dialog-actions { position: sticky; bottom: 0; display: flex; justify-content: flex-end; padding: 1rem 1.5rem 1.25rem; border-top: 1px solid var(--color-invoice-border); background: var(--color-invoice-surface); }
 
 .invoice-document { padding: 2rem; }
-.invoice-parties { display: grid; grid-template-columns: 1fr 1fr; gap: 3rem; margin-bottom: 2.25rem; }
-.document-meta { display: flex; justify-content: flex-end; margin-bottom: 1.5rem; }
-.document-meta dl { display: flex; flex-wrap: wrap; gap: 1.25rem; margin: 0; }
-.document-meta dt { font-size: .68rem; }
-.document-meta dd { margin-top: .2rem; font-size: .82rem; }
-.invoice-parties h2 { margin: .4rem 0; font-family: var(--font-invoice-display); font-size: 1.35rem; }
-.invoice-parties section > p:last-child { color: var(--color-invoice-muted); line-height: 1.55; }
+.document-header { display: grid; grid-template-columns: minmax(0, 1fr) minmax(12rem, .72fr) minmax(0, 1fr); grid-template-areas: "issuer identity customer"; gap: clamp(1rem, 2vw, 2rem); align-items: start; margin-bottom: 2.25rem; }
+.document-header > div { min-width: 0; width: 100%; overflow-wrap: anywhere; }
+.document-header__identity { grid-area: identity; text-align: center; }
+.document-header__issuer { grid-area: issuer; }
+.document-header__customer { grid-area: customer; text-align: right; }
+.document-header__customer > .document-party { width: min(18rem, 100%); margin-left: auto; }
+.document-identity { width: min(16rem, 100%); margin-inline: auto; }
+.document-identity h2 { font-family: var(--font-invoice-display); font-size: 1.5rem; }
+.document-number { margin: .75rem 0; color: var(--color-invoice-primary); font-size: 1.05rem; font-weight: 800; }
+.document-non-fiscal { color: var(--color-invoice-warning); font-size: .7rem; font-weight: 800; letter-spacing: .1em; }
+.document-dates { display: grid; gap: .65rem; margin: 1rem 0 0; font-size: .8rem; }
+.document-dates > div { display: grid; gap: .15rem; }
+.document-party h2 { margin: .5rem 0; font-family: var(--font-invoice-display); font-size: 1.2rem; overflow-wrap: anywhere; }
+.document-party-details, .document-address { width: 100%; max-width: 18rem; overflow-wrap: anywhere; }
+.document-party-details { margin: .5rem 0 0; color: var(--color-invoice-muted); font-size: .82rem; line-height: 1.6; }
+.document-address { display: block; margin-top: .45rem; }
+.document-header__customer .document-party-details { margin-left: auto; }
+.document-header .issuer-brand img { max-width: min(180px, 100%); }
+.authoring-header { grid-column: 1 / -1; min-width: 0; }
+.authoring-header .document-header { margin-bottom: 0; }
+.document-date-fields { display: grid; gap: .85rem; margin-top: 1.25rem; }
+.document-date-fields label, .document-date-fields input, .document-date-fields select { min-width: 0; text-align: center; }
+.document-date-fields select { text-align-last: center; }
+.document-address-field { width: 100%; max-width: 18rem; }
+.document-date-fields .fixed-value { justify-content: center; }
+.document-header__customer .authoring-section { padding: 0; border: 0; background: transparent; box-shadow: none; text-align: left; }
+.document-header .section-heading { flex-wrap: wrap; gap: .5rem; }
+.document-header .section-heading p { font-size: .75rem; }
+.document-header__customer .form-grid.two { grid-template-columns: minmax(0, 1fr); }
+.document-header__customer input, .document-header__customer select { min-width: 0; }
+.document-header__customer .segmented-control span { padding: .5rem .3rem; font-size: .7rem; }
 .invoice-document .table-wrap { margin: 0 -2rem; }
 .invoice-bottom { display: flex; justify-content: space-between; gap: 2rem; padding-top: 1.5rem; }
 .invoice-bottom dl { width: min(350px, 100%); margin: 0; }
@@ -278,6 +302,9 @@ dd { margin: 0; font-weight: 750; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 
 @media (max-width: 980px) {
+  .document-header { grid-template-columns: minmax(0, 1fr); grid-template-areas: "identity" "issuer" "customer"; gap: 1.75rem; }
+  .document-header__customer { text-align: left; }
+  .document-header__customer > .document-party, .document-header__customer .document-party-details { margin-left: 0; }
   .shell { grid-template-columns: 78px minmax(0, 1fr); }
   .sidebar { padding-inline: .75rem; }
   .brand { justify-content: center; margin-inline: 0; }

@@ -1,24 +1,35 @@
 import { money } from "../format.ts"
 import { identifierLabel } from "../invoice-authoring-state.ts"
 import type { Proforma } from "../models.ts"
-import { IssuerBrand } from "./IssuerBrand.tsx"
+import { DocumentHeader } from "./DocumentHeader.tsx"
+import { IssuerDetails } from "./IssuerDetails.tsx"
 
 type CommercialDocumentSnapshot = Pick<Proforma, "currency" | "customer" | "dueDate" | "issueDate" | "issuer" | "lines" | "notes" | "vatBreakdown" | "totalExcludingVat" | "vatTotal" | "totalIncludingVat">
 
 interface CommercialDocumentProps {
   readonly snapshot: CommercialDocumentSnapshot
-  readonly heading?: string
-  readonly notice?: string
+  readonly identity: {
+    readonly kind: "invoice" | "proforma"
+    readonly series: string
+    readonly number: number
+  }
   readonly lineCaption: string
 }
 
 const address = (value: CommercialDocumentSnapshot["issuer"]["address"]): string =>
   [value.street, value.city, value.county, value.postalCode, value.countryCode].filter((part) => part !== undefined && part !== "").join(", ")
 
-export const CommercialDocument = ({ snapshot, heading, notice, lineCaption }: CommercialDocumentProps) => <div className="invoice-document card">
-  {heading === undefined ? null : <header><p className="eyebrow">{notice}</p><h2>{heading}</h2></header>}
-  <div className="document-meta"><dl><div><dt>Data emiterii</dt><dd>{snapshot.issueDate}</dd></div><div><dt>Data scadenței</dt><dd>{snapshot.dueDate ?? "—"}</dd></div><div><dt>Monedă</dt><dd>{snapshot.currency}</dd></div></dl></div>
-  <div className="invoice-parties"><section><p className="eyebrow">Furnizor</p><IssuerBrand branding={snapshot.issuer.branding} /><h2>{snapshot.issuer.name}</h2><p style={{ overflowWrap: "anywhere" }}>Formă juridică: {snapshot.issuer.legalForm.toUpperCase()}<br />{snapshot.issuer.fiscalIdentifier === "" ? null : <>CUI / CIF: {snapshot.issuer.fiscalIdentifier}<br /></>}Nr. Reg. Com.: {snapshot.issuer.tradeRegistryNumber}<br />{snapshot.issuer.socialCapital === "" ? null : <>Capital social: {snapshot.issuer.socialCapital} RON<br /></>}{snapshot.issuer.iban === "" ? null : <>IBAN: {snapshot.issuer.iban}<br /></>}{snapshot.issuer.bankName === "" ? null : <>Bancă: {snapshot.issuer.bankName}<br /></>}{address(snapshot.issuer.address)}</p></section><section><p className="eyebrow">Cumpărător · {snapshot.customer.partyType === "company" ? "PJ" : "PF"}</p><h2>{snapshot.customer.name}</h2><p>{snapshot.customer.fiscalIdentifier === "" ? null : <>{identifierLabel(snapshot.customer.partyType)}: {snapshot.customer.fiscalIdentifier}<br /></>}{address(snapshot.customer.address)}</p></section></div>
+export const CommercialDocument = ({ snapshot, identity, lineCaption }: CommercialDocumentProps) => <div className="invoice-document card">
+  <DocumentHeader
+    identity={<section className="document-identity">
+      <h2>{identity.kind === "invoice" ? "FACTURĂ" : "PROFORMĂ"}</h2>
+      {identity.kind === "proforma" ? <p className="document-non-fiscal">DOCUMENT NEFISCAL</p> : null}
+      <p className="document-number"><span className="sr-only">Număr {identity.kind === "invoice" ? "factură" : "proformă"} </span>{identity.series} {String(identity.number)}</p>
+      <dl className="document-dates"><div><dt>Data emiterii</dt><dd>{snapshot.issueDate}</dd></div>{snapshot.dueDate === null ? null : <div><dt>Scadență</dt><dd>{snapshot.dueDate}</dd></div>}<div><dt>Monedă</dt><dd>{snapshot.currency}</dd></div></dl>
+    </section>}
+    issuer={<section className="document-party"><p className="eyebrow">Furnizor</p><IssuerDetails issuer={snapshot.issuer} /></section>}
+    customer={<section className="document-party"><p className="eyebrow">Client · {snapshot.customer.partyType === "company" ? "PJ" : "PF"}</p><h2>{snapshot.customer.name}</h2><p className="document-party-details">{snapshot.customer.fiscalIdentifier === "" ? null : <>{identifierLabel(snapshot.customer.partyType)}: {snapshot.customer.fiscalIdentifier}<br /></>}<span className="document-address">{address(snapshot.customer.address)}</span></p></section>}
+  />
   <div className="table-wrap"><table><caption className="sr-only">{lineCaption}</caption><thead><tr><th>Descriere</th><th>Cantitate</th><th>U.M.</th><th>Preț unitar</th><th>TVA</th><th>Total</th></tr></thead><tbody>{snapshot.lines.map((line) => <tr key={line.id}><td>{line.description}</td><td>{line.quantity}</td><td>{line.unitOfMeasure.name} — {line.unitOfMeasure.code}</td><td>{money(line.unitPrice, snapshot.currency)}</td><td>{line.vatRate}%</td><td>{money(line.totalIncludingVat, snapshot.currency)}</td></tr>)}</tbody></table></div>
   <div className="invoice-bottom"><div className="document-tax-details"><h3>Detaliu TVA</h3>{snapshot.vatBreakdown.map((tax) => <p key={`${tax.code}-${tax.rate}`}>{tax.rate}% · bază {money(tax.vatBaseAmount, snapshot.currency)} · TVA {money(tax.vatAmount, snapshot.currency)}</p>)}</div><dl><div><dt>Subtotal</dt><dd>{money(snapshot.totalExcludingVat, snapshot.currency)}</dd></div><div><dt>TVA</dt><dd>{money(snapshot.vatTotal, snapshot.currency)}</dd></div><div className="grand-total"><dt>Total</dt><dd>{money(snapshot.totalIncludingVat, snapshot.currency)}</dd></div></dl></div>
   {snapshot.notes === null ? null : <section className="document-notes"><p className="eyebrow">Observații</p><p className="document-notes-body">{snapshot.notes}</p></section>}

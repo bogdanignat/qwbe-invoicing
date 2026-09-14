@@ -34,8 +34,8 @@ import {
   wrapText,
 } from "./pdf-layout.ts"
 
-export const invoiceTemplateVersion = "invoice-v6"
-export const proformaTemplateVersion = "proforma-v5"
+export const invoiceTemplateVersion = "invoice-v7"
+export const proformaTemplateVersion = "proforma-v6"
 
 const regularFontPath = fileURLToPath(new URL("./assets/fonts/DejaVuSans.ttf", import.meta.url))
 const boldFontPath = fileURLToPath(new URL("./assets/fonts/DejaVuSans-Bold.ttf", import.meta.url))
@@ -108,6 +108,7 @@ const partyAddressLines = (party: RenderableParty): ReadonlyArray<string> => {
 
 export const issuerLegalLines = (issuer: RenderableDocument["issuer"]): ReadonlyArray<string> => [
   `Formă juridică: ${issuer.legalForm.toUpperCase()}`,
+  issuer.vatRegistered ? "Plătitor de TVA" : "Neplătitor de TVA",
   issuer.tradeRegistryNumber === "" ? "" : `Nr. registrul comerțului: ${issuer.tradeRegistryNumber}`,
   issuer.socialCapital === "" ? "" : `Capital social: ${formatAmount(issuer.socialCapital)} RON`,
   issuer.bankName === "" ? "" : `Bancă: ${issuer.bankName}`,
