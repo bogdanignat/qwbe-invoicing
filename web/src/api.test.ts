@@ -288,7 +288,7 @@ void test("lists and creates document series with the final API contract", async
       const body = path === "/api/session"
         ? { authenticated: true, csrfToken: "csrf-token" }
         : path === "/api/drafts"
-          ? { id: "draft-1", organizationId: "org-1", customerId: "customer-1", customer: { partyType: "company", name: "Client", fiscalIdentifier: "RO1", address: { countryCode: "RO", city: "Iași", street: "Strada 1" } }, series: "QWBE", issueDate: "2026-09-01", dueDate: "2026-09-16", currency: "RON", notes: null, status: "draft", lines: [], vatBreakdown: [], totalExcludingVat: "0.00", vatTotal: "0.00", totalIncludingVat: "0.00" }
+          ? { id: "draft-1", organizationId: "org-1", customerId: "customer-1", sourceProformaId: null, customer: { partyType: "company", name: "Client", fiscalIdentifier: "RO1", address: { countryCode: "RO", city: "Iași", street: "Strada 1" } }, series: "QWBE", issueDate: "2026-09-01", dueDate: "2026-09-16", currency: "RON", notes: null, status: "draft", lines: [], vatBreakdown: [], totalExcludingVat: "0.00", vatTotal: "0.00", totalIncludingVat: "0.00" }
         : init?.method === "POST"
           ? { organizationId: "org-1", documentType: "invoice", series: "QWBE" }
           : [{ organizationId: "org-1", documentType: "invoice", series: "QWBE" }]
@@ -381,7 +381,7 @@ void test("calls direct and draft issuance, proforma invoice, registry, detail, 
   const originalFetch = globalThis.fetch
   const calls: Array<{ readonly path: string; readonly init: RequestInit }> = []
   const draft = {
-    id: "draft-2", organizationId: "org-1", customerId: "customer-1",
+    id: "draft-2", organizationId: "org-1", customerId: "customer-1", sourceProformaId: null,
     customer: { partyType: "company", name: "Client", fiscalIdentifier: "RO1", address: { countryCode: "RO", city: "Iași", street: "Strada 1" } },
     series: "QWBE", issueDate: "2026-09-01", dueDate: null, currency: "RON", notes: null, status: "draft", lines: [], vatBreakdown: [],
     totalExcludingVat: "0.00", vatTotal: "0.00", totalIncludingVat: "0.00",
@@ -390,7 +390,7 @@ void test("calls direct and draft issuance, proforma invoice, registry, detail, 
     ...draft, id: "proforma-1", sourceDraftId: "draft-1", series: "PRO", number: 7,
     issuedAt: "2026-09-01T10:00:00.000Z", actorId: "user-1",
     issuer: { name: "QWBE", fiscalIdentifier: "RO2", address: { countryCode: "RO", city: "Botoșani", street: "Strada 2" }, legalForm: "srl", tradeRegistryNumber: "J07/123/2020", iban: "", bankName: "", socialCapital: "200.00", branding: null },
-    invoiceSeries: "QWBE", convertedDraftId: null, convertedInvoiceId: null,
+    convertedDraftId: null, convertedInvoiceId: null,
   }
   const invoice = { ...proforma, id: "invoice-1", draftId: null, sourceProformaId: "proforma-1", series: "QWBE", number: 8, eFacturaStatus: "not_sent" }
   const authoring = { customerId: "customer-1", series: "QWBE", issueDate: "2026-09-01", dueDate: null,
@@ -408,32 +408,34 @@ void test("calls direct and draft issuance, proforma invoice, registry, detail, 
       return Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } }))
     }
     await runUiEffect(loginApiSession("secret-token"))
-    await runUiEffect(invoicingClient.issueDraftProforma("draft/1", "PRO", "key-draft-proforma"))
-    await runUiEffect(invoicingClient.issueProforma({ ...authoring, proformaSeries: "PRO" }, "key-direct-proforma"))
+    const proformaAuthoring = { customerId: authoring.customerId, issueDate: authoring.issueDate, dueDate: authoring.dueDate,
+      currency: authoring.currency, lines: authoring.lines }
+    await runUiEffect(invoicingClient.issueProforma({ ...proformaAuthoring, proformaSeries: "PRO" }, "key-direct-proforma"))
     await runUiEffect(invoicingClient.issueInvoice(authoring, "key-direct-invoice"))
     await runUiEffect(invoicingClient.listProformas())
     await runUiEffect(invoicingClient.getProforma("proforma/1"))
-    await runUiEffect(invoicingClient.issueInvoiceFromProforma("proforma/1", "key-conversion"))
+    await runUiEffect(invoicingClient.issueInvoiceFromProforma("proforma/1", "QWBE", "key-conversion"))
+    await runUiEffect(invoicingClient.createDraftFromProforma("proforma/1", "QWBE", "key-draft-conversion"))
     assert.equal((await runUiEffect(invoicingClient.downloadProformaPdf("proforma/1"))).size, 3)
     assert.deepEqual(calls.slice(1).map(({ path, init }) => [init.method, path]), [
-      ["POST", "/api/drafts/draft%2F1/proformas"],
       ["POST", "/api/proformas"],
       ["POST", "/api/invoices"],
       ["GET", "/api/proformas"],
       ["GET", "/api/proformas/proforma%2F1"],
       ["POST", "/api/proformas/proforma%2F1/invoice"],
+      ["POST", "/api/proformas/proforma%2F1/draft-invoice"],
       ["POST", "/api/proformas/proforma%2F1/pdf"],
       ["GET", "/api/proformas/proforma%2F1/pdf"],
     ])
-    const issueBody = calls[1]?.init.body
-    assert.equal(typeof issueBody, "string")
-    assert.deepEqual(JSON.parse(issueBody as string), { series: "PRO" })
-    const directProformaBody = calls[2]?.init.body
+    const directProformaBody = calls[1]?.init.body
     if (typeof directProformaBody !== "string") throw new Error("Expected direct proforma body")
-    assert.deepEqual(JSON.parse(directProformaBody), { ...authoring, proformaSeries: "PRO" })
-    assert.deepEqual(calls.slice(1, 4).map(({ init }) => new Headers(init.headers).get("idempotency-key")),
-      ["key-draft-proforma", "key-direct-proforma", "key-direct-invoice"])
-    assert.equal(new Headers(calls[6]?.init.headers).get("idempotency-key"), "key-conversion")
+    assert.deepEqual(JSON.parse(directProformaBody), { ...proformaAuthoring, proformaSeries: "PRO" })
+    assert.deepEqual(calls.slice(1, 3).map(({ init }) => new Headers(init.headers).get("idempotency-key")),
+      ["key-direct-proforma", "key-direct-invoice"])
+    assert.deepEqual(JSON.parse(calls[5]?.init.body as string), { invoiceSeries: "QWBE" })
+    assert.deepEqual(JSON.parse(calls[6]?.init.body as string), { invoiceSeries: "QWBE" })
+    assert.equal(new Headers(calls[5]?.init.headers).get("idempotency-key"), "key-conversion")
+    assert.equal(new Headers(calls[6]?.init.headers).get("idempotency-key"), "key-draft-conversion")
   } finally {
     await runUiEffect(clearApiSession)
     globalThis.fetch = originalFetch

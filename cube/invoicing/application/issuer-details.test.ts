@@ -17,6 +17,9 @@ const document = {
   series: "INV", issueDate: "2026-09-01", currency: "RON" as const,
   lines: [{ description: "Serviciu", quantity: "1", unitPrice: "10", unitOfMeasure: each, vatRateCode: "RO_STANDARD" }],
 }
+const proformaDocument = {
+  customer: document.customer, issueDate: document.issueDate, currency: document.currency, lines: document.lines,
+}
 const setup = async () => {
   const state = emptyState()
   const service = createInvoicingService({ context: contextProvider({ identity, organization: { id: "org-1" } }),
@@ -66,7 +69,7 @@ void test("all direct and draft issuance routes refuse incomplete SRL/PFA withou
     await Effect.runPromise(service.addDraftLine({ draftId: draft.id, ...line }))
     await Effect.runPromise(service.configureIssuer({ ...input, ...patch }))
     const operations: Effect.Effect<unknown, InvoicingFailure>[] = [service.issueInvoice(idempotent(document)), service.issueInvoice(idempotent({ draftId: draft.id })),
-      service.issueProforma(idempotent({ ...document, proformaSeries: "PRO" })), service.issueProforma(idempotent({ draftId: draft.id, series: "PRO" }))]
+      service.issueProforma(idempotent({ ...proformaDocument, proformaSeries: "PRO" })), service.issueProforma(idempotent({ draftId: draft.id, series: "PRO" }))]
     for (const operation of operations) {
       const result = await Effect.runPromise(Effect.either(operation))
       assert.equal(result._tag, "Left")
@@ -83,11 +86,11 @@ void test("all direct and draft issuance routes refuse incomplete SRL/PFA withou
 void test("PFA issues without capital; conversion, correction, summaries and replay preserve their source issuer", async () => {
   const { service } = await setup()
   await Effect.runPromise(service.configureIssuer({ ...input, legalForm: "pfa", tradeRegistryNumber: "F40/123/2020", socialCapital: "" }))
-  const proforma = await Effect.runPromise(service.issueProforma(idempotent({ ...document, proformaSeries: "PRO" })))
+  const proforma = await Effect.runPromise(service.issueProforma(idempotent({ ...proformaDocument, proformaSeries: "PRO" })))
   assert.equal(proforma.issuer.legalForm, "pfa")
   assert.equal(proforma.issuer.socialCapital, "")
   await Effect.runPromise(service.configureIssuer({ ...input, tradeRegistryNumber: "", socialCapital: "" }))
-  const request = idempotent({ proformaId: proforma.id })
+  const request = idempotent({ proformaId: proforma.id, invoiceSeries: "INV" })
   const invoice = await Effect.runPromise(service.issueInvoiceFromProforma(request))
   assert.deepEqual(invoice.issuer, proforma.issuer)
   assert.deepEqual(await Effect.runPromise(service.issueInvoiceFromProforma(request)), invoice)

@@ -40,5 +40,7 @@ export type { DocumentCursor, DraftCursor, NameCursor, PageQuery } from "./appli
 export type { InvoicingDependencies, InvoicingService, InvoicingTransaction } from "./application/invoicing.ts"
 export type * from "./domain/invoice.ts"
 export type * from "./domain/inputs.ts"
+export type { Proforma, ProformaSummary, ProformaConversion, ProformaInvoiceConversion,
+  IssueProformaInput, ConvertProformaInput, AuthoringProformaInput } from "./issuance/index.ts"
 export type * from "./corrections/domain/corrections.ts"
 export type * from "./domain/unit-of-measures.ts"

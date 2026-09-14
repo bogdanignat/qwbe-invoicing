@@ -16,7 +16,7 @@ export const BuyerEditor = ({ form, customers, disabled, onChange, onBuyerModeCh
   const choosePartyType = (partyType: PartyType): void => { onChange(switchPartyType(form, partyType)) }
   const fiscalIdentifier = form.partyType === "company" ? form.companyTaxIdentifier : form.individualTaxIdentifier
   return <section className="card authoring-section">
-    <div className="section-heading"><div><h2>2. Cumpărător</h2><p>Alege un client salvat sau completează un client folosit doar pe această factură.</p></div></div>
+    <div className="section-heading"><div><h2>Cumpărător</h2><p>Alege un client salvat sau completează un client folosit doar pe acest document.</p></div></div>
     <fieldset className="segmented-fieldset"><legend>Sursa cumpărătorului</legend><div className="segmented-control">
       <label><input type="radio" name="buyerMode" value="saved" checked={form.buyerMode === "saved"} disabled={disabled || customers.length === 0} onChange={() => { onBuyerModeChange("saved") }} /><span>Client salvat</span></label>
       <label><input type="radio" name="buyerMode" value="one-time" checked={form.buyerMode === "one-time"} disabled={disabled} onChange={() => { onBuyerModeChange("one-time") }} /><span>Client ocazional</span></label>
@@ -34,7 +34,7 @@ export const BuyerEditor = ({ form, customers, disabled, onChange, onBuyerModeCh
         <label>{identifierLabel(form.partyType)} {form.partyType === "individual" ? <span className="optional">opțional</span> : null}<input value={fiscalIdentifier} required={form.partyType === "company"} disabled={disabled} pattern={form.partyType === "company" ? romanianCuiPattern : "(?:[0-9]{13})?"} maxLength={13} title={form.partyType === "company" ? "CUI românesc valid, cu sau fără prefixul RO" : "CNP valid din 13 cifre sau câmp gol"} inputMode={form.partyType === "individual" ? "numeric" : "text"} onChange={(event) => { const value = form.partyType === "company" ? normalizeRomanianCui(event.currentTarget.value) : event.currentTarget.value.replace(/\D/g, ""); onChange(form.partyType === "company" ? { companyTaxIdentifier: value } : { individualTaxIdentifier: value }) }} /></label>
         <label>Țară<select value="RO" disabled><option value="RO">România (RO)</option></select></label>
         <label>Localitate<input required disabled={disabled} value={form.city} onChange={(event) => { onChange({ city: event.currentTarget.value }) }} /></label>
-        <label className="span-two">Stradă și număr<input required disabled={disabled} value={form.street} onChange={(event) => { onChange({ street: event.currentTarget.value }) }} /></label>
+        <label className="span-two document-address-field">Stradă și număr<input required disabled={disabled} value={form.street} onChange={(event) => { onChange({ street: event.currentTarget.value }) }} /></label>
         <label>Județ <span className="optional">opțional</span><input disabled={disabled} value={form.county} onChange={(event) => { onChange({ county: event.currentTarget.value }) }} /></label>
         <label>Cod poștal <span className="optional">opțional</span><input disabled={disabled} value={form.postalCode} onChange={(event) => { onChange({ postalCode: event.currentTarget.value }) }} /></label>
       </div>

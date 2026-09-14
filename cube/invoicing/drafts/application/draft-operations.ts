@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 
 import { checked, draftPageQuery, missing, pageOf, type Authorize, type OperationDependencies, type Page, type PageRequest } from "../../application/support.ts"
-import type { InvoicingFailure } from "../../contracts/failures.ts"
+import { DomainConflict, type InvoicingFailure } from "../../contracts/failures.ts"
 import type { InvoicingPermissions } from "../../contracts/permissions.ts"
 import { calculateLine } from "../../domain/calculation.ts"
 import type { DocumentSource, DraftInvoice } from "../../domain/invoice.ts"
@@ -28,7 +28,7 @@ export const createDraftDocumentOperations = (
     const id = yield* dependencies.ids.next
     return yield* dependencies.store.transaction((transaction) => Effect.gen(function*() {
       const { document } = yield* authorDocument(input, context.organization.id, transaction, dependencies.ids)
-      const draft: DraftInvoice = { id, ...document, status: "draft" }
+      const draft: DraftInvoice = { id, ...document, status: "draft", sourceProformaId: null }
       yield* transaction.saveDraft(draft)
       return structuredClone(draft)
     }))
@@ -72,7 +72,10 @@ export const createDraftDocumentOperations = (
   const deleteDraft = (id: string) => Effect.gen(function*() {
     const context = yield* authorize(permissions.draftInvoices)
     return yield* dependencies.store.transaction((transaction) => Effect.gen(function*() {
-      yield* findEditable(transaction, context.organization.id, id)
+      const draft = yield* findEditable(transaction, context.organization.id, id)
+      if (draft.sourceProformaId !== null) return yield* Effect.fail(new DomainConflict({
+        code: "derived_draft_cannot_be_deleted", message: "A draft linked to a proforma cannot be deleted",
+      }))
       yield* transaction.deleteDraft(context.organization.id, id)
     }))
   })

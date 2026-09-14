@@ -12,7 +12,6 @@ import { useInvoiceAuthoringDraft } from "./invoice-authoring-draft-hooks.ts"
 import { useInvoiceAuthoringPresets } from "./invoice-authoring-presets-hooks.ts"
 import { useInvoiceIssuance } from "./invoices-hooks.ts"
 import type { Customer, DraftInvoice, Issuer, UnitOfMeasure, VatCatalogue, VatRate } from "./models.ts"
-import { useProformaIssuance, type ProformaIssuanceState } from "./proforma-hooks.ts"
 import { defaultVatCode, staleDraftLineIds, vatRatesForIssuer } from "./vat-defaults.ts"
 
 export interface InvoiceAuthoringSessionInput {
@@ -21,7 +20,6 @@ export interface InvoiceAuthoringSessionInput {
   readonly vatCatalogue: VatCatalogue
   readonly customers: ReadonlyArray<Customer>
   readonly invoiceSeries: ReadonlyArray<string>
-  readonly proformaSeries: ReadonlyArray<string>
   readonly unitOfMeasures: ReadonlyArray<UnitOfMeasure>
   readonly backgroundErrors: ReadonlyArray<Error>
   readonly notify: (message: string) => void
@@ -54,7 +52,10 @@ export interface InvoiceAuthoringSessionViewModel {
     readonly invoicePending: boolean
     readonly canIssueInvoice: boolean
   }
-  readonly proformaIssuance: ProformaIssuanceState
+  readonly draftDeletion:
+    | { readonly kind: "hidden" }
+    | { readonly kind: "available" }
+    | { readonly kind: "derived"; readonly sourceHref: string }
   readonly actions: {
     readonly changeForm: (patch: Partial<InvoiceAuthoringForm>) => void
     readonly chooseBuyerMode: ReturnType<typeof useInvoiceAuthoringCustomers>["chooseBuyerMode"]
@@ -95,12 +96,12 @@ export const useInvoiceAuthoringSession = (input: InvoiceAuthoringSessionInput):
     draftId: draft?.id, payload, canIssue: taxReadiness.canIssue, workflowPending,
     confirmMessage: "Emiți factura? Numărul și documentul fiscal devin imuabile.",
   })
-  const proformaIssuance = useProformaIssuance({
-    draftId: draft?.id, payload, editable: readiness.editable, series: input.proformaSeries,
-    synchronized: taxReadiness.synchronized, hasLines: readiness.hasLines,
-    workflowPending: workflowPending || invoiceIssuance.pending,
-  })
-  const pending = workflowPending || invoiceIssuance.pending || proformaIssuance.pending
+  const pending = workflowPending || invoiceIssuance.pending
+  const draftDeletion = draft === undefined
+    ? { kind: "hidden" as const }
+    : draft.sourceProformaId === null
+      ? { kind: "available" as const }
+      : { kind: "derived" as const, sourceHref: `/proformas/${encodeURIComponent(draft.sourceProformaId)}` }
 
   return {
     document: {
@@ -116,9 +117,9 @@ export const useInvoiceAuthoringSession = (input: InvoiceAuthoringSessionInput):
     },
     status: {
       pending, savePending: draftWorkflow.savePending, invoicePending: invoiceIssuance.pending,
-      canIssueInvoice: invoiceIssuance.canIssue && !proformaIssuance.pending,
+      canIssueInvoice: invoiceIssuance.canIssue,
     },
-    proformaIssuance,
+    draftDeletion,
     actions: {
       changeForm: (patch) => { setForm((current) => ({ ...current, ...patch })) },
       chooseBuyerMode: authoringCustomers.chooseBuyerMode, chooseCustomer: authoringCustomers.chooseCustomer,

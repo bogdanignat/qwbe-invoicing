@@ -25,6 +25,7 @@ const invoice: RenderableInvoice = {
   notes: null,
   issuer: {
     branding: null,
+    vatRegistered: true,
     name: "Știință și Tehnică SRL",
     fiscalIdentifier: "RO12345674",
     address: { countryCode: "RO", city: "Botoșani", street: "Strada Independenței 1" },

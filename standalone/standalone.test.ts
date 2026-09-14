@@ -11,6 +11,20 @@ import { route } from "./http.ts"
 import { applyMigrations, databaseReady, planMigrations } from "./migrations.ts"
 import { staticUiResponse } from "./static-ui.ts"
 
+function assertSourceIndexes(directory: string): void {
+  const database = new DatabaseSync(join(directory, "invoicing.sqlite"), { readOnly: true })
+  try {
+    for (const [table, index] of [["issued_invoices", "issued_invoices_source"], ["proformas", "proformas_source"]] as const) {
+      const indexes = new Set(database.prepare(`PRAGMA index_list(${table})`).all().map((row) => String(row.name)))
+      assert.ok(indexes.has(index), `${index} must belong to ${table}`)
+      assert.deepEqual(database.prepare(`PRAGMA index_info(${index})`).all().map((row) => String(row.name)),
+        ["organization_id", "source_app", "source_kind", "source_id"], index)
+    }
+  } finally {
+    database.close()
+  }
+}
+
 void test("migration apply is idempotent", () => {
   const directory = mkdtempSync(join(tmpdir(), "qwbe-migrations-"))
   try {
@@ -32,13 +46,17 @@ void test("migration apply is idempotent", () => {
       "014-issuer-branding",
       "015-issuer-details",
       "016-fiscal-audit",
+      "017-issuer-vat-status",
+      "018-proforma-workflow",
       "documents/000-foundation",
       "documents/001-artifacts",
       "documents/002-proforma-artifacts",
       "sessions/000-browser-sessions",
     ])
-    assert.equal(applyMigrations(directory).changed, 21)
+    assert.equal(applyMigrations(directory).changed, 23)
+    assertSourceIndexes(directory)
     assert.equal(applyMigrations(directory).changed, 0)
+    assertSourceIndexes(directory)
     assert.equal(databaseReady(directory), true)
   } finally {
     rmSync(directory, { recursive: true, force: true })
@@ -57,7 +75,7 @@ void test("migrations leave every database in write-ahead logging mode with the 
         database.close()
       }
     }
-    const database = new DatabaseSync(join(directory, "invoicing.sqlite"), { readOnly: true })
+    const database = new DatabaseSync(join(directory, "invoicing.sqlite"))
     try {
       const triggers = new Set(database.prepare("SELECT name FROM sqlite_master WHERE type = 'trigger'").all().map((row) => String(row.name)))
       for (const expected of ["issued_invoices_no_update", "issued_invoices_no_delete", "issued_lines_no_update", "issued_lines_no_delete",
@@ -70,6 +88,10 @@ void test("migrations leave every database in write-ahead logging mode with the 
       for (const table of ["issued_invoices", "proformas", "correction_documents"]) {
         const actor = database.prepare("SELECT type,\"notnull\" AS required,dflt_value FROM pragma_table_info(?) WHERE name='actor_id'").get(table)
         assert.deepEqual(actor === undefined ? undefined : { ...actor }, { type: "TEXT", required: 1, dflt_value: null }, table)
+        const vatRegistered = database.prepare("SELECT type,\"notnull\" AS required,dflt_value FROM pragma_table_info(?) WHERE name='issuer_vat_registered'").get(table)
+        assert.deepEqual(vatRegistered === undefined ? undefined : { ...vatRegistered }, { type: "INTEGER", required: 1, dflt_value: null }, table)
+        assert.match(String(database.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name=?").get(table)?.sql),
+          /issuer_vat_registered INTEGER NOT NULL CHECK\(issuer_vat_registered IN\(0,1\)\)/)
       }
       assert.match(String(database.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='audit_events'").get()?.sql), /STRICT$/)
       for (const [table, column] of [["issuers", "branding"], ["issued_invoices", "issuer_branding"], ["proformas", "issuer_branding"]] as const) {
@@ -90,7 +112,18 @@ void test("migrations leave every database in write-ahead logging mode with the 
         const sql = String(database.prepare("SELECT sql FROM sqlite_master WHERE type='trigger' AND name=?").get(trigger)?.sql)
         assert.ok(sql.includes("issuer_branding"), trigger)
         assert.ok(sql.includes("issuer_legal_form"), trigger)
+        assert.ok(sql.includes("issuer_vat_registered"), trigger)
       }
+      assert.equal(database.prepare("SELECT 1 FROM pragma_table_info('proformas') WHERE name='invoice_series'").get(), undefined)
+      assert.ok(database.prepare("SELECT 1 FROM sqlite_master WHERE type='trigger' AND name='issued_invoices_lineage_insert'").get())
+      database.prepare(`INSERT INTO issuers(organization_id,legal_name,tax_identifier,country_code,city,street,
+        default_currency,default_payment_term_days,legal_form,trade_registry_number,iban,bank_name,social_capital)
+        VALUES('org-idempotency','Furnizor SRL','RO12345674','RO','Iași','Strada 1','RON',15,'srl','J22/123/2020','','','1000.00')`).run()
+      database.prepare(`INSERT INTO idempotency_records(
+        organization_id,idempotency_key,operation,fingerprint,result_kind,result_id,created_at)
+        VALUES('org-idempotency','draft-from-proforma','create_draft_invoice_from_proforma',?,'draft','draft-1','2026-09-01T10:00:00.000Z')`)
+        .run(`sha256:${"0".repeat(64)}`)
+      assert.equal(database.prepare("SELECT result_kind FROM idempotency_records WHERE idempotency_key='draft-from-proforma'").get()?.result_kind, "draft")
     } finally {
       database.close()
     }

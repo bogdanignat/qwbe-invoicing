@@ -31,6 +31,8 @@ export type LegalForm = "srl" | "pfa"
 
 export interface IssuerCompanySnapshot extends PartySnapshot {
   readonly legalForm: LegalForm
+  // Registration at source issuance, frozen independently of line rates or later profile changes.
+  readonly vatRegistered: boolean
   readonly tradeRegistryNumber: string
   readonly iban: string
   readonly bankName: string
@@ -64,9 +66,10 @@ export type IdempotencyOperation =
   | "issue_proforma_direct"
   | "issue_proforma_from_draft"
   | "issue_invoice_from_proforma"
+  | "create_draft_invoice_from_proforma"
   | "create_correction"
 
-export type IdempotencyResultKind = "invoice" | "proforma" | "correction"
+export type IdempotencyResultKind = "invoice" | "proforma" | "correction" | "draft"
 
 export interface IdempotencyRecord extends IdempotencyAttempt {
   readonly organizationId: string
@@ -88,7 +91,7 @@ export interface VatConfiguration {
   readonly effectiveTo?: string
 }
 
-export interface IssuerProfile extends IssuerSnapshot {
+export interface IssuerProfile extends Omit<IssuerSnapshot, "vatRegistered"> {
   readonly organizationId: string
   readonly defaultCurrency: string
   readonly defaultPaymentTermDays: number
@@ -151,6 +154,7 @@ interface DocumentContent {
 export interface DraftInvoice extends DocumentContent {
   readonly id: string
   readonly organizationId: string
+  readonly sourceProformaId: string | null
   readonly customerId?: string
   readonly series: string
   readonly status: "draft" | "issued" | "proforma_issued"
@@ -165,7 +169,7 @@ export interface VatBreakdown {
   readonly vatAmount: string
 }
 
-interface NumberedDocumentSnapshot extends DocumentContent {
+export interface NumberedDocumentSnapshot extends DocumentContent {
   readonly id: string
   readonly organizationId: string
   readonly series: string
@@ -184,15 +188,6 @@ export interface IssuedInvoice extends NumberedDocumentSnapshot {
 
 export type IssuedInvoiceSummary = Omit<IssuedInvoice, "issuer"> & { readonly issuer: IssuerCompanySnapshot }
 
-export interface Proforma extends NumberedDocumentSnapshot {
-  readonly sourceDraftId: string | null
-  readonly invoiceSeries: string
-  readonly convertedDraftId: string | null
-  readonly convertedInvoiceId: string | null
-}
-
-export type ProformaSummary = Omit<Proforma, "issuer"> & { readonly issuer: IssuerCompanySnapshot }
-
 export interface AuditEvent {
   readonly id: string
   readonly organizationId: string
@@ -203,19 +198,3 @@ export interface AuditEvent {
   readonly targetId: string
   readonly reason?: string
 }
-
-export type ProformaConversion = Readonly<{
-  proformaId: string
-  organizationId: string
-  resultingDraftId: string
-  actorId: string
-  convertedAt: string
-}>
-
-export type ProformaInvoiceConversion = Readonly<{
-  proformaId: string
-  organizationId: string
-  resultingInvoiceId: string
-  actorId: string
-  convertedAt: string
-}>

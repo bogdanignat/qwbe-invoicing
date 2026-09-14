@@ -1,23 +1,27 @@
-import coreMigrations from "./core-migrations.json" with { type: "json" }
-import authoringMigrations from "./authoring-migrations.json" with { type: "json" }
+import core from "./core-migrations.json" with { type: "json" }
+import authoring from "./authoring-migrations.json" with { type: "json" }
 
-import evolutionMigrations from "./evolution-migrations.json" with { type: "json" }
-import proformaMigrations from "./proforma-migrations.json" with { type: "json" }
-import presetMigrations from "./preset-migrations.json" with { type: "json" }
-import documentNotesMigrations from "./document-notes-migrations.json" with { type: "json" }
-import auditMigrations from "./audit-migrations.json" with { type: "json" }
+import evolution from "./evolution-migrations.json" with { type: "json" }
+import proforma from "./proforma-migrations.json" with { type: "json" }
+import presets from "./preset-migrations.json" with { type: "json" }
+import notes from "./document-notes-migrations.json" with { type: "json" }
+import audit from "./audit-migrations.json" with { type: "json" }
+import vat from "./issuer-vat-status-migrations.json" with { type: "json" }
+import workflow from "./proforma-workflow-migrations.json" with { type: "json" }
 export interface InvoicingMigration {
   readonly name: string
   readonly statements: ReadonlyArray<string>
   readonly foreignKeys?: "off"
 }
 
-export const invoicingMigrations: ReadonlyArray<InvoicingMigration> = [
-  ...coreMigrations,
-  ...evolutionMigrations,
-  ...authoringMigrations as ReadonlyArray<InvoicingMigration>,
-  ...proformaMigrations as ReadonlyArray<InvoicingMigration>,
-  ...presetMigrations,
-  ...documentNotesMigrations,
-  ...auditMigrations,
-]
+export const invoicingMigrations = [
+  core,
+  evolution,
+  authoring,
+  proforma,
+  presets,
+  notes,
+  audit,
+  vat,
+  workflow,
+].flat() as ReadonlyArray<InvoicingMigration>

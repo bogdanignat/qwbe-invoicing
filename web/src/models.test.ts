@@ -88,7 +88,7 @@ const commercialDocument = {
   lines: [{ id: "line-1", description: "Serviciu", quantity: "1.0000", unitPrice: "100.00", unitOfMeasure: each, vatRateCode: "RO_STANDARD", vatRate: "21.00", totalExcludingVat: "100.00", vatAmount: "21.00", totalIncludingVat: "121.00" }],
   vatBreakdown: [{ code: "RO_STANDARD", rate: "21.00", vatBaseAmount: "100.00", vatAmount: "21.00" }],
   totalExcludingVat: "100.00", vatTotal: "21.00", totalIncludingVat: "121.00",
-  invoiceSeries: "QWBE", convertedDraftId: null, convertedInvoiceId: null,
+  convertedDraftId: null, convertedInvoiceId: null,
 }
 
 void test("strictly decodes nullable commercial dates and proforma conversion state", () => {
@@ -101,8 +101,10 @@ void test("strictly decodes nullable commercial dates and proforma conversion st
   assert.throws(() => decodeProforma({ ...commercialDocument, convertedDraftId: undefined }), /invalid convertedDraftId/)
   assert.throws(() => decodeProforma({ ...commercialDocument, convertedDraftId: 2 }), /invalid convertedDraftId/)
   assert.throws(() => decodeProforma({ ...commercialDocument, actorId: undefined }), /invalid actorId/)
-  assert.equal(decodeDraft({ ...commercialDocument, status: "draft", customerId: "customer-1" }).dueDate, null)
-  assert.throws(() => decodeDraft({ ...commercialDocument, status: "draft", customerId: "customer-1", dueDate: undefined }), /invalid dueDate/)
+  assert.equal(decodeDraft({ ...commercialDocument, status: "draft", customerId: "customer-1", sourceProformaId: null }).dueDate, null)
+  assert.throws(() => decodeDraft({ ...commercialDocument, status: "draft", customerId: "customer-1", sourceProformaId: null, dueDate: undefined }), /invalid dueDate/)
+  assert.throws(() => decodeDraft({ ...commercialDocument, status: "draft", customerId: "customer-1", sourceProformaId: undefined }), /invalid sourceProformaId/)
+  assert.equal("invoiceSeries" in decodeProforma(commercialDocument), false)
   assert.equal(decodeInvoice({ ...commercialDocument, draftId: null, sourceProformaId: "proforma-1", eFacturaStatus: "not_sent" }).sourceProformaId, "proforma-1")
   assert.throws(() => decodeInvoice({ ...commercialDocument, draftId: "draft-1", sourceProformaId: null, eFacturaStatus: "not_sent", dueDate: false }), /invalid dueDate/)
   assert.equal(decodeProforma({ ...commercialDocument, notes: "Mentiune" }).notes, "Mentiune")
@@ -140,7 +142,7 @@ void test("strictly requires and decodes issuer branding on details while summar
 
 void test("requires the series fixed on a draft", () => {
   const draft = {
-    id: "draft-1", organizationId: "org-1", customerId: "customer-1",
+    id: "draft-1", organizationId: "org-1", customerId: "customer-1", sourceProformaId: null,
     customer: { partyType: "company", name: "Client", fiscalIdentifier: "RO1", address: { countryCode: "RO", city: "Iași", street: "Strada 1" } },
     series: "QWBE", issueDate: "2026-09-01", dueDate: "2026-09-16", currency: "RON", notes: null, status: "draft", lines: [],
     vatBreakdown: [], totalExcludingVat: "0.00", vatTotal: "0.00", totalIncludingVat: "0.00",
@@ -177,7 +179,7 @@ void test("decodes VAT catalogue legal periods and nullable inference", () => {
 
 void test("decodes inline individual buyers and complete server totals", () => {
   const decoded = decodeDraft({
-    id: "draft-2", organizationId: "org-1",
+    id: "draft-2", organizationId: "org-1", sourceProformaId: null,
     customer: { partyType: "individual", name: "Ana Pop", fiscalIdentifier: "", address: { countryCode: "RO", city: "Iași", street: "Strada 2" } },
     series: "QWBE", issueDate: "2026-09-01", dueDate: "2026-09-16", currency: "RON", notes: "Livrare in 3 transe.", status: "draft",
     source: { app: "crm", kind: "contract", id: "contract-1" },

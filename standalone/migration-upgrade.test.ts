@@ -57,11 +57,13 @@ const seedVersionSix = (directory: string) => {
 }
 
 // Historical populated fixtures stop before fresh-only NOT NULL migrations; development databases are recreated.
-const excludeFreshOnlyIssuerDetails = (directory: string): void => {
+const excludeFreshOnlyMigrations = (directory: string): void => {
   const database = new DatabaseSync(databasePath(directory))
   try {
     database.prepare("INSERT INTO schema_migrations(name,applied_at)VALUES('015-issuer-details','2026-01-01')").run()
     database.prepare("INSERT INTO schema_migrations(name,applied_at)VALUES('016-fiscal-audit','2026-01-01')").run()
+    database.prepare("INSERT INTO schema_migrations(name,applied_at)VALUES('017-issuer-vat-status','2026-01-01')").run()
+    database.prepare("INSERT INTO schema_migrations(name,applied_at)VALUES('018-proforma-workflow','2026-01-01')").run()
   } finally { database.close() }
 }
 
@@ -69,7 +71,7 @@ void test("upgrades a populated version-six database without rewriting migration
   const directory = mkdtempSync(join(tmpdir(), "qwbe-upgrade-"))
   try {
     seedVersionSix(directory)
-    excludeFreshOnlyIssuerDetails(directory)
+    excludeFreshOnlyMigrations(directory)
     assert.equal(applyMigrations(directory).changed, 12)
     const database = new DatabaseSync(databasePath(directory))
     try {
@@ -81,7 +83,7 @@ void test("upgrades a populated version-six database without rewriting migration
         "004-invoice-delete-last", "005-allow-e-factura-status-update", "006-customer-soft-delete", "007-complete-invoice-authoring",
          "008-proforma-workflow", "009-proforma-direct-invoice", "010-product-presets-payment-terms",
          "011-external-api-snapshots", "012-payment-idempotency", "013-document-notes", "014-issuer-branding", "015-issuer-details",
-         "016-fiscal-audit"])
+          "016-fiscal-audit", "017-issuer-vat-status", "018-proforma-workflow"])
       const columns = database.prepare("PRAGMA table_info(invoice_drafts)").all()
       assert.equal(columns.some((row) => row.name === "customer_id" && row.notnull === 0), true)
       assert.equal(columns.some((row) => row.name === "due_date" && row.notnull === 0), true)
@@ -157,11 +159,47 @@ void test("upgrades a populated version-six database without rewriting migration
   }
 })
 
+void test("018 rejects populated document storage atomically without dropping data", () => {
+  const directory = mkdtempSync(join(tmpdir(), "qwbe-proforma-workflow-upgrade-"))
+  try {
+    const database = new DatabaseSync(databasePath(directory))
+    try {
+      database.exec("PRAGMA foreign_keys=ON")
+      database.exec("CREATE TABLE schema_migrations(name TEXT PRIMARY KEY,applied_at TEXT NOT NULL)STRICT")
+      const migrations = [...invoicingMigrations, ...paymentsMigrations]
+        .filter(({ name }) => name <= "017-issuer-vat-status").sort((left, right) => left.name.localeCompare(right.name))
+      for (const migration of migrations) {
+        if (migration.foreignKeys === "off") database.exec("PRAGMA foreign_keys=OFF")
+        database.exec("BEGIN")
+        for (const statement of migration.statements) database.exec(statement)
+        database.prepare("INSERT INTO schema_migrations VALUES(?,?)").run(migration.name, "2026-01-01")
+        database.exec("COMMIT")
+        if (migration.foreignKeys === "off") database.exec("PRAGMA foreign_keys=ON")
+      }
+      database.prepare("INSERT INTO document_series VALUES('org-1','invoice','INV')").run()
+      database.prepare(`INSERT INTO invoice_drafts(id,organization_id,customer_id,customer_party_type,customer_legal_name,
+        customer_tax_identifier,customer_country_code,customer_city,customer_street,series,issue_date,currency,status)
+        VALUES('draft-1','org-1',NULL,'company','Client SRL','RO87654329','RO','Iași','Strada 1','INV','2026-09-01','RON','draft')`).run()
+    } finally { database.close() }
+    assert.throws(() => applyMigrations(directory), /CHECK constraint failed: document_count=0/)
+    const unchanged = new DatabaseSync(databasePath(directory), { readOnly: true })
+    try {
+      assert.deepEqual({ ...unchanged.prepare(`SELECT
+        (SELECT COUNT(*) FROM invoice_drafts) AS drafts,
+        (SELECT COUNT(*) FROM issued_invoices) AS invoices,
+        (SELECT COUNT(*) FROM proformas) AS proformas`).get() }, { drafts: 1, invoices: 0, proformas: 0 })
+      assert.equal(unchanged.prepare("SELECT 1 FROM schema_migrations WHERE name='018-proforma-workflow'").get(), undefined)
+      assert.ok(unchanged.prepare("SELECT 1 FROM pragma_table_info('proformas') WHERE name='invoice_series'").get())
+      assert.equal(unchanged.prepare("SELECT 1 FROM sqlite_master WHERE name='migration_018_fresh_guard'").get(), undefined)
+    } finally { unchanged.close() }
+  } finally { rmSync(directory, { recursive: true, force: true }) }
+})
+
 void test("015 is fresh-only and rolls back instead of inventing issuer-detail backfill", () => {
   const directory = mkdtempSync(join(tmpdir(), "qwbe-issuer-details-upgrade-"))
   try {
     seedVersionSix(directory)
-    excludeFreshOnlyIssuerDetails(directory)
+    excludeFreshOnlyMigrations(directory)
     applyMigrations(directory)
     const database = new DatabaseSync(databasePath(directory))
     try {
@@ -180,7 +218,7 @@ void test("016 uses SQLite fresh-only NOT NULL ALTER behavior and rolls back wit
   const directory = mkdtempSync(join(tmpdir(), "qwbe-audit-upgrade-"))
   try {
     seedVersionSix(directory)
-    excludeFreshOnlyIssuerDetails(directory)
+    excludeFreshOnlyMigrations(directory)
     applyMigrations(directory)
     const database = new DatabaseSync(databasePath(directory))
     try {
@@ -192,6 +230,27 @@ void test("016 uses SQLite fresh-only NOT NULL ALTER behavior and rolls back wit
       assert.equal(unchanged.prepare("SELECT 1 FROM schema_migrations WHERE name='016-fiscal-audit'").get(), undefined)
       assert.equal(unchanged.prepare("SELECT 1 FROM pragma_table_info('issued_invoices') WHERE name='actor_id'").get(), undefined)
       assert.equal(unchanged.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='audit_events'").get(), undefined)
+    } finally { unchanged.close() }
+  } finally { rmSync(directory, { recursive: true, force: true }) }
+})
+
+void test("017 rejects populated databases atomically instead of inventing issuer VAT status", () => {
+  const directory = mkdtempSync(join(tmpdir(), "qwbe-issuer-vat-upgrade-"))
+  try {
+    seedVersionSix(directory)
+    excludeFreshOnlyMigrations(directory)
+    applyMigrations(directory)
+    const database = new DatabaseSync(databasePath(directory))
+    try {
+      database.prepare("DELETE FROM schema_migrations WHERE name='017-issuer-vat-status'").run()
+    } finally { database.close() }
+    assert.throws(() => applyMigrations(directory), /Cannot add a NOT NULL column with default value NULL/)
+    const unchanged = new DatabaseSync(databasePath(directory), { readOnly: true })
+    try {
+      assert.equal(unchanged.prepare("SELECT 1 FROM schema_migrations WHERE name='017-issuer-vat-status'").get(), undefined)
+      for (const table of ["issued_invoices", "proformas", "correction_documents"]) {
+        assert.equal(unchanged.prepare("SELECT 1 FROM pragma_table_info(?) WHERE name='issuer_vat_registered'").get(table), undefined)
+      }
     } finally { unchanged.close() }
   } finally { rmSync(directory, { recursive: true, force: true }) }
 })
@@ -220,7 +279,7 @@ void test("009 preserves legacy proforma-to-draft conversion audit", () => {
         INSERT INTO proforma_conversions VALUES('proforma-1','org-1','legacy-result','user-1','2026-09-02T10:00:00.000Z');
       `)
     } finally { database.close() }
-    excludeFreshOnlyIssuerDetails(directory)
+    excludeFreshOnlyMigrations(directory)
     assert.ok(applyMigrations(directory).changed > 0)
     const upgraded = new DatabaseSync(databasePath(directory), { readOnly: true })
     try {

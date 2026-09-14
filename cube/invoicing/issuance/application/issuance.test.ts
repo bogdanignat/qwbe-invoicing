@@ -98,7 +98,7 @@ void test("issues deterministic immutable invoice snapshots through the public s
   const listed = await Effect.runPromise(service.listIssuedInvoices())
   assert.equal("branding" in (listed.items[0]?.issuer ?? {}), false)
   assert.deepEqual(listed.items[0]?.issuer, { name: issued.issuer.name, fiscalIdentifier: issued.issuer.fiscalIdentifier,
-    address: issued.issuer.address, legalForm: "srl", tradeRegistryNumber: "J40/123/2020",
+    address: issued.issuer.address, legalForm: "srl", vatRegistered: true, tradeRegistryNumber: "J40/123/2020",
     socialCapital: "200.00", iban: "", bankName: "" })
 
   await Effect.runPromise(service.configureIssuer({
@@ -263,7 +263,7 @@ void test("issues immutable proformas from saved drafts", async () => {
   const other = createInvoicingService({ context: contextProvider({ identity, organization: { id: "org-2" } }),
     clock: fixedClock, ids: sequentialIds(), store: memoryStore(state), branding: brandingNormalizer, cubeIdentity: "invoicing" })
   assert.equal(await Effect.runPromise(Effect.flip(other.getProforma(proforma.id))) instanceof ResourceNotFound, true)
-  assert.equal(await Effect.runPromise(Effect.flip(other.issueInvoiceFromProforma(idempotent({ proformaId: proforma.id })))) instanceof ResourceNotFound, true)
+  assert.equal(await Effect.runPromise(Effect.flip(other.issueInvoiceFromProforma(idempotent({ proformaId: proforma.id, invoiceSeries: "SAME" })))) instanceof ResourceNotFound, true)
 })
 
 void test("issues authored documents without drafts and invoices a proforma snapshot exactly once", async () => {
@@ -284,16 +284,17 @@ void test("issues authored documents without drafts and invoices a proforma snap
   assert.equal(invoice.draftId, null)
   assert.equal(invoice.sourceProformaId, null)
   assert.equal(state.drafts.size, 0)
-  const proforma = await Effect.runPromise(service.issueProforma(idempotent({ ...input, proformaSeries: "PRO" })))
+  const { series: invoiceSeries, ...proformaInput } = input
+  const proforma = await Effect.runPromise(service.issueProforma(idempotent({ ...proformaInput, proformaSeries: "PRO" })))
   assert.equal(proforma.sourceDraftId, null)
-  assert.equal(proforma.invoiceSeries, "INV")
+  assert.equal("invoiceSeries" in proforma, false)
   assert.equal(proforma.actorId, identity.id)
   assert.equal(state.drafts.size, 0)
   await Effect.runPromise(service.configureIssuer({ name: "Exemplu SRL", fiscalIdentifier: "RO12345674",
     address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" }, defaultCurrency: "RON",
     legalForm: "srl", tradeRegistryNumber: "J40/123/2020", socialCapital: "200.00", iban: "", bankName: "",
     defaultPaymentTermDays: 15, vatChange: { registered: true, effectiveFrom: "2025-08-01" }, branding: { text: "Marca B", image: null } }))
-  const converted = await Effect.runPromise(service.issueInvoiceFromProforma(idempotent({ proformaId: proforma.id })))
+  const converted = await Effect.runPromise(service.issueInvoiceFromProforma(idempotent({ proformaId: proforma.id, invoiceSeries })))
   assert.equal(converted.draftId, null)
   assert.equal(converted.sourceProformaId, proforma.id)
   assert.equal(converted.actorId, identity.id)
@@ -313,8 +314,8 @@ void test("issues authored documents without drafts and invoices a proforma snap
   assert.equal(converted.issueDate, "2026-09-01")
   assert.equal(converted.issuedAt, "2026-09-01T10:00:00.000Z")
   assert.equal(state.invoiceConversions.get(proforma.id)?.actorId, identity.id)
-  await expectConflict(service.issueInvoiceFromProforma(idempotent({ proformaId: proforma.id })), "proforma_already_converted")
-  const rollbackSource = await Effect.runPromise(service.issueProforma(idempotent({ ...input, proformaSeries: "PRO" })))
+  await expectConflict(service.issueInvoiceFromProforma(idempotent({ proformaId: proforma.id, invoiceSeries })), "proforma_already_converted")
+  const rollbackSource = await Effect.runPromise(service.issueProforma(idempotent({ ...proformaInput, proformaSeries: "PRO" })))
   const invoiceCount = state.issued.size
   const invoiceSequence = state.sequences.get("org-1:2026:invoice:INV")
   const failing = createInvoicingService({ context: contextProvider({ identity, organization: { id: "org-1" } }),
@@ -322,12 +323,12 @@ void test("issues authored documents without drafts and invoices a proforma snap
       transaction: (use) => memoryStore(state).transaction((transaction) => use({ ...transaction,
         saveProformaInvoiceConversion: () => Effect.fail(new DomainConflict({ code: "forced_failure", message: "forced" })) })),
     } })
-  await expectConflict(failing.issueInvoiceFromProforma(idempotent({ proformaId: rollbackSource.id })), "forced_failure")
+  await expectConflict(failing.issueInvoiceFromProforma(idempotent({ proformaId: rollbackSource.id, invoiceSeries })), "forced_failure")
   assert.equal(state.issued.size, invoiceCount)
   assert.equal(state.sequences.get("org-1:2026:invoice:INV"), invoiceSequence)
   const other = createInvoicingService({ context: contextProvider({ identity, organization: { id: "org-2" } }),
     clock: fixedClock, ids: sequentialIds(), store: memoryStore(state), branding: brandingNormalizer, cubeIdentity: "invoicing" })
-  assert.equal(await Effect.runPromise(Effect.flip(other.issueInvoiceFromProforma(idempotent({ proformaId: proforma.id })))) instanceof ResourceNotFound, true)
+  assert.equal(await Effect.runPromise(Effect.flip(other.issueInvoiceFromProforma(idempotent({ proformaId: proforma.id, invoiceSeries })))) instanceof ResourceNotFound, true)
 })
 
 void test("numbers documents chronologically per series and dates proforma conversions on the conversion day", async () => {
@@ -344,6 +345,10 @@ void test("numbers documents chronologically per series and dates proforma conve
     address: { countryCode: "RO", city: "Iași", street: "Strada Mică 2" } }
   const document = (issueDate: string, dueDate: string | null = null) => ({ customer, series: "INV", issueDate, dueDate, currency: "RON" as const,
     lines: [{ description: "Servicii", quantity: "1", unitPrice: "100", unitOfMeasure: each, vatRateCode: "RO_STANDARD" }] })
+  const proformaDocument = (issueDate: string, dueDate: string | null = null) => {
+    const input = document(issueDate, dueDate)
+    return { customer: input.customer, issueDate: input.issueDate, dueDate: input.dueDate, currency: input.currency, lines: input.lines }
+  }
   await Effect.runPromise(service.issueInvoice(idempotent(document("2026-08-30"))))
   const backdated = await Effect.runPromise(Effect.flip(service.issueInvoice(idempotent(document("2026-08-29")))))
   assert.equal(backdated instanceof ValidationFailure && backdated.issues[0]?.startsWith("issueDate cannot be before 2026-08-30"), true)
@@ -352,12 +357,12 @@ void test("numbers documents chronologically per series and dates proforma conve
   assert.equal((await Effect.runPromise(service.issueInvoice(idempotent(document("2026-08-30"))))).number, 2)
   assert.equal(state.sequences.get("org-1:2026:invoice:INV"), 2)
 
-  const proforma = await Effect.runPromise(service.issueProforma(idempotent({ ...document("2026-08-20", "2026-09-04"), proformaSeries: "PRO" })))
-  const converted = await Effect.runPromise(service.issueInvoiceFromProforma(idempotent({ proformaId: proforma.id })))
+  const proforma = await Effect.runPromise(service.issueProforma(idempotent({ ...proformaDocument("2026-08-20", "2026-09-04"), proformaSeries: "PRO" })))
+  const converted = await Effect.runPromise(service.issueInvoiceFromProforma(idempotent({ proformaId: proforma.id, invoiceSeries: "INV" })))
   assert.equal(converted.issueDate, "2026-09-01")
   assert.equal(converted.dueDate, "2026-09-16")
   assert.equal(converted.number, 3)
-  const oldProforma = await Effect.runPromise(Effect.flip(service.issueProforma(idempotent({ ...document("2026-08-19"), proformaSeries: "PRO" }))))
+  const oldProforma = await Effect.runPromise(Effect.flip(service.issueProforma(idempotent({ ...proformaDocument("2026-08-19"), proformaSeries: "PRO" }))))
   assert.equal(oldProforma instanceof ValidationFailure, true)
 })
 
@@ -384,7 +389,9 @@ void test("freezes draft remarks into every issued snapshot and carries them thr
   await Effect.runPromise(service.addDraftLine({ draftId: invoiceDraft.id, ...line }))
   assert.equal((await Effect.runPromise(service.issueInvoice(idempotent({ draftId: invoiceDraft.id })))).notes, remarks)
 
-  const directProforma = await Effect.runPromise(service.issueProforma(idempotent({ ...authored, proformaSeries: "PRO" })))
+  const authoredProforma = { customer: authored.customer, issueDate: authored.issueDate, dueDate: authored.dueDate,
+    currency: authored.currency, lines: authored.lines, notes: authored.notes }
+  const directProforma = await Effect.runPromise(service.issueProforma(idempotent({ ...authoredProforma, proformaSeries: "PRO" })))
   assert.equal(directProforma.notes, remarks)
 
   const proformaDraft = await Effect.runPromise(service.createDraft({ customer, series: "INV", issueDate: "2026-09-01", notes: remarks }))
@@ -392,13 +399,13 @@ void test("freezes draft remarks into every issued snapshot and carries them thr
   const draftProforma = await Effect.runPromise(service.issueProforma(idempotent({ draftId: proformaDraft.id, series: "PRO" })))
   assert.equal(draftProforma.notes, remarks)
 
-  const converted = await Effect.runPromise(service.issueInvoiceFromProforma(idempotent({ proformaId: draftProforma.id })))
+  const converted = await Effect.runPromise(service.issueInvoiceFromProforma(idempotent({ proformaId: draftProforma.id, invoiceSeries: "INV" })))
   assert.equal(converted.notes, draftProforma.notes)
 
   const bare = await Effect.runPromise(service.issueInvoice(idempotent({
     customer, series: "INV", issueDate: "2026-09-01", dueDate: null, currency: "RON" as const, lines: [line],
   })))
   assert.equal(bare.notes, null)
-  const invalid = await Effect.runPromise(Effect.flip(service.issueProforma(idempotent({ ...authored, proformaSeries: "PRO", notes: "  " }))))
+  const invalid = await Effect.runPromise(Effect.flip(service.issueProforma(idempotent({ ...authoredProforma, proformaSeries: "PRO", notes: "  " }))))
   assert.equal(invalid instanceof ValidationFailure, true)
 })

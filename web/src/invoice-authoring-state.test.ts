@@ -12,7 +12,7 @@ const manualForm: InvoiceAuthoringForm = {
 }
 
 const draft: DraftInvoice = {
-  id: "draft-1", organizationId: "org-1", customer: { partyType: "individual", name: "Ana Pop", fiscalIdentifier: "", address: { countryCode: "RO", city: "Iași", street: "Strada 1" } },
+  id: "draft-1", organizationId: "org-1", sourceProformaId: null, customer: { partyType: "individual", name: "Ana Pop", fiscalIdentifier: "", address: { countryCode: "RO", city: "Iași", street: "Strada 1" } },
   series: "QWBE", issueDate: "2026-09-02", dueDate: "2026-09-17", currency: "RON", notes: null, status: "draft", lines: [], vatBreakdown: [],
   totalExcludingVat: "0.00", vatTotal: "0.00", totalIncludingVat: "0.00",
 }

@@ -22,7 +22,8 @@ export const operationNames = [
   "addDraftLine", "updateDraftLine", "deleteDraftLine", "issueDraftInvoice", "issueInvoice",
   "listPayments", "recordPayment", "reversePayment", "createCorrection", "listCorrections", "getCorrection",
   "listIssuedInvoices", "getIssuedInvoice", "renderInvoicePdf", "downloadInvoicePdf",
-  "issueDraftProforma", "issueProforma", "listProformas", "getProforma", "issueInvoiceFromProforma", "renderProformaPdf", "downloadProformaPdf",
+  "issueDraftProforma", "issueProforma", "listProformas", "getProforma", "issueInvoiceFromProforma", "createDraftInvoiceFromProforma",
+  "renderProformaPdf", "downloadProformaPdf",
   "getSession", "createSession", "deleteSession",
 ] as const
 export type OperationName = typeof operationNames[number]
@@ -175,7 +176,9 @@ const invoicing = HttpApiGroup.make("invoicing")
     .setPayload(S.AuthoringProformaInput).addSuccess(S.Proforma)))))))
   .add(invoicingBase(notFound(HttpApiEndpoint.get("getProforma")`/proformas/${id}`.addSuccess(S.Proforma))))
   .add(invoicingBase(conflict(notFound(validation(idempotentBody(HttpApiEndpoint.post("issueInvoiceFromProforma")`/proformas/${id}/invoice`
-    .setPayload(S.EmptyInput).addSuccess(S.IssuedInvoice)))))))
+    .setPayload(S.ConvertProformaInput).addSuccess(S.IssuedInvoice)))))))
+  .add(invoicingBase(conflict(notFound(validation(idempotentBody(HttpApiEndpoint.post("createDraftInvoiceFromProforma")`/proformas/${id}/draft-invoice`
+    .setPayload(S.ConvertProformaInput).addSuccess(S.DraftInvoice)))))))
 
 const documents = HttpApiGroup.make("documents")
   .add(documentsBase(body(HttpApiEndpoint.post("renderInvoicePdf")`/invoices/${invoiceId}/pdf`.addSuccess(S.Artifact)

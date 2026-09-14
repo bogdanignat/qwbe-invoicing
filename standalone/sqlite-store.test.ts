@@ -153,21 +153,21 @@ void test("persists an issued snapshot across store recreation and isolates orga
     assert.equal(proforma.convertedDraftId, null)
     assert.equal((await Effect.runPromise(service.getProforma(proforma.id))).convertedDraftId, null)
     assert.equal((await Effect.runPromise(service.listProformas())).items[0]?.convertedDraftId, null)
-    const converted = await Effect.runPromise(service.issueInvoiceFromProforma(idempotent({ proformaId: proforma.id })))
+    const converted = await Effect.runPromise(service.issueInvoiceFromProforma(idempotent({ proformaId: proforma.id, invoiceSeries: "QWBE" })))
     assert.deepEqual(converted.lines, proformaAuthored.lines)
     assert.equal(converted.series, "QWBE")
     assert.equal(converted.dueDate, null)
     assert.equal((await Effect.runPromise(service.getProforma(proforma.id))).convertedInvoiceId, converted.id)
-    const duplicateConversion = await Effect.runPromise(Effect.flip(service.issueInvoiceFromProforma(idempotent({ proformaId: proforma.id }))))
+    const duplicateConversion = await Effect.runPromise(Effect.flip(service.issueInvoiceFromProforma(idempotent({ proformaId: proforma.id, invoiceSeries: "QWBE" }))))
     assert.equal(duplicateConversion instanceof DomainConflict && duplicateConversion.code === "proforma_already_converted", true)
-    const directProforma = await Effect.runPromise(service.issueProforma(idempotent({ customerId: customer.id, series: "QWBE",
+    const directProforma = await Effect.runPromise(service.issueProforma(idempotent({ customerId: customer.id,
       proformaSeries: "PRO", issueDate: "2026-09-01", currency: "RON",
       lines: [{ description: "Direct", quantity: "1", unitPrice: "75", unitOfMeasure: each, vatRateCode: "RO_STANDARD" }] })))
-    const directInvoice = await Effect.runPromise(service.issueInvoiceFromProforma(idempotent({ proformaId: directProforma.id })))
+    const directInvoice = await Effect.runPromise(service.issueInvoiceFromProforma(idempotent({ proformaId: directProforma.id, invoiceSeries: "QWBE" })))
     assert.equal(directInvoice.sourceProformaId, directProforma.id)
     assert.deepEqual(directInvoice.lines, directProforma.lines)
     assert.equal((await Effect.runPromise(service.getProforma(directProforma.id))).convertedInvoiceId, directInvoice.id)
-    const duplicateDirect = await Effect.runPromise(Effect.flip(service.issueInvoiceFromProforma(idempotent({ proformaId: directProforma.id }))))
+    const duplicateDirect = await Effect.runPromise(Effect.flip(service.issueInvoiceFromProforma(idempotent({ proformaId: directProforma.id, invoiceSeries: "QWBE" }))))
     assert.equal(duplicateDirect instanceof DomainConflict && duplicateDirect.code === "proforma_already_converted", true)
     const correction = await Effect.runPromise(service.createCorrection(idempotent({
       originalInvoiceId: issued.id, reason: "Corecție fiscală",
@@ -407,7 +407,7 @@ void test("round-trips document remarks and keeps them immutable once issued", a
     const invoice = await Effect.runPromise(service.issueInvoice(idempotent({ draftId: draft.id })))
     assert.equal(invoice.notes, remarks)
     const proforma = await Effect.runPromise(service.issueProforma(idempotent({
-      customer, series: "QWBE", proformaSeries: "PRO", issueDate: "2026-09-01", dueDate: null, currency: "RON", lines: [line], notes: remarks,
+      customer, proformaSeries: "PRO", issueDate: "2026-09-01", dueDate: null, currency: "RON", lines: [line], notes: remarks,
     })))
     const reopened = createSqliteStore(directory)
     const readBack = createInvoicingService({ context: context("org-1"), clock, ids: ids(), store: reopened, branding, cubeIdentity: "invoicing" })

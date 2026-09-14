@@ -4,10 +4,10 @@ import { findIdempotencyReplay, idempotencyRecord, missingIdempotencyResult } fr
 import { checked, documentPageQuery, missing, pageOf, recordAuditEvent, type Authorize, type OperationDependencies, type Page, type PageRequest } from "../../application/support.ts"
 import type { InvoicingFailure } from "../../contracts/failures.ts"
 import type { InvoicingPermissions } from "../../contracts/permissions.ts"
-import type { DocumentSource, Idempotent, Proforma, ProformaSummary } from "../../domain/invoice.ts"
-import type { AuthoringProformaInput, IssueProformaInput } from "../../domain/inputs.ts"
+import type { DocumentSource, Idempotent } from "../../domain/invoice.ts"
 import { calendarDate, validateDocumentSource } from "../../domain/validation.ts"
 import { validateIssuerForIssuance } from "../../registry/index.ts"
+import type { AuthoringProformaInput, IssueProformaInput, Proforma, ProformaSummary } from "../domain/proforma.ts"
 import { fiscalYear, issuanceSource, numberedSnapshot } from "./snapshot.ts"
 import { ensureChronology } from "./invoices.ts"
 
@@ -40,7 +40,7 @@ export const createProformaOperations = (
       if (series === undefined) return yield* Effect.fail(missing("document_series", proformaSeries))
       yield* ensureChronology(transaction, context.organization.id, "proforma", series.series, document.issueDate, calendarDate(issuedAt))
       const proforma: Proforma = {
-        sourceDraftId: draft?.id ?? null, invoiceSeries: document.series, convertedDraftId: null, convertedInvoiceId: null,
+        sourceDraftId: draft?.id ?? null, convertedDraftId: null, convertedInvoiceId: null,
         ...numberedSnapshot(document, issuer, { id, series: series.series,
           number: yield* transaction.allocateDocumentNumber(context.organization.id, fiscalYear(document.issueDate), "proforma", series.series),
           issuedAt, actorId: context.identity.id }),

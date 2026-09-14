@@ -49,7 +49,7 @@ export const createInvoiceOperations = (
       yield* ensureChronology(transaction, context.organization.id, "invoice", document.series, document.issueDate, calendarDate(issuedAt))
       const number = yield* transaction.allocateDocumentNumber(context.organization.id, fiscalYear(document.issueDate), "invoice", document.series)
       const invoice: IssuedInvoice = {
-        draftId: draft?.id ?? null, sourceProformaId: null,
+        draftId: draft?.id ?? null, sourceProformaId: draft?.sourceProformaId ?? null,
         ...numberedSnapshot(document, issuer, { id: invoiceId, series: document.series, number, issuedAt, actorId: context.identity.id }),
         eFacturaStatus: "not_sent",
       }

@@ -11,7 +11,7 @@ export const InvoiceDetailView = ({ id, notify }: { readonly id: string; readonl
   if (state.bundle.data === undefined && state.bundle.isPending) return <Loading />
   if (state.bundle.data === undefined) return <Page title="Factură" eyebrow="Document emis"><ErrorAlert error={state.bundle.error} /></Page>
   const { invoice, paymentSummary, corrections } = state.bundle.data
-  return <Page title={`Factura ${invoice.series} ${String(invoice.number)}`} eyebrow={`Emisă la ${invoice.issueDate}`} actions={<>
+  return <Page title="Factură" eyebrow="Document emis" actions={<>
     <Button variant="secondary" onClick={() => { state.download.start() }} disabled={state.download.pending}>{state.download.pending ? "Se generează…" : "Descarcă PDF"}</Button>
   </>}>
     {state.bundle.error === null ? null : <ErrorAlert error={state.bundle.error} />}

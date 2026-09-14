@@ -1,8 +1,9 @@
 import type { Effect } from "effect"
 
 import type { DomainConflict, PersistenceFailure } from "../contracts/failures.ts"
-import type { AuditEvent, Customer, DocumentSeries, DocumentSource, DocumentType, DraftInvoice, IdempotencyRecord, IssuedInvoice, IssuedInvoiceSummary, IssuerProfile, NumberedDocumentType, ProductPreset, Proforma, ProformaConversion, ProformaInvoiceConversion, ProformaSummary } from "../domain/invoice.ts"
+import type { AuditEvent, Customer, DocumentSeries, DocumentSource, DocumentType, DraftInvoice, IdempotencyRecord, IssuedInvoice, IssuedInvoiceSummary, IssuerProfile, NumberedDocumentType, ProductPreset } from "../domain/invoice.ts"
 import type { CorrectionDocument } from "../corrections/domain/corrections.ts"
+import type { Proforma, ProformaConversion, ProformaInvoiceConversion, ProformaSummary } from "../issuance/domain/proforma.ts"
 
 export interface PageQuery<Key> {
   readonly limit: number
@@ -71,6 +72,7 @@ export interface InvoicingTransaction {
   readonly findProforma: Find<Proforma>
   readonly listProformas: PagedList<ProformaSummary, DocumentCursor>
   readonly findProformaConversion: Find<ProformaConversion>
+  readonly saveProformaConversion: Save<ProformaConversion>
   readonly findProformaInvoiceConversion: Find<ProformaInvoiceConversion>
   readonly saveProformaInvoiceConversion: Save<ProformaInvoiceConversion>
   readonly saveCorrection: Save<CorrectionDocument>
