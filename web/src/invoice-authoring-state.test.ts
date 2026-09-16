@@ -1,38 +1,38 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { addCalendarDays, applyProductPreset, authoringAccess, authoringDocumentPayload, authoringPayloadMatchesDraft, authoringReadiness, authoringSeriesOptions, authoringTaxReadiness, createDraftPayload, documentNotesIssue, documentNotesMaxLength, draftLinePayload, draftLinesForEditing, editDueDate, formFromDraft, headerMatchesDraft, initialBuyerSelection, linesMatchDraft, newAuthoringForm, newEditableInvoiceLine, pendingLineOperations, preferredUnitOfMeasure, selectBuyerMode, selectIssueDate, selectedSavedCustomer, selectSavedCustomer, switchBuyerMode, switchPartyType, updateDraftPayload, type InvoiceAuthoringForm } from "./invoice-authoring-state.ts"
+import { addCalendarDays, applyProductPreset, authoringAccess, authoringDocumentPayload, authoringPayloadMatchesDraft, authoringReadiness, authoringSeriesOptions, authoringTaxReadiness, createDraftPayload, documentNotesIssue, documentNotesMaxLength, draftLinePayload, draftLinesForEditing, editDueDate, formFromDraft, headerMatchesDraft, initialBuyerSelection, linesMatchDraft, newAuthoringForm, newEditableInvoiceLine, pendingLineOperations, positiveInvoiceRequiresDueDate, preferredUnitOfMeasure, selectBuyerCounty, selectBuyerMode, selectIssueDate, selectedSavedCustomer, selectSavedCustomer, switchBuyerMode, switchPartyType, updateDraftPayload, type InvoiceAuthoringForm } from "./invoice-authoring-state.ts"
 import type { Customer, DraftInvoice, Issuer, ProductPreset } from "./models.ts"
 const each = { code: "C62", name: "unitate" } as const
 
 const manualForm: InvoiceAuthoringForm = {
-  buyerMode: "one-time", customerId: "", partyType: "individual", name: "Ana Pop", companyTaxIdentifier: "RO123", individualTaxIdentifier: "",
-  countryCode: "RO", city: "Iași", street: "Strada 1", county: "", postalCode: "", series: "QWBE",
+  buyerMode: "one-time", customerId: "", partyType: "individual", name: "Ana Pop", companyTaxIdentifier: "RO123", individualTaxIdentifier: "", vatRegistered: false,
+  countryCode: "RO", city: "Iași", street: "Strada 1", county: "RO-IS", sector: undefined, postalCode: "", series: "QWBE",
   issueDate: "2026-09-02", dueDate: "2026-09-17", dueDateEdited: true, notes: "",
 }
 
 const draft: DraftInvoice = {
-  id: "draft-1", organizationId: "org-1", sourceProformaId: null, customer: { partyType: "individual", name: "Ana Pop", fiscalIdentifier: "", address: { countryCode: "RO", city: "Iași", street: "Strada 1" } },
+  id: "draft-1", organizationId: "org-1", sourceProformaId: null, customer: { partyType: "individual", name: "Ana Pop", fiscalIdentifier: "", vatRegistered: false, address: { countryCode: "RO", city: "Iași", street: "Strada 1", county: "RO-IS" } },
   series: "QWBE", issueDate: "2026-09-02", dueDate: "2026-09-17", currency: "RON", notes: null, status: "draft", lines: [], vatBreakdown: [],
   totalExcludingVat: "0.00", vatTotal: "0.00", totalIncludingVat: "0.00",
 }
 
 const issuer: Issuer = {
-  organizationId: "org-1", name: "QWBE", fiscalIdentifier: "RO2",
-  address: { countryCode: "RO", city: "Botoșani", street: "Strada 2" },
+  organizationId: "org-1", name: "QWBE", fiscalIdentifier: "2",
+  address: { countryCode: "RO", city: "Botoșani", street: "Strada 2", county: "RO-BT" },
   legalForm: "srl", tradeRegistryNumber: "J07/123/2020", iban: "", bankName: "", socialCapital: "200.00",
   branding: null, defaultCurrency: "RON", defaultPaymentTermDays: 15, vatConfigurations: [],
   currentVat: { registered: true, effectiveFrom: "2025-08-01" },
 }
 
 const customer: Customer = {
-  id: "customer-1", organizationId: "org-1", partyType: "company", name: "Client", fiscalIdentifier: "RO1",
-  address: { countryCode: "RO", city: "Iași", street: "Strada 1" }, defaultPaymentTermDays: 30,
+  id: "customer-1", organizationId: "org-1", partyType: "company", name: "Client", fiscalIdentifier: "1", vatRegistered: true,
+  address: { countryCode: "RO", city: "Iași", street: "Strada 1", county: "RO-IS" }, defaultPaymentTermDays: 30,
 }
 
 void test("builds the exact one-time buyer payload and preserves blank optional CNP", () => {
   assert.deepEqual(createDraftPayload(manualForm), {
-    customer: { partyType: "individual", name: "Ana Pop", fiscalIdentifier: "", address: { countryCode: "RO", city: "Iași", street: "Strada 1" } },
+    customer: { partyType: "individual", name: "Ana Pop", fiscalIdentifier: "", vatRegistered: false, address: { countryCode: "RO", city: "Iași", street: "Strada 1", county: "RO-IS" } },
     series: "QWBE", issueDate: "2026-09-02", dueDate: "2026-09-17", currency: "RON", notes: null,
   })
   assert.equal(createDraftPayload({ ...manualForm, notes: "  Livrare esalonata  " }).notes, "Livrare esalonata")
@@ -42,14 +42,14 @@ void test("builds the exact one-time buyer payload and preserves blank optional 
 void test("compares one-time buyers semantically regardless of API property order before issuing a draft", () => {
   const fromApi: DraftInvoice = {
     ...draft,
-    customer: { name: "Ana Pop", fiscalIdentifier: "", address: { street: "Strada 1", city: "Iași", countryCode: "RO" }, partyType: "individual" },
+    customer: { name: "Ana Pop", fiscalIdentifier: "", vatRegistered: false, address: { street: "Strada 1", city: "Iași", countryCode: "RO", county: "RO-IS" }, partyType: "individual" },
   }
   const payload = authoringDocumentPayload(formFromDraft(fromApi), draftLinesForEditing(fromApi))
   assert.equal(authoringPayloadMatchesDraft(payload, fromApi), true)
   assert.equal(authoringPayloadMatchesDraft(payload, { ...fromApi, customer: { ...fromApi.customer, name: "Altcineva" } }), false)
   assert.equal(authoringPayloadMatchesDraft(payload, { ...fromApi, customer: { ...fromApi.customer, fiscalIdentifier: "123" } }), false)
   assert.equal(authoringPayloadMatchesDraft(payload, { ...fromApi, customer: { ...fromApi.customer, partyType: "company" } }), false)
-  for (const field of ["countryCode", "city", "street", "county", "postalCode"] as const) {
+  for (const field of ["countryCode", "city", "street", "county", "sector", "postalCode"] as const) {
     assert.equal(authoringPayloadMatchesDraft(payload, {
       ...fromApi, customer: { ...fromApi.customer, address: { ...fromApi.customer.address, [field]: "schimbat" } },
     }), false, field)
@@ -81,7 +81,7 @@ void test("requires explicit saved-customer selection and falls back to one-time
 
 void test("derives new-document due dates from the selected customer and falls back to issuer terms", () => {
   const form = newAuthoringForm(issuer, "QWBE", true, "2026-09-04")
-  const customerWithoutTerm: Customer = { id: "customer-3", organizationId: "org-1", partyType: "company", name: "Client", fiscalIdentifier: "RO1", address: customer.address }
+  const customerWithoutTerm: Customer = { id: "customer-3", organizationId: "org-1", partyType: "company", name: "Client", fiscalIdentifier: "1", vatRegistered: false, address: customer.address }
   assert.equal(form.dueDate, "2026-09-19")
   assert.equal(selectSavedCustomer(form, customer.id, customer, issuer, true).dueDate, "2026-10-04")
   assert.equal(selectSavedCustomer(form, "customer-2", { ...customer, id: "customer-2", defaultPaymentTermDays: 0 }, issuer, true).dueDate, "2026-09-04")
@@ -152,11 +152,24 @@ void test("prepares invoice and proforma series independently for authoring", ()
 })
 
 void test("switching PJ/PF preserves distinct typed identifiers", () => {
-  const company = { ...manualForm, partyType: "company" as const, companyTaxIdentifier: "RO123", individualTaxIdentifier: "1960523420018" }
+  const company = { ...manualForm, partyType: "company" as const, companyTaxIdentifier: "RO123", individualTaxIdentifier: "1960523420018", vatRegistered: true }
   const individual = switchPartyType(company, "individual")
-  assert.equal(createDraftPayload(company).customer?.fiscalIdentifier, "RO123")
+  assert.equal(createDraftPayload(company).customer?.fiscalIdentifier, "123")
+  assert.equal(createDraftPayload(company).customer?.vatRegistered, true)
   assert.equal(createDraftPayload(individual).customer?.fiscalIdentifier, "1960523420018")
+  assert.equal(createDraftPayload(individual).customer?.vatRegistered, false)
   assert.equal(switchPartyType(individual, "company").companyTaxIdentifier, "RO123")
+})
+
+void test("keeps sector only for Bucharest and requires due date only for positive invoices", () => {
+  const bucharest = selectBuyerCounty(manualForm, "RO-B")
+  assert.equal(bucharest.sector, undefined)
+  assert.equal(selectBuyerCounty({ ...bucharest, sector: 3 }, "RO-IS").sector, undefined)
+  assert.equal(positiveInvoiceRequiresDueDate(null, "121.00"), true)
+  assert.equal(positiveInvoiceRequiresDueDate(null, "0.00"), false)
+  assert.equal(positiveInvoiceRequiresDueDate(null, "-121.00"), false)
+  assert.equal(positiveInvoiceRequiresDueDate("2026-09-30", "121.00"), false)
+  assert.equal(positiveInvoiceRequiresDueDate(null, undefined, [{ quantity: "2", unitPrice: "10.00" }]), true)
 })
 
 void test("rehydrates inline buyer drafts and detects unsaved header changes", () => {

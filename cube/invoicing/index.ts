@@ -33,6 +33,8 @@ export const cube = {
 export * from "./contracts/index.ts"
 export { calculateTotals } from "./domain/calculation.ts"
 export { unitOfMeasures } from "./domain/unit-of-measures.ts"
+export { ROMANIAN_COUNTIES, isRomanianCountyCode, romanianCountyName } from "./registry/domain/romanian-counties.ts"
+export type { RomanianCounty } from "./registry/domain/romanian-counties.ts"
 export { createInvoicingService } from "./application/invoicing.ts"
 export { defaultPageSize, maximumPageSize } from "./application/support.ts"
 export type { Page, PageRequest } from "./application/support.ts"

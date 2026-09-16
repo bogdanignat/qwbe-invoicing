@@ -13,18 +13,18 @@ import { createSqliteStore } from "./sqlite-store.ts"
 
 const insertDraft = (database: DatabaseSync, id: string, organizationId = "org-1") => database.prepare(`INSERT INTO invoice_drafts(
   id,organization_id,customer_party_type,customer_legal_name,customer_tax_identifier,customer_country_code,customer_city,
-  customer_street,series,issue_date,currency,status)VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`).run(
-  id, organizationId, "company", "Client SRL", "RO87654329", "RO", "Iași", "Strada 1", "INV", "2026-09-01", "RON", "draft",
+  customer_street,customer_county,customer_vat_registered,series,issue_date,currency,status)VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+  id, organizationId, "company", "Client SRL", "87654329", "RO", "Iași", "Strada 1", "RO-IS", 1, "INV", "2026-09-01", "RON", "draft",
 )
 
 const insertProforma = (database: DatabaseSync, id: string, organizationId = "org-1", number = 1) => database.prepare(`INSERT INTO proformas(
   id,source_draft_id,organization_id,fiscal_year,document_type,series,number,issue_date,issued_at,currency,
-  issuer_legal_name,issuer_tax_identifier,issuer_country_code,issuer_city,issuer_street,customer_party_type,
-  customer_legal_name,customer_tax_identifier,customer_country_code,customer_city,customer_street,
+  issuer_legal_name,issuer_tax_identifier,issuer_country_code,issuer_city,issuer_street,issuer_county,customer_party_type,
+  customer_legal_name,customer_tax_identifier,customer_country_code,customer_city,customer_street,customer_county,customer_vat_registered,
   total_excluding_tax,tax_total,total_including_tax,sealed,issuer_legal_form,issuer_trade_registry_number,
   issuer_iban,issuer_bank_name,issuer_social_capital,actor_id,issuer_vat_registered)
   VALUES(?,NULL,?,2026,'proforma','PRO',?,'2026-09-01','2026-09-01T10:00:00.000Z','RON',
-  'Furnizor SRL','RO12345674','RO','Iași','Strada 2','company','Client SRL','RO87654329','RO','Iași','Strada 1',
+  'Furnizor SRL','12345674','RO','Iași','Strada 2','RO-IS','company','Client SRL','87654329','RO','Iași','Strada 1','RO-IS',1,
   '0.00','0.00','0.00',1,'srl','J22/123/2020','','','1000.00','user-1',1)`).run(id, organizationId, number)
 
 const insertInvoice = (database: DatabaseSync, input: {
@@ -36,12 +36,12 @@ const insertInvoice = (database: DatabaseSync, input: {
   readonly number: number
 }) => database.prepare(`INSERT INTO issued_invoices(
   id,draft_id,source_proforma_id,organization_id,fiscal_year,document_type,series,number,issue_date,issued_at,currency,
-  issuer_legal_name,issuer_tax_identifier,issuer_country_code,issuer_city,issuer_street,customer_party_type,
-  customer_legal_name,customer_tax_identifier,customer_country_code,customer_city,customer_street,
+  issuer_legal_name,issuer_tax_identifier,issuer_country_code,issuer_city,issuer_street,issuer_county,customer_party_type,
+  customer_legal_name,customer_tax_identifier,customer_country_code,customer_city,customer_street,customer_county,customer_vat_registered,
   total_excluding_tax,tax_total,total_including_tax,issuer_legal_form,issuer_trade_registry_number,
   issuer_iban,issuer_bank_name,issuer_social_capital,actor_id,issuer_vat_registered)
   VALUES(?,?,?,?,2026,'invoice',?,?,'2026-09-01','2026-09-01T11:00:00.000Z','RON',
-  'Furnizor SRL','RO12345674','RO','Iași','Strada 2','company','Client SRL','RO87654329','RO','Iași','Strada 1',
+  'Furnizor SRL','12345674','RO','Iași','Strada 2','RO-IS','company','Client SRL','87654329','RO','Iași','Strada 1','RO-IS',1,
   '0.00','0.00','0.00','srl','J22/123/2020','','','1000.00','user-1',1)`).run(
   input.id, input.draftId, input.sourceProformaId, input.organizationId ?? "org-1", input.series ?? "INV", input.number,
 )

@@ -6,7 +6,7 @@ series with sequential numbering, CUI/CIF validation, VAT per line, immutable is
 documents, and correction by storno instead of editing.
 
 Jurisdiction and currency are fixed to Romania (`RO`) and Romanian leu (`RON`) in the first
-release. The data model is prepared for RO e-Factura (EN 16931 / RO CIUS), but this version
+release. The data model is being prepared for RO e-Factura (EN 16931 / RO CIUS), but this version
 does **not** submit invoices to ANAF yet. See [What it does not do yet](#what-it-does-not-do-yet).
 
 The product and engineering baseline is [`PRODUCT.md`](./PRODUCT.md), the architecture is
@@ -275,7 +275,7 @@ handler on shutdown.
 | Area | Routes |
 |---|---|
 | Issuer | `GET`, `PUT /api/issuer` |
-| VAT catalogue | `GET /api/vat-regimes`, optionally with both `countryCode` and `fiscalIdentifier` |
+| VAT catalogue | `GET /api/vat-regimes` |
 | Series | `GET`, `POST /api/document-series` |
 | Customers | `GET`, `POST /api/customers`, `GET`, `PUT`, `DELETE /api/customers/:id` |
 | Product presets | `GET`, `POST /api/product-presets`, `PUT`, `DELETE /api/product-presets/:id` |
@@ -290,12 +290,29 @@ handler on shutdown.
 Issuer configuration accepts `vatChange: { registered, effectiveFrom }` instead
 of a caller-authored `vatConfigurations` history. The server builds that history
 and returns it with `currentVat` (null when no registration is currently active).
-The catalogue supplies date-effective line rates separately from issuer registration;
-CUI inference is a suggestion, and configuration checks CUI/regime consistency
-on the current Europe/Bucharest date, not against a future scheduled transition.
+The catalogue supplies date-effective line rates separately from issuer registration.
+CUI is stored as canonical digits without `RO`; VAT registration is explicit, never
+inferred from a prefix. The UI may strip a typed `RO` prefix without changing the
+registration checkbox. Company buyers also carry an explicit `vatRegistered` flag;
+individual buyers must use `false` and may omit their CNP (empty identifier).
+Issued snapshots preserve both parties' VAT status. UI/PDF derive a registered
+party's VAT identifier as `RO` + CUI without consulting the current registry.
+Addresses require one of the 42 Romanian ISO 3166-2 county codes. `RO-B` requires
+an integer sector from 1 to 6; other counties prohibit a sector.
+Positive invoices require `dueDate` before a number is allocated, including draft
+issuance and proforma conversion. Drafts, proformas and zero invoices may omit it.
 Draft issuance rejects stale VAT without consuming a document number; saving a
 stale draft refreshes affected lines even when their VAT code is unchanged. Issued
 documents, external snapshots and proforma conversions retain their frozen values.
+
+The invoice public contract owns these immutable fiscal facts; the future e-Factura
+exporter must not reconstruct them from current profiles or private database tables.
+Readiness is **not complete**: VAT category/exemption reason and the exact CIUS-RO
+mapping for Article 310 still need verified official rules, snapshot fields and tests.
+No UBL/XML export or ANAF transport is included in this correction lot.
+Migration `019` requires an empty invoice database and rejects populated schemas
+atomically; it does not backfill or delete local data. Use the existing migration
+and doctor commands against a fresh development data directory.
 
 Numbered invoices, proformas and corrections expose a trusted `actorId`. Their
 issuance, issuer/series configuration, payments and reversals append fiscal events

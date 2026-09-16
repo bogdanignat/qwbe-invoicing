@@ -27,15 +27,16 @@ export const InvoiceAuthoringSession = (props: InvoiceAuthoringSessionInput) => 
             <div className="document-date-fields">
               <label>Serie factură<select required disabled={status.pending || document.draft !== undefined} value={document.form.series} onChange={(event) => { actions.changeForm({ series: event.currentTarget.value }) }}>{document.invoiceSeries.map((series) => <option key={series} value={series}>{series}</option>)}</select></label>
               <label>Data emiterii<input required disabled={status.pending} type="date" value={document.form.issueDate} onChange={(event) => { actions.chooseIssueDate(event.currentTarget.value) }} /></label>
-              <label>Data scadenței <span className="optional">opțională</span><input disabled={status.pending} type="date" min={document.form.issueDate} value={document.form.dueDate} onChange={(event) => { actions.chooseDueDate(event.currentTarget.value) }} /></label>
+              <label>Data scadenței {status.dueDateRequired ? <span className="required">obligatorie la emitere</span> : <span className="optional">opțională în draft</span>}<input disabled={status.pending} type="date" min={document.form.issueDate} value={document.form.dueDate} aria-required={status.dueDateRequired} aria-describedby={feedback.dueDateIssue === null ? undefined : "invoice-due-date-issue"} onChange={(event) => { actions.chooseDueDate(event.currentTarget.value) }} /></label>
               <div className="static-field"><span>Monedă</span><span className="fixed-value">RON</span></div>
             </div>
           </section>}
           issuer={<SellerSummary issuer={document.issuer} />}
-          customer={<BuyerEditor form={document.form} customers={document.customers} disabled={status.pending} onChange={actions.changeForm} onBuyerModeChange={actions.chooseBuyerMode} onSavedCustomerChange={actions.chooseCustomer} />}
+          customer={<BuyerEditor form={document.form} customers={document.customers} disabled={status.pending} sectorRequired={document.buyerSectorRequired} onChange={actions.changeForm} onBuyerModeChange={actions.chooseBuyerMode} onSavedCustomerChange={actions.chooseCustomer} onPartyTypeChange={actions.choosePartyType} onCountyChange={actions.chooseCounty} onFiscalIdentifierChange={actions.changeFiscalIdentifier} onSectorChange={actions.chooseSector} />}
         />
       </div>
       <div className="authoring-main">
+        {feedback.dueDateIssue === null ? null : <p className="status-note warning" id="invoice-due-date-issue">{feedback.dueDateIssue} Draftul poate fi salvat fără scadență.</p>}
         <div className="card authoring-section">
           <label className="notes-field">Observații <span className="optional">opțional</span><textarea disabled={status.pending} maxLength={feedback.notesMaxLength} rows={3} aria-describedby="notes-status" aria-invalid={feedback.notesIssue !== null} value={document.form.notes} onChange={(event) => { actions.changeForm({ notes: event.currentTarget.value }) }} /></label>
           <p className={feedback.notesIssue === null ? "hint notes-status" : "hint notes-status warning"} id="notes-status" aria-live="polite">{feedback.notesIssue ?? `${String(document.form.notes.length)}/${String(feedback.notesMaxLength)}`}</p>

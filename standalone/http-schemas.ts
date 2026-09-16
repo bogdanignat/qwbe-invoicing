@@ -36,7 +36,8 @@ export const Address = Schema.Struct({
   countryCode: Schema.String,
   city: Schema.String,
   street: Schema.String,
-  county: optionalString,
+  county: Schema.String,
+  sector: optional(Schema.Int),
   postalCode: optionalString,
 }).annotations(bodyObject)
 
@@ -75,6 +76,7 @@ export const IssuerParty = Schema.Struct({ ...IssuerCompanySnapshot.fields, bran
 
 export const Buyer = Schema.Struct({
   partyType: Schema.Literal("company", "individual"),
+  vatRegistered: Schema.Boolean,
   name: Schema.String,
   fiscalIdentifier: Schema.String,
   address: Address,
@@ -108,13 +110,8 @@ export const VatRate = Schema.Struct({
   effectiveFrom: Schema.String, effectiveTo: optionalString,
 })
 export const VatCatalogue = Schema.Struct({
-  rates: Schema.Array(VatRate), inferredRegistration: Schema.NullOr(Schema.Boolean),
+  rates: Schema.Array(VatRate),
 })
-export const VatInferenceQuery = Schema.Struct({ countryCode: optionalString, fiscalIdentifier: optionalString }).pipe(
-  Schema.filter((value) => (value.countryCode === undefined) === (value.fiscalIdentifier === undefined), {
-    message: () => "countryCode and fiscalIdentifier must be supplied together",
-  }),
-)
 
 export const IssuerInput = Schema.Struct({
   name: Schema.String,
@@ -189,10 +186,7 @@ const pageOf = <A, I, R>(item: Schema.Schema<A, I, R>) => Schema.Struct({ items:
 export const Customer = Schema.Struct({
   id: Schema.String,
   organizationId: Schema.String,
-  partyType: Schema.Literal("company", "individual"),
-  name: Schema.String,
-  fiscalIdentifier: Schema.String,
-  address: Address,
+  ...Buyer.fields,
   defaultPaymentTermDays: optional(Schema.Int),
   deletedAt: optionalString,
 })

@@ -7,18 +7,18 @@ import { createInvoicingService } from "./invoicing.ts"
 import { brandingNormalizer, contextProvider, each, emptyState, fixedClock, identity, idempotent, memoryStore, sequentialIds } from "./memory-store.test-support.ts"
 
 const input: ConfigureIssuerInput = {
-  name: "Emitent SRL", fiscalIdentifier: "RO12345674", address: { countryCode: "RO", city: "Iași", street: "Strada 1" },
+  name: "Emitent SRL", fiscalIdentifier: "12345674", address: { countryCode: "RO", city: "Iași", street: "Strada 1", county: "RO-IS" },
   legalForm: "srl", tradeRegistryNumber: "J40/123/2020", socialCapital: "200.00", iban: "", bankName: "",
   branding: null, defaultCurrency: "RON", defaultPaymentTermDays: 15,
   vatChange: { registered: true, effectiveFrom: "2025-08-01" },
 }
 const document = {
-  customer: { partyType: "individual" as const, name: "Client", fiscalIdentifier: "", address: input.address },
-  series: "INV", issueDate: "2026-09-01", currency: "RON" as const,
+  customer: { partyType: "individual" as const, name: "Client", fiscalIdentifier: "", vatRegistered: false, address: input.address },
+  series: "INV", issueDate: "2026-09-01", dueDate: "2026-09-16", currency: "RON" as const,
   lines: [{ description: "Serviciu", quantity: "1", unitPrice: "10", unitOfMeasure: each, vatRateCode: "RO_STANDARD" }],
 }
 const proformaDocument = {
-  customer: document.customer, issueDate: document.issueDate, currency: document.currency, lines: document.lines,
+  customer: document.customer, issueDate: document.issueDate, dueDate: document.dueDate, currency: document.currency, lines: document.lines,
 }
 const setup = async () => {
   const state = emptyState()

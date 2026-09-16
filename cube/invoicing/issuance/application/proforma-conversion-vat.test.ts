@@ -8,7 +8,7 @@ import { ResourceNotFound, ValidationFailure } from "../../contracts/failures.ts
 import type { ConfigureIssuerInput } from "../../domain/inputs.ts"
 
 const issuer: ConfigureIssuerInput = {
-  name: "Emitent SRL", fiscalIdentifier: "RO12345674", address: { countryCode: "RO", city: "Iași", street: "Strada 1" },
+  name: "Emitent SRL", fiscalIdentifier: "12345674", address: { countryCode: "RO", city: "Iași", street: "Strada 1", county: "RO-IS" },
   legalForm: "srl", tradeRegistryNumber: "J40/123/2020", socialCapital: "200.00", iban: "", bankName: "",
   branding: { text: "Brand proformă", image: null }, defaultCurrency: "RON", defaultPaymentTermDays: 15,
   vatChange: { registered: true, effectiveFrom: "2025-01-01" },
@@ -19,12 +19,12 @@ const setup = async (registered = true, date = "2026-09-01") => {
   let now = new Date(`${date}T10:00:00.000Z`)
   const service = createInvoicingService({ context: contextProvider({ identity, organization: { id: "org-1" } }),
     clock: { now: Effect.sync(() => now) }, ids: sequentialIds(), store: memoryStore(state), branding: brandingNormalizer, cubeIdentity: "invoicing" })
-  await Effect.runPromise(service.configureIssuer({ ...issuer, fiscalIdentifier: registered ? "RO12345674" : "12345674",
+  await Effect.runPromise(service.configureIssuer({ ...issuer, fiscalIdentifier: "12345674",
     vatChange: { ...issuer.vatChange, registered } }))
   await Effect.runPromise(service.addDocumentSeries({ documentType: "invoice", series: "INV" }))
   await Effect.runPromise(service.addDocumentSeries({ documentType: "proforma", series: "PRO" }))
-  const proforma = await Effect.runPromise(service.issueProforma(idempotent({ proformaSeries: "PRO", issueDate: date,
-    currency: "RON", customer: { partyType: "individual", name: "Client", fiscalIdentifier: "", address: issuer.address },
+  const proforma = await Effect.runPromise(service.issueProforma(idempotent({ proformaSeries: "PRO", issueDate: date, dueDate: date,
+    currency: "RON", customer: { partyType: "individual", name: "Client", fiscalIdentifier: "", vatRegistered: false, address: issuer.address },
     lines: [{ description: "Serviciu", quantity: "1", unitPrice: "100", unitOfMeasure: each,
       vatRateCode: registered ? "RO_STANDARD" : "RO_NON_VAT" }] })))
   const conversion = idempotent({ proformaId: proforma.id, invoiceSeries: "INV" })
@@ -35,7 +35,7 @@ for (const registered of [false, true]) {
   void test(`direct conversion rejects ${registered ? "VAT to non-VAT" : "non-VAT to VAT"} changes without side effects`, async () => {
     const { state, service, proforma, conversion, setDate } = await setup(registered)
     setDate("2026-09-02")
-    await Effect.runPromise(service.configureIssuer({ ...issuer, fiscalIdentifier: registered ? "12345674" : "RO12345674",
+    await Effect.runPromise(service.configureIssuer({ ...issuer, fiscalIdentifier: "12345674",
       vatChange: { registered: !registered, effectiveFrom: "2026-09-02" } }))
     const before = structuredClone(state)
     const result = await Effect.runPromise(Effect.either(service.issueInvoiceFromProforma(conversion)))

@@ -40,14 +40,6 @@ const sameRate = (left: string, right: string): boolean => scaledRate(left) !== 
 
 export const vatRatesOn = (date: string): ReadonlyArray<VatRate> => romanianVatRates.filter((rate) => activeOn(rate, date))
 
-export const inferVatRegistration = (countryCode: string, fiscalIdentifier: string): boolean | undefined => {
-  if (countryCode.trim().toUpperCase() !== "RO") return undefined
-  const identifier = fiscalIdentifier.trim().toUpperCase()
-  if (/^RO\d+$/.test(identifier)) return true
-  if (/^\d+$/.test(identifier)) return false
-  return undefined
-}
-
 const vatRegistrationOn = (
   configurations: ReadonlyArray<VatConfiguration>, date: string,
 ): VatRegistration | undefined => {

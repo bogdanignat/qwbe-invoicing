@@ -9,14 +9,14 @@ import { validateDate, validateDocumentSeries } from "../../domain/validation.ts
 import { normalizeBrandingText, validateIssuer, validateIssuerProfile } from "../domain/validation.ts"
 import { normalizeIssuerDetails } from "../domain/issuer-details.ts"
 import { decodeStrictBase64, validateCanonicalImage } from "../domain/branding.ts"
-import { inferVatRegistration, romanianVatRates, scheduleVatRegistration } from "../domain/vat-regime.ts"
-import { issuerDate, issuerView, type IssuerView, type VatCatalogue, type VatInference } from "./issuer-view.ts"
-export type { IssuerView, VatCatalogue, VatInference } from "./issuer-view.ts"
+import { romanianVatRates, scheduleVatRegistration } from "../domain/vat-regime.ts"
+import { issuerView, type IssuerView, type VatCatalogue } from "./issuer-view.ts"
+export type { IssuerView, VatCatalogue } from "./issuer-view.ts"
 
 export interface IssuerOperations {
   readonly configureIssuer: (input: ConfigureIssuerInput) => Effect.Effect<IssuerView, InvoicingFailure>
   readonly getIssuer: () => Effect.Effect<IssuerView, InvoicingFailure>
-  readonly getVatCatalogue: (inference?: VatInference) => Effect.Effect<VatCatalogue, InvoicingFailure>
+  readonly getVatCatalogue: () => Effect.Effect<VatCatalogue, InvoicingFailure>
   readonly addDocumentSeries: (input: ConfigureDocumentSeriesInput) => Effect.Effect<DocumentSeries, InvoicingFailure>
   readonly listDocumentSeries: () => Effect.Effect<ReadonlyArray<DocumentSeries>, InvoicingFailure>
 }
@@ -49,7 +49,7 @@ export const createIssuerOperations = (
       const configured: IssuerProfile = {
         ...profile, vatConfigurations, branding: input.branding === null ? null : { text, image },
       }
-      yield* checked(() => { validateIssuer(configured, issuerDate(now)) })
+      yield* checked(() => { validateIssuer(configured) })
       yield* transaction.saveIssuer(configured)
       yield* recordAuditEvent(transaction, context, dependencies.ids, now, {
         action: "issuer.configured", targetKind: "issuer", targetId: context.organization.id,
@@ -63,10 +63,9 @@ export const createIssuerOperations = (
     const issuer = yield* dependencies.store.transaction((transaction) => transaction.findIssuer(context.organization.id))
     return issuer === undefined ? yield* Effect.fail(missing("issuer", context.organization.id)) : issuerView(issuer, now)
   })
-  const getVatCatalogue = (inference?: VatInference) => Effect.gen(function*() {
+  const getVatCatalogue = () => Effect.gen(function*() {
     yield* authorize(permissions.read)
-    const inferred = inference === undefined ? undefined : inferVatRegistration(inference.countryCode, inference.fiscalIdentifier)
-    return { rates: romanianVatRates.map((rate) => ({ ...rate })), inferredRegistration: inferred ?? null }
+    return { rates: romanianVatRates.map((rate) => ({ ...rate })) }
   })
   const addDocumentSeries = (input: ConfigureDocumentSeriesInput) => Effect.gen(function*() {
     const context = yield* authorize(permissions.manageSettings)

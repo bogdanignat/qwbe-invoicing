@@ -127,13 +127,15 @@ const optionalInteger = (value: Row, field: string): number | undefined => {
 }
 
 const addressFrom = (value: Row, prefix = ""): Address => {
-  const county = optionalText(value, `${prefix}county`)
+  const county = text(value, `${prefix}county`)
+  const sector = optionalInteger(value, `${prefix}sector`)
   const postalCode = optionalText(value, `${prefix}postal_code`)
   return {
     countryCode: text(value, `${prefix}country_code`),
     city: text(value, `${prefix}city`),
     street: text(value, `${prefix}street`),
-    ...(county === undefined ? {} : { county }),
+    county,
+    ...(sector === undefined ? {} : { sector }),
     ...(postalCode === undefined ? {} : { postalCode }),
   }
 }
@@ -174,6 +176,7 @@ const issuerCompanyFrom = (value: Row, prefix: string): IssuerCompanySnapshot =>
 const buyerFrom = (value: Row, prefix: string): BuyerSnapshot => ({
   ...partyFrom(value, prefix),
   partyType: text(value, `${prefix}party_type`) as BuyerSnapshot["partyType"],
+  vatRegistered: booleanInteger(value, `${prefix}vat_registered`),
 })
 
 const brandingFrom = (value: Row, field: string): IssuerBranding | null => {
@@ -266,11 +269,12 @@ const documentSeriesFrom = (value: Row): DocumentSeries => ({
   series: text(value, "series"),
 })
 
-const addressValues = (address: Address): ReadonlyArray<string | null> => [
+const addressValues = (address: Address): ReadonlyArray<string | number | null> => [
   address.countryCode,
   address.city,
   address.street,
-  address.county ?? null,
+  address.county,
+  address.sector ?? null,
   address.postalCode ?? null,
 ]
 
@@ -423,13 +427,13 @@ const appendAuditEvent = (database: DatabaseSync, event: AuditEvent): void => {
 const transactionAdapter = (database: DatabaseSync): ProformaWorkflowTransaction => ({
   saveIssuer: (issuer) => write("save issuer", () => {
     database.prepare(`INSERT INTO issuers
-      (organization_id, legal_name, tax_identifier, country_code, city, street, county, postal_code,
+      (organization_id, legal_name, tax_identifier, country_code, city, street, county, sector, postal_code,
        legal_form, trade_registry_number, iban, bank_name, social_capital,
        default_currency, default_payment_term_days, branding)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT (organization_id) DO UPDATE SET legal_name=excluded.legal_name,
        tax_identifier=excluded.tax_identifier, country_code=excluded.country_code, city=excluded.city,
-       street=excluded.street, county=excluded.county, postal_code=excluded.postal_code,
+        street=excluded.street, county=excluded.county, sector=excluded.sector, postal_code=excluded.postal_code,
           legal_form=excluded.legal_form, trade_registry_number=excluded.trade_registry_number,
           iban=excluded.iban, bank_name=excluded.bank_name, social_capital=excluded.social_capital,
          default_currency=excluded.default_currency, default_payment_term_days=excluded.default_payment_term_days,
@@ -485,14 +489,15 @@ const transactionAdapter = (database: DatabaseSync): ProformaWorkflowTransaction
       ORDER BY document_type, series`).all(organizationId).map((value) => documentSeriesFrom(value as Row))),
   saveCustomer: (customer) => write("save customer", () => {
     const result = database.prepare(`INSERT INTO customers
-      (id, organization_id, party_type, legal_name, tax_identifier, country_code, city, street, county, postal_code, default_payment_term_days)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       (id, organization_id, party_type, legal_name, tax_identifier, country_code, city, street, county, sector, postal_code, vat_registered, default_payment_term_days)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT (id) DO UPDATE SET party_type=excluded.party_type, legal_name=excluded.legal_name, tax_identifier=excluded.tax_identifier,
       country_code=excluded.country_code, city=excluded.city, street=excluded.street,
-       county=excluded.county, postal_code=excluded.postal_code, default_payment_term_days=excluded.default_payment_term_days
+        county=excluded.county, sector=excluded.sector, postal_code=excluded.postal_code,
+        vat_registered=excluded.vat_registered, default_payment_term_days=excluded.default_payment_term_days
       WHERE customers.organization_id=excluded.organization_id`)
       .run(customer.id, customer.organizationId, customer.partyType, customer.name, customer.fiscalIdentifier,
-        ...addressValues(customer.address), customer.defaultPaymentTermDays ?? null)
+        ...addressValues(customer.address), Number(customer.vatRegistered), customer.defaultPaymentTermDays ?? null)
     if (result.changes === 0) throw new DomainConflict({ code: "customer_id_taken", message: "Customer id belongs to another organization" })
   }),
   findCustomer: (organizationId, id) => read("find customer", () => {
@@ -540,18 +545,18 @@ const transactionAdapter = (database: DatabaseSync): ProformaWorkflowTransaction
   saveDraft: (draft) => write("save draft", () => {
     const result = database.prepare(`INSERT INTO invoice_drafts
       (id, organization_id, source_app, source_kind, source_id, customer_id, customer_party_type, customer_legal_name, customer_tax_identifier,
-       customer_country_code, customer_city, customer_street, customer_county, customer_postal_code,
-        series, issue_date, due_date, currency, status, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        customer_country_code, customer_city, customer_street, customer_county, customer_sector, customer_postal_code, customer_vat_registered,
+         series, issue_date, due_date, currency, status, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT (id) DO UPDATE SET source_app=excluded.source_app,source_kind=excluded.source_kind,source_id=excluded.source_id,
        customer_id=excluded.customer_id, customer_party_type=excluded.customer_party_type,
        customer_legal_name=excluded.customer_legal_name, customer_tax_identifier=excluded.customer_tax_identifier,
        customer_country_code=excluded.customer_country_code, customer_city=excluded.customer_city,
-       customer_street=excluded.customer_street, customer_county=excluded.customer_county,
-       customer_postal_code=excluded.customer_postal_code, issue_date=excluded.issue_date,
+        customer_street=excluded.customer_street, customer_county=excluded.customer_county, customer_sector=excluded.customer_sector,
+        customer_postal_code=excluded.customer_postal_code, customer_vat_registered=excluded.customer_vat_registered, issue_date=excluded.issue_date,
        due_date=excluded.due_date, currency=excluded.currency, status=excluded.status, notes=excluded.notes
        WHERE invoice_drafts.organization_id=excluded.organization_id`)
       .run(draft.id, draft.organizationId, ...sourceValues(draft.source), draft.customerId ?? null, draft.customer.partyType,
-        draft.customer.name, draft.customer.fiscalIdentifier, ...addressValues(draft.customer.address),
+         draft.customer.name, draft.customer.fiscalIdentifier, ...addressValues(draft.customer.address), Number(draft.customer.vatRegistered),
         draft.series, draft.issueDate, draft.dueDate, draft.currency, draft.status, draft.notes)
     if (result.changes === 0) throw new DomainConflict({ code: "draft_id_taken", message: "Draft id belongs to another organization" })
     saveLines(database, { table: "draft_lines" }, draft.id, draft.lines)
@@ -601,18 +606,19 @@ const transactionAdapter = (database: DatabaseSync): ProformaWorkflowTransaction
     database.prepare(`INSERT INTO issued_invoices
       (id, draft_id, source_proforma_id, organization_id, source_app, source_kind, source_id, fiscal_year, document_type, series, number, issue_date, due_date,
        issued_at, currency, issuer_legal_name, issuer_tax_identifier, issuer_country_code, issuer_city,
-          issuer_street, issuer_county, issuer_postal_code, issuer_legal_form, issuer_trade_registry_number, issuer_iban,
+           issuer_street, issuer_county, issuer_sector, issuer_postal_code, issuer_legal_form, issuer_trade_registry_number, issuer_iban,
           issuer_bank_name, issuer_social_capital, issuer_vat_registered, issuer_branding, customer_legal_name, customer_tax_identifier, customer_party_type,
-       customer_country_code, customer_city, customer_street, customer_county, customer_postal_code,
+        customer_country_code, customer_city, customer_street, customer_county, customer_sector, customer_postal_code, customer_vat_registered,
          total_excluding_tax, tax_total, total_including_tax, e_factura_status, notes, actor_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'invoice', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'invoice', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .run(invoice.id, invoice.draftId, invoice.sourceProformaId, invoice.organizationId, ...sourceValues(invoice.source), Number(invoice.issueDate.slice(0, 4)),
         invoice.series, invoice.number, invoice.issueDate, invoice.dueDate, invoice.issuedAt, invoice.currency,
          invoice.issuer.name, invoice.issuer.fiscalIdentifier, ...addressValues(invoice.issuer.address),
           invoice.issuer.legalForm, invoice.issuer.tradeRegistryNumber, invoice.issuer.iban,
           invoice.issuer.bankName, invoice.issuer.socialCapital, Number(invoice.issuer.vatRegistered),
          invoice.issuer.branding === null ? null : JSON.stringify(invoice.issuer.branding),
-        invoice.customer.name, invoice.customer.fiscalIdentifier, invoice.customer.partyType, ...addressValues(invoice.customer.address),
+         invoice.customer.name, invoice.customer.fiscalIdentifier, invoice.customer.partyType, ...addressValues(invoice.customer.address),
+         Number(invoice.customer.vatRegistered),
         invoice.totalExcludingVat, invoice.vatTotal, invoice.totalIncludingVat,
         (invoice as unknown as { eFacturaStatus?: string }).eFacturaStatus ?? "not_sent", invoice.notes, invoice.actorId)
     saveLines(database, { table: "issued_lines" }, invoice.id, invoice.lines)
@@ -631,9 +637,9 @@ const transactionAdapter = (database: DatabaseSync): ProformaWorkflowTransaction
     const keyset = documentKeyset(page)
     return database.prepare(`SELECT id,draft_id,source_proforma_id,organization_id,source_app,source_kind,source_id,series,number,
       issue_date,due_date,issued_at,actor_id,currency,notes,issuer_legal_name,issuer_tax_identifier,issuer_country_code,issuer_city,
-       issuer_street,issuer_county,issuer_postal_code,issuer_legal_form,issuer_trade_registry_number,issuer_iban,
+        issuer_street,issuer_county,issuer_sector,issuer_postal_code,issuer_legal_form,issuer_trade_registry_number,issuer_iban,
        issuer_bank_name,issuer_social_capital,issuer_vat_registered,NULL AS issuer_branding,customer_legal_name,customer_tax_identifier,
-      customer_party_type,customer_country_code,customer_city,customer_street,customer_county,customer_postal_code,
+       customer_party_type,customer_country_code,customer_city,customer_street,customer_county,customer_sector,customer_postal_code,customer_vat_registered,
       total_excluding_tax,tax_total,total_including_tax,e_factura_status
       FROM issued_invoices WHERE organization_id = ?${filter.sql}${keyset.sql}
       ORDER BY issue_date DESC, number DESC, id LIMIT ?`).all(organizationId, ...filter.values, ...keyset.values, rowsWanted(page))
@@ -642,17 +648,18 @@ const transactionAdapter = (database: DatabaseSync): ProformaWorkflowTransaction
   saveProforma: (proforma) => write("save proforma", () => {
     database.prepare(`INSERT INTO proformas
       (id,source_draft_id,organization_id,source_app,source_kind,source_id,fiscal_year,document_type,series,number,issue_date,due_date,issued_at,currency,
-        issuer_legal_name,issuer_tax_identifier,issuer_country_code,issuer_city,issuer_street,issuer_county,issuer_postal_code,
+         issuer_legal_name,issuer_tax_identifier,issuer_country_code,issuer_city,issuer_street,issuer_county,issuer_sector,issuer_postal_code,
         issuer_legal_form,issuer_trade_registry_number,issuer_iban,issuer_bank_name,issuer_social_capital,issuer_vat_registered,issuer_branding,
-       customer_party_type,customer_legal_name,customer_tax_identifier,customer_country_code,customer_city,customer_street,customer_county,customer_postal_code,
-           total_excluding_tax,tax_total,total_including_tax,notes,actor_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
+        customer_party_type,customer_legal_name,customer_tax_identifier,customer_country_code,customer_city,customer_street,customer_county,customer_sector,customer_postal_code,customer_vat_registered,
+            total_excluding_tax,tax_total,total_including_tax,notes,actor_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`)
       .run(proforma.id, proforma.sourceDraftId, proforma.organizationId, ...sourceValues(proforma.source), Number(proforma.issueDate.slice(0, 4)), "proforma",
         proforma.series, proforma.number, proforma.issueDate, proforma.dueDate, proforma.issuedAt, proforma.currency,
          proforma.issuer.name, proforma.issuer.fiscalIdentifier, ...addressValues(proforma.issuer.address),
           proforma.issuer.legalForm, proforma.issuer.tradeRegistryNumber, proforma.issuer.iban,
           proforma.issuer.bankName, proforma.issuer.socialCapital, Number(proforma.issuer.vatRegistered),
          proforma.issuer.branding === null ? null : JSON.stringify(proforma.issuer.branding), proforma.customer.partyType,
-        proforma.customer.name, proforma.customer.fiscalIdentifier, ...addressValues(proforma.customer.address),
+         proforma.customer.name, proforma.customer.fiscalIdentifier, ...addressValues(proforma.customer.address),
+         Number(proforma.customer.vatRegistered),
         proforma.totalExcludingVat, proforma.vatTotal, proforma.totalIncludingVat, proforma.notes, proforma.actorId)
     saveLines(database, { table: "proforma_lines", organizationId: proforma.organizationId }, proforma.id, proforma.lines)
     const statement = database.prepare(`INSERT INTO proforma_tax_breakdown
@@ -677,10 +684,10 @@ const transactionAdapter = (database: DatabaseSync): ProformaWorkflowTransaction
     const keyset = documentKeyset(page, "p.")
     return database.prepare(`SELECT p.id,p.source_draft_id,p.organization_id,p.source_app,p.source_kind,p.source_id,p.series,
       p.number,p.issue_date,p.due_date,p.issued_at,p.actor_id,p.currency,p.notes,p.issuer_legal_name,p.issuer_tax_identifier,
-       p.issuer_country_code,p.issuer_city,p.issuer_street,p.issuer_county,p.issuer_postal_code,p.issuer_legal_form,
+        p.issuer_country_code,p.issuer_city,p.issuer_street,p.issuer_county,p.issuer_sector,p.issuer_postal_code,p.issuer_legal_form,
        p.issuer_trade_registry_number,p.issuer_iban,p.issuer_bank_name,p.issuer_social_capital,p.issuer_vat_registered,NULL AS issuer_branding,
       p.customer_party_type,p.customer_legal_name,p.customer_tax_identifier,p.customer_country_code,p.customer_city,
-      p.customer_street,p.customer_county,p.customer_postal_code,p.total_excluding_tax,p.tax_total,p.total_including_tax,
+       p.customer_street,p.customer_county,p.customer_sector,p.customer_postal_code,p.customer_vat_registered,p.total_excluding_tax,p.tax_total,p.total_including_tax,
       c.resulting_draft_id AS converted_draft_id,COALESCE(i.resulting_invoice_id,di.id) AS converted_invoice_id FROM proformas p
       LEFT JOIN proforma_conversions c ON c.organization_id=p.organization_id AND c.proforma_id=p.id
       LEFT JOIN proforma_invoice_conversions i ON i.organization_id=p.organization_id AND i.proforma_id=p.id
@@ -717,17 +724,18 @@ const transactionAdapter = (database: DatabaseSync): ProformaWorkflowTransaction
   saveCorrection: (correction) => write("save correction", () => {
     database.prepare(`INSERT INTO correction_documents
       (id, organization_id, source_app, source_kind, source_id, original_invoice_id, fiscal_year, document_type, series, number, issue_date, issued_at, reason, currency,
-        issuer_legal_name, issuer_tax_identifier, issuer_country_code, issuer_city, issuer_street, issuer_county, issuer_postal_code,
+         issuer_legal_name, issuer_tax_identifier, issuer_country_code, issuer_city, issuer_street, issuer_county, issuer_sector, issuer_postal_code,
          issuer_legal_form, issuer_trade_registry_number, issuer_iban, issuer_bank_name, issuer_social_capital, issuer_vat_registered,
-        customer_legal_name, customer_tax_identifier, customer_party_type, customer_country_code, customer_city, customer_street, customer_county, customer_postal_code,
+         customer_legal_name, customer_tax_identifier, customer_party_type, customer_country_code, customer_city, customer_street, customer_county, customer_sector, customer_postal_code, customer_vat_registered,
        total_excluding_tax, tax_total, total_including_tax, actor_id)
-         VALUES (?, ?, ?, ?, ?, ?, ?, 'correction', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+          VALUES (?, ?, ?, ?, ?, ?, ?, 'correction', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
       .run(correction.id, correction.organizationId, ...sourceValues(correction.source), correction.originalInvoiceId, correction.fiscalYear,
         correction.series, correction.number, correction.issueDate, correction.issuedAt, correction.reason, correction.currency,
          correction.issuer.name, correction.issuer.fiscalIdentifier, ...addressValues(correction.issuer.address),
          correction.issuer.legalForm, correction.issuer.tradeRegistryNumber, correction.issuer.iban,
          correction.issuer.bankName, correction.issuer.socialCapital, Number(correction.issuer.vatRegistered),
-        correction.customer.name, correction.customer.fiscalIdentifier, correction.customer.partyType, ...addressValues(correction.customer.address),
+         correction.customer.name, correction.customer.fiscalIdentifier, correction.customer.partyType, ...addressValues(correction.customer.address),
+         Number(correction.customer.vatRegistered),
         correction.totalExcludingVat, correction.vatTotal, correction.totalIncludingVat, correction.actorId)
     const lineStmt = database.prepare(`INSERT INTO correction_lines
       (id, correction_id, line_position, description, quantity, unit_price, unit_code, unit_name, tax_code, tax_category, tax_rate, total_excluding_tax, tax_amount, total_including_tax)

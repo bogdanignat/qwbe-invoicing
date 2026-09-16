@@ -3,8 +3,9 @@ import { useState } from "react"
 import { today } from "./format.ts"
 import {
   authoringDocumentPayload, authoringReadiness, authoringTaxReadiness,
-  documentNotesIssue, documentNotesMaxLength, draftLinesForEditing, formFromDraft, newAuthoringForm, newEditableInvoiceLine,
+  documentNotesIssue, documentNotesMaxLength, draftLinesForEditing, editBuyerFiscalIdentifier, formFromDraft, newAuthoringForm, newEditableInvoiceLine,
   preferredUnitOfMeasure,
+  positiveInvoiceRequiresDueDate, selectBuyerCounty, selectBuyerSector, switchPartyType,
   type EditableInvoiceLine, type InvoiceAuthoringForm,
 } from "./invoice-authoring-state.ts"
 import { useInvoiceAuthoringCustomers } from "./invoice-authoring-customers-hooks.ts"
@@ -12,6 +13,7 @@ import { useInvoiceAuthoringDraft } from "./invoice-authoring-draft-hooks.ts"
 import { useInvoiceAuthoringPresets } from "./invoice-authoring-presets-hooks.ts"
 import { useInvoiceIssuance } from "./invoices-hooks.ts"
 import type { Customer, DraftInvoice, Issuer, UnitOfMeasure, VatCatalogue, VatRate } from "./models.ts"
+import { countyRequiresSector } from "./romanian-counties.ts"
 import { defaultVatCode, staleDraftLineIds, vatRatesForIssuer } from "./vat-defaults.ts"
 
 export interface InvoiceAuthoringSessionInput {
@@ -34,6 +36,7 @@ export interface InvoiceAuthoringSessionViewModel {
     readonly unitOfMeasures: ReadonlyArray<UnitOfMeasure>
     readonly form: InvoiceAuthoringForm
     readonly lines: ReadonlyArray<EditableInvoiceLine>
+    readonly buyerSectorRequired: boolean
     readonly productPresets: ReturnType<typeof useInvoiceAuthoringPresets>["presets"]
     readonly vatRates: ReadonlyArray<VatRate>
   }
@@ -45,12 +48,14 @@ export interface InvoiceAuthoringSessionViewModel {
     readonly staleTaxWarning: string | null
     readonly notesIssue: string | null
     readonly notesMaxLength: number
+    readonly dueDateIssue: string | null
   }
   readonly status: {
     readonly pending: boolean
     readonly savePending: boolean
     readonly invoicePending: boolean
     readonly canIssueInvoice: boolean
+    readonly dueDateRequired: boolean
   }
   readonly draftDeletion:
     | { readonly kind: "hidden" }
@@ -62,6 +67,10 @@ export interface InvoiceAuthoringSessionViewModel {
     readonly chooseCustomer: ReturnType<typeof useInvoiceAuthoringCustomers>["chooseCustomer"]
     readonly chooseIssueDate: ReturnType<typeof useInvoiceAuthoringCustomers>["chooseIssueDate"]
     readonly chooseDueDate: ReturnType<typeof useInvoiceAuthoringCustomers>["chooseDueDate"]
+    readonly choosePartyType: (partyType: InvoiceAuthoringForm["partyType"]) => void
+    readonly chooseCounty: (county: string) => void
+    readonly changeFiscalIdentifier: (value: string) => void
+    readonly chooseSector: (sector: string) => void
     readonly addLine: () => void
     readonly changeLine: (key: string, patch: Partial<EditableInvoiceLine>) => void
     readonly choosePreset: (lineKey: string, presetId: string) => void
@@ -92,8 +101,9 @@ export const useInvoiceAuthoringSession = (input: InvoiceAuthoringSessionInput):
   const vatRates = vatRatesForIssuer(input.vatCatalogue, input.issuer, form.issueDate)
   const staleTax = draft === undefined ? false : forcedUpdateLineIds(draft).length > 0
   const taxReadiness = authoringTaxReadiness(readiness, staleTax)
+  const dueDateRequired = positiveInvoiceRequiresDueDate(form.dueDate, readiness.synchronized ? draft?.totalIncludingVat : undefined, lines)
   const invoiceIssuance = useInvoiceIssuance({
-    draftId: draft?.id, payload, canIssue: taxReadiness.canIssue, workflowPending,
+    draftId: draft?.id, payload, canIssue: taxReadiness.canIssue && !dueDateRequired, workflowPending,
     confirmMessage: "Emiți factura? Numărul și documentul fiscal devin imuabile.",
   })
   const pending = workflowPending || invoiceIssuance.pending
@@ -107,6 +117,7 @@ export const useInvoiceAuthoringSession = (input: InvoiceAuthoringSessionInput):
     document: {
       draft, issuer: input.issuer, customers: input.customers, invoiceSeries: input.invoiceSeries,
       unitOfMeasures: input.unitOfMeasures, form, lines, productPresets: authoringPresets.presets, vatRates,
+      buyerSectorRequired: countyRequiresSector(form.county),
     },
     feedback: {
       backgroundErrors: [...input.backgroundErrors, authoringPresets.error].filter((error): error is Error => error !== null),
@@ -114,16 +125,22 @@ export const useInvoiceAuthoringSession = (input: InvoiceAuthoringSessionInput):
       resumableSave: draftWorkflow.resumableSave,
       issuerWarning: authoringCustomers.issuerWarning, staleTaxWarning: taxReadiness.warning,
       notesIssue: documentNotesIssue(form.notes), notesMaxLength: documentNotesMaxLength,
+      dueDateIssue: dueDateRequired ? "Data scadenței este obligatorie pentru o factură cu total pozitiv." : null,
     },
     status: {
       pending, savePending: draftWorkflow.savePending, invoicePending: invoiceIssuance.pending,
       canIssueInvoice: invoiceIssuance.canIssue,
+      dueDateRequired,
     },
     draftDeletion,
     actions: {
       changeForm: (patch) => { setForm((current) => ({ ...current, ...patch })) },
       chooseBuyerMode: authoringCustomers.chooseBuyerMode, chooseCustomer: authoringCustomers.chooseCustomer,
       chooseIssueDate: authoringCustomers.chooseIssueDate, chooseDueDate: authoringCustomers.chooseDueDate,
+      choosePartyType: (partyType) => { setForm((current) => switchPartyType(current, partyType)) },
+      chooseCounty: (county) => { setForm((current) => selectBuyerCounty(current, county)) },
+      changeFiscalIdentifier: (value) => { setForm((current) => editBuyerFiscalIdentifier(current, value)) },
+      chooseSector: (sector) => { setForm((current) => selectBuyerSector(current, sector)) },
       addLine: () => { setLines((current) => [...current, newEditableInvoiceLine(crypto.randomUUID(), defaultVatCode(input.vatCatalogue, input.issuer, form.issueDate), preferredUnitOfMeasure(input.unitOfMeasures))]) },
       changeLine: (key, patch) => { setLines((current) => current.map((line) => line.key === key ? { ...line, ...patch } : line)) },
       choosePreset: authoringPresets.choosePreset,

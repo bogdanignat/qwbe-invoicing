@@ -38,8 +38,8 @@ const issueFixture = async (directory: string): Promise<{ readonly invoiceId: st
   })
   await Effect.runPromise(service.configureIssuer({
     name: "Știință și Tehnică SRL",
-    fiscalIdentifier: "RO12345674",
-    address: { countryCode: "RO", city: "Botoșani", street: "Strada Independenței 1" },
+    fiscalIdentifier: "12345674",
+    address: { countryCode: "RO", city: "Botoșani", street: "Strada Independenței 1", county: "RO-BT" },
     legalForm: "srl",
     tradeRegistryNumber: "J22/123/2020",
     iban: "RO49AAAA1B31007593840000",
@@ -55,10 +55,13 @@ const issueFixture = async (directory: string): Promise<{ readonly invoiceId: st
   const customer = await Effect.runPromise(service.createCustomer({
     partyType: "company",
     name: "Țesături România SRL",
-    fiscalIdentifier: "RO87654329",
-    address: { countryCode: "RO", city: "Iași", street: "Șoseaua Națională 2" },
+    fiscalIdentifier: "87654329",
+    vatRegistered: true,
+    address: { countryCode: "RO", city: "Iași", street: "Șoseaua Națională 2", county: "RO-IS" },
   }))
-  const draft = await Effect.runPromise(service.createDraft({ customerId: customer.id, issueDate: "2026-09-01", series: "QWBE" }))
+  const draft = await Effect.runPromise(service.createDraft({
+    customerId: customer.id, issueDate: "2026-09-01", dueDate: "2026-09-16", series: "QWBE",
+  }))
   await Effect.runPromise(service.addDraftLine({
     draftId: draft.id,
     description: "Servicii de consultanță",
@@ -69,7 +72,7 @@ const issueFixture = async (directory: string): Promise<{ readonly invoiceId: st
   }))
   const invoiceId = (await Effect.runPromise(service.issueInvoice(idempotent("fixture-invoice", { draftId: draft.id })))).id
   const proformaDraft = await Effect.runPromise(service.createDraft({
-    customerId: customer.id, issueDate: "2026-09-01", dueDate: null, series: "QWBE",
+    customerId: customer.id, issueDate: "2026-09-01", dueDate: "2026-09-16", series: "QWBE",
   }))
   await Effect.runPromise(service.addDraftLine({
     draftId: proformaDraft.id, description: "Avans", quantity: "1", unitPrice: "50", unitOfMeasure: each, vatRateCode: "RO_STANDARD",

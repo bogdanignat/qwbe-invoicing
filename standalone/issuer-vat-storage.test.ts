@@ -41,8 +41,8 @@ void test("round-trips frozen issuer VAT status for invoices, proformas, convers
     } as const
     const service = createInvoicingService({ ...dependencies, store: createSqliteStore(directory) })
     const issuer = {
-      name: "Furnizor SRL", fiscalIdentifier: "RO12345674",
-      address: { countryCode: "RO", city: "Iași", street: "Strada 1" }, legalForm: "srl" as const,
+      name: "Furnizor SRL", fiscalIdentifier: "12345674",
+      address: { countryCode: "RO", city: "Iași", street: "Strada 1", county: "RO-IS" }, legalForm: "srl" as const,
       tradeRegistryNumber: "J22/123/2020", iban: "RO49AAAA1B31007593840000", bankName: "Banca",
       socialCapital: "1000.00", defaultCurrency: "RON", defaultPaymentTermDays: 15, branding: null,
     }
@@ -50,9 +50,11 @@ void test("round-trips frozen issuer VAT status for invoices, proformas, convers
     await Effect.runPromise(service.addDocumentSeries({ documentType: "invoice", series: "INV" }))
     await Effect.runPromise(service.addDocumentSeries({ documentType: "proforma", series: "PRO" }))
     const customer = await Effect.runPromise(service.createCustomer({ partyType: "company", name: "Client SRL",
-      fiscalIdentifier: "RO87654329", address: { countryCode: "RO", city: "Cluj", street: "Strada 2" } }))
+      fiscalIdentifier: "87654329", vatRegistered: true,
+      address: { countryCode: "RO", city: "Cluj", street: "Strada 2", county: "RO-CJ" } }))
     const issueDraft = async (vatRateCode: string) => {
-      const draft = await Effect.runPromise(service.createDraft({ customerId: customer.id, series: "INV", issueDate: now.toISOString().slice(0, 10) }))
+      const draft = await Effect.runPromise(service.createDraft({ customerId: customer.id, series: "INV",
+        issueDate: now.toISOString().slice(0, 10), dueDate: "2026-09-30" }))
       await Effect.runPromise(service.addDraftLine({ draftId: draft.id, description: "Servicii", quantity: "1",
         unitPrice: "100", unitOfMeasure: each, vatRateCode }))
       return draft

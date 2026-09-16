@@ -7,7 +7,7 @@ import { createInvoicingService } from "../../application/invoicing.ts"
 import { brandingNormalizer, contextProvider, emptyState, fixedClock, identity, memoryStore, sequentialIds } from "../../application/memory-store.test-support.ts"
 import { ValidationFailure } from "../../contracts/index.ts"
 
-const address = { countryCode: "RO", city: "Iași", street: "Strada 1" }
+const address = { countryCode: "RO", city: "Iași", street: "Strada 1", county: "RO-IS" }
 
 void test("pages customers by name with an opaque cursor and validates the page request", async () => {
   const service = createInvoicingService({
@@ -15,7 +15,7 @@ void test("pages customers by name with an opaque cursor and validates the page 
     clock: fixedClock, ids: sequentialIds(), store: memoryStore(emptyState()), branding: brandingNormalizer, cubeIdentity: "invoicing",
   })
   for (const name of ["Delta", "alfa", "Charlie", "Bravo", "Echo"]) {
-    await Effect.runPromise(service.createCustomer({ partyType: "individual", name, fiscalIdentifier: "", address }))
+    await Effect.runPromise(service.createCustomer({ partyType: "individual", name, fiscalIdentifier: "", vatRegistered: false, address }))
   }
   const first = await Effect.runPromise(service.listCustomers({ limit: 2 }))
   assert.deepEqual(first.items.map((customer) => customer.name), ["alfa", "Bravo"])

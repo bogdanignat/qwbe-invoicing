@@ -27,8 +27,8 @@ const invoice: RenderableInvoice = {
     branding: null,
     vatRegistered: true,
     name: "Știință și Tehnică SRL",
-    fiscalIdentifier: "RO12345674",
-    address: { countryCode: "RO", city: "Botoșani", street: "Strada Independenței 1" },
+    fiscalIdentifier: "12345674",
+    address: { countryCode: "RO", city: "Botoșani", street: "Strada Independenței 1", county: "RO-BT" },
     legalForm: "srl",
     tradeRegistryNumber: "J40/123/2020",
     socialCapital: "200.00",
@@ -37,9 +37,10 @@ const invoice: RenderableInvoice = {
   },
   customer: {
     partyType: "company",
+    vatRegistered: true,
     name: "Țesături România SRL",
-    fiscalIdentifier: "RO87654329",
-    address: { countryCode: "RO", city: "Iași", street: "Șoseaua Națională 2" },
+    fiscalIdentifier: "87654329",
+    address: { countryCode: "RO", city: "Iași", street: "Șoseaua Națională 2", county: "RO-IS" },
   },
   lines: [{
     description: "Servicii de consultanță",

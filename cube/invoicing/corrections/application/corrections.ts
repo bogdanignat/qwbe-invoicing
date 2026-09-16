@@ -72,13 +72,13 @@ export const createCorrectionOperations = (d: OperationDependencies, perms: Invo
     return yield* d.store.transaction((tx) => Effect.gen(function*() {
       const c = yield* tx.findCorrection(ctx.organization.id, id)
       if (c === undefined) return yield* Effect.fail(missing("correction", id))
-      return c
+      return structuredClone(c)
     }))
   })
   const listCorrections = (originalInvoiceId: string, source?: DocumentSource): Effect.Effect<ReadonlyArray<CorrectionDocument>, InvoicingFailure> => Effect.gen(function*() {
     if (source !== undefined) yield* checked(() => { validateDocumentSource(source) })
     const ctx = yield* auth(perms.read)
-    return yield* d.store.transaction((tx) => tx.listCorrections(ctx.organization.id, originalInvoiceId, source))
+    return structuredClone(yield* d.store.transaction((tx) => tx.listCorrections(ctx.organization.id, originalInvoiceId, source)))
   })
   return { createCorrection, getCorrection, listCorrections }
 }

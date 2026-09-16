@@ -8,7 +8,7 @@ import type { DraftInvoice, Idempotent, IssuedInvoice } from "../../domain/invoi
 import { currentVatRegistration, validateIssuerForIssuance, validateVatForIssuance } from "../../registry/index.ts"
 import type { ConvertProformaInput } from "../domain/proforma.ts"
 import { fiscalYear, numberedSnapshot } from "./snapshot.ts"
-import { ensureChronology } from "./invoices.ts"
+import { ensureChronology, validateInvoiceDueDate } from "./invoices.ts"
 import { conversionDates, conversionSource } from "./proforma-conversion-context.ts"
 import { createProformaDraftOperation } from "./proforma-draft.ts"
 
@@ -33,7 +33,6 @@ export const createProformaConversionOperations = (
       }
       const proforma = yield* conversionSource(transaction, context.organization.id, input)
       yield* checked(() => { validateIssuerForIssuance(proforma.issuer) })
-      const id = yield* dependencies.ids.next
       const convertedAt = yield* dependencies.clock.now
       const { issueDate, dueDate } = conversionDates(proforma, convertedAt)
       const issuer = yield* transaction.findIssuer(context.organization.id)
@@ -43,8 +42,10 @@ export const createProformaConversionOperations = (
         if (currentVatRegistration(issuer.vatConfigurations, issueDate)?.registered !== proforma.issuer.vatRegistered) {
           throw new ValidationFailure({ issues: ["issuer VAT registration changed since the proforma was issued"] })
         }
+        validateInvoiceDueDate({ dueDate, totalIncludingVat: proforma.totalIncludingVat })
       })
       yield* ensureChronology(transaction, context.organization.id, "invoice", input.invoiceSeries, issueDate, issueDate)
+      const id = yield* dependencies.ids.next
       const invoice: IssuedInvoice = {
         draftId: null, sourceProformaId: proforma.id, eFacturaStatus: "not_sent",
         ...numberedSnapshot({ ...proforma, issueDate, dueDate }, proforma.issuer, { id, series: input.invoiceSeries,

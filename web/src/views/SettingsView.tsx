@@ -6,6 +6,7 @@ import { SettingsHelpDialog } from "../components/SettingsHelpDialog.tsx"
 import { Button } from "../components/ui/Button.tsx"
 import { useIssuerSettings } from "../issuer-settings-hooks.ts"
 import { romanianCuiPattern } from "../vat-defaults.ts"
+import { ROMANIAN_COUNTIES } from "../romanian-counties.ts"
 
 export const SettingsView = ({ notify }: { readonly notify: (message: string) => void }) => {
   const state = useIssuerSettings(notify)
@@ -17,24 +18,24 @@ export const SettingsView = ({ notify }: { readonly notify: (message: string) =>
     <div className="settings-help-row"><SettingsHelpDialog /></div>
     <section className="card form-card">
       {state.save.error === null ? null : <ErrorAlert error={state.save.error} />}
-      {state.vatInferenceError === null ? null : <ErrorAlert error={state.vatInferenceError} />}
       <form key={state.formKey} onSubmit={state.submit}>
         <fieldset className="issuer-settings-fields" disabled={state.save.pending}>
         <div className="form-grid two">
           <label>Denumire legală<input name="name" defaultValue={issuer?.name ?? ""} required /></label>
-          <label>CUI / identificator fiscal<input name="fiscalIdentifier" defaultValue={state.fiscalIdentifier} pattern={romanianCuiPattern} maxLength={12} title="CUI românesc valid, cu sau fără prefixul RO" aria-describedby="issuer-cui-hint" onInput={(event) => { state.normalizeFiscalIdentifier(event.currentTarget) }} onBlur={(event) => { state.inferVat(event.currentTarget) }} required /></label>
+          <label>CUI / identificator fiscal<input name="fiscalIdentifier" defaultValue={state.fiscalIdentifier} pattern={romanianCuiPattern} maxLength={12} title="CUI românesc numeric; prefixul RO introdus este eliminat" aria-describedby="issuer-cui-hint" onInput={(event) => { state.normalizeFiscalIdentifier(event.currentTarget) }} required /></label>
           <label>Formă juridică<select name="legalForm" defaultValue={issuer?.legalForm ?? ""} required><option value="" disabled>Selectează forma juridică</option><option value="srl">SRL</option><option value="pfa">PFA</option></select></label>
           <label>Nr. Registrul Comerțului <span className="optional">necesar la emitere</span><input name="tradeRegistryNumber" defaultValue={issuer?.tradeRegistryNumber ?? ""} maxLength={32} placeholder="J2022000067070" /></label>
           <label>Țară<select name="countryCode" defaultValue="RO" required><option value="RO">România (RO)</option></select></label>
           <label>Localitate<input name="city" defaultValue={issuer?.address.city ?? ""} required /></label>
           <label className="span-two">Adresă<input name="street" defaultValue={issuer?.address.street ?? ""} required /></label>
-          <label>Județ<input name="county" defaultValue={issuer?.address.county ?? ""} /></label>
+          <label>Județ<select name="county" required value={state.county} onChange={(event) => { state.changeCounty(event.currentTarget.value) }}><option value="" disabled>Alege județul</option>{ROMANIAN_COUNTIES.map((county) => <option key={county.code} value={county.code}>{county.name}</option>)}</select></label>
+          {state.sectorRequired ? <label>Sector<select name="sector" required value={state.sector ?? ""} onChange={(event) => { state.changeSector(event.currentTarget.value) }}><option value="" disabled>Alege sectorul</option>{[1, 2, 3, 4, 5, 6].map((sector) => <option key={sector} value={sector}>Sector {sector}</option>)}</select></label> : null}
           <label>Cod poștal<input name="postalCode" defaultValue={issuer?.address.postalCode ?? ""} /></label>
           <label>Capital social (RON) <span className="optional">necesar la emitere pentru SRL</span><input name="socialCapital" defaultValue={issuer?.socialCapital ?? ""} inputMode="decimal" maxLength={21} placeholder="200.00" /></label>
           <label>IBAN <span className="optional">opțional</span><input name="iban" defaultValue={issuer?.iban ?? ""} autoCapitalize="characters" spellCheck={false} /></label>
           <label className="span-two">Bancă <span className="optional">opțională</span><input name="bankName" defaultValue={issuer?.bankName ?? ""} /></label>
         </div>
-        <p className="hint" id="issuer-cui-hint">CUI românesc valid, cu sau fără prefixul RO; cifra de control este verificată la salvare.</p>
+        <p className="hint" id="issuer-cui-hint">CUI-ul este salvat numeric; prefixul RO introdus este eliminat fără a modifica regimul TVA. Cifra de control este verificată la salvare.</p>
         <hr />
         <fieldset className="branding-fields">
           <legend>Brand documente <span className="optional">opțional</span></legend>
@@ -55,7 +56,7 @@ export const SettingsView = ({ notify }: { readonly notify: (message: string) =>
           <label className="checkbox-label"><input name="vatRegistered" type="checkbox" checked={state.vatRegistered} onChange={(event) => { state.changeVatRegistration(event.currentTarget.checked) }} /> Plătitoare de TVA</label>
           <label>Schimbarea regimului se aplică de la<input name="taxEffectiveFrom" type="date" value={state.vatEffectiveFrom} onChange={(event) => { state.changeVatEffectiveFrom(event.currentTarget.value) }} required /></label>
         </div>
-        <p className="hint" id="vat-hint">Prefixul RO al CUI-ului și regimul TVA ales trebuie să corespundă. Serverul validează concordanța și construiește calendarul cotelor.</p>
+        <p className="hint" id="vat-hint">Regimul TVA este ales explicit și independent de forma în care introduci CUI-ul.</p>
         <output name="vatStatus" className="status-note" aria-live="polite">{state.vatStatus}</output>
         {state.vatHistory.length === 0 ? null : <div><h3>Istoric regim TVA</h3><ul>{state.vatHistory.map((item) => <li key={`${item.effectiveFrom}-${item.effectiveTo ?? "prezent"}`}>{item.registered ? "Plătitor TVA" : "Neplătitor TVA"}: {item.rates}; {item.effectiveFrom} – {item.effectiveTo ?? "prezent"}</li>)}</ul></div>}
         {state.branding.imageError === null ? null : <p className="status-note warning" id="issuer-brand-save-warning">Sigla selectată nu este validă. Alege alt fișier sau renunță la fișierul respins înainte de salvare.</p>}

@@ -15,14 +15,14 @@ import { applicationHttpApi } from "./http-api.ts"
 import * as S from "./http-schemas.ts"
 import { applyMigrations } from "./migrations.ts"
 
-const customer = { partyType: "company", name: "Client", fiscalIdentifier: " ro87654329 ",
-  address: { countryCode: "RO", city: "Iași", street: "Strada 1" } }
+const customer = { partyType: "company", name: "Client", fiscalIdentifier: " 87654329 ", vatRegistered: true,
+  address: { countryCode: "RO", city: "Iași", street: "Strada 1", county: "RO-IS" } }
 const source = { app: "shop", kind: "order", id: "123" }
 const line = { description: "Servicii", quantity: "1", unitPrice: "10.00",
   unitOfMeasure: { code: "HUR", name: "oră" }, vatRateCode: "RO_STANDARD" }
 const draft = { customerId: "customer-1", series: "QWBE", issueDate: "2026-09-01" }
 const authoring = { ...draft, currency: "RON", lines: [line] }
-const issuer = { name: "Furnizor", fiscalIdentifier: " ro12345674 ", address: customer.address,
+const issuer = { name: "Furnizor", fiscalIdentifier: " 12345674 ", address: customer.address,
   legalForm: "srl" as const, tradeRegistryNumber: " j22/123/2020 ", iban: " ro49 aaaa 1b31 0075 9384 0000 ",
   bankName: " Banca Română ", socialCapital: "1000",
   defaultCurrency: "RON", defaultPaymentTermDays: 15,
@@ -116,13 +116,13 @@ void test("every buyer contract requires exactly one buyer and normalizes inline
       assert.deepEqual(schemaIssues(schema, raw), ["exactly one of customerId or customer is required"])
     }
     const inline = decode({ ...withoutBuyer, customer }) as { customer: { fiscalIdentifier: string } }
-    assert.equal(inline.customer.fiscalIdentifier, "RO87654329")
+    assert.equal(inline.customer.fiscalIdentifier, "87654329")
     for (const raw of [{ ...value, customerId: null }, { ...withoutBuyer, customer: null }]) {
       assert.deepEqual(issuesOf(() => decode(raw)), schemaIssues(schema, raw))
     }
   }
-  assert.equal(A.issuerInput(issuer).fiscalIdentifier, "RO12345674")
-  assert.equal(A.customerInput(customer).fiscalIdentifier, "RO87654329")
+  assert.equal(A.issuerInput(issuer).fiscalIdentifier, "12345674")
+  assert.equal(A.customerInput(customer).fiscalIdentifier, "87654329")
 })
 
 void test("notes keep null/omission/paragraphs and collect every rule in stable order", () => {
@@ -211,17 +211,6 @@ void test("source query requires all three fields exactly once and maps them to 
     const duplicate = new URLSearchParams(complete)
     duplicate.append(key, "duplicate")
     assert.deepEqual(issuesOf(() => A.sourceFilter(duplicate)), ["sourceApp, sourceKind, and sourceId must be supplied exactly once and together"])
-  }
-})
-
-void test("VAT inference query accepts neither or both fields and rejects partial input", () => {
-  assert.deepEqual(Schema.decodeUnknownSync(S.VatInferenceQuery)({}), {})
-  const complete = { countryCode: "RO", fiscalIdentifier: "RO12345674" }
-  assert.deepEqual(Schema.decodeUnknownSync(S.VatInferenceQuery)(complete), complete)
-  for (const partial of [{ countryCode: "RO" }, { fiscalIdentifier: "RO12345674" }]) {
-    assert.deepEqual(schemaIssues(S.VatInferenceQuery, partial), [
-      "countryCode and fiscalIdentifier must be supplied together",
-    ])
   }
 })
 

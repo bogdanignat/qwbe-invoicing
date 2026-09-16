@@ -20,8 +20,8 @@ void test("issues deterministic immutable invoice snapshots through the public s
 
   await Effect.runPromise(service.configureIssuer({
     name: "Exemplu SRL",
-    fiscalIdentifier: "RO12345674",
-    address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" },
+    fiscalIdentifier: "12345674",
+    address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1", county: "RO-BT" },
     legalForm: "srl", tradeRegistryNumber: "J40/123/2020", socialCapital: "200.00", iban: "", bankName: "",
     defaultCurrency: "RON",
     defaultPaymentTermDays: 15,
@@ -42,8 +42,9 @@ void test("issues deterministic immutable invoice snapshots through the public s
   const customer = await Effect.runPromise(service.createCustomer({
     partyType: "company",
     name: "Client SRL",
-    fiscalIdentifier: "RO87654329",
-    address: { countryCode: "RO", city: "Iași", street: "Strada Mică 2" },
+    fiscalIdentifier: "87654329",
+    vatRegistered: true,
+    address: { countryCode: "RO", city: "București", street: "Strada Mică 2", county: "RO-B", sector: 3 },
   }))
   const unknownSeries = await Effect.runPromise(Effect.flip(service.createDraft({
     customerId: customer.id,
@@ -80,7 +81,13 @@ void test("issues deterministic immutable invoice snapshots through the public s
     unitOfMeasure: each,
     vatRateCode: "RO_STANDARD",
   }))
-
+  const missingDueDate = await Effect.runPromise(Effect.flip(service.issueInvoice(idempotent({ draftId: draft.id }))))
+  assert.equal(missingDueDate instanceof ValidationFailure
+    && missingDueDate.issues.includes("dueDate is required for an invoice with a positive amount due"), true)
+  assert.equal(state.sequences.size, 0)
+  assert.equal(state.drafts.get(draft.id)?.status, "draft")
+  await Effect.runPromise(service.updateDraft({ draftId: draft.id, customerId: customer.id,
+    issueDate: "2026-09-01", dueDate: "2026-09-16" }))
   const issued = await Effect.runPromise(service.issueInvoice(idempotent({ draftId: draft.id })))
   assert.equal(issued.number, 1)
   assert.equal(issued.actorId, identity.id)
@@ -95,6 +102,13 @@ void test("issues deterministic immutable invoice snapshots through the public s
   assert.equal(issued.totalIncludingVat, "151.25")
   assert.equal(issued.issuer.name, "Exemplu SRL")
   assert.equal(issued.customer.name, "Client SRL")
+  assert.equal(issued.issuer.fiscalIdentifier, "12345674")
+  assert.equal(issued.issuer.vatRegistered, true)
+  assert.deepEqual(issued.issuer.address, { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1", county: "RO-BT" })
+  assert.equal(issued.customer.fiscalIdentifier, "87654329")
+  assert.equal(issued.customer.vatRegistered, true)
+  assert.deepEqual(issued.customer.address, { countryCode: "RO", city: "București", street: "Strada Mică 2", county: "RO-B", sector: 3 })
+  assert.equal(issued.dueDate, "2026-09-16")
   const listed = await Effect.runPromise(service.listIssuedInvoices())
   assert.equal("branding" in (listed.items[0]?.issuer ?? {}), false)
   assert.deepEqual(listed.items[0]?.issuer, { name: issued.issuer.name, fiscalIdentifier: issued.issuer.fiscalIdentifier,
@@ -103,16 +117,17 @@ void test("issues deterministic immutable invoice snapshots through the public s
 
   await Effect.runPromise(service.configureIssuer({
     name: "Exemplu Renamed SRL",
-    fiscalIdentifier: "RO12345674",
-    address: { countryCode: "RO", city: "Botoșani", street: "Altă stradă 3" },
+    fiscalIdentifier: "12345674",
+    address: { countryCode: "RO", city: "Botoșani", street: "Altă stradă 3", county: "RO-BT" },
     legalForm: "srl", tradeRegistryNumber: "J40/123/2020", socialCapital: "200.00", iban: "", bankName: "",
     defaultCurrency: "RON",
     defaultPaymentTermDays: 30,
     vatChange: { registered: true, effectiveFrom: "2025-08-01" }, branding: null,
   }))
+  await Effect.runPromise(service.updateCustomer({ ...customer, name: "Client schimbat", vatRegistered: false,
+    address: { countryCode: "RO", city: "Iași", street: "Altă stradă", county: "RO-IS" } }))
   const preserved = await Effect.runPromise(service.getIssuedInvoice(issued.id))
-  assert.equal(preserved.issuer.name, "Exemplu SRL")
-  assert.equal(preserved.series, "QWBE")
+  assert.deepEqual(preserved, issued)
 
   await Effect.runPromise(service.deleteCustomer(customer.id))
   assert.deepEqual(await Effect.runPromise(service.listCustomers()), { items: [], nextCursor: null })
@@ -148,8 +163,8 @@ void test("failed invoice and proforma issuance rolls back both the document and
 
   await Effect.runPromise(service.configureIssuer({
     name: "Exemplu SRL",
-    fiscalIdentifier: "RO12345674",
-    address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" },
+    fiscalIdentifier: "12345674",
+    address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1", county: "RO-BT" },
     legalForm: "srl", tradeRegistryNumber: "J40/123/2020", socialCapital: "200.00", iban: "", bankName: "",
     defaultCurrency: "RON",
     defaultPaymentTermDays: 15,
@@ -160,10 +175,11 @@ void test("failed invoice and proforma issuance rolls back both the document and
   const customer = await Effect.runPromise(service.createCustomer({
     partyType: "company",
     name: "Client SRL",
-    fiscalIdentifier: "RO87654329",
-    address: { countryCode: "RO", city: "Iași", street: "Strada Mică 2" },
+    fiscalIdentifier: "87654329",
+    vatRegistered: true,
+    address: { countryCode: "RO", city: "Iași", street: "Strada Mică 2", county: "RO-IS" },
   }))
-  const draft = await Effect.runPromise(service.createDraft({ customerId: customer.id, issueDate: "2026-09-01", series: "QWBE" }))
+  const draft = await Effect.runPromise(service.createDraft({ customerId: customer.id, issueDate: "2026-09-01", series: "QWBE", dueDate: "2026-09-16" }))
   const deletion = await Effect.runPromise(Effect.flip(service.deleteCustomer(customer.id)))
   assert.equal(deletion instanceof DomainConflict && deletion.code === "customer_has_open_drafts", true)
   await Effect.runPromise(service.addDraftLine({
@@ -222,15 +238,15 @@ void test("issues immutable proformas from saved drafts", async () => {
     ids: sequentialIds(), store: memoryStore(state), branding: brandingNormalizer, cubeIdentity: "invoicing",
   })
   await Effect.runPromise(service.configureIssuer({
-    name: "Exemplu SRL", fiscalIdentifier: "RO12345674",
-    address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" },
+    name: "Exemplu SRL", fiscalIdentifier: "12345674",
+    address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1", county: "RO-BT" },
     legalForm: "srl", tradeRegistryNumber: "J40/123/2020", socialCapital: "200.00", iban: "", bankName: "",
     defaultCurrency: "RON", defaultPaymentTermDays: 15, vatChange: { registered: true, effectiveFrom: "2025-08-01" }, branding: null,
   }))
   await Effect.runPromise(service.addDocumentSeries({ documentType: "invoice", series: "SAME" }))
   await Effect.runPromise(service.addDocumentSeries({ documentType: "proforma", series: "SAME" }))
-  const buyer = { partyType: "company" as const, name: "Client SRL", fiscalIdentifier: "RO87654329",
-    address: { countryCode: "RO", city: "Iași", street: "Strada Mică 2" } }
+  const buyer = { partyType: "company" as const, name: "Client SRL", fiscalIdentifier: "87654329", vatRegistered: true,
+    address: { countryCode: "RO", city: "Iași", street: "Strada Mică 2", county: "RO-IS" } }
   const savedCustomer = await Effect.runPromise(service.createCustomer(buyer))
   const source = await Effect.runPromise(service.createDraft({ customerId: savedCustomer.id, series: "SAME", issueDate: "2026-09-01", dueDate: null }))
   await Effect.runPromise(service.addDraftLine({
@@ -250,7 +266,7 @@ void test("issues immutable proformas from saved drafts", async () => {
     draftId: source.id, description: "X", quantity: "1", unitPrice: "1", unitOfMeasure: each, vatRateCode: "RO_STANDARD",
   }), "draft_already_issued")
 
-  const invoiceSource = await Effect.runPromise(service.createDraft({ customer: buyer, series: "SAME", issueDate: "2026-09-01" }))
+  const invoiceSource = await Effect.runPromise(service.createDraft({ customer: buyer, series: "SAME", issueDate: "2026-09-01", dueDate: "2026-09-16" }))
   await Effect.runPromise(service.addDraftLine({ draftId: invoiceSource.id, description: "Direct", quantity: "1", unitPrice: "10", unitOfMeasure: each, vatRateCode: "RO_STANDARD" }))
   assert.equal((await Effect.runPromise(service.issueInvoice(idempotent({ draftId: invoiceSource.id })))).number, 1)
   assert.equal((await Effect.runPromise(service.listProformas())).items[0]?.convertedDraftId, null)
@@ -270,28 +286,45 @@ void test("issues authored documents without drafts and invoices a proforma snap
   const state = emptyState()
   const service = createInvoicingService({ context: contextProvider({ identity, organization: { id: "org-1" } }),
     clock: fixedClock, ids: sequentialIds(), store: memoryStore(state), branding: brandingNormalizer, cubeIdentity: "invoicing" })
-  await Effect.runPromise(service.configureIssuer({ name: "Exemplu SRL", fiscalIdentifier: "RO12345674",
-    address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" }, defaultCurrency: "RON",
+  await Effect.runPromise(service.configureIssuer({ name: "Exemplu SRL", fiscalIdentifier: "12345674",
+    address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1", county: "RO-BT" }, defaultCurrency: "RON",
     legalForm: "srl", tradeRegistryNumber: "J40/123/2020", socialCapital: "200.00", iban: "", bankName: "",
     defaultPaymentTermDays: 15, vatChange: { registered: true, effectiveFrom: "2025-08-01" }, branding: { text: "Marca A", image: null } }))
   await Effect.runPromise(service.addDocumentSeries({ documentType: "invoice", series: "INV" }))
   await Effect.runPromise(service.addDocumentSeries({ documentType: "proforma", series: "PRO" }))
-  const customer = { partyType: "company" as const, name: "Client SRL", fiscalIdentifier: "RO87654329",
-    address: { countryCode: "RO", city: "Iași", street: "Strada Mică 2" } }
-  const input = { customer, series: "INV", issueDate: "2026-09-01", dueDate: null, currency: "RON" as const,
+  const customer = { partyType: "company" as const, name: "Client SRL", fiscalIdentifier: "87654329", vatRegistered: true,
+    address: { countryCode: "RO", city: "Iași", street: "Strada Mică 2", county: "RO-IS" } }
+  const input = { customer, series: "INV", issueDate: "2026-09-01", dueDate: "2026-09-16", currency: "RON" as const,
     lines: [{ description: "Avans", quantity: "2", unitPrice: "50", unitOfMeasure: each, vatRateCode: "RO_STANDARD" }] }
+  const missingDueDate = await Effect.runPromise(Effect.flip(service.issueInvoice(idempotent({ ...input, dueDate: null }))))
+  assert.equal(missingDueDate instanceof ValidationFailure
+    && missingDueDate.issues.includes("dueDate is required for an invoice with a positive amount due"), true)
+  assert.equal(state.sequences.get("org-1:2026:invoice:INV"), undefined)
+  const zero = await Effect.runPromise(service.issueInvoice(idempotent({ ...input, dueDate: null,
+    lines: [{ description: "Avans", quantity: "2", unitPrice: "0", unitOfMeasure: each, vatRateCode: "RO_STANDARD" }] })))
+  assert.equal(zero.totalIncludingVat, "0.00")
+  assert.equal(zero.dueDate, null)
   const invoice = await Effect.runPromise(service.issueInvoice(idempotent(input)))
   assert.equal(invoice.draftId, null)
   assert.equal(invoice.sourceProformaId, null)
   assert.equal(state.drafts.size, 0)
   const { series: invoiceSeries, ...proformaInput } = input
+  const undatedProforma = await Effect.runPromise(service.issueProforma(idempotent({ ...proformaInput, dueDate: null, proformaSeries: "PRO" })))
+  const beforeUndatedConversion = state.sequences.get("org-1:2026:invoice:INV")
+  const undatedFailure = await Effect.runPromise(Effect.flip(service.issueInvoiceFromProforma(idempotent({
+    proformaId: undatedProforma.id, invoiceSeries,
+  }))))
+  assert.equal(undatedFailure instanceof ValidationFailure
+    && undatedFailure.issues.includes("dueDate is required for an invoice with a positive amount due"), true)
+  assert.equal(state.sequences.get("org-1:2026:invoice:INV"), beforeUndatedConversion)
+  assert.equal((await Effect.runPromise(service.getProforma(undatedProforma.id))).convertedInvoiceId, null)
   const proforma = await Effect.runPromise(service.issueProforma(idempotent({ ...proformaInput, proformaSeries: "PRO" })))
   assert.equal(proforma.sourceDraftId, null)
   assert.equal("invoiceSeries" in proforma, false)
   assert.equal(proforma.actorId, identity.id)
   assert.equal(state.drafts.size, 0)
-  await Effect.runPromise(service.configureIssuer({ name: "Exemplu SRL", fiscalIdentifier: "RO12345674",
-    address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" }, defaultCurrency: "RON",
+  await Effect.runPromise(service.configureIssuer({ name: "Exemplu SRL", fiscalIdentifier: "12345674",
+    address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1", county: "RO-BT" }, defaultCurrency: "RON",
     legalForm: "srl", tradeRegistryNumber: "J40/123/2020", socialCapital: "200.00", iban: "", bankName: "",
     defaultPaymentTermDays: 15, vatChange: { registered: true, effectiveFrom: "2025-08-01" }, branding: { text: "Marca B", image: null } }))
   const converted = await Effect.runPromise(service.issueInvoiceFromProforma(idempotent({ proformaId: proforma.id, invoiceSeries })))
@@ -335,15 +368,15 @@ void test("numbers documents chronologically per series and dates proforma conve
   const state = emptyState()
   const service = createInvoicingService({ context: contextProvider({ identity, organization: { id: "org-1" } }),
     clock: fixedClock, ids: sequentialIds(), store: memoryStore(state), branding: brandingNormalizer, cubeIdentity: "invoicing" })
-  await Effect.runPromise(service.configureIssuer({ name: "Exemplu SRL", fiscalIdentifier: "RO12345674",
-    address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" }, defaultCurrency: "RON",
+  await Effect.runPromise(service.configureIssuer({ name: "Exemplu SRL", fiscalIdentifier: "12345674",
+    address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1", county: "RO-BT" }, defaultCurrency: "RON",
     legalForm: "srl", tradeRegistryNumber: "J40/123/2020", socialCapital: "200.00", iban: "", bankName: "",
     defaultPaymentTermDays: 15, vatChange: { registered: true, effectiveFrom: "2025-08-01" }, branding: null }))
   await Effect.runPromise(service.addDocumentSeries({ documentType: "invoice", series: "INV" }))
   await Effect.runPromise(service.addDocumentSeries({ documentType: "proforma", series: "PRO" }))
-  const customer = { partyType: "company" as const, name: "Client SRL", fiscalIdentifier: "RO87654329",
-    address: { countryCode: "RO", city: "Iași", street: "Strada Mică 2" } }
-  const document = (issueDate: string, dueDate: string | null = null) => ({ customer, series: "INV", issueDate, dueDate, currency: "RON" as const,
+  const customer = { partyType: "company" as const, name: "Client SRL", fiscalIdentifier: "87654329", vatRegistered: true,
+    address: { countryCode: "RO", city: "Iași", street: "Strada Mică 2", county: "RO-IS" } }
+  const document = (issueDate: string, dueDate: string | null = issueDate) => ({ customer, series: "INV", issueDate, dueDate, currency: "RON" as const,
     lines: [{ description: "Servicii", quantity: "1", unitPrice: "100", unitOfMeasure: each, vatRateCode: "RO_STANDARD" }] })
   const proformaDocument = (issueDate: string, dueDate: string | null = null) => {
     const input = document(issueDate, dueDate)
@@ -370,22 +403,22 @@ void test("freezes draft remarks into every issued snapshot and carries them thr
   const state = emptyState()
   const service = createInvoicingService({ context: contextProvider({ identity, organization: { id: "org-1" } }),
     clock: fixedClock, ids: sequentialIds(), store: memoryStore(state), branding: brandingNormalizer, cubeIdentity: "invoicing" })
-  await Effect.runPromise(service.configureIssuer({ name: "Exemplu SRL", fiscalIdentifier: "RO12345674",
-    address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" }, defaultCurrency: "RON",
+  await Effect.runPromise(service.configureIssuer({ name: "Exemplu SRL", fiscalIdentifier: "12345674",
+    address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1", county: "RO-BT" }, defaultCurrency: "RON",
     legalForm: "srl", tradeRegistryNumber: "J40/123/2020", socialCapital: "200.00", iban: "", bankName: "",
     defaultPaymentTermDays: 15, vatChange: { registered: true, effectiveFrom: "2025-08-01" }, branding: null }))
   await Effect.runPromise(service.addDocumentSeries({ documentType: "invoice", series: "INV" }))
   await Effect.runPromise(service.addDocumentSeries({ documentType: "proforma", series: "PRO" }))
-  const customer = { partyType: "company" as const, name: "Client SRL", fiscalIdentifier: "RO87654329",
-    address: { countryCode: "RO", city: "Iași", street: "Strada Mică 2" } }
+  const customer = { partyType: "company" as const, name: "Client SRL", fiscalIdentifier: "87654329", vatRegistered: true,
+    address: { countryCode: "RO", city: "Iași", street: "Strada Mică 2", county: "RO-IS" } }
   const remarks = "Termen de execuție 10 zile.\nTransport inclus."
   const line = { description: "Servicii", quantity: "1", unitPrice: "100", unitOfMeasure: each, vatRateCode: "RO_STANDARD" }
-  const authored = { customer, series: "INV", issueDate: "2026-09-01", dueDate: null, currency: "RON" as const, lines: [line], notes: remarks }
+  const authored = { customer, series: "INV", issueDate: "2026-09-01", dueDate: "2026-09-16", currency: "RON" as const, lines: [line], notes: remarks }
 
   const directInvoice = await Effect.runPromise(service.issueInvoice(idempotent(authored)))
   assert.equal(directInvoice.notes, remarks)
 
-  const invoiceDraft = await Effect.runPromise(service.createDraft({ customer, series: "INV", issueDate: "2026-09-01", notes: remarks }))
+  const invoiceDraft = await Effect.runPromise(service.createDraft({ customer, series: "INV", issueDate: "2026-09-01", dueDate: "2026-09-16", notes: remarks }))
   await Effect.runPromise(service.addDraftLine({ draftId: invoiceDraft.id, ...line }))
   assert.equal((await Effect.runPromise(service.issueInvoice(idempotent({ draftId: invoiceDraft.id })))).notes, remarks)
 
@@ -394,7 +427,7 @@ void test("freezes draft remarks into every issued snapshot and carries them thr
   const directProforma = await Effect.runPromise(service.issueProforma(idempotent({ ...authoredProforma, proformaSeries: "PRO" })))
   assert.equal(directProforma.notes, remarks)
 
-  const proformaDraft = await Effect.runPromise(service.createDraft({ customer, series: "INV", issueDate: "2026-09-01", notes: remarks }))
+  const proformaDraft = await Effect.runPromise(service.createDraft({ customer, series: "INV", issueDate: "2026-09-01", dueDate: "2026-09-16", notes: remarks }))
   await Effect.runPromise(service.addDraftLine({ draftId: proformaDraft.id, ...line }))
   const draftProforma = await Effect.runPromise(service.issueProforma(idempotent({ draftId: proformaDraft.id, series: "PRO" })))
   assert.equal(draftProforma.notes, remarks)
@@ -403,7 +436,7 @@ void test("freezes draft remarks into every issued snapshot and carries them thr
   assert.equal(converted.notes, draftProforma.notes)
 
   const bare = await Effect.runPromise(service.issueInvoice(idempotent({
-    customer, series: "INV", issueDate: "2026-09-01", dueDate: null, currency: "RON" as const, lines: [line],
+    customer, series: "INV", issueDate: "2026-09-01", dueDate: "2026-09-16", currency: "RON" as const, lines: [line],
   })))
   assert.equal(bare.notes, null)
   const invalid = await Effect.runPromise(Effect.flip(service.issueProforma(idempotent({ ...authoredProforma, proformaSeries: "PRO", notes: "  " }))))

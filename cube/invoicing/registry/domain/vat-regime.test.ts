@@ -3,11 +3,11 @@ import test from "node:test"
 
 import { ValidationFailure } from "../../contracts/failures.ts"
 import type { IssuerProfile } from "../../domain/invoice.ts"
-import { currentVatRegistration, inferVatRegistration, romanianVatRates, scheduleVatRegistration, validateVatForIssuance, vatRatesOn } from "./vat-regime.ts"
+import { currentVatRegistration, romanianVatRates, scheduleVatRegistration, validateVatForIssuance, vatRatesOn } from "./vat-regime.ts"
 
 const issuer = (vatConfigurations: IssuerProfile["vatConfigurations"]): IssuerProfile => ({
-  organizationId: "org-1", name: "Exemplu", fiscalIdentifier: "RO12345674",
-  address: { countryCode: "RO", city: "Iași", street: "Strada 1" },
+  organizationId: "org-1", name: "Exemplu", fiscalIdentifier: "12345674",
+  address: { countryCode: "RO", city: "Iași", street: "Strada 1", county: "RO-IS" },
   legalForm: "srl", tradeRegistryNumber: "J22/1/2020", iban: "", bankName: "", socialCapital: "200.00",
   defaultCurrency: "RON", defaultPaymentTermDays: 15, vatConfigurations, branding: null,
 })
@@ -16,12 +16,6 @@ void test("serves distinct historical and current legal VAT pairs", () => {
   assert.deepEqual(vatRatesOn("2025-07-31").map(({ code, rate }) => `${code}/${rate}`), ["RO_STANDARD/19.00", "RO_REDUCED/9.00", "RO_REDUCED_5/5.00", "RO_NON_VAT/0.00"])
   assert.deepEqual(vatRatesOn("2025-08-01").map(({ code, rate }) => `${code}/${rate}`), ["RO_STANDARD/21.00", "RO_REDUCED/11.00", "RO_NON_VAT/0.00"])
   assert.equal(romanianVatRates.some(({ rate }) => rate === "19.00"), true)
-})
-
-void test("treats CUI inference as a suggestion only", () => {
-  assert.equal(inferVatRegistration("RO", " RO45561046 "), true)
-  assert.equal(inferVatRegistration("ro", "45561046"), false)
-  assert.equal(inferVatRegistration("DE", "RO45561046"), undefined)
 })
 
 void test("server materializes every later catalogue epoch for a registered schedule", () => {

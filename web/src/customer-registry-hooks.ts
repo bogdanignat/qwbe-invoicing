@@ -6,6 +6,8 @@ import { formField, type FormSubmitEvent } from "./form.ts"
 import { invoicingClient, type CustomerInput } from "./invoicing-client.ts"
 import type { Customer, PartyType } from "./models.ts"
 import { usePagedList } from "./paged-query.ts"
+import { countyRequiresSector } from "./romanian-counties.ts"
+import { normalizeRomanianCui } from "./vat-defaults.ts"
 
 interface CustomerSaveRequest {
   readonly id?: string
@@ -15,15 +17,19 @@ interface CustomerSaveRequest {
 
 const customerPayload = (form: HTMLFormElement, partyType: PartyType): CustomerInput => {
   const county = formField(form, "county")
+  const sector = formField(form, "sector")
   const postalCode = formField(form, "postalCode")
   const paymentTerm = formField(form, "defaultPaymentTermDays")
   return {
     partyType,
     name: formField(form, "name"),
-    fiscalIdentifier: formField(form, "fiscalIdentifier"),
+    fiscalIdentifier: partyType === "company" ? normalizeRomanianCui(formField(form, "fiscalIdentifier")) : formField(form, "fiscalIdentifier"),
+    vatRegistered: partyType === "company" && form.elements.namedItem("vatRegistered") instanceof HTMLInputElement
+      ? (form.elements.namedItem("vatRegistered") as HTMLInputElement).checked
+      : false,
     address: {
       countryCode: "RO", city: formField(form, "city"), street: formField(form, "street"),
-      ...(county === "" ? {} : { county }), ...(postalCode === "" ? {} : { postalCode }),
+      county, ...(sector === "" ? {} : { sector: Number(sector) }), ...(postalCode === "" ? {} : { postalCode }),
     },
     ...(paymentTerm === "" ? {} : { defaultPaymentTermDays: Number(paymentTerm) }),
   }
@@ -33,6 +39,7 @@ export const useCustomerRegistry = (notify: (message: string) => void) => {
   const queryClient = useQueryClient()
   const [editing, setEditing] = useState<Customer | undefined>(undefined)
   const [partyType, setPartyType] = useState<PartyType>("company")
+  const [county, setCounty] = useState("")
   const customers = usePagedList(["customers"], (page) => invoicingClient.listCustomers(page))
   const save = useMutation({
     mutationFn: (request: CustomerSaveRequest) => request.id === undefined
@@ -42,6 +49,7 @@ export const useCustomerRegistry = (notify: (message: string) => void) => {
       request.form.reset()
       setEditing(undefined)
       setPartyType("company")
+      setCounty("")
       await queryClient.invalidateQueries({ queryKey: ["customers"] })
       notify(request.id === undefined ? "Clientul a fost creat." : "Clientul a fost actualizat.")
     },
@@ -49,7 +57,7 @@ export const useCustomerRegistry = (notify: (message: string) => void) => {
   const removal = useMutation({
     mutationFn: (id: string) => runUiEffect(invoicingClient.deleteCustomer(id)),
     onSuccess: async (_result, id) => {
-      if (editing?.id === id) { setEditing(undefined); setPartyType("company") }
+      if (editing?.id === id) { setEditing(undefined); setPartyType("company"); setCounty("") }
       await queryClient.invalidateQueries({ queryKey: ["customers"] })
       notify("Clientul a fost șters.")
     },
@@ -65,10 +73,16 @@ export const useCustomerRegistry = (notify: (message: string) => void) => {
     }
     save.mutate({ ...(editing === undefined ? {} : { id: editing.id }), body: customerPayload(form, partyType), form })
   }
-  const edit = (customer: Customer): void => { setEditing(customer); setPartyType(customer.partyType) }
-  const cancelEdit = (): void => { setEditing(undefined); setPartyType("company") }
+  const edit = (customer: Customer): void => { setEditing(customer); setPartyType(customer.partyType); setCounty(customer.address.county) }
+  const cancelEdit = (): void => { setEditing(undefined); setPartyType("company"); setCounty("") }
   const remove = (customer: Customer): void => {
     if (window.confirm(`Ștergi clientul „${customer.name}”? Facturile deja emise rămân neschimbate.`)) removal.mutate(customer.id)
   }
-  return { customers, editing, partyType, setPartyType, submit, edit, cancelEdit, save, removal, remove }
+  const normalizeFiscalIdentifier = (input: HTMLInputElement): void => {
+    input.value = partyType === "company" ? normalizeRomanianCui(input.value) : input.value.replace(/\D/g, "")
+  }
+  return {
+    customers, editing, partyType, setPartyType, county, sectorRequired: countyRequiresSector(county), setCounty,
+    submit, edit, cancelEdit, save, removal, remove, normalizeFiscalIdentifier,
+  }
 }

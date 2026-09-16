@@ -72,8 +72,8 @@ void test("persists an issued snapshot across store recreation and isolates orga
     })
     await Effect.runPromise(service.configureIssuer({
       name: "Exemplu SRL",
-      fiscalIdentifier: "RO12345674",
-      address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1", postalCode: "710000" },
+      fiscalIdentifier: "12345674",
+      address: { countryCode: "RO", city: "București", street: "Strada Mare 1", county: "RO-B", sector: 2, postalCode: "020000" },
       legalForm: "srl",
       tradeRegistryNumber: "J22/123/2020",
       iban: "RO49AAAA1B31007593840000",
@@ -94,13 +94,13 @@ void test("persists an issued snapshot across store recreation and isolates orga
     const customer = await Effect.runPromise(service.createCustomer({
       partyType: "company",
       name: "Client SRL",
-      fiscalIdentifier: "RO87654329",
-      address: { countryCode: "RO", city: "Iași", street: "Strada Mică 2" },
+      fiscalIdentifier: "87654329", vatRegistered: true,
+      address: { countryCode: "RO", city: "București", street: "Strada Mică 2", county: "RO-B", sector: 3 },
       defaultPaymentTermDays: 14,
     }))
     const updatedCustomer = await Effect.runPromise(service.updateCustomer({
-      id: customer.id, partyType: "company", name: "Client Actualizat SRL", fiscalIdentifier: "RO87654329",
-      address: { countryCode: "RO", city: "Iași", street: "Strada Nouă 3" }, defaultPaymentTermDays: 30,
+      id: customer.id, partyType: "company", name: "Client Actualizat SRL", fiscalIdentifier: "87654329", vatRegistered: true,
+      address: { countryCode: "RO", city: "București", street: "Strada Nouă 3", county: "RO-B", sector: 4 }, defaultPaymentTermDays: 30,
     }))
     assert.equal(updatedCustomer.defaultPaymentTermDays, 30)
     const preset = await Effect.runPromise(service.createProductPreset({ description: "  Servicii software  ", unitPrice: "125.5", unitOfMeasure: each }))
@@ -109,6 +109,7 @@ void test("persists an issued snapshot across store recreation and isolates orga
     const draft = await Effect.runPromise(service.createDraft({
       customerId: customer.id,
       issueDate: "2026-09-01",
+      dueDate: "2026-09-16",
       series: "QWBE",
       source: { app: "crm", kind: "contract", id: "contract-1" },
     }))
@@ -142,7 +143,7 @@ void test("persists an issued snapshot across store recreation and isolates orga
       text: "Marca A", image: { pngBase64: "iVBORw0KGgo=", width: 12, height: 6 },
     })
     const proformaSource = await Effect.runPromise(service.createDraft({
-      customerId: customer.id, issueDate: "2026-09-01", dueDate: null, series: "QWBE",
+      customerId: customer.id, issueDate: "2026-09-01", dueDate: "2026-09-16", series: "QWBE",
       source: { app: "crm", kind: "offer", id: "offer-1" },
     }))
     const proformaAuthored = await Effect.runPromise(service.addDraftLine({
@@ -156,12 +157,12 @@ void test("persists an issued snapshot across store recreation and isolates orga
     const converted = await Effect.runPromise(service.issueInvoiceFromProforma(idempotent({ proformaId: proforma.id, invoiceSeries: "QWBE" })))
     assert.deepEqual(converted.lines, proformaAuthored.lines)
     assert.equal(converted.series, "QWBE")
-    assert.equal(converted.dueDate, null)
+    assert.equal(converted.dueDate, "2026-09-16")
     assert.equal((await Effect.runPromise(service.getProforma(proforma.id))).convertedInvoiceId, converted.id)
     const duplicateConversion = await Effect.runPromise(Effect.flip(service.issueInvoiceFromProforma(idempotent({ proformaId: proforma.id, invoiceSeries: "QWBE" }))))
     assert.equal(duplicateConversion instanceof DomainConflict && duplicateConversion.code === "proforma_already_converted", true)
     const directProforma = await Effect.runPromise(service.issueProforma(idempotent({ customerId: customer.id,
-      proformaSeries: "PRO", issueDate: "2026-09-01", currency: "RON",
+      proformaSeries: "PRO", issueDate: "2026-09-01", dueDate: "2026-09-16", currency: "RON",
       lines: [{ description: "Direct", quantity: "1", unitPrice: "75", unitOfMeasure: each, vatRateCode: "RO_STANDARD" }] })))
     const directInvoice = await Effect.runPromise(service.issueInvoiceFromProforma(idempotent({ proformaId: directProforma.id, invoiceSeries: "QWBE" })))
     assert.equal(directInvoice.sourceProformaId, directProforma.id)
@@ -223,6 +224,9 @@ void test("persists an issued snapshot across store recreation and isolates orga
         .run("0.00", issued.id))
       assert.throws(() => database.prepare("UPDATE issued_invoices SET issuer_county = ? WHERE id = ?")
         .run("BT", issued.id))
+      assert.throws(() => database.prepare("UPDATE issued_invoices SET issuer_sector = 1 WHERE id = ?").run(issued.id))
+      assert.throws(() => database.prepare("UPDATE issued_invoices SET customer_sector = 1 WHERE id = ?").run(issued.id))
+      assert.throws(() => database.prepare("UPDATE issued_invoices SET customer_vat_registered = 0 WHERE id = ?").run(issued.id))
       assert.throws(() => database.prepare("UPDATE issued_invoices SET issuer_postal_code = NULL WHERE id = ?")
         .run(issued.id))
       assert.throws(() => database.prepare("UPDATE issued_invoices SET source_id = 'changed' WHERE id = ?").run(issued.id))
@@ -251,6 +255,12 @@ void test("persists an issued snapshot across store recreation and isolates orga
       assert.throws(() => database.prepare("UPDATE proformas SET source_id='changed' WHERE id=?").run(proforma.id))
       assert.throws(() => database.prepare("UPDATE proformas SET issuer_branding=NULL WHERE id=?").run(proforma.id))
       assert.throws(() => database.prepare("UPDATE proformas SET issuer_social_capital='0.00' WHERE id=?").run(proforma.id))
+      assert.throws(() => database.prepare("UPDATE proformas SET issuer_sector=1 WHERE id=?").run(proforma.id))
+      assert.throws(() => database.prepare("UPDATE proformas SET customer_sector=1 WHERE id=?").run(proforma.id))
+      assert.throws(() => database.prepare("UPDATE proformas SET customer_vat_registered=0 WHERE id=?").run(proforma.id))
+      assert.throws(() => database.prepare("UPDATE correction_documents SET issuer_sector=1 WHERE id=?").run(correction.id))
+      assert.throws(() => database.prepare("UPDATE correction_documents SET customer_sector=1 WHERE id=?").run(correction.id))
+      assert.throws(() => database.prepare("UPDATE correction_documents SET customer_vat_registered=0 WHERE id=?").run(correction.id))
       assert.throws(() => database.prepare("UPDATE issuers SET branding='not-json' WHERE organization_id='org-1'").run())
       assert.equal(database.prepare("SELECT sealed FROM proformas WHERE id=?").get(proforma.id)?.sealed, 1)
       assert.equal(database.prepare("SELECT actor_id FROM proforma_invoice_conversions WHERE proforma_id=?").get(proforma.id)?.actor_id, "user-1")
@@ -266,34 +276,34 @@ void test("persists an issued snapshot across store recreation and isolates orga
       assert.throws(() => database.prepare("DELETE FROM proforma_tax_breakdown WHERE proforma_id=?").run(proforma.id))
       assert.throws(() => database.prepare("DELETE FROM proforma_invoice_conversions WHERE proforma_id=?").run(proforma.id))
       database.prepare(`INSERT INTO invoice_drafts(id,organization_id,customer_id,customer_party_type,customer_legal_name,
-        customer_tax_identifier,customer_country_code,customer_city,customer_street,customer_county,customer_postal_code,
+        customer_tax_identifier,customer_country_code,customer_city,customer_street,customer_county,customer_sector,customer_postal_code,customer_vat_registered,
         series,issue_date,due_date,currency,status) SELECT 'wrong-series-source',organization_id,NULL,customer_party_type,
         customer_legal_name,customer_tax_identifier,customer_country_code,customer_city,customer_street,customer_county,
-        customer_postal_code,series,issue_date,due_date,currency,'proforma_issued' FROM invoice_drafts WHERE id=?`).run(proformaSource.id)
+        customer_sector,customer_postal_code,customer_vat_registered,series,issue_date,due_date,currency,'proforma_issued' FROM invoice_drafts WHERE id=?`).run(proformaSource.id)
       assert.throws(() => database.prepare(`INSERT INTO proformas(id,source_draft_id,organization_id,fiscal_year,document_type,
         series,number,issue_date,due_date,issued_at,currency,issuer_legal_name,issuer_tax_identifier,issuer_country_code,
-        issuer_city,issuer_street,issuer_county,issuer_postal_code,issuer_legal_form,issuer_trade_registry_number,
+        issuer_city,issuer_street,issuer_county,issuer_sector,issuer_postal_code,issuer_legal_form,issuer_trade_registry_number,
         issuer_iban,issuer_bank_name,issuer_social_capital,customer_party_type,customer_legal_name,
-        customer_tax_identifier,customer_country_code,customer_city,customer_street,customer_county,customer_postal_code,
+        customer_tax_identifier,customer_country_code,customer_city,customer_street,customer_county,customer_sector,customer_postal_code,customer_vat_registered,
         total_excluding_tax,tax_total,total_including_tax,sealed,invoice_series)
         SELECT 'wrong-series-proforma','wrong-series-source',
         organization_id,fiscal_year,document_type,'QWBE',number+10,issue_date,due_date,issued_at,currency,issuer_legal_name,
-        issuer_tax_identifier,issuer_country_code,issuer_city,issuer_street,issuer_county,issuer_postal_code,issuer_legal_form,
+         issuer_tax_identifier,issuer_country_code,issuer_city,issuer_street,issuer_county,issuer_sector,issuer_postal_code,issuer_legal_form,
         issuer_trade_registry_number,issuer_iban,issuer_bank_name,issuer_social_capital,customer_party_type,
-        customer_legal_name,customer_tax_identifier,customer_country_code,customer_city,customer_street,customer_county,
-        customer_postal_code,total_excluding_tax,tax_total,total_including_tax,0,invoice_series FROM proformas WHERE id=?`).run(proforma.id))
+         customer_legal_name,customer_tax_identifier,customer_country_code,customer_city,customer_street,customer_county,
+         customer_sector,customer_postal_code,customer_vat_registered,total_excluding_tax,tax_total,total_including_tax,0,invoice_series FROM proformas WHERE id=?`).run(proforma.id))
       assert.throws(() => database.prepare(`INSERT INTO proformas(id,source_draft_id,organization_id,fiscal_year,document_type,
         series,number,issue_date,due_date,issued_at,currency,issuer_legal_name,issuer_tax_identifier,issuer_country_code,
-        issuer_city,issuer_street,issuer_county,issuer_postal_code,issuer_legal_form,issuer_trade_registry_number,
+        issuer_city,issuer_street,issuer_county,issuer_sector,issuer_postal_code,issuer_legal_form,issuer_trade_registry_number,
         issuer_iban,issuer_bank_name,issuer_social_capital,customer_party_type,customer_legal_name,
-        customer_tax_identifier,customer_country_code,customer_city,customer_street,customer_county,customer_postal_code,
+        customer_tax_identifier,customer_country_code,customer_city,customer_street,customer_county,customer_sector,customer_postal_code,customer_vat_registered,
         total_excluding_tax,tax_total,total_including_tax,sealed,invoice_series)
         SELECT 'missing-series-proforma','wrong-series-source',
         organization_id,fiscal_year,document_type,'MISSING',number+11,issue_date,due_date,issued_at,currency,issuer_legal_name,
-        issuer_tax_identifier,issuer_country_code,issuer_city,issuer_street,issuer_county,issuer_postal_code,issuer_legal_form,
+         issuer_tax_identifier,issuer_country_code,issuer_city,issuer_street,issuer_county,issuer_sector,issuer_postal_code,issuer_legal_form,
         issuer_trade_registry_number,issuer_iban,issuer_bank_name,issuer_social_capital,customer_party_type,
-        customer_legal_name,customer_tax_identifier,customer_country_code,customer_city,customer_street,customer_county,
-        customer_postal_code,total_excluding_tax,tax_total,total_including_tax,0,invoice_series FROM proformas WHERE id=?`).run(proforma.id))
+         customer_legal_name,customer_tax_identifier,customer_country_code,customer_city,customer_street,customer_county,
+         customer_sector,customer_postal_code,customer_vat_registered,total_excluding_tax,tax_total,total_including_tax,0,invoice_series FROM proformas WHERE id=?`).run(proforma.id))
     } finally {
       database.close()
     }
@@ -384,8 +394,8 @@ void test("round-trips document remarks and keeps them immutable once issued", a
       context: context("org-1"), clock, ids: ids(), store: createSqliteStore(directory), branding, cubeIdentity: "invoicing",
     })
     await Effect.runPromise(service.configureIssuer({
-      name: "Exemplu SRL", fiscalIdentifier: "RO12345674",
-      address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" },
+      name: "Exemplu SRL", fiscalIdentifier: "12345674",
+      address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1", county: "RO-BT" },
       legalForm: "srl", tradeRegistryNumber: "J22/123/2020", iban: "RO49AAAA1B31007593840000",
       bankName: "Banca Română", socialCapital: "1000.00",
       defaultCurrency: "RON", defaultPaymentTermDays: 15,
@@ -395,19 +405,19 @@ void test("round-trips document remarks and keeps them immutable once issued", a
     await Effect.runPromise(service.addDocumentSeries({ documentType: "invoice", series: "QWBE" }))
     await Effect.runPromise(service.addDocumentSeries({ documentType: "proforma", series: "PRO" }))
     const customer = {
-      partyType: "company" as const, name: "Client SRL", fiscalIdentifier: "RO87654329",
-      address: { countryCode: "RO", city: "Iași", street: "Strada Mică 2" },
+      partyType: "company" as const, name: "Client SRL", fiscalIdentifier: "87654329", vatRegistered: true,
+      address: { countryCode: "RO", city: "Iași", street: "Strada Mică 2", county: "RO-IS" },
     }
     const remarks = "Livrare în tranșe.\nGaranție 24 de luni."
     const line = { description: "Servicii", quantity: "1", unitPrice: "100", unitOfMeasure: each, vatRateCode: "RO_STANDARD" }
-    const draft = await Effect.runPromise(service.createDraft({ customer, series: "QWBE", issueDate: "2026-09-01", notes: remarks }))
+    const draft = await Effect.runPromise(service.createDraft({ customer, series: "QWBE", issueDate: "2026-09-01", dueDate: "2026-09-16", notes: remarks }))
     await Effect.runPromise(service.addDraftLine({ draftId: draft.id, ...line }))
     assert.equal((await Effect.runPromise(service.getDraft(draft.id))).notes, remarks)
     assert.equal((await Effect.runPromise(service.listDrafts())).items[0]?.notes, remarks)
     const invoice = await Effect.runPromise(service.issueInvoice(idempotent({ draftId: draft.id })))
     assert.equal(invoice.notes, remarks)
     const proforma = await Effect.runPromise(service.issueProforma(idempotent({
-      customer, proformaSeries: "PRO", issueDate: "2026-09-01", dueDate: null, currency: "RON", lines: [line], notes: remarks,
+      customer, proformaSeries: "PRO", issueDate: "2026-09-01", dueDate: "2026-09-16", currency: "RON", lines: [line], notes: remarks,
     })))
     const reopened = createSqliteStore(directory)
     const readBack = createInvoicingService({ context: context("org-1"), clock, ids: ids(), store: reopened, branding, cubeIdentity: "invoicing" })
