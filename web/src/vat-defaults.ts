@@ -1,4 +1,4 @@
-import type { Issuer, VatCatalogue, VatConfiguration, VatRate } from "./models.ts"
+import { ARTICLE_310_EXEMPTION_REASON, isTaxableVatCode, type Issuer, type NonVatBasis, type VatBreakdown, type VatCatalogue, type VatConfiguration, type VatRate } from "./models.ts"
 
 interface DraftTaxLine { readonly vatRateCode: string; readonly vatRate: string }
 interface SavedDraftTaxLine extends DraftTaxLine { readonly id: string }
@@ -15,17 +15,28 @@ const scaledRate = (rate: string): bigint | undefined => {
 }
 const sameRate = (left: string, right: string): boolean => scaledRate(left) !== undefined && scaledRate(left) === scaledRate(right)
 
-export const issuerVatRegistrationOn = (issuer: Issuer, date: string): boolean | undefined => {
-  const active = issuer.vatConfigurations.filter((configuration) => activeOn(configuration, date))
-  if (active.length === 0) return undefined
-  return !active.some(({ code, rate }) => code === "RO_NON_VAT" && sameRate(rate, "0"))
+const configurationRegistration = (configurations: ReadonlyArray<VatConfiguration>): boolean | undefined => {
+  if (configurations.length === 0) return undefined
+  if (configurations.every(({ code, rate, vatCategoryCode, vatExemptionReason }) => code === "RO_NON_VAT" && sameRate(rate, "0")
+    && vatCategoryCode === "E" && vatExemptionReason === ARTICLE_310_EXEMPTION_REASON)) return false
+  if (configurations.every(({ code, rate, vatCategoryCode, vatExemptionReason }) => isTaxableVatCode(code) && (scaledRate(rate) ?? 0n) > 0n
+    && vatCategoryCode === "S" && vatExemptionReason === null)) return true
+  return undefined
 }
 
-export interface FallbackVatRegistration {
-  readonly registered: boolean
+export const issuerVatRegistrationOn = (issuer: Issuer, date: string): boolean | undefined => {
+  const active = issuer.vatConfigurations.filter((configuration) => activeOn(configuration, date))
+  return configurationRegistration(active)
+}
+
+interface FallbackVatRegistrationPeriod {
   readonly effectiveFrom: string
   readonly timing: "scheduled" | "expired"
 }
+export type FallbackVatRegistration = FallbackVatRegistrationPeriod & (
+  { readonly registered: true; readonly nonVatBasis?: never }
+  | { readonly registered: false; readonly nonVatBasis: NonVatBasis }
+)
 
 export const fallbackVatRegistration = (
   configurations: ReadonlyArray<VatConfiguration>, date: string,
@@ -39,11 +50,10 @@ export const fallbackVatRegistration = (
   const selected = scheduled ?? expired
   if (selected === undefined) return undefined
   const active = configurations.filter((configuration) => activeOn(configuration, selected.effectiveFrom))
-  return {
-    registered: !active.some(({ code, rate }) => code === "RO_NON_VAT" && sameRate(rate, "0")),
-    effectiveFrom: selected.effectiveFrom,
-    timing: scheduled === undefined ? "expired" : "scheduled",
-  }
+  const registered = configurationRegistration(active)
+  if (registered === undefined) return undefined
+  const period = { effectiveFrom: selected.effectiveFrom, timing: scheduled === undefined ? "expired" as const : "scheduled" as const }
+  return registered ? { registered: true, ...period } : { registered: false, nonVatBasis: "article_310", ...period }
 }
 
 export const vatRatesForIssuer = (catalogue: VatCatalogue, issuer: Issuer, date: string): ReadonlyArray<VatRate> => {
@@ -73,12 +83,15 @@ export const staleDraftLineIds = (
     .map(({ id }) => id)
 }
 
-export interface VatHistoryItem {
+interface VatHistoryPeriod {
   readonly effectiveFrom: string
   readonly effectiveTo?: string
-  readonly registered: boolean
   readonly rates: string
 }
+export type VatHistoryItem = VatHistoryPeriod & (
+  { readonly registered: true; readonly nonVatBasis?: never }
+  | { readonly registered: false; readonly nonVatBasis: NonVatBasis }
+)
 
 export const vatRegistrationHistory = (
   configurations: ReadonlyArray<VatConfiguration>, catalogue: VatCatalogue,
@@ -90,9 +103,19 @@ export const vatRegistrationHistory = (
   }
   return [...groups.values()].map((group) => {
     const first = group[0] as VatConfiguration
-    const registered = !group.some(({ code, rate }) => code === "RO_NON_VAT" && sameRate(rate, "0"))
+    const registered = configurationRegistration(group)
+    if (registered === undefined) throw new Error("Configurație TVA istorică incompletă sau neacceptată.")
     const rates = group.map((configuration) => catalogue.rates.find((rate) => rate.code === configuration.code
       && sameRate(rate.rate, configuration.rate))?.label ?? `${configuration.rate}%`).join(", ")
-    return { effectiveFrom: first.effectiveFrom, ...(first.effectiveTo === undefined ? {} : { effectiveTo: first.effectiveTo }), registered, rates }
+    const period = { effectiveFrom: first.effectiveFrom, ...(first.effectiveTo === undefined ? {} : { effectiveTo: first.effectiveTo }), rates }
+    return registered ? { ...period, registered: true as const } : { ...period, registered: false as const, nonVatBasis: "article_310" as const }
   }).sort((left, right) => right.effectiveFrom.localeCompare(left.effectiveFrom))
 }
+
+export const issuerForIssueDate = (issuer: Issuer, date: string): Issuer & { readonly vatRegistered: boolean } => ({
+  ...issuer,
+  vatRegistered: issuerVatRegistrationOn(issuer, date) === true,
+})
+
+export const vatTreatmentLabel = (treatment: { readonly vatCategoryCode: VatBreakdown["vatCategoryCode"]; readonly rate?: string; readonly vatRate?: string }): string =>
+  treatment.vatCategoryCode === "E" ? "Scutit TVA — art. 310" : `TVA ${treatment.rate ?? treatment.vatRate ?? ""}%`

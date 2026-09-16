@@ -1,5 +1,6 @@
 import type { IssuerProfile } from "../../domain/invoice.ts"
-import { currentVatRegistration, type VatRate, type VatRegistration } from "../domain/vat-regime.ts"
+import type { VatRate } from "../domain/vat-catalogue.ts"
+import { currentVatRegistration, type VatRegistration } from "../domain/vat-regime.ts"
 
 export type IssuerView = IssuerProfile & { readonly currentVat: VatRegistration | null }
 export interface VatCatalogue {

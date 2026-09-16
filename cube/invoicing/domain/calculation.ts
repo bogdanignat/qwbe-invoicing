@@ -1,6 +1,7 @@
 import { ValidationFailure } from "../contracts/failures.ts"
-import type { DraftLine, VatBreakdown, VatConfiguration } from "./invoice.ts"
+import type { DraftInvoice, DraftLine, VatBreakdown, VatConfiguration } from "./invoice.ts"
 import { normalizeUnitOfMeasure, type UnitOfMeasure } from "./unit-of-measures.ts"
+import { validateVatTreatment } from "./validation.ts"
 
 const parseScaled = (value: string, scale: number, field: string): bigint => {
   const match = /^(\d+)(?:\.(\d+))?$/.exec(value.trim())
@@ -34,13 +35,12 @@ export const calculateLine = (input: {
   readonly unitOfMeasure: UnitOfMeasure
   readonly vat: VatConfiguration
 }): DraftLine => {
+  validateVatTreatment(input.vat.code, input.vat.rate, input.vat.vatCategoryCode, input.vat.vatExemptionReason)
   if (input.description.trim().length === 0) throw new ValidationFailure({ issues: ["description is required"] })
   const quantity = parseScaled(input.quantity, 4, "quantity")
   const unitPrice = parseScaled(input.unitPrice, 2, "unitPrice")
   const vatRate = parseScaled(input.vat.rate, 2, "vatRate")
   if (quantity === 0n) throw new ValidationFailure({ issues: ["quantity must be greater than zero"] })
-  if (vatRate > 10_000n) throw new ValidationFailure({ issues: ["vatRate cannot exceed 100.00"] })
-
   const net = divideHalfUp(quantity * unitPrice, 10_000n)
   const vat = divideHalfUp(net * vatRate, 10_000n)
   return {
@@ -51,6 +51,8 @@ export const calculateLine = (input: {
     unitOfMeasure: normalizeUnitOfMeasure(input.unitOfMeasure),
     vatRateCode: input.vat.code,
     vatRate: formatScaled(vatRate, 2),
+    vatCategoryCode: input.vat.vatCategoryCode,
+    vatExemptionReason: input.vat.vatExemptionReason,
     totalExcludingVat: formatScaled(net, 2),
     vatAmount: formatScaled(vat, 2),
     totalIncludingVat: formatScaled(net + vat, 2),
@@ -58,20 +60,24 @@ export const calculateLine = (input: {
 }
 
 const moneyToMinor = (value: string): bigint => parseScaled(value, 2, "money")
+const mismatch = (message: string): never => { throw new ValidationFailure({ issues: [message] }) }
+const lineValue = (line: DraftLine): string => `${line.totalExcludingVat}|${line.vatAmount}|${line.totalIncludingVat}`
 
-// Document VAT is computed once per VAT category from the summed taxable base (EN 16931
-// BR-CO-17), never by adding the per-line amounts: line VAT is rounded on each line, so
-// summing it can miss the category amount by a cent and fail e-Factura validation. The
-// line `vatAmount` stays informational; the sum of line totals may therefore differ from
-// `totalIncludingVat` by rounding, which the standard allows (BR-CO-14, BR-CO-15).
 export const calculateTotals = (lines: ReadonlyArray<DraftLine>) => {
   const groups = new Map<string, { line: DraftLine; base: bigint }>()
   let totalExcludingVat = 0n
   for (const line of lines) {
+    const checked = calculateLine({ ...line, vat: { code: line.vatRateCode, rate: line.vatRate,
+      vatCategoryCode: line.vatCategoryCode, vatExemptionReason: line.vatExemptionReason, effectiveFrom: "0000-01-01" } })
+    if (lineValue(line) !== lineValue(checked)) mismatch("line totals are inconsistent")
     const base = moneyToMinor(line.totalExcludingVat)
     totalExcludingVat += base
-    const key = `${line.vatRateCode}:${line.vatRate}`
+    const key = line.vatCategoryCode === "E" ? "E" : `${line.vatCategoryCode}:${formatScaled(parseScaled(line.vatRate, 2, "vatRate"), 2)}`
     const current = groups.get(key)
+    if (current !== undefined && (current.line.vatRateCode !== line.vatRateCode
+      || current.line.vatExemptionReason !== line.vatExemptionReason)) {
+      throw new ValidationFailure({ issues: [`VAT group ${key} contains inconsistent code or exemption reason`] })
+    }
     groups.set(key, { line, base: (current?.base ?? 0n) + base })
   }
   let vatTotal = 0n
@@ -81,6 +87,8 @@ export const calculateTotals = (lines: ReadonlyArray<DraftLine>) => {
     return {
       code: line.vatRateCode,
       rate: line.vatRate,
+      vatCategoryCode: line.vatCategoryCode,
+      vatExemptionReason: line.vatExemptionReason,
       vatBaseAmount: formatScaled(base, 2),
       vatAmount: formatScaled(vat, 2),
     }
@@ -91,4 +99,16 @@ export const calculateTotals = (lines: ReadonlyArray<DraftLine>) => {
     totalIncludingVat: formatScaled(totalExcludingVat + vatTotal, 2),
     vatBreakdown,
   }
+}
+
+type FiscalDocument = Pick<DraftInvoice, "lines" | "vatBreakdown" | "totalExcludingVat" | "vatTotal" | "totalIncludingVat">
+const breakdownValue = ({ code, rate, vatCategoryCode, vatExemptionReason, vatBaseAmount, vatAmount }: VatBreakdown): string =>
+  JSON.stringify([code, rate, vatCategoryCode, vatExemptionReason, vatBaseAmount, vatAmount])
+
+export const validateFiscalDocument = (document: FiscalDocument): void => {
+  if (document.lines.length === 0) mismatch("document must contain at least one line")
+  const expected = calculateTotals(document.lines)
+  const value = (document: Omit<FiscalDocument, "lines">): string => JSON.stringify([document.totalExcludingVat,
+    document.vatTotal, document.totalIncludingVat, document.vatBreakdown.map(breakdownValue).sort()])
+  if (value(document) !== value(expected)) mismatch("document totals are inconsistent")
 }

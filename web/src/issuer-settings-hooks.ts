@@ -8,9 +8,16 @@ import { today } from "./format.ts"
 import { invoicingClient, type IssuerInput } from "./invoicing-client.ts"
 import { beginBrandImageSelection, brandingDraftFromSaved, brandingImageSaveIssue, changeBrandImage, changeBrandText as changeBrandTextInDraft, createRevisionGuard, normalizeBrandText, removeBrandImage as removeBrandImageFromDraft, removeBranding as emptyBrandingDraft, validateBrandingDimensions, validateBrandingFile, validateBrandingFileInfo, type BrandingDraft, type RasterMime } from "./issuer-branding.ts"
 import { normalizeIssuerLegalDetails, type IssuerLegalDetails } from "./issuer-details.ts"
+import { vatChangeFromSelection, vatSettingsSelection } from "./issuer-settings-state.ts"
 import { fallbackVatRegistration, normalizeRomanianCui, vatRegistrationHistory } from "./vat-defaults.ts"
 import { useVatCatalogue } from "./vat-hooks.ts"
 import { countyRequiresSector } from "./romanian-counties.ts"
+
+interface VatOverride {
+  readonly registered: boolean
+  readonly effectiveFrom: string
+  readonly status: string
+}
 
 const decodeImageDimensions = async (blob: Blob): Promise<{ readonly width: number; readonly height: number }> => {
   if (typeof createImageBitmap === "function") {
@@ -44,7 +51,7 @@ export const useIssuerSettings = (notify: (message: string) => void) => {
   const [issuerDetailsError, setIssuerDetailsError] = useState<Error | null>(null)
   const [imagePending, setImagePending] = useState(false)
   const [formVersion, setFormVersion] = useState(0)
-  const [vatOverride, setVatOverride] = useState<{ readonly registered: boolean; readonly effectiveFrom: string; readonly status: string }>()
+  const [vatOverride, setVatOverride] = useState<VatOverride>()
   const [countyOverride, setCountyOverride] = useState<string | undefined>()
   const [sectorOverride, setSectorOverride] = useState<number | undefined>()
   const fileGuard = useRef(createRevisionGuard())
@@ -52,8 +59,9 @@ export const useIssuerSettings = (notify: (message: string) => void) => {
   const issuer = issuerQuery.data ?? undefined
   const fallbackVat = issuer?.currentVat == null ? fallbackVatRegistration(issuer?.vatConfigurations ?? [], today()) : undefined
   const savedVat = issuer?.currentVat ?? fallbackVat
-  const vatRegistered = vatOverride?.registered ?? savedVat?.registered ?? false
-  const vatEffectiveFrom = vatOverride?.effectiveFrom ?? savedVat?.effectiveFrom ?? today()
+  const savedVatSelection = vatSettingsSelection(savedVat, today())
+  const vatRegistered = vatOverride?.registered ?? savedVatSelection.registered
+  const vatEffectiveFrom = vatOverride?.effectiveFrom ?? savedVatSelection.effectiveFrom
   const branding = brandingOverride ?? brandingDraftFromSaved(issuer?.branding ?? null)
   const { county, sector } = issuerAddressSelection(issuer?.address, countyOverride, sectorOverride)
 
@@ -177,7 +185,7 @@ export const useIssuerSettings = (notify: (message: string) => void) => {
           ...(sector === "" ? {} : { sector: Number(sector) }), ...(postalCode === "" ? {} : { postalCode }) },
         ...legalDetails,
         defaultCurrency: "RON", defaultPaymentTermDays: Number(formField(form, "defaultPaymentTermDays")),
-        vatChange: { registered: vatRegistered, effectiveFrom: formField(form, "taxEffectiveFrom") },
+        vatChange: vatChangeFromSelection({ registered: vatRegistered, effectiveFrom: formField(form, "taxEffectiveFrom") }),
         branding: brandText === null && image === null ? null : { text: brandText, image: image === null ? null : { dataBase64: image.dataBase64 } },
       },
     })

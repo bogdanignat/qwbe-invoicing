@@ -33,4 +33,4 @@ export const validateCreateCorrectionInput = (input: CreateCorrectionInput): voi
   }
   if (issues.length > 0) throw new ValidationFailure({ issues })
 }
-export const negateMoney = (value: string): string => value.startsWith("-") ? value.slice(1) : `-${value}`
+export const negateMoney = (value: string): string => Number(value) === 0 ? "0.00" : value.startsWith("-") ? value.slice(1) : `-${value}`

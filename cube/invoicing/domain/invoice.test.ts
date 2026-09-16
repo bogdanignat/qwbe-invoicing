@@ -92,8 +92,8 @@ void test("resolves exactly one effective-dated issuer tax configuration", () =>
     defaultPaymentTermDays: 15,
     branding: null,
     vatConfigurations: [
-      { code: "RO_STANDARD", rate: "19.00", effectiveFrom: "2020-01-01", effectiveTo: "2025-07-31" },
-      { code: "RO_STANDARD", rate: "21.00", effectiveFrom: "2025-08-01" },
+      { code: "RO_STANDARD", rate: "19.00", vatCategoryCode: "S" as const, vatExemptionReason: null, effectiveFrom: "2020-01-01", effectiveTo: "2025-07-31" },
+      { code: "RO_STANDARD", rate: "21.00", vatCategoryCode: "S" as const, vatExemptionReason: null, effectiveFrom: "2025-08-01" },
     ],
   }
   validateIssuer(issuer)

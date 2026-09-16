@@ -14,7 +14,7 @@ import { useInvoiceAuthoringPresets } from "./invoice-authoring-presets-hooks.ts
 import { useInvoiceIssuance } from "./invoices-hooks.ts"
 import type { Customer, DraftInvoice, Issuer, UnitOfMeasure, VatCatalogue, VatRate } from "./models.ts"
 import { countyRequiresSector } from "./romanian-counties.ts"
-import { defaultVatCode, staleDraftLineIds, vatRatesForIssuer } from "./vat-defaults.ts"
+import { defaultVatCode, issuerForIssueDate, staleDraftLineIds, vatRatesForIssuer } from "./vat-defaults.ts"
 
 export interface InvoiceAuthoringSessionInput {
   readonly initialDraft?: DraftInvoice
@@ -30,7 +30,7 @@ export interface InvoiceAuthoringSessionInput {
 export interface InvoiceAuthoringSessionViewModel {
   readonly document: {
     readonly draft: DraftInvoice | undefined
-    readonly issuer: Issuer
+    readonly issuer: Issuer & { readonly vatRegistered: boolean }
     readonly customers: ReadonlyArray<Customer>
     readonly invoiceSeries: ReadonlyArray<string>
     readonly unitOfMeasures: ReadonlyArray<UnitOfMeasure>
@@ -115,7 +115,7 @@ export const useInvoiceAuthoringSession = (input: InvoiceAuthoringSessionInput):
 
   return {
     document: {
-      draft, issuer: input.issuer, customers: input.customers, invoiceSeries: input.invoiceSeries,
+      draft, issuer: issuerForIssueDate(input.issuer, form.issueDate), customers: input.customers, invoiceSeries: input.invoiceSeries,
       unitOfMeasures: input.unitOfMeasures, form, lines, productPresets: authoringPresets.presets, vatRates,
       buyerSectorRequired: countyRequiresSector(form.county),
     },

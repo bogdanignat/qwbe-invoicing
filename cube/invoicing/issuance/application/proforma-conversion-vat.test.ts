@@ -5,7 +5,11 @@ import { Effect } from "effect"
 import { createInvoicingService } from "../../application/invoicing.ts"
 import { brandingNormalizer, contextProvider, each, emptyState, identity, idempotent, memoryStore, sequentialIds } from "../../application/memory-store.test-support.ts"
 import { ResourceNotFound, ValidationFailure } from "../../contracts/failures.ts"
-import type { ConfigureIssuerInput } from "../../domain/inputs.ts"
+import type { ConfigureIssuerInput, VatChange } from "../../domain/inputs.ts"
+
+const vatChange = (registered: boolean, effectiveFrom: string): VatChange => registered
+  ? { registered: true, effectiveFrom }
+  : { registered: false, effectiveFrom, nonVatBasis: "article_310" }
 
 const issuer: ConfigureIssuerInput = {
   name: "Emitent SRL", fiscalIdentifier: "12345674", address: { countryCode: "RO", city: "Iași", street: "Strada 1", county: "RO-IS" },
@@ -20,7 +24,7 @@ const setup = async (registered = true, date = "2026-09-01") => {
   const service = createInvoicingService({ context: contextProvider({ identity, organization: { id: "org-1" } }),
     clock: { now: Effect.sync(() => now) }, ids: sequentialIds(), store: memoryStore(state), branding: brandingNormalizer, cubeIdentity: "invoicing" })
   await Effect.runPromise(service.configureIssuer({ ...issuer, fiscalIdentifier: "12345674",
-    vatChange: { ...issuer.vatChange, registered } }))
+    vatChange: vatChange(registered, issuer.vatChange.effectiveFrom) }))
   await Effect.runPromise(service.addDocumentSeries({ documentType: "invoice", series: "INV" }))
   await Effect.runPromise(service.addDocumentSeries({ documentType: "proforma", series: "PRO" }))
   const proforma = await Effect.runPromise(service.issueProforma(idempotent({ proformaSeries: "PRO", issueDate: date, dueDate: date,
@@ -36,7 +40,7 @@ for (const registered of [false, true]) {
     const { state, service, proforma, conversion, setDate } = await setup(registered)
     setDate("2026-09-02")
     await Effect.runPromise(service.configureIssuer({ ...issuer, fiscalIdentifier: "12345674",
-      vatChange: { registered: !registered, effectiveFrom: "2026-09-02" } }))
+      vatChange: vatChange(!registered, "2026-09-02") }))
     const before = structuredClone(state)
     const result = await Effect.runPromise(Effect.either(service.issueInvoiceFromProforma(conversion)))
     assert.equal(result._tag, "Left")
@@ -98,8 +102,34 @@ void test("valid conversion keeps the source issuer and replays after a later VA
   assert.equal(invoice.totalIncludingVat, proforma.totalIncludingVat)
   setDate("2026-09-03")
   await Effect.runPromise(service.configureIssuer({ ...issuer, fiscalIdentifier: "12345674",
-    vatChange: { registered: false, effectiveFrom: "2026-09-03" } }))
+    vatChange: vatChange(false, "2026-09-03") }))
   const before = structuredClone(state)
   assert.deepEqual(await Effect.runPromise(service.issueInvoiceFromProforma(conversion)), invoice)
+  assert.deepEqual(state, before)
+})
+
+void test("copies an old valid proforma to a draft but gates issuance until its VAT treatment is edited", async () => {
+  const { service, proforma, conversion, setDate } = await setup(true)
+  setDate("2026-09-02")
+  await Effect.runPromise(service.configureIssuer({ ...issuer, vatChange: vatChange(false, "2026-09-02") }))
+  const draft = await Effect.runPromise(service.createDraftInvoiceFromProforma(conversion))
+  assert.deepEqual(draft.lines, proforma.lines.map((line, index) => ({ ...line, id: draft.lines[index]?.id })))
+  assert.ok(await Effect.runPromise(Effect.flip(service.issueInvoice(idempotent({ draftId: draft.id })))) instanceof ValidationFailure)
+  const line = draft.lines[0]
+  assert.ok(line)
+  await Effect.runPromise(service.updateDraftLine({ draftId: draft.id, lineId: line.id, description: line.description,
+    quantity: line.quantity, unitPrice: line.unitPrice, unitOfMeasure: line.unitOfMeasure, vatRateCode: "RO_NON_VAT" }))
+  const invoice = await Effect.runPromise(service.issueInvoice(idempotent({ draftId: draft.id })))
+  assert.equal(invoice.lines[0]?.vatCategoryCode, "E")
+})
+
+void test("rejects a source with only its breakdown corrupted on both conversion paths", async () => {
+  const { state, service, proforma, conversion } = await setup()
+  state.proformas.set(proforma.id, { ...proforma,
+    vatBreakdown: proforma.vatBreakdown.map((item) => ({ ...item, vatBaseAmount: "99.99" })) })
+  const before = structuredClone(state)
+  assert.ok(await Effect.runPromise(Effect.flip(service.issueInvoiceFromProforma(conversion))) instanceof ValidationFailure)
+  assert.deepEqual(state, before)
+  assert.ok(await Effect.runPromise(Effect.flip(service.createDraftInvoiceFromProforma(conversion))) instanceof ValidationFailure)
   assert.deepEqual(state, before)
 })

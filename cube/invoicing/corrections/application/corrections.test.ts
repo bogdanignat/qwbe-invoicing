@@ -6,6 +6,7 @@ import { Effect } from "effect"
 import { createInvoicingService } from "../../application/invoicing.ts"
 import { brandingNormalizer, contextProvider, each, emptyState, expectConflict, fixedClock, identity, idempotent, memoryStore, sequentialIds } from "../../application/memory-store.test-support.ts"
 import { PermissionDenied, ResourceNotFound, ValidationFailure } from "../../contracts/index.ts"
+import { article310VatExemptionReason } from "../../domain/validation.ts"
 
 void test("corrects an issued invoice exactly once with a negated immutable snapshot", async () => {
   const state = emptyState()
@@ -27,6 +28,13 @@ void test("corrects an issued invoice exactly once with a negated immutable snap
     source: { app: "shop", kind: "order", id: "order-7" },
     lines: [{ description: "Servicii", quantity: "1.2500", unitPrice: "100.00", unitOfMeasure: each, vatRateCode: "RO_STANDARD" }],
   })))
+
+  state.issued.set(invoice.id, { ...invoice,
+    vatBreakdown: invoice.vatBreakdown.map((item) => ({ ...item, vatBaseAmount: "124.99" })) })
+  const corruptState = structuredClone(state)
+  assert.ok(await Effect.runPromise(Effect.flip(service.createCorrection(idempotent({ originalInvoiceId: invoice.id, reason: "Storno" })))) instanceof ValidationFailure)
+  assert.deepEqual(state, corruptState)
+  state.issued.set(invoice.id, invoice)
 
   const missing = await Effect.runPromise(Effect.flip(service.createCorrection(idempotent({ originalInvoiceId: "nope", reason: "Storno" }))))
   assert.equal(missing instanceof ResourceNotFound && missing.resource === "invoice", true)
@@ -50,7 +58,8 @@ void test("corrects an issued invoice exactly once with a negated immutable snap
   assert.equal(correction.vatTotal, "-26.25")
   assert.equal(correction.totalIncludingVat, "-151.25")
   assert.equal(correction.lines[0]?.totalIncludingVat, "-151.25")
-  assert.deepEqual(correction.vatBreakdown, [{ code: "RO_STANDARD", rate: "21.00", vatBaseAmount: "-125.00", vatAmount: "-26.25" }])
+  assert.deepEqual(correction.vatBreakdown, [{ code: "RO_STANDARD", rate: "21.00", vatCategoryCode: "S",
+    vatExemptionReason: null, vatBaseAmount: "-125.00", vatAmount: "-26.25" }])
   assert.deepEqual(correction.issuer, { name: invoice.issuer.name, fiscalIdentifier: invoice.issuer.fiscalIdentifier,
     address: invoice.issuer.address, legalForm: "srl", vatRegistered: true, tradeRegistryNumber: "J40/123/2020",
     socialCapital: "200.00", iban: "", bankName: "" })
@@ -79,4 +88,28 @@ void test("corrects an issued invoice exactly once with a negated immutable snap
     clock: fixedClock, ids: sequentialIds(), store: memoryStore(state), branding: brandingNormalizer, cubeIdentity: "invoicing",
   })
   assert.equal(await Effect.runPromise(Effect.flip(denied.createCorrection(idempotent({ originalInvoiceId: invoice.id, reason: "Storno" })))) instanceof PermissionDenied, true)
+})
+
+void test("storno preserves article 310 facts and canonicalizes signed zero", async () => {
+  const state = emptyState()
+  const service = createInvoicingService({ context: contextProvider({ identity, organization: { id: "org-1" } }),
+    clock: fixedClock, ids: sequentialIds(), store: memoryStore(state), branding: brandingNormalizer, cubeIdentity: "invoicing" })
+  const address = { countryCode: "RO", city: "Iași", street: "Strada 1", county: "RO-IS" }
+  await Effect.runPromise(service.configureIssuer({ name: "Emitent", fiscalIdentifier: "12345674", address, legalForm: "srl",
+    tradeRegistryNumber: "J40/1/2020", socialCapital: "200.00", iban: "", bankName: "", branding: null,
+    defaultCurrency: "RON", defaultPaymentTermDays: 15,
+    vatChange: { registered: false, effectiveFrom: "2025-08-01", nonVatBasis: "article_310" } }))
+  await Effect.runPromise(service.addDocumentSeries({ documentType: "invoice", series: "INV" }))
+  const invoice = await Effect.runPromise(service.issueInvoice(idempotent({ series: "INV", issueDate: "2026-09-01", currency: "RON",
+    customer: { partyType: "individual", name: "Client", fiscalIdentifier: "", vatRegistered: false, address },
+    lines: [{ description: "Gratuit", quantity: "1", unitPrice: "0", unitOfMeasure: each, vatRateCode: "RO_NON_VAT" }] })))
+  const correction = await Effect.runPromise(service.createCorrection(idempotent({ originalInvoiceId: invoice.id, reason: "Storno" })))
+  const line = correction.lines[0]
+  const tax = correction.vatBreakdown[0]
+  assert.ok(line)
+  assert.ok(tax)
+  assert.equal(line.vatCategoryCode, "E")
+  assert.equal(line.vatExemptionReason, article310VatExemptionReason)
+  assert.deepEqual([line.totalExcludingVat, line.vatAmount, tax.vatBaseAmount, correction.vatTotal, correction.totalIncludingVat],
+  ["0.00", "0.00", "0.00", "0.00", "0.00"])
 })

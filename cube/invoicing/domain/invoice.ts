@@ -11,7 +11,6 @@ export interface Address {
 
 export interface PartySnapshot {
   readonly name: string
-  // Canonical numeric CUI for companies/PFA; optional CNP for individuals.
   readonly fiscalIdentifier: string
   readonly address: Address
 }
@@ -31,7 +30,6 @@ export type LegalForm = "srl" | "pfa"
 
 export interface IssuerCompanySnapshot extends PartySnapshot {
   readonly legalForm: LegalForm
-  // Registration at source issuance, frozen independently of line rates or later profile changes.
   readonly vatRegistered: boolean
   readonly tradeRegistryNumber: string
   readonly iban: string
@@ -85,7 +83,7 @@ export interface Idempotent<Input> {
   readonly idempotency: IdempotencyAttempt
 }
 
-export interface VatConfiguration {
+export interface VatConfiguration extends VatTreatment {
   readonly code: string
   readonly rate: string
   readonly effectiveFrom: string
@@ -123,7 +121,7 @@ export interface ProductPreset {
   readonly unitOfMeasure: UnitOfMeasure
 }
 
-export interface DraftLine {
+export interface DraftLine extends VatTreatment {
   readonly id: string
   readonly description: string
   readonly quantity: string
@@ -142,8 +140,6 @@ interface DocumentContent {
   readonly issueDate: string
   readonly dueDate: string | null
   readonly currency: string
-  // Free-form remarks captured while the document is a draft; frozen into the
-  // snapshot on issuance. `null` means "no remarks"; the empty string is not a valid state.
   readonly notes: string | null
   readonly lines: readonly DraftLine[]
   readonly vatBreakdown: ReadonlyArray<VatBreakdown>
@@ -161,9 +157,12 @@ export interface DraftInvoice extends DocumentContent {
   readonly status: "draft" | "issued" | "proforma_issued"
 }
 
-// VAT category per UNCL5305 (S, Z, E, O, AE) is not modelled yet; when e-Factura
-// needs it the field is `vatCategoryCode`, never a bare `category`.
-export interface VatBreakdown {
+export type VatCategoryCode = "S" | "E"
+export interface VatTreatment {
+  vatCategoryCode: VatCategoryCode
+  vatExemptionReason: string | null
+}
+export interface VatBreakdown extends VatTreatment {
   readonly code: string
   readonly rate: string
   readonly vatBaseAmount: string

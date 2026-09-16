@@ -18,7 +18,7 @@ void test("formats county labels and Bucharest sectors without leaking transport
 
 void test("issuer presentation distinguishes the current profile from immutable snapshot status", () => {
   const fiscalIdentifier = "12345674"
-  const currentVat = { registered: true, effectiveFrom: "2026-01-01" }
+  const currentVat = { registered: true, effectiveFrom: "2026-01-01" } as const
   assert.equal(issuerPresentationIdentity({ fiscalIdentifier, currentVat }).vatIdentifier, "RO12345674")
   assert.equal(issuerPresentationIdentity({ fiscalIdentifier, currentVat: null }).vatIdentifier, null)
   const frozenIssuer = { fiscalIdentifier, vatRegistered: false, currentVat }

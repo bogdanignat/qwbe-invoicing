@@ -287,7 +287,12 @@ handler on shutdown.
 | Proformas | `POST /api/proformas`, `POST /api/drafts/:id/proformas`, `GET /api/proformas`, `GET /api/proformas/:id`, `POST /api/proformas/:id/invoice`, `POST`, `GET /api/proformas/:id/pdf` |
 | Health | `GET /health/live`, `GET /health/ready` (no auth) |
 
-Issuer configuration accepts `vatChange: { registered, effectiveFrom }` instead
+Issuer configuration accepts `vatChange: { registered, effectiveFrom }` for VAT
+registration, or `{ registered: false, effectiveFrom, nonVatBasis: "article_310" }`
+for the supported small-business exemption. The UI generates this basis automatically
+from the existing non-VAT registration setting; no second selection is required.
+`nonVatBasis` is forbidden
+when `registered` is true. These commands are accepted instead
 of a caller-authored `vatConfigurations` history. The server builds that history
 and returns it with `currentVat` (null when no registration is currently active).
 The catalogue supplies date-effective line rates separately from issuer registration.
@@ -307,12 +312,22 @@ documents, external snapshots and proforma conversions retain their frozen value
 
 The invoice public contract owns these immutable fiscal facts; the future e-Factura
 exporter must not reconstruct them from current profiles or private database tables.
-Readiness is **not complete**: VAT category/exemption reason and the exact CIUS-RO
-mapping for Article 310 still need verified official rules, snapshot fields and tests.
-No UBL/XML export or ANAF transport is included in this correction lot.
+Line/configuration/breakdown snapshots include `vatCategoryCode` and
+`vatExemptionReason`: `S` for positive standard/reduced rates (reason `null`),
+`E` at `0.00` for Article 310, with the frozen legal reason text.
+The application supports Article 310 for its non-VAT issuer workflow and generates
+the associated metadata automatically; other exemptions and categories O/Z/AE are
+not supported. This bounded product rule is not an external fiscal-status lookup.
+See [the fiscal treatment contract and evidence](docs/VAT_TREATMENT.md).
+Readiness is **not complete**: no UBL/XML export, complete CIUS-RO validation or
+ANAF transport is included in this lot.
 Migration `019` requires an empty invoice database and rejects populated schemas
 atomically; it does not backfill or delete local data. Use the existing migration
 and doctor commands against a fresh development data directory.
+Migration `020` is also fresh-only for affected VAT tables: no backfill or automatic
+deletion. It persists S/E and reason fields and rejects incompatible populated data
+before changing its schema. Atomicity is per migration, not the whole pending batch;
+earlier migrations may already have committed when a later migration is refused.
 
 Numbered invoices, proformas and corrections expose a trusted `actorId`. Their
 issuance, issuer/series configuration, payments and reversals append fiscal events

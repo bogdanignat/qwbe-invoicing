@@ -157,7 +157,7 @@ void test("saves typed issuer branding input and decodes the canonical PNG", asy
     name: "QWBE", fiscalIdentifier: "2", address: { countryCode: "RO", city: "Botoșani", street: "Strada 2", county: "RO-BT" },
     legalForm: "srl" as const, tradeRegistryNumber: "J07/123/2020", iban: "RO49AAAA1B31007593840000", bankName: "Banca", socialCapital: "200.00",
     defaultCurrency: "RON", defaultPaymentTermDays: 15,
-    vatChange: { registered: true, effectiveFrom: "2025-08-01" },
+    vatChange: { registered: true as const, effectiveFrom: "2025-08-01" },
     branding: { text: "QWBE", image: { dataBase64: "jpeg-input" } },
   }
   const { vatChange, ...issuerResponse } = input
@@ -168,8 +168,8 @@ void test("saves typed issuer branding input and decodes the canonical PNG", asy
       const body = path === "/api/session"
         ? { authenticated: true, csrfToken: "csrf-token" }
         : { ...issuerResponse, organizationId: "org-1", vatConfigurations: [
-          { code: "RO_STANDARD", rate: "21.00", effectiveFrom: "2025-08-01" },
-          { code: "RO_REDUCED", rate: "11.00", effectiveFrom: "2025-08-01" },
+          { code: "RO_STANDARD", rate: "21.00", vatCategoryCode: "S", vatExemptionReason: null, effectiveFrom: "2025-08-01" },
+          { code: "RO_REDUCED", rate: "11.00", vatCategoryCode: "S", vatExemptionReason: null, effectiveFrom: "2025-08-01" },
         ], currentVat: vatChange,
         branding: { text: "QWBE", image: { pngBase64: "png-output", width: 120, height: 40 } } }
       return Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } }))
@@ -198,8 +198,8 @@ void test("loads VAT regimes without issuer inference", async () => {
       const body = path === "/api/session"
         ? { authenticated: true, csrfToken: "csrf-token" }
         : { rates: [
-          { code: "RO_STANDARD", rate: "21.00", kind: "standard", label: "TVA standard 21%", effectiveFrom: "2025-08-01" },
-          { code: "RO_REDUCED", rate: "11.00", kind: "reduced", label: "TVA redus 11%", effectiveFrom: "2025-08-01" },
+          { code: "RO_STANDARD", rate: "21.00", vatCategoryCode: "S", vatExemptionReason: null, kind: "standard", label: "TVA standard 21%", effectiveFrom: "2025-08-01" },
+          { code: "RO_REDUCED", rate: "11.00", vatCategoryCode: "S", vatExemptionReason: null, kind: "reduced", label: "TVA redus 11%", effectiveFrom: "2025-08-01" },
         ] }
       return Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } }))
     }

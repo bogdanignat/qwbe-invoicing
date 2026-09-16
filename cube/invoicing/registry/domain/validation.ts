@@ -3,7 +3,7 @@ import { normalizeMoney } from "../../domain/calculation.ts"
 import type { IssuerProfile, VatConfiguration } from "../../domain/invoice.ts"
 import type { CustomerInput, ProductPresetInput } from "../../domain/inputs.ts"
 import { normalizeUnitOfMeasure } from "../../domain/unit-of-measures.ts"
-import { maximumPaymentTermDays, validateDate } from "../../domain/validation.ts"
+import { maximumPaymentTermDays, validateDate, validateVatTreatment } from "../../domain/validation.ts"
 import { normalizeIssuerDetails } from "./issuer-details.ts"
 import { isValidRomanianCui, validateBuyer, validateParty } from "./party-validation.ts"
 
@@ -68,9 +68,8 @@ const validateVatConfigurations = (configurations: ReadonlyArray<VatConfiguratio
     if (!/^(?:\d|[1-9]\d|100)(?:\.\d{1,2})?$/.test(configuration.rate)) {
       issues.push(`vat configuration ${configuration.code} rate must be between 0 and 100 with at most two decimals`)
     }
-    if (configuration.code === "RO_NON_VAT" && Number(configuration.rate) !== 0) {
-      issues.push("vat configuration RO_NON_VAT rate must be 0")
-    }
+    try { validateVatTreatment(configuration.code, configuration.rate, configuration.vatCategoryCode, configuration.vatExemptionReason) }
+    catch (error) { if (error instanceof ValidationFailure) issues.push(...error.issues); else throw error }
     issues.push(...dateIssues(configuration))
   }
   const ordered = [...configurations].sort((left, right) => left.effectiveFrom.localeCompare(right.effectiveFrom))

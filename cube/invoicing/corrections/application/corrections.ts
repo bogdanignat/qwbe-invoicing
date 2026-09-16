@@ -7,6 +7,7 @@ import { calendarDate, validateDocumentSource } from "../../domain/validation.ts
 import { findIdempotencyReplay, idempotencyRecord, missingIdempotencyResult } from "../../application/idempotency.ts"
 import { checked, copyBuyer, copyIssuerCompanySnapshot, copySource, missing, recordAuditEvent, type Authorize, type OperationDependencies } from "../../application/support.ts"
 import { validateIssuerForIssuance } from "../../registry/index.ts"
+import { validateFiscalDocument } from "../../domain/calculation.ts"
 import { ensureChronology } from "./chronology.ts"
 const fy = (d: string): number => Number(d.slice(0, 4))
 export const createCorrectionOperations = (d: OperationDependencies, perms: InvoicingPermissions, auth: Authorize) => {
@@ -25,7 +26,10 @@ export const createCorrectionOperations = (d: OperationDependencies, perms: Invo
       }
       const orig = yield* tx.findIssuedInvoice(ctx.organization.id, input.originalInvoiceId)
       if (orig === undefined) return yield* Effect.fail(missing("invoice", input.originalInvoiceId))
-      yield* checked(() => { validateIssuerForIssuance(orig.issuer) })
+      yield* checked(() => {
+        validateFiscalDocument(orig)
+        validateIssuerForIssuance(orig.issuer)
+      })
       const existing = yield* tx.listCorrections(ctx.organization.id, input.originalInvoiceId)
       if (existing.length > 0) {
         return yield* Effect.fail(new DomainConflict({

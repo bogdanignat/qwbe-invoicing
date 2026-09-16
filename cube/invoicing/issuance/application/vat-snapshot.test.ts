@@ -3,6 +3,7 @@ import test from "node:test"
 import { Effect } from "effect"
 import { createInvoicingService } from "../../application/invoicing.ts"
 import { brandingNormalizer, contextProvider, each, emptyState, fixedClock, identity, idempotent, memoryStore, sequentialIds } from "../../application/memory-store.test-support.ts"
+import { ValidationFailure } from "../../contracts/failures.ts"
 
 void test("SRL and PFA freeze VAT registration at issueDate on direct and draft invoice/proforma issuance", async () => {
   for (const legalForm of ["srl", "pfa"] as const) {
@@ -13,7 +14,7 @@ void test("SRL and PFA freeze VAT registration at issueDate on direct and draft 
       tradeRegistryNumber: legalForm === "srl" ? "J40/123/2020" : "F40/123/2020",
       socialCapital: legalForm === "srl" ? "200.00" : "", iban: "", bankName: "", branding: null,
       address: { countryCode: "RO", city: "Iași", street: "Strada 1", county: "RO-IS" }, defaultCurrency: "RON", defaultPaymentTermDays: 15 }
-    await Effect.runPromise(service.configureIssuer({ ...issuer, vatChange: { registered: false, effectiveFrom: "2025-08-01" } }))
+    await Effect.runPromise(service.configureIssuer({ ...issuer, vatChange: { registered: false, effectiveFrom: "2025-08-01", nonVatBasis: "article_310" } }))
     await Effect.runPromise(service.configureIssuer({ ...issuer, fiscalIdentifier: "12345674",
       vatChange: { registered: true, effectiveFrom: "2026-09-01" } }))
     assert.equal("vatRegistered" in (await Effect.runPromise(service.getIssuer())), false)
@@ -40,4 +41,23 @@ void test("SRL and PFA freeze VAT registration at issueDate on direct and draft 
       }
     }
   }
+})
+
+void test("rejects a draft whose breakdown alone is corrupt before numbering or audit", async () => {
+  const state = emptyState()
+  const service = createInvoicingService({ context: contextProvider({ identity, organization: { id: "org-1" } }),
+    clock: fixedClock, ids: sequentialIds(), store: memoryStore(state), branding: brandingNormalizer, cubeIdentity: "invoicing" })
+  const address = { countryCode: "RO", city: "Iași", street: "Strada 1", county: "RO-IS" }
+  await Effect.runPromise(service.configureIssuer({ name: "Emitent", fiscalIdentifier: "12345674", legalForm: "srl",
+    tradeRegistryNumber: "J40/123/2020", socialCapital: "200.00", iban: "", bankName: "", branding: null,
+    address, defaultCurrency: "RON", defaultPaymentTermDays: 15, vatChange: { registered: true, effectiveFrom: "2025-08-01" } }))
+  await Effect.runPromise(service.addDocumentSeries({ documentType: "invoice", series: "INV" }))
+  const draft = await Effect.runPromise(service.createDraft({ series: "INV", issueDate: "2026-09-01", dueDate: "2026-09-01",
+    customer: { partyType: "individual", name: "Client", fiscalIdentifier: "", vatRegistered: false, address } }))
+  const complete = await Effect.runPromise(service.addDraftLine({ draftId: draft.id, description: "Serviciu", quantity: "1",
+    unitPrice: "10", unitOfMeasure: each, vatRateCode: "RO_STANDARD" }))
+  state.drafts.set(draft.id, { ...complete, vatBreakdown: complete.vatBreakdown.map((item) => ({ ...item, vatAmount: "2.09" })) })
+  const before = structuredClone(state)
+  assert.ok(await Effect.runPromise(Effect.flip(service.issueInvoice(idempotent({ draftId: draft.id })))) instanceof ValidationFailure)
+  assert.deepEqual(state, before)
 })

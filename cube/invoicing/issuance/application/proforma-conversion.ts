@@ -5,6 +5,7 @@ import { checked, missing, recordAuditEvent, type Authorize, type OperationDepen
 import { ValidationFailure, type InvoicingFailure } from "../../contracts/failures.ts"
 import type { InvoicingPermissions } from "../../contracts/permissions.ts"
 import type { DraftInvoice, Idempotent, IssuedInvoice } from "../../domain/invoice.ts"
+import { validateFiscalDocument } from "../../domain/calculation.ts"
 import { currentVatRegistration, validateIssuerForIssuance, validateVatForIssuance } from "../../registry/index.ts"
 import type { ConvertProformaInput } from "../domain/proforma.ts"
 import { fiscalYear, numberedSnapshot } from "./snapshot.ts"
@@ -32,7 +33,10 @@ export const createProformaConversionOperations = (
         return replay === undefined ? yield* Effect.fail(missingIdempotencyResult("invoice")) : structuredClone(replay)
       }
       const proforma = yield* conversionSource(transaction, context.organization.id, input)
-      yield* checked(() => { validateIssuerForIssuance(proforma.issuer) })
+      yield* checked(() => {
+        validateFiscalDocument(proforma)
+        validateIssuerForIssuance(proforma.issuer)
+      })
       const convertedAt = yield* dependencies.clock.now
       const { issueDate, dueDate } = conversionDates(proforma, convertedAt)
       const issuer = yield* transaction.findIssuer(context.organization.id)

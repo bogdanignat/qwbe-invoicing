@@ -49,16 +49,36 @@ void test("migration apply is idempotent", () => {
       "017-issuer-vat-status",
       "018-proforma-workflow",
       "019-efactura-party-snapshots",
+      "020-vat-treatment-snapshots",
       "documents/000-foundation",
       "documents/001-artifacts",
       "documents/002-proforma-artifacts",
       "sessions/000-browser-sessions",
     ])
-    assert.equal(applyMigrations(directory).changed, 24)
+    assert.equal(applyMigrations(directory).changed, 25)
     assertSourceIndexes(directory)
     assert.equal(applyMigrations(directory).changed, 0)
     assertSourceIndexes(directory)
     assert.equal(databaseReady(directory), true)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+void test("migrate CLI reapplies the complete schema with zero changes", () => {
+  const directory = mkdtempSync(join(tmpdir(), "qwbe-migrations-cli-"))
+  const executable = join(process.cwd(), "bin", "qwbe-invoicing.ts")
+  const env = { ...process.env, DATA_DIR: directory, NODE_ENV: "development" }
+  try {
+    const first = spawnSync(process.execPath, [executable, "migrate", "--apply", "--json"], { encoding: "utf8", env })
+    assert.equal(first.status, 0, first.stderr)
+    const firstReport: unknown = JSON.parse(first.stdout)
+    assert.ok(typeof firstReport === "object" && firstReport !== null && "changed" in firstReport)
+    assert.equal(firstReport.changed, 25)
+    const second = spawnSync(process.execPath, [executable, "migrate", "--apply", "--json"], { encoding: "utf8", env })
+    assert.equal(second.status, 0, second.stderr)
+    const secondReport: unknown = JSON.parse(second.stdout)
+    assert.deepEqual(secondReport, { scanned: 25, changed: 0, skipped: 25, failed: 0, pending: [] })
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }

@@ -14,7 +14,7 @@ import { invoicingClient, type AuthoringProformaInput } from "./invoicing-client
 import type { Customer, Issuer, UnitOfMeasure, VatCatalogue, VatRate } from "./models.ts"
 import { navigate } from "./navigation.ts"
 import { useOperationIdempotency } from "./operation-idempotency.ts"
-import { defaultVatCode, vatRatesForIssuer } from "./vat-defaults.ts"
+import { defaultVatCode, issuerForIssueDate, vatRatesForIssuer } from "./vat-defaults.ts"
 import { authoringSeriesOptions } from "./invoice-authoring-state.ts"
 import { useVatCatalogue } from "./vat-hooks.ts"
 import { countyRequiresSector } from "./romanian-counties.ts"
@@ -69,7 +69,7 @@ export interface ProformaAuthoringSessionInput {
 
 export interface ProformaAuthoringSessionViewModel {
   readonly document: {
-    readonly issuer: Issuer
+    readonly issuer: Issuer & { readonly vatRegistered: boolean }
     readonly customers: ReadonlyArray<Customer>
     readonly proformaSeries: ReadonlyArray<string>
     readonly unitOfMeasures: ReadonlyArray<UnitOfMeasure>
@@ -132,7 +132,7 @@ export const useProformaAuthoringSession = (input: ProformaAuthoringSessionInput
   })
   const canSave = readiness.hasLines && form.series !== "" && !mutation.isPending && documentNotesIssue(form.notes) === null
   return {
-    document: { issuer: input.issuer, customers: input.customers, proformaSeries: input.proformaSeries, unitOfMeasures: input.unitOfMeasures,
+    document: { issuer: issuerForIssueDate(input.issuer, form.issueDate), customers: input.customers, proformaSeries: input.proformaSeries, unitOfMeasures: input.unitOfMeasures,
       form, lines, buyerSectorRequired: countyRequiresSector(form.county), productPresets: presets.presets, vatRates: vatRatesForIssuer(input.vatCatalogue, input.issuer, form.issueDate) },
     feedback: { backgroundErrors: [...input.backgroundErrors, presets.error].filter((error): error is Error => error !== null),
       mutationError: mutation.error, issuerWarning: customers.issuerWarning, notesIssue: documentNotesIssue(form.notes), notesMaxLength: documentNotesMaxLength },

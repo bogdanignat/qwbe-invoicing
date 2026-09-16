@@ -5,6 +5,7 @@ import { checked, copyBuyer, copyIssuerSnapshot, copySource, missing } from "../
 import { DomainConflict, ValidationFailure } from "../../contracts/failures.ts"
 import type { IdGenerator } from "../../contracts/host.ts"
 import type { DraftInvoice, IssuerProfile, IssuerSnapshot } from "../../domain/invoice.ts"
+import { validateFiscalDocument } from "../../domain/calculation.ts"
 import type { AuthoringDocumentInput } from "../../domain/inputs.ts"
 import { authorDocument } from "../../drafts/index.ts"
 import { currentVatRegistration, validateVatForIssuance } from "../../registry/index.ts"
@@ -23,6 +24,7 @@ export interface NumberedIdentity {
 export const fiscalYear = (isoDate: string): number => Number(isoDate.slice(0, 4))
 
 const issuerAtIssuance = (issuer: IssuerProfile, document: SnapshotContent) => checked((): IssuerSnapshot => {
+  validateFiscalDocument(document)
   validateVatForIssuance(issuer, document.issueDate, document.lines)
   const registration = currentVatRegistration(issuer.vatConfigurations, document.issueDate)
   if (registration === undefined) throw new ValidationFailure({ issues: [`issuer VAT registration must be configured on ${document.issueDate}`] })

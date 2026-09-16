@@ -1,7 +1,7 @@
 import { HttpApiSchema } from "@effect/platform"
 import { Schema } from "effect"
 
-import type { BuyerSource } from "../cube/invoicing/index.ts"
+import type { BuyerSource, ConfigureIssuerInput } from "../cube/invoicing/index.ts"
 
 const optional = <S extends Schema.Schema.All>(schema: S) => Schema.optionalWith(schema, { exact: true })
 const optionalString = optional(Schema.String)
@@ -88,23 +88,35 @@ export const CustomerInput = Schema.Struct({
   defaultPaymentTermDays: optional(Schema.Int),
 }).annotations(bodyObject)
 
+const VatTreatmentFields = {
+  vatCategoryCode: Schema.Literal("S", "E"),
+  vatExemptionReason: nullableString,
+}
 export const VatConfiguration = Schema.Struct({
+  ...VatTreatmentFields,
   code: Schema.String,
   rate: Schema.String,
   effectiveFrom: Schema.String,
   effectiveTo: optionalString,
 })
 
-export const VatRegistration = Schema.Struct({
+const VatChangeFields = Schema.Struct({
   registered: Schema.Boolean,
   effectiveFrom: Schema.String,
-  effectiveTo: optionalString,
+  // Declare this field before refinement so decoding cannot strip an illegal value.
+  nonVatBasis: optional(Schema.Unknown),
 })
-export const VatChange = Schema.Struct({
-  registered: Schema.Boolean,
-  effectiveFrom: Schema.String,
-}).annotations(bodyObject)
+const explicitVatBasis = <A extends Schema.Schema.Type<typeof VatChangeFields>, I, R>(schema: Schema.Schema<A, I, R>) =>
+  schema.pipe(Schema.filter((input): input is A & ConfigureIssuerInput["vatChange"] =>
+    input.registered ? !Object.hasOwn(input, "nonVatBasis") : input.nonVatBasis === "article_310", {
+    message: () => "nonVatBasis must be article_310 for a non-VAT issuer and absent for a VAT-registered issuer",
+  }))
+export const VatChange = VatChangeFields.annotations(bodyObject).pipe(explicitVatBasis)
+export const VatRegistration = Schema.Struct({
+  ...VatChangeFields.fields, effectiveTo: optionalString,
+}).pipe(explicitVatBasis)
 export const VatRate = Schema.Struct({
+  ...VatTreatmentFields,
   code: Schema.String, rate: Schema.String,
   kind: Schema.Literal("standard", "reduced", "non_vat"), label: Schema.String,
   effectiveFrom: Schema.String, effectiveTo: optionalString,
@@ -208,6 +220,7 @@ export const ProductPreset = Schema.Struct({
 })
 
 export const DraftLine = Schema.Struct({
+  ...VatTreatmentFields,
   id: Schema.String,
   description: Schema.String,
   quantity: Schema.String,
@@ -221,6 +234,7 @@ export const DraftLine = Schema.Struct({
 })
 
 export const VatBreakdown = Schema.Struct({
+  ...VatTreatmentFields,
   code: Schema.String,
   rate: Schema.String,
   vatBaseAmount: Schema.String,
