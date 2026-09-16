@@ -13,10 +13,10 @@ const longToken = "NumeSauAdresaFaraSpatiiCareTrebuieSaRamanaIntegralVizibila"
 const snapshot: Snapshot = {
   currency: "RON", issueDate: "2026-09-14", dueDate: "2026-09-29", notes: null,
   issuer: {
-    name: `Emitent ${longToken}`, fiscalIdentifier: "RO2", legalForm: "srl", tradeRegistryNumber: "J01/1/2026",
-    iban: "RO49AAAA1B31007593840000", bankName: "Banca", socialCapital: "200", address: { countryCode: "RO", city: "Botoșani", street: longToken }, branding: null,
+    name: `Emitent ${longToken}`, fiscalIdentifier: "2", vatRegistered: true, legalForm: "srl", tradeRegistryNumber: "J01/1/2026",
+    iban: "RO49AAAA1B31007593840000", bankName: "Banca", socialCapital: "200", address: { countryCode: "RO", city: "Botoșani", street: longToken, county: "RO-BT" }, branding: null,
   },
-  customer: { partyType: "company", name: `Client ${longToken}`, fiscalIdentifier: "RO1", address: { countryCode: "RO", city: "Iași", street: longToken } },
+  customer: { partyType: "company", name: `Client ${longToken}`, fiscalIdentifier: "1", vatRegistered: true, address: { countryCode: "RO", city: "Iași", street: longToken, county: "RO-IS" } },
   lines: [], vatBreakdown: [], totalExcludingVat: "0.00", vatTotal: "0.00", totalIncludingVat: "0.00",
 }
 

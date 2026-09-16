@@ -12,9 +12,9 @@ void test("SRL and PFA freeze VAT registration at issueDate on direct and draft 
     const issuer = { name: "Emitent", fiscalIdentifier: "12345674", legalForm,
       tradeRegistryNumber: legalForm === "srl" ? "J40/123/2020" : "F40/123/2020",
       socialCapital: legalForm === "srl" ? "200.00" : "", iban: "", bankName: "", branding: null,
-      address: { countryCode: "RO", city: "Iași", street: "Strada 1" }, defaultCurrency: "RON", defaultPaymentTermDays: 15 }
+      address: { countryCode: "RO", city: "Iași", street: "Strada 1", county: "RO-IS" }, defaultCurrency: "RON", defaultPaymentTermDays: 15 }
     await Effect.runPromise(service.configureIssuer({ ...issuer, vatChange: { registered: false, effectiveFrom: "2025-08-01" } }))
-    await Effect.runPromise(service.configureIssuer({ ...issuer, fiscalIdentifier: "RO12345674",
+    await Effect.runPromise(service.configureIssuer({ ...issuer, fiscalIdentifier: "12345674",
       vatChange: { registered: true, effectiveFrom: "2026-09-01" } }))
     assert.equal("vatRegistered" in (await Effect.runPromise(service.getIssuer())), false)
     for (const documentType of ["invoice", "proforma"] as const) {
@@ -24,8 +24,8 @@ void test("SRL and PFA freeze VAT registration at issueDate on direct and draft 
       const registered = issueDate === "2026-09-01"
       const line = { description: "Serviciu", quantity: "1", unitPrice: "10", unitOfMeasure: each,
         vatRateCode: registered ? "RO_STANDARD" : "RO_NON_VAT" }
-      const document = { series: "INV", issueDate, currency: "RON" as const, customer: { partyType: "individual" as const,
-        name: "Client", fiscalIdentifier: "", address: issuer.address }, lines: [line] }
+      const document = { series: "INV", issueDate, dueDate: issueDate, currency: "RON" as const, customer: { partyType: "individual" as const,
+        name: "Client", fiscalIdentifier: "", vatRegistered: false, address: issuer.address }, lines: [line] }
       const invoice = await Effect.runPromise(service.issueInvoice(idempotent(document)))
       const proforma = await Effect.runPromise(service.issueProforma(idempotent({ ...document, proformaSeries: "PRO" })))
       assert.equal(invoice.issuer.vatRegistered, registered)

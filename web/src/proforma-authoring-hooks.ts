@@ -5,7 +5,7 @@ import { runUiEffect } from "./api.ts"
 import { today } from "./format.ts"
 import {
   authoringDocumentPayload, authoringReadiness, documentNotesIssue, documentNotesMaxLength,
-  newAuthoringForm, newEditableInvoiceLine, preferredUnitOfMeasure,
+  editBuyerFiscalIdentifier, newAuthoringForm, newEditableInvoiceLine, preferredUnitOfMeasure, selectBuyerCounty, selectBuyerSector, switchPartyType,
   type EditableInvoiceLine, type InvoiceAuthoringForm,
 } from "./invoice-authoring-state.ts"
 import { useInvoiceAuthoringCustomers } from "./invoice-authoring-customers-hooks.ts"
@@ -17,6 +17,7 @@ import { useOperationIdempotency } from "./operation-idempotency.ts"
 import { defaultVatCode, vatRatesForIssuer } from "./vat-defaults.ts"
 import { authoringSeriesOptions } from "./invoice-authoring-state.ts"
 import { useVatCatalogue } from "./vat-hooks.ts"
+import { countyRequiresSector } from "./romanian-counties.ts"
 
 export type ProformaAuthoringPageState =
   | { readonly kind: "loading" }
@@ -74,6 +75,7 @@ export interface ProformaAuthoringSessionViewModel {
     readonly unitOfMeasures: ReadonlyArray<UnitOfMeasure>
     readonly form: InvoiceAuthoringForm
     readonly lines: ReadonlyArray<EditableInvoiceLine>
+    readonly buyerSectorRequired: boolean
     readonly productPresets: ReturnType<typeof useInvoiceAuthoringPresets>["presets"]
     readonly vatRates: ReadonlyArray<VatRate>
   }
@@ -91,6 +93,10 @@ export interface ProformaAuthoringSessionViewModel {
     readonly chooseCustomer: ReturnType<typeof useInvoiceAuthoringCustomers>["chooseCustomer"]
     readonly chooseIssueDate: ReturnType<typeof useInvoiceAuthoringCustomers>["chooseIssueDate"]
     readonly chooseDueDate: ReturnType<typeof useInvoiceAuthoringCustomers>["chooseDueDate"]
+    readonly choosePartyType: (partyType: InvoiceAuthoringForm["partyType"]) => void
+    readonly chooseCounty: (county: string) => void
+    readonly changeFiscalIdentifier: (value: string) => void
+    readonly chooseSector: (sector: string) => void
     readonly addLine: () => void
     readonly changeLine: (key: string, patch: Partial<EditableInvoiceLine>) => void
     readonly choosePreset: (lineKey: string, presetId: string) => void
@@ -127,7 +133,7 @@ export const useProformaAuthoringSession = (input: ProformaAuthoringSessionInput
   const canSave = readiness.hasLines && form.series !== "" && !mutation.isPending && documentNotesIssue(form.notes) === null
   return {
     document: { issuer: input.issuer, customers: input.customers, proformaSeries: input.proformaSeries, unitOfMeasures: input.unitOfMeasures,
-      form, lines, productPresets: presets.presets, vatRates: vatRatesForIssuer(input.vatCatalogue, input.issuer, form.issueDate) },
+      form, lines, buyerSectorRequired: countyRequiresSector(form.county), productPresets: presets.presets, vatRates: vatRatesForIssuer(input.vatCatalogue, input.issuer, form.issueDate) },
     feedback: { backgroundErrors: [...input.backgroundErrors, presets.error].filter((error): error is Error => error !== null),
       mutationError: mutation.error, issuerWarning: customers.issuerWarning, notesIssue: documentNotesIssue(form.notes), notesMaxLength: documentNotesMaxLength },
     status: { pending: mutation.isPending, canSave, seriesMissing: input.proformaSeries.length === 0 },
@@ -135,6 +141,10 @@ export const useProformaAuthoringSession = (input: ProformaAuthoringSessionInput
       changeForm: (patch) => { setForm((current) => ({ ...current, ...patch })) },
       chooseBuyerMode: customers.chooseBuyerMode, chooseCustomer: customers.chooseCustomer,
       chooseIssueDate: customers.chooseIssueDate, chooseDueDate: customers.chooseDueDate,
+      choosePartyType: (partyType) => { setForm((current) => switchPartyType(current, partyType)) },
+      chooseCounty: (county) => { setForm((current) => selectBuyerCounty(current, county)) },
+      changeFiscalIdentifier: (value) => { setForm((current) => editBuyerFiscalIdentifier(current, value)) },
+      chooseSector: (sector) => { setForm((current) => selectBuyerSector(current, sector)) },
       addLine: () => { setLines((current) => [...current, newEditableInvoiceLine(crypto.randomUUID(), defaultVatCode(input.vatCatalogue, input.issuer, form.issueDate), preferredUnitOfMeasure(input.unitOfMeasures))]) },
       changeLine: (key, patch) => { setLines((current) => current.map((line) => line.key === key ? { ...line, ...patch } : line)) },
       choosePreset: presets.choosePreset,

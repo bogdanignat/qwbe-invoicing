@@ -11,7 +11,7 @@ const summary = (status: PaymentSummary["status"], remainingAmount: string, with
 const correction: CorrectionDocument = {
   id: "correction-1", series: "QWBE", number: 1, issueDate: "2026-08-31", actorId: "user-1",
   reason: "Corecție", currency: "RON", totalIncludingVat: "-121.00",
-  issuer: { name: "QWBE", fiscalIdentifier: "RO2", address: { countryCode: "RO", city: "Botoșani", street: "Strada 2" }, legalForm: "srl", tradeRegistryNumber: "J07/123/2020", iban: "", bankName: "", socialCapital: "200.00" },
+  issuer: { name: "QWBE", fiscalIdentifier: "2", vatRegistered: true, address: { countryCode: "RO", city: "Botoșani", street: "Strada 2", county: "RO-BT" }, legalForm: "srl", tradeRegistryNumber: "J07/123/2020", iban: "", bankName: "", socialCapital: "200.00" },
 }
 
 void test("allows payments only while an invoice has a remaining balance", () => {

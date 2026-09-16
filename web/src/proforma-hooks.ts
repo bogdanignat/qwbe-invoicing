@@ -7,6 +7,7 @@ import { invoicingClient } from "./invoicing-client.ts"
 import { useOperationIdempotency } from "./operation-idempotency.ts"
 import { navigate } from "./navigation.ts"
 import { usePagedList } from "./paged-query.ts"
+import { positiveInvoiceRequiresDueDate } from "./invoice-authoring-state.ts"
 
 export const useProformas = () => usePagedList(["proformas"], (page) => invoicingClient.listProformas(page))
 
@@ -58,13 +59,14 @@ export const useProformaDetail = (id: string) => {
     },
   })
   const conversionPending = issuance.isPending || draftCreation.isPending
+  const dueDateRequired = proforma.data === undefined ? false : positiveInvoiceRequiresDueDate(proforma.data.dueDate, proforma.data.totalIncludingVat)
   const converted = proforma.data?.convertedInvoiceId !== null && proforma.data?.convertedInvoiceId !== undefined
     ? { kind: "invoice" as const, href: `/invoices/${encodeURIComponent(proforma.data.convertedInvoiceId)}` }
     : proforma.data?.convertedDraftId !== null && proforma.data?.convertedDraftId !== undefined
       ? { kind: "draft" as const, href: `/drafts/${encodeURIComponent(proforma.data.convertedDraftId)}` }
       : { kind: "available" as const }
   const issueInvoice = (): void => {
-    if (!canConvert || effectiveSeries === "" || conversionPending) return
+    if (!canConvert || effectiveSeries === "" || conversionPending || dueDateRequired) return
     if (window.confirm("Emiți factura din această proformă? Liniile și totalurile sunt copiate exact; factura primește data de azi, scadența cu același termen și următorul număr din serie.")) issuance.mutate(effectiveSeries)
   }
   const createDraft = (): void => {
@@ -76,7 +78,10 @@ export const useProformaDetail = (id: string) => {
     conversion: {
       pending: conversionPending, error: issuance.error ?? draftCreation.error ?? series.error,
       series: invoiceSeries, selectedSeries: effectiveSeries, selectSeries: setSelectedSeries,
-      canConvert: canConvert && effectiveSeries !== "" && !conversionPending, converted, issueInvoice, createDraft,
+      canCreateDraft: canConvert && effectiveSeries !== "" && !conversionPending,
+      canIssueInvoice: canConvert && effectiveSeries !== "" && !conversionPending && !dueDateRequired,
+      dueDateIssue: dueDateRequired ? "Proforma are total pozitiv și nu are scadență. Creează un draft și completează scadența înainte de emiterea facturii." : null,
+      converted, issueInvoice, createDraft,
     },
     download: { pending: download.isPending, error: download.error, start: download.mutate },
   }

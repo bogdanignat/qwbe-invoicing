@@ -26,14 +26,15 @@ const invoice: RenderableInvoice = {
     bankName: "Banca Română",
     socialCapital: "1000.00",
     name: "Știință și Tehnică SRL",
-    fiscalIdentifier: "RO12345674",
-    address: { countryCode: "RO", city: "Botoșani", street: "Strada Independenței 1" },
+    fiscalIdentifier: "12345674",
+    address: { countryCode: "RO", city: "Botoșani", street: "Strada Independenței 1", county: "RO-BT" },
   },
   customer: {
     partyType: "company",
+    vatRegistered: true,
     name: "Țesături România SRL",
-    fiscalIdentifier: "RO87654329",
-    address: { countryCode: "RO", city: "Iași", street: "Șoseaua Națională 2" },
+    fiscalIdentifier: "87654329",
+    address: { countryCode: "RO", city: "Iași", street: "Șoseaua Națională 2", county: "RO-IS" },
   },
   lines: [{
     description: "Servicii de consultanță și analiză",
@@ -89,7 +90,7 @@ void test("labels the frozen issuer VAT status for SRL and PFA without inventing
       assert.equal(lines[1], vatRegistered ? "Plătitor de TVA" : "Neplătitor de TVA")
       assert.equal(lines.some((line) => /scutit|scutire|\b310\b/i.test(line)), false)
       assert.equal(lines.some((line) => line.startsWith("Capital social:")), legalForm === "srl")
-      // Even with zero VAT and a misleading CUI prefix, the renderer must use only the snapshot flag.
+      // Even with zero VAT, the renderer must use only the snapshot flag.
       const rendered = await Effect.runPromise(createPdfRenderer().render({ ...invoice, issuer,
         vatTotal: "0.00", lines: invoice.lines.map((line) => ({ ...line, vatRate: "0.00", vatAmount: "0.00" })) }))
       assert.equal((await PDFDocument.load(rendered.bytes, { updateMetadata: false })).getPageCount(), 1)
@@ -98,10 +99,12 @@ void test("labels the frozen issuer VAT status for SRL and PFA without inventing
 })
 
 void test("renders an individual buyer with a CNP label and omits an empty identifier", async () => {
-  const individual = { ...invoice.customer, partyType: "individual" as const, name: "Ion Popescu", fiscalIdentifier: "1800101221144" }
+  const individual = { ...invoice.customer, partyType: "individual" as const, vatRegistered: false, name: "Ion Popescu", fiscalIdentifier: "1800101221144" }
   assert.equal(partyIdentifierLine(individual), "CNP: 1800101221144")
   assert.equal(partyIdentifierLine({ ...individual, fiscalIdentifier: "" }), undefined)
-  assert.equal(partyIdentifierLine(invoice.issuer), "CUI: RO12345674")
+  assert.equal(partyIdentifierLine(invoice.issuer), "CUI: 12345674 · Cod TVA: RO12345674")
+  assert.equal(partyIdentifierLine({ ...invoice.issuer, vatRegistered: false }), "CUI: 12345674")
+  assert.equal(partyIdentifierLine(invoice.customer), "CUI: 87654329 · Cod TVA: RO87654329")
   const rendered = await Effect.runPromise(createPdfRenderer().render({ ...invoice, customer: individual }))
   const parsed = await PDFDocument.load(rendered.bytes, { updateMetadata: false })
   assert.equal(parsed.getPageCount(), 1)

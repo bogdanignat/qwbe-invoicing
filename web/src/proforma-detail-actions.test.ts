@@ -10,10 +10,10 @@ import type { Proforma } from "./models.ts"
 const proforma: Proforma = {
   actorId: "actor", id: "proforma-1", sourceDraftId: null, organizationId: "org", series: "PRO", number: 4,
   issueDate: "2026-09-14", dueDate: null, issuedAt: "2026-09-14T10:00:00.000Z", currency: "RON", notes: null,
-  issuer: { name: "Emitent", fiscalIdentifier: "RO123", legalForm: "srl", tradeRegistryNumber: "J22/1/2020", iban: "", bankName: "", socialCapital: "200", branding: null,
-    address: { countryCode: "RO", city: "Iași", street: "Strada 1" } },
-  customer: { partyType: "company", name: "Client", fiscalIdentifier: "RO456", address: { countryCode: "RO", city: "Iași", street: "Strada 2" } },
-  lines: [], vatBreakdown: [], totalExcludingVat: "0.00", vatTotal: "0.00", totalIncludingVat: "0.00",
+  issuer: { name: "Emitent", fiscalIdentifier: "123", vatRegistered: true, legalForm: "srl", tradeRegistryNumber: "J22/1/2020", iban: "", bankName: "", socialCapital: "200", branding: null,
+    address: { countryCode: "RO", city: "Iași", street: "Strada 1", county: "RO-IS" } },
+  customer: { partyType: "company", name: "Client", fiscalIdentifier: "456", vatRegistered: false, address: { countryCode: "RO", city: "Iași", street: "Strada 2", county: "RO-IS" } },
+  lines: [], vatBreakdown: [], totalExcludingVat: "100.00", vatTotal: "21.00", totalIncludingVat: "121.00",
   convertedDraftId: null, convertedInvoiceId: null,
 }
 
@@ -31,6 +31,7 @@ void test("offers both conversion actions with an explicit invoice series", asyn
   assert.match(available, /Serie factură/)
   assert.match(available, /Emite factura/)
   assert.match(available, /Creează draft de factură/)
+  assert.match(available, /nu are scadență.*Creează un draft/)
   assert.ok(available.includes("Alege seria facturii"))
   assert.equal(available.match(/<button\b[^>]*\sdisabled=""[^>]*>/g)?.length, 2)
   const withoutSeries = render(proforma, false)

@@ -16,17 +16,17 @@ void test("new documents and saved drafts use the same centered header without a
   const input: InvoiceAuthoringSessionInput = {
     issuer: { organizationId: "org", name: "Emitent", fiscalIdentifier: "12345674", legalForm: "pfa",
       tradeRegistryNumber: "F22/1/2020", socialCapital: "", iban: "", bankName: "", branding: null,
-      address: { countryCode: "RO", city: "Iași", street: "AdresaFaraSpatii".repeat(10) },
+      address: { countryCode: "RO", city: "Iași", street: "AdresaFaraSpatii".repeat(10), county: "RO-IS" },
       defaultCurrency: "RON", defaultPaymentTermDays: 15, currentVat: { registered: false, effectiveFrom: "2025-08-01" },
       vatConfigurations: [{ code: "RO_NON_VAT", rate: "0.00", effectiveFrom: "2025-08-01" }] },
-    vatCatalogue: { rates: [{ code: "RO_NON_VAT", rate: "0.00", effectiveFrom: "2025-08-01", kind: "non_vat", label: "Neplătitor de TVA" }], inferredRegistration: null },
+    vatCatalogue: { rates: [{ code: "RO_NON_VAT", rate: "0.00", effectiveFrom: "2025-08-01", kind: "non_vat", label: "Neplătitor de TVA" }] },
     customers: [], invoiceSeries: ["INV"], unitOfMeasures: [{ code: "C62", name: "unitate" }],
     backgroundErrors: [], notify: () => undefined,
   }
   const draft: DraftInvoice = { id: "draft", organizationId: "org", sourceProformaId: null, series: "INV", issueDate: "2026-09-14", dueDate: null,
     currency: "RON", notes: "Note păstrate", status: "draft", lines: [], vatBreakdown: [],
     totalExcludingVat: "0.00", vatTotal: "0.00", totalIncludingVat: "0.00",
-    customer: { partyType: "individual", name: "Client", fiscalIdentifier: "", address: input.issuer.address } }
+    customer: { partyType: "individual", name: "Client", fiscalIdentifier: "", vatRegistered: false, address: input.issuer.address } }
   for (const props of [input, { ...input, initialDraft: draft }]) {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })
     try {
@@ -46,6 +46,8 @@ void test("new documents and saved drafts use the same centered header without a
       assert.match(html, /Salvează draftul/)
       assert.match(html, /Emite factura/)
       assert.match(html, /Observații/)
+      if (!("initialDraft" in props)) assert.match(html, /Cumpărător înregistrat în scopuri de TVA/)
+      assert.match(html, /Alege județul/)
       assert.equal(html.match(/type="date"/g)?.length, 2)
       const seriesField = html.slice(html.indexOf("Serie factură"), html.indexOf("Data emiterii"))
       assert.equal(seriesField.includes("disabled"), "initialDraft" in props)

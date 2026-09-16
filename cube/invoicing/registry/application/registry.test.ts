@@ -9,8 +9,8 @@ import { DomainConflict, ResourceNotFound, ValidationFailure } from "../../contr
 import { PermissionDenied } from "../../contracts/failures.ts"
 
 const issuerInput = (branding: Parameters<ReturnType<typeof createInvoicingService>["configureIssuer"]>[0]["branding"]) => ({
-  name: "Exemplu SRL", fiscalIdentifier: "RO12345674",
-  address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" },
+  name: "Exemplu SRL", fiscalIdentifier: "12345674",
+  address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1", county: "RO-BT" },
   legalForm: "srl" as const, tradeRegistryNumber: "J40/123/2020", socialCapital: "200.00", iban: "", bankName: "",
   defaultCurrency: "RON", defaultPaymentTermDays: 15,
   vatChange: { registered: true, effectiveFrom: "2025-08-01" }, branding,
@@ -28,13 +28,13 @@ void test("updates tenant customers and manages hard-deleted product presets", a
     clock: fixedClock, ids: generator, store: memoryStore(state), branding: brandingNormalizer, cubeIdentity: "invoicing",
   })
   const customer = await Effect.runPromise(service.createCustomer({
-    partyType: "individual", name: "Ion", fiscalIdentifier: "",
-    address: { countryCode: "RO", city: "Iași", street: "Strada 1" }, defaultPaymentTermDays: 0,
+    partyType: "individual", name: "Ion", fiscalIdentifier: "", vatRegistered: false,
+    address: { countryCode: "RO", city: "Iași", street: "Strada 1", county: "RO-IS" }, defaultPaymentTermDays: 0,
   }))
   assert.equal(customer.defaultPaymentTermDays, 0)
   const updated = await Effect.runPromise(service.updateCustomer({
-    id: customer.id, partyType: "individual", name: "Ion Actualizat", fiscalIdentifier: "",
-    address: { countryCode: "RO", city: "Cluj", street: "Strada 2" }, defaultPaymentTermDays: 30,
+    id: customer.id, partyType: "individual", name: "Ion Actualizat", fiscalIdentifier: "", vatRegistered: false,
+    address: { countryCode: "RO", city: "Cluj", street: "Strada 2", county: "RO-CJ" }, defaultPaymentTermDays: 30,
   }))
   assert.equal(updated.defaultPaymentTermDays, 30)
   assert.equal((await Effect.runPromise(service.getCustomer(customer.id))).name, "Ion Actualizat")
@@ -130,7 +130,7 @@ void test("rolls issuer configuration back when its audit append fails", async (
   assert.equal(state.auditEvents.length, auditBaseline)
 })
 
-void test("schedules future VAT transitions without changing the current fiscal identifier", async () => {
+void test("schedules future VAT transitions with a canonical CUI independent of registration", async () => {
   for (const registered of [true, false]) {
     const state = emptyState()
     let now = new Date("2026-09-12T12:00:00.000Z")
@@ -139,7 +139,7 @@ void test("schedules future VAT transitions without changing the current fiscal 
       clock: { now: Effect.sync(() => now) }, ids: sequentialIds(), store: memoryStore(state),
       branding: brandingNormalizer, cubeIdentity: "invoicing",
     })
-    const input = { ...issuerInput(null), fiscalIdentifier: registered ? "RO12345674" : "12345674",
+    const input = { ...issuerInput(null), fiscalIdentifier: "12345674",
       vatChange: { registered, effectiveFrom: "2026-01-01" } }
     await Effect.runPromise(service.configureIssuer(input))
     const scheduled = await Effect.runPromise(service.configureIssuer({ ...input,

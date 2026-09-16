@@ -154,7 +154,7 @@ void test("saves typed issuer branding input and decodes the canonical PNG", asy
   const originalFetch = globalThis.fetch
   const calls: Array<{ readonly path: string; readonly init: RequestInit }> = []
   const input = {
-    name: "QWBE", fiscalIdentifier: "RO2", address: { countryCode: "RO", city: "Botoșani", street: "Strada 2" },
+    name: "QWBE", fiscalIdentifier: "2", address: { countryCode: "RO", city: "Botoșani", street: "Strada 2", county: "RO-BT" },
     legalForm: "srl" as const, tradeRegistryNumber: "J07/123/2020", iban: "RO49AAAA1B31007593840000", bankName: "Banca", socialCapital: "200.00",
     defaultCurrency: "RON", defaultPaymentTermDays: 15,
     vatChange: { registered: true, effectiveFrom: "2025-08-01" },
@@ -189,7 +189,7 @@ void test("saves typed issuer branding input and decodes the canonical PNG", asy
   }
 })
 
-void test("loads VAT regimes with optional complete issuer inference", async () => {
+void test("loads VAT regimes without issuer inference", async () => {
   const originalFetch = globalThis.fetch
   const calls: Array<string> = []
   try {
@@ -200,16 +200,12 @@ void test("loads VAT regimes with optional complete issuer inference", async () 
         : { rates: [
           { code: "RO_STANDARD", rate: "21.00", kind: "standard", label: "TVA standard 21%", effectiveFrom: "2025-08-01" },
           { code: "RO_REDUCED", rate: "11.00", kind: "reduced", label: "TVA redus 11%", effectiveFrom: "2025-08-01" },
-        ], inferredRegistration: path.includes("fiscalIdentifier") ? true : null }
+        ] }
       return Promise.resolve(new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } }))
     }
     await runUiEffect(loginApiSession("secret-token"))
-    assert.equal((await runUiEffect(invoicingClient.getVatCatalogue())).inferredRegistration, null)
-    assert.equal((await runUiEffect(invoicingClient.getVatCatalogue({ countryCode: "RO", fiscalIdentifier: "RO12345674" }))).inferredRegistration, true)
-    assert.deepEqual(calls.slice(1), [
-      "/api/vat-regimes",
-      "/api/vat-regimes?countryCode=RO&fiscalIdentifier=RO12345674",
-    ])
+    assert.equal((await runUiEffect(invoicingClient.getVatCatalogue())).rates.length, 2)
+    assert.deepEqual(calls.slice(1), ["/api/vat-regimes"])
   } finally {
     await runUiEffect(clearApiSession)
     globalThis.fetch = originalFetch
@@ -288,7 +284,7 @@ void test("lists and creates document series with the final API contract", async
       const body = path === "/api/session"
         ? { authenticated: true, csrfToken: "csrf-token" }
         : path === "/api/drafts"
-          ? { id: "draft-1", organizationId: "org-1", customerId: "customer-1", sourceProformaId: null, customer: { partyType: "company", name: "Client", fiscalIdentifier: "RO1", address: { countryCode: "RO", city: "Iași", street: "Strada 1" } }, series: "QWBE", issueDate: "2026-09-01", dueDate: "2026-09-16", currency: "RON", notes: null, status: "draft", lines: [], vatBreakdown: [], totalExcludingVat: "0.00", vatTotal: "0.00", totalIncludingVat: "0.00" }
+          ? { id: "draft-1", organizationId: "org-1", customerId: "customer-1", sourceProformaId: null, customer: { partyType: "company", name: "Client", fiscalIdentifier: "1", vatRegistered: false, address: { countryCode: "RO", city: "Iași", street: "Strada 1", county: "RO-IS" } }, series: "QWBE", issueDate: "2026-09-01", dueDate: "2026-09-16", currency: "RON", notes: null, status: "draft", lines: [], vatBreakdown: [], totalExcludingVat: "0.00", vatTotal: "0.00", totalIncludingVat: "0.00" }
         : init?.method === "POST"
           ? { organizationId: "org-1", documentType: "invoice", series: "QWBE" }
           : [{ organizationId: "org-1", documentType: "invoice", series: "QWBE" }]
@@ -325,8 +321,8 @@ void test("calls customer edit and product preset CRUD routes", async () => {
   const originalFetch = globalThis.fetch
   const calls: Array<{ readonly path: string; readonly init: RequestInit }> = []
   const customer = {
-    id: "customer/1", organizationId: "org-1", partyType: "company" as const, name: "Client", fiscalIdentifier: "RO1",
-    address: { countryCode: "RO", city: "Iași", street: "Strada 1" }, defaultPaymentTermDays: 30,
+    id: "customer/1", organizationId: "org-1", partyType: "company" as const, name: "Client", fiscalIdentifier: "1", vatRegistered: false,
+    address: { countryCode: "RO", city: "Iași", street: "Strada 1", county: "RO-IS" }, defaultPaymentTermDays: 30,
   }
   const preset = { id: "preset/1", organizationId: "org-1", description: "Consultanță", unitPrice: "100.00",
     unitOfMeasure: { code: "HUR", name: "oră" } }
@@ -345,7 +341,7 @@ void test("calls customer edit and product preset CRUD routes", async () => {
     }
     await runUiEffect(loginApiSession("secret-token"))
     await runUiEffect(invoicingClient.updateCustomer(customer.id, {
-      partyType: customer.partyType, name: customer.name, fiscalIdentifier: customer.fiscalIdentifier,
+      partyType: customer.partyType, name: customer.name, fiscalIdentifier: customer.fiscalIdentifier, vatRegistered: customer.vatRegistered,
       address: customer.address, defaultPaymentTermDays: customer.defaultPaymentTermDays,
     }))
     await runUiEffect(invoicingClient.listProductPresets())
@@ -366,8 +362,8 @@ void test("calls customer edit and product preset CRUD routes", async () => {
     assert.equal(typeof customerBody, "string")
     assert.equal(typeof updatePresetBody, "string")
     assert.deepEqual(JSON.parse(customerBody as string), {
-      partyType: "company", name: "Client", fiscalIdentifier: "RO1",
-      address: { countryCode: "RO", city: "Iași", street: "Strada 1" }, defaultPaymentTermDays: 30,
+      partyType: "company", name: "Client", fiscalIdentifier: "1", vatRegistered: false,
+      address: { countryCode: "RO", city: "Iași", street: "Strada 1", county: "RO-IS" }, defaultPaymentTermDays: 30,
     })
     assert.deepEqual(JSON.parse(updatePresetBody as string), { description: "Consultanță", unitPrice: "120.00",
       unitOfMeasure: preset.unitOfMeasure })
@@ -382,14 +378,14 @@ void test("calls direct and draft issuance, proforma invoice, registry, detail, 
   const calls: Array<{ readonly path: string; readonly init: RequestInit }> = []
   const draft = {
     id: "draft-2", organizationId: "org-1", customerId: "customer-1", sourceProformaId: null,
-    customer: { partyType: "company", name: "Client", fiscalIdentifier: "RO1", address: { countryCode: "RO", city: "Iași", street: "Strada 1" } },
+    customer: { partyType: "company", name: "Client", fiscalIdentifier: "1", vatRegistered: false, address: { countryCode: "RO", city: "Iași", street: "Strada 1", county: "RO-IS" } },
     series: "QWBE", issueDate: "2026-09-01", dueDate: null, currency: "RON", notes: null, status: "draft", lines: [], vatBreakdown: [],
     totalExcludingVat: "0.00", vatTotal: "0.00", totalIncludingVat: "0.00",
   }
   const proforma = {
     ...draft, id: "proforma-1", sourceDraftId: "draft-1", series: "PRO", number: 7,
     issuedAt: "2026-09-01T10:00:00.000Z", actorId: "user-1",
-    issuer: { name: "QWBE", fiscalIdentifier: "RO2", address: { countryCode: "RO", city: "Botoșani", street: "Strada 2" }, legalForm: "srl", tradeRegistryNumber: "J07/123/2020", iban: "", bankName: "", socialCapital: "200.00", branding: null },
+    issuer: { name: "QWBE", fiscalIdentifier: "2", vatRegistered: true, address: { countryCode: "RO", city: "Botoșani", street: "Strada 2", county: "RO-BT" }, legalForm: "srl", tradeRegistryNumber: "J07/123/2020", iban: "", bankName: "", socialCapital: "200.00", branding: null },
     convertedDraftId: null, convertedInvoiceId: null,
   }
   const invoice = { ...proforma, id: "invoice-1", draftId: null, sourceProformaId: "proforma-1", series: "QWBE", number: 8, eFacturaStatus: "not_sent" }

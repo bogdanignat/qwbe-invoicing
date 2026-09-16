@@ -28,6 +28,12 @@ export const ensureChronology = (tx: InvoicingTransaction, org: string, kind: Nu
   }))
 })
 
+export const validateInvoiceDueDate = (document: { readonly dueDate: string | null; readonly totalIncludingVat: string }): void => {
+  if (document.totalIncludingVat !== "0.00" && document.dueDate === null) {
+    throw new ValidationFailure({ issues: ["dueDate is required for an invoice with a positive amount due"] })
+  }
+}
+
 export const createInvoiceOperations = (
   dependencies: OperationDependencies,
   permissions: InvoicingPermissions,
@@ -43,7 +49,10 @@ export const createInvoiceOperations = (
         return replay === undefined ? yield* Effect.fail(missingIdempotencyResult("invoice")) : structuredClone(replay)
       }
       const { document, issuer, draft } = yield* issuanceSource(input, context.organization.id, transaction, dependencies.ids, "invoice")
-      yield* checked(() => { validateIssuerForIssuance(issuer) })
+      yield* checked(() => {
+        validateIssuerForIssuance(issuer)
+        validateInvoiceDueDate(document)
+      })
       const invoiceId = yield* dependencies.ids.next
       const issuedAt = yield* dependencies.clock.now
       yield* ensureChronology(transaction, context.organization.id, "invoice", document.series, document.issueDate, calendarDate(issuedAt))

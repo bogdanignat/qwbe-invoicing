@@ -14,8 +14,8 @@ void test("authors snapshot-owned drafts and recalculates every server-derived a
     ids: sequentialIds(), store: memoryStore(state), branding: brandingNormalizer, cubeIdentity: "invoicing",
   })
   const issuer = {
-    name: "Exemplu SRL", fiscalIdentifier: "RO12345674",
-    address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" },
+    name: "Exemplu SRL", fiscalIdentifier: "12345674",
+    address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1", county: "RO-BT" },
     legalForm: "srl", tradeRegistryNumber: "J40/123/2020", socialCapital: "200.00", iban: "", bankName: "",
     defaultCurrency: "RON", defaultPaymentTermDays: 15,
     branding: null, vatChange: { registered: true, effectiveFrom: "2025-01-01" },
@@ -24,10 +24,10 @@ void test("authors snapshot-owned drafts and recalculates every server-derived a
   await Effect.runPromise(service.configureIssuer({ ...issuer, vatChange: { registered: true, effectiveFrom: "2025-08-01" } }))
   await Effect.runPromise(service.addDocumentSeries({ documentType: "invoice", series: "QWBE" }))
   const saved = await Effect.runPromise(service.createCustomer({
-    partyType: "company", name: "Original SRL", fiscalIdentifier: "RO87654329",
-    address: { countryCode: "RO", city: "Iași", street: "Strada Mică 2" },
+    partyType: "company", name: "Original SRL", fiscalIdentifier: "87654329", vatRegistered: true,
+    address: { countryCode: "RO", city: "Iași", street: "Strada Mică 2", county: "RO-IS" },
   }))
-  const savedDraft = await Effect.runPromise(service.createDraft({ customerId: saved.id, series: "QWBE", issueDate: "2025-07-31" }))
+  const savedDraft = await Effect.runPromise(service.createDraft({ customerId: saved.id, series: "QWBE", issueDate: "2025-07-31", dueDate: "2025-08-15" }))
   assert.equal(savedDraft.customer.name, "Original SRL")
   assert.equal(savedDraft.totalIncludingVat, "0.00")
   state.customers.set(saved.id, { ...saved, name: "Directory Renamed SRL" })
@@ -37,21 +37,21 @@ void test("authors snapshot-owned drafts and recalculates every server-derived a
   assert.equal(savedIssued.customer.partyType, "company")
 
   const inlineBuyer = {
-    partyType: "individual" as const, name: "Ion Popescu", fiscalIdentifier: "",
-    address: { countryCode: "RO", city: "Cluj-Napoca", street: "Strada Unu 1" },
+    partyType: "individual" as const, name: "Ion Popescu", fiscalIdentifier: "", vatRegistered: false,
+    address: { countryCode: "RO", city: "Cluj-Napoca", street: "Strada Unu 1", county: "RO-CJ" },
   }
   const invalidSource = await Effect.runPromise(Effect.flip(service.createDraft({
     customerId: saved.id, customer: inlineBuyer, series: "QWBE", issueDate: "2025-07-31",
   } as never)))
   assert.equal(invalidSource instanceof ValidationFailure, true)
-  const draft = await Effect.runPromise(service.createDraft({ customer: inlineBuyer, series: "QWBE", issueDate: "2025-07-31" }))
+  const draft = await Effect.runPromise(service.createDraft({ customer: inlineBuyer, series: "QWBE", issueDate: "2025-07-31", dueDate: "2025-08-15" }))
   assert.equal(draft.customerId, undefined)
   let edited = await Effect.runPromise(service.addDraftLine({
     draftId: draft.id, description: "Consultanță", quantity: "1", unitPrice: "100", unitOfMeasure: each, vatRateCode: "RO_STANDARD",
   }))
   const lineId = edited.lines[0]?.id as string
   assert.equal(edited.totalIncludingVat, "119.00")
-  edited = await Effect.runPromise(service.updateDraft({ customer: inlineBuyer, draftId: draft.id, issueDate: "2025-08-01" }))
+  edited = await Effect.runPromise(service.updateDraft({ customer: inlineBuyer, draftId: draft.id, issueDate: "2025-08-01", dueDate: "2025-08-15" }))
   assert.equal(edited.lines[0]?.vatRate, "21.00")
   assert.equal(edited.totalIncludingVat, "121.00")
   const unsafeDate = await Effect.runPromise(Effect.flip(service.updateDraft({
@@ -90,16 +90,16 @@ void test("captures, replaces and clears free-form remarks on a draft", async ()
     ids: sequentialIds(), store: memoryStore(state), branding: brandingNormalizer, cubeIdentity: "invoicing",
   })
   await Effect.runPromise(service.configureIssuer({
-    name: "Exemplu SRL", fiscalIdentifier: "RO12345674",
-    address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" },
+    name: "Exemplu SRL", fiscalIdentifier: "12345674",
+    address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1", county: "RO-BT" },
     legalForm: "srl", tradeRegistryNumber: "J40/123/2020", socialCapital: "200.00", iban: "", bankName: "",
     defaultCurrency: "RON", defaultPaymentTermDays: 15,
     branding: null, vatChange: { registered: true, effectiveFrom: "2025-08-01" },
   }))
   await Effect.runPromise(service.addDocumentSeries({ documentType: "invoice", series: "QWBE" }))
   const buyer = {
-    partyType: "individual" as const, name: "Ion Popescu", fiscalIdentifier: "",
-    address: { countryCode: "RO", city: "Cluj-Napoca", street: "Strada Unu 1" },
+    partyType: "individual" as const, name: "Ion Popescu", fiscalIdentifier: "", vatRegistered: false,
+    address: { countryCode: "RO", city: "Cluj-Napoca", street: "Strada Unu 1", county: "RO-CJ" },
   }
   const header = { customer: buyer, series: "QWBE", issueDate: "2025-08-01" }
   const remarks = "Livrare în 3 tranșe.\nPlata la recepție."

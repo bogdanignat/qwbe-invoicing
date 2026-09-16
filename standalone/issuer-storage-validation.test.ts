@@ -23,7 +23,8 @@ void test("strict issuer reads refuse corrupt or noncanonical profile, invoice, 
       branding: { normalize: () => Effect.die("No image in this fixture") },
       store: createSqliteStore(directory), cubeIdentity: "invoicing",
     })
-    const profile = { name: "Test SRL", fiscalIdentifier: "RO12345674", address: { countryCode: "RO", city: "Iași", street: "Test 1" },
+    const profile = { name: "Test SRL", fiscalIdentifier: "12345674",
+      address: { countryCode: "RO", city: "Iași", street: "Test 1", county: "RO-IS" },
       legalForm: "srl" as const, tradeRegistryNumber: "J40/123/2020", socialCapital: "200.00", bankName: "Banca Test", iban: "RO49AAAA1B31007593840000",
       branding: null, defaultCurrency: "RON", defaultPaymentTermDays: 15,
       vatChange: { registered: true, effectiveFrom: "2025-08-01" },
@@ -31,8 +32,8 @@ void test("strict issuer reads refuse corrupt or noncanonical profile, invoice, 
     await Effect.runPromise(service.configureIssuer(profile))
     await Effect.runPromise(service.addDocumentSeries({ documentType: "invoice", series: "INV" }))
     await Effect.runPromise(service.addDocumentSeries({ documentType: "proforma", series: "PRO" }))
-    const request = { series: "INV", issueDate: "2026-09-01", currency: "RON" as const,
-      customer: { name: "Client", partyType: "individual" as const, fiscalIdentifier: "", address: profile.address },
+    const request = { series: "INV", issueDate: "2026-09-01", dueDate: "2026-09-16", currency: "RON" as const,
+      customer: { name: "Client", partyType: "individual" as const, fiscalIdentifier: "", vatRegistered: false, address: profile.address },
       lines: [{ description: "Service", quantity: "1", unitPrice: "10", unitOfMeasure: { code: "C62", name: "unitate" }, vatRateCode: "RO_STANDARD" }],
     }
     const attempt = <Value>(value: Value) => ({ request: value, idempotency: { key: `attempt-${String(++sequence)}`, fingerprint: `sha256:${"0".repeat(64)}` } })

@@ -5,7 +5,7 @@ import { join } from "node:path"
 import { DatabaseSync } from "node:sqlite"
 import test from "node:test"
 
-import { invoicingMigrations } from "../cube/invoicing/index.ts"
+import { ROMANIAN_COUNTIES, invoicingMigrations } from "../cube/invoicing/index.ts"
 import { documentsMigrations } from "../cube/invoicing/documents/index.ts"
 import { paymentsMigrations } from "../cube/payments/index.ts"
 import { applyMigrations, databasePath, documentsDatabasePath } from "./migrations.ts"
@@ -64,6 +64,7 @@ const excludeFreshOnlyMigrations = (directory: string): void => {
     database.prepare("INSERT INTO schema_migrations(name,applied_at)VALUES('016-fiscal-audit','2026-01-01')").run()
     database.prepare("INSERT INTO schema_migrations(name,applied_at)VALUES('017-issuer-vat-status','2026-01-01')").run()
     database.prepare("INSERT INTO schema_migrations(name,applied_at)VALUES('018-proforma-workflow','2026-01-01')").run()
+    database.prepare("INSERT INTO schema_migrations(name,applied_at)VALUES('019-efactura-party-snapshots','2026-01-01')").run()
   } finally { database.close() }
 }
 
@@ -83,7 +84,7 @@ void test("upgrades a populated version-six database without rewriting migration
         "004-invoice-delete-last", "005-allow-e-factura-status-update", "006-customer-soft-delete", "007-complete-invoice-authoring",
          "008-proforma-workflow", "009-proforma-direct-invoice", "010-product-presets-payment-terms",
          "011-external-api-snapshots", "012-payment-idempotency", "013-document-notes", "014-issuer-branding", "015-issuer-details",
-          "016-fiscal-audit", "017-issuer-vat-status", "018-proforma-workflow"])
+           "016-fiscal-audit", "017-issuer-vat-status", "018-proforma-workflow", "019-efactura-party-snapshots"])
       const columns = database.prepare("PRAGMA table_info(invoice_drafts)").all()
       assert.equal(columns.some((row) => row.name === "customer_id" && row.notnull === 0), true)
       assert.equal(columns.some((row) => row.name === "due_date" && row.notnull === 0), true)
@@ -191,6 +192,83 @@ void test("018 rejects populated document storage atomically without dropping da
       assert.equal(unchanged.prepare("SELECT 1 FROM schema_migrations WHERE name='018-proforma-workflow'").get(), undefined)
       assert.ok(unchanged.prepare("SELECT 1 FROM pragma_table_info('proformas') WHERE name='invoice_series'").get())
       assert.equal(unchanged.prepare("SELECT 1 FROM sqlite_master WHERE name='migration_018_fresh_guard'").get(), undefined)
+    } finally { unchanged.close() }
+  } finally { rmSync(directory, { recursive: true, force: true }) }
+})
+
+void test("019 creates strict party address and buyer VAT storage while keeping due dates nullable", () => {
+  const directory = mkdtempSync(join(tmpdir(), "qwbe-efactura-party-schema-"))
+  try {
+    applyMigrations(directory)
+    const database = new DatabaseSync(databasePath(directory))
+    try {
+      const requiredColumns = {
+        issuers: ["county", "sector"],
+        customers: ["county", "sector", "vat_registered"],
+        invoice_drafts: ["customer_county", "customer_sector", "customer_vat_registered"],
+        issued_invoices: ["issuer_county", "issuer_sector", "customer_county", "customer_sector", "customer_vat_registered"],
+        proformas: ["issuer_county", "issuer_sector", "customer_county", "customer_sector", "customer_vat_registered"],
+        correction_documents: ["issuer_county", "issuer_sector", "customer_county", "customer_sector", "customer_vat_registered"],
+      } as const
+      for (const [table, names] of Object.entries(requiredColumns)) {
+        const columns = new Map(database.prepare(`PRAGMA table_info(${table})`).all().map((column) => [column.name, column]))
+        for (const name of names) assert.equal(columns.get(name)?.notnull, name.endsWith("sector") ? 0 : 1, `${table}.${name}`)
+        const sql = String(database.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name=?").get(table)?.sql)
+        const storedCountyCodes = new Set(sql.match(/RO-(?:[A-Z]{2}|B)(?=')/g) ?? [])
+        assert.deepEqual(storedCountyCodes, new Set(ROMANIAN_COUNTIES.map(({ code }) => code)), `${table} county CHECK`)
+      }
+      for (const table of ["invoice_drafts", "issued_invoices", "proformas"]) {
+        assert.equal(database.prepare(`PRAGMA table_info(${table})`).all()
+          .find((column) => column.name === "due_date")?.notnull, 0, `${table}.due_date`)
+      }
+      database.exec(`
+        INSERT INTO issuers(organization_id,legal_name,tax_identifier,country_code,city,street,county,sector,postal_code,
+          default_currency,default_payment_term_days,legal_form,trade_registry_number,iban,bank_name,social_capital)
+          VALUES('org-1','Furnizor SRL','12345674','RO','București','Strada 1','RO-B',1,NULL,'RON',15,'srl','J40/1/2020','','','200.00');
+        INSERT INTO document_series VALUES('org-1','invoice','INV');
+        INSERT INTO customers(id,organization_id,legal_name,tax_identifier,country_code,city,street,county,sector,postal_code,party_type,vat_registered)
+          VALUES('customer-1','org-1','Client SRL','87654329','RO','Iași','Strada 2','RO-IS',NULL,NULL,'company',1);
+        INSERT INTO invoice_drafts(id,organization_id,customer_id,customer_party_type,customer_legal_name,customer_tax_identifier,
+          customer_country_code,customer_city,customer_street,customer_county,customer_sector,customer_postal_code,customer_vat_registered,
+          series,issue_date,due_date,currency,status)
+          VALUES('draft-1','org-1','customer-1','company','Client SRL','87654329','RO','Iași','Strada 2','RO-IS',NULL,NULL,1,
+          'INV','2026-09-01',NULL,'RON','draft');
+      `)
+      assert.throws(() => database.prepare("INSERT INTO customers(id,organization_id,legal_name,tax_identifier,country_code,city,street,county,party_type,vat_registered) VALUES('bad-county','org-1','Bad','1','RO','X','X','IS','company',0)").run())
+      assert.throws(() => database.prepare("INSERT INTO customers(id,organization_id,legal_name,tax_identifier,country_code,city,street,county,sector,party_type,vat_registered) VALUES('missing-sector','org-1','Bad','1','RO','X','X','RO-B',NULL,'company',0)").run())
+      assert.throws(() => database.prepare("INSERT INTO customers(id,organization_id,legal_name,tax_identifier,country_code,city,street,county,sector,party_type,vat_registered) VALUES('extra-sector','org-1','Bad','1','RO','X','X','RO-IS',1,'company',0)").run())
+      assert.throws(() => database.prepare("INSERT INTO customers(id,organization_id,legal_name,tax_identifier,country_code,city,street,county,party_type,vat_registered) VALUES('individual-vat','org-1','Ion','','RO','Iași','X','RO-IS','individual',1)").run())
+    } finally { database.close() }
+  } finally { rmSync(directory, { recursive: true, force: true }) }
+})
+
+void test("019 rejects populated storage atomically without changing schema or data", () => {
+  const directory = mkdtempSync(join(tmpdir(), "qwbe-efactura-party-upgrade-"))
+  try {
+    const database = new DatabaseSync(databasePath(directory))
+    try {
+      database.exec("CREATE TABLE schema_migrations(name TEXT PRIMARY KEY,applied_at TEXT NOT NULL)STRICT")
+      const migrations = [...invoicingMigrations, ...paymentsMigrations]
+        .filter(({ name }) => name <= "018-proforma-workflow").sort((left, right) => left.name.localeCompare(right.name))
+      for (const migration of migrations) {
+        if (migration.foreignKeys === "off") database.exec("PRAGMA foreign_keys=OFF")
+        database.exec("BEGIN")
+        for (const statement of migration.statements) database.exec(statement)
+        database.prepare("INSERT INTO schema_migrations VALUES(?,?)").run(migration.name, "2026-01-01")
+        database.exec("COMMIT")
+        if (migration.foreignKeys === "off") database.exec("PRAGMA foreign_keys=ON")
+      }
+      database.prepare(`INSERT INTO issuers(organization_id,legal_name,tax_identifier,country_code,city,street,
+        default_currency,default_payment_term_days,legal_form,trade_registry_number,iban,bank_name,social_capital)
+        VALUES('org-1','Furnizor SRL','12345674','RO','Iași','Strada 1','RON',15,'srl','J22/1/2020','','','200.00')`).run()
+    } finally { database.close() }
+    assert.throws(() => applyMigrations(directory), /CHECK constraint failed: entity_count=0/)
+    const unchanged = new DatabaseSync(databasePath(directory), { readOnly: true })
+    try {
+      assert.equal(unchanged.prepare("SELECT legal_name FROM issuers WHERE organization_id='org-1'").get()?.legal_name, "Furnizor SRL")
+      assert.equal(unchanged.prepare("SELECT 1 FROM schema_migrations WHERE name='019-efactura-party-snapshots'").get(), undefined)
+      assert.equal(unchanged.prepare("SELECT 1 FROM pragma_table_info('issuers') WHERE name='sector'").get(), undefined)
+      assert.equal(unchanged.prepare("SELECT 1 FROM sqlite_master WHERE name='migration_019_fresh_guard'").get(), undefined)
     } finally { unchanged.close() }
   } finally { rmSync(directory, { recursive: true, force: true }) }
 })
@@ -344,13 +422,15 @@ void test("013 adds nullable remarks guarded by the content-immutability trigger
       assert.equal(triggers.length, 2)
       for (const trigger of triggers) assert.ok(String(trigger.sql).includes("notes"), String(trigger.name))
       database.exec(`
-        INSERT INTO issuers(organization_id,legal_name,tax_identifier,country_code,city,street,county,postal_code,default_currency,default_payment_term_days,
+        INSERT INTO issuers(organization_id,legal_name,tax_identifier,country_code,city,street,county,sector,postal_code,default_currency,default_payment_term_days,
           legal_form,trade_registry_number,iban,bank_name,social_capital)
-          VALUES('org-1','Furnizor SRL','RO12345674','RO','Iași','Strada 1',NULL,NULL,'RON',15,'srl','J22/123/2020','','','1000.00');
+          VALUES('org-1','Furnizor SRL','12345674','RO','Iași','Strada 1','RO-IS',NULL,NULL,'RON',15,'srl','J22/123/2020','','','1000.00');
         INSERT INTO document_series VALUES('org-1','invoice','INV'),('org-1','proforma','PRO');
         INSERT INTO invoice_drafts(id,organization_id,customer_id,customer_party_type,customer_legal_name,customer_tax_identifier,
-          customer_country_code,customer_city,customer_street,customer_county,customer_postal_code,series,issue_date,due_date,currency,status,notes)
-          VALUES('draft-1','org-1',NULL,'company','Client SRL','RO87654329','RO','Iași','Strada 1',NULL,NULL,'INV','2026-09-01',NULL,'RON','draft','Observație');
+          customer_country_code,customer_city,customer_street,customer_county,customer_sector,customer_postal_code,customer_vat_registered,
+          series,issue_date,due_date,currency,status,notes)
+          VALUES('draft-1','org-1',NULL,'company','Client SRL','87654329','RO','Iași','Strada 1','RO-IS',NULL,NULL,1,
+          'INV','2026-09-01',NULL,'RON','draft','Observație');
       `)
       assert.equal(database.prepare("SELECT notes FROM invoice_drafts WHERE id = 'draft-1'").get()?.notes, "Observație")
       database.prepare("UPDATE invoice_drafts SET notes = NULL WHERE id = 'draft-1'").run()

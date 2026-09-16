@@ -51,7 +51,8 @@ The organization/legal entity profile supports:
 - legal name;
 - tax identifier and VAT identifier;
 - trade register identifier;
-- structured address: country, county/region, city, postal code, street;
+- structured address: country, required ISO 3166-2 Romanian county, city, postal code, street;
+  sector 1–6 is required for `RO-B` and prohibited for other counties;
 - IBAN, bank, and payment instructions;
 - VAT registration and applicable tax regime;
 - contact details and logo;
@@ -73,7 +74,10 @@ directly on the draft. Both legal entities and natural persons support:
 - optional email, phone, and contact person;
 - default currency, payment term, and notes.
 
-Legal entities require a valid Romanian CUI/CIF. For natural persons, CNP is
+Legal entities require a valid Romanian CUI/CIF stored as digits without `RO`,
+and an explicit VAT registration flag. VAT identifiers are derived from that flag
+and the canonical CUI, never inferred from user-entered prefixes. For natural persons,
+VAT registration must be false and CNP is
 optional and is requested or stored only when the transaction and legal obligation
 require it. Personal data is otherwise kept to the minimum necessary.
 
@@ -159,9 +163,12 @@ Depending on the operation and tax regime, an issued invoice must preserve:
 Due date, IBAN, bank, email, and phone are strongly recommended product fields but
 are not universal mandatory elements in the standard invoice list.
 
-`dueDate` is nullable on drafts, proformas, and issued invoices. Absence of a due
-date is preserved through proforma conversion and invoice issuance; it never makes
-an unpaid or partially paid invoice overdue by date alone.
+`dueDate` is nullable on drafts and proformas. As a product choice satisfying the
+due-date/payment-terms alternative, a positive invoice requires a due date before
+number allocation, including direct issuance, draft issuance and proforma conversion.
+No payment-terms field or implicit date is introduced. A proforma without a due date
+can be converted to an editable draft first. Zero invoices remain exempt; corrections
+retain their own rules. A null date never makes a document overdue by date alone.
 
 ### 3.7 Issuance and immutable snapshot
 
@@ -267,8 +274,16 @@ a fiscal receipt.
 
 ## 5. RO e-Factura readiness without ANAF integration
 
-The commercial invoice model preserves the information needed later by EN 16931 and
-the Romanian CIUS profile:
+The invoice owns immutable fiscal facts exposed through its public document contract;
+the future e-Factura cube consumes those facts, not private tables or current profiles.
+County/sector, canonical CUI and explicit party VAT registration now round-trip through
+registry, drafts, issued snapshots, proformas and full corrections. This is not complete
+EN 16931/CIUS-RO readiness: category and exemption reasons (including verified Article
+310 mapping) are still outstanding, and no XML exporter is included yet.
+
+The target commercial invoice model must eventually preserve the information needed
+by EN 16931 and the Romanian CIUS profile; this list is a target, not a claim that all
+fields are currently implemented:
 
 - invoice identifier, issue date, and invoice type code;
 - seller and buyer names, addresses, tax identifiers, and electronic endpoints;

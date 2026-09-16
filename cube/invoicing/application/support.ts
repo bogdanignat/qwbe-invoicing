@@ -31,11 +31,11 @@ export const recordAuditEvent = (
 }))
 
 export const copyParty = (party: PartySnapshot): PartySnapshot => ({
-  name: party.name, fiscalIdentifier: party.fiscalIdentifier.trim().toUpperCase(), address: { ...party.address },
+  name: party.name, fiscalIdentifier: party.fiscalIdentifier, address: { ...party.address },
 })
 
 export const copyBuyer = (buyer: BuyerSnapshot): BuyerSnapshot => ({
-  ...copyParty(buyer), partyType: buyer.partyType,
+  ...copyParty(buyer), partyType: buyer.partyType, vatRegistered: buyer.vatRegistered,
 })
 
 export const copyIssuerCompanySnapshot = (issuer: IssuerCompanySnapshot): IssuerCompanySnapshot => ({

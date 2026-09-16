@@ -29,17 +29,19 @@ void test("SQLite registries page with a keyset cursor in issue-date, number and
       cubeIdentity: "invoicing",
     })
     await Effect.runPromise(service.configureIssuer({
-      name: "Exemplu SRL", fiscalIdentifier: "RO12345674", address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" },
+      name: "Exemplu SRL", fiscalIdentifier: "12345674",
+      address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1", county: "RO-BT" },
       legalForm: "srl", tradeRegistryNumber: "J22/123/2020", iban: "RO49AAAA1B31007593840000", bankName: "Banca Română", socialCapital: "1000.00",
       defaultCurrency: "RON", defaultPaymentTermDays: 15,
       vatChange: { registered: true, effectiveFrom: "2025-08-01" }, branding: null,
     }))
     await Effect.runPromise(service.addDocumentSeries({ documentType: "invoice", series: "QWBE" }))
-    const customer = { partyType: "company" as const, name: "Client SRL", fiscalIdentifier: "RO87654329", address: { countryCode: "RO", city: "Iași", street: "Strada 2" } }
+    const customer = { partyType: "company" as const, name: "Client SRL", fiscalIdentifier: "87654329", vatRegistered: true,
+      address: { countryCode: "RO", city: "Iași", street: "Strada 2", county: "RO-IS" } }
     const issued: Array<IssuedInvoice> = []
     for (const issueDate of ["2026-09-01", "2026-09-02", "2026-09-03", "2026-09-03", "2026-09-03"]) {
       issued.push(await Effect.runPromise(service.issueInvoice(idempotent({
-        customer, series: "QWBE", issueDate, currency: "RON" as const,
+        customer, series: "QWBE", issueDate, dueDate: "2026-09-20", currency: "RON" as const,
         lines: [{ description: "Servicii", quantity: "1", unitPrice: "10", unitOfMeasure: each, vatRateCode: "RO_STANDARD" }],
       }))))
     }
@@ -58,7 +60,7 @@ void test("SQLite registries page with a keyset cursor in issue-date, number and
     assert.deepEqual(seen, expected)
 
     for (const name of ["Zeta", "alfa", "Beta"]) {
-      await Effect.runPromise(service.createCustomer({ ...customer, name, fiscalIdentifier: "RO87654329" }))
+      await Effect.runPromise(service.createCustomer({ ...customer, name }))
     }
     const first = await Effect.runPromise(service.listCustomers({ limit: 2 }))
     assert.deepEqual(first.items.map((item) => item.name), ["alfa", "Beta"])

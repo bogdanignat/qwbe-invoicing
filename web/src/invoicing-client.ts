@@ -108,10 +108,7 @@ export const invoicingClient = {
     Effect.catchAll((failure) => failure.status === 404 ? Effect.succeed(null) : Effect.fail(failure)),
   ),
   saveIssuer: (body: IssuerInput) => apiRequest("/api/issuer", decodeIssuer, { method: "PUT", body }),
-  getVatCatalogue: (inference?: { readonly countryCode: string; readonly fiscalIdentifier: string }) => apiRequest(
-    inference === undefined ? "/api/vat-regimes" : `/api/vat-regimes?${new URLSearchParams(inference).toString()}`,
-    decodeVatCatalogue,
-  ),
+  getVatCatalogue: () => apiRequest("/api/vat-regimes", decodeVatCatalogue),
   listDocumentSeries: () => apiRequest("/api/document-series", decodeDocumentSeriesList),
   createDocumentSeries: (body: CreateDocumentSeriesInput) => apiRequest("/api/document-series", decodeDocumentSeries, { method: "POST", body }),
   createDraft: (body: CreateDraftInput) => apiRequest("/api/drafts", decodeDraft, { method: "POST", body }),

@@ -48,12 +48,13 @@ void test("migration apply is idempotent", () => {
       "016-fiscal-audit",
       "017-issuer-vat-status",
       "018-proforma-workflow",
+      "019-efactura-party-snapshots",
       "documents/000-foundation",
       "documents/001-artifacts",
       "documents/002-proforma-artifacts",
       "sessions/000-browser-sessions",
     ])
-    assert.equal(applyMigrations(directory).changed, 23)
+    assert.equal(applyMigrations(directory).changed, 24)
     assertSourceIndexes(directory)
     assert.equal(applyMigrations(directory).changed, 0)
     assertSourceIndexes(directory)
@@ -116,9 +117,9 @@ void test("migrations leave every database in write-ahead logging mode with the 
       }
       assert.equal(database.prepare("SELECT 1 FROM pragma_table_info('proformas') WHERE name='invoice_series'").get(), undefined)
       assert.ok(database.prepare("SELECT 1 FROM sqlite_master WHERE type='trigger' AND name='issued_invoices_lineage_insert'").get())
-      database.prepare(`INSERT INTO issuers(organization_id,legal_name,tax_identifier,country_code,city,street,
+      database.prepare(`INSERT INTO issuers(organization_id,legal_name,tax_identifier,country_code,city,street,county,
         default_currency,default_payment_term_days,legal_form,trade_registry_number,iban,bank_name,social_capital)
-        VALUES('org-idempotency','Furnizor SRL','RO12345674','RO','Iași','Strada 1','RON',15,'srl','J22/123/2020','','','1000.00')`).run()
+        VALUES('org-idempotency','Furnizor SRL','12345674','RO','Iași','Strada 1','RO-IS','RON',15,'srl','J22/123/2020','','','1000.00')`).run()
       database.prepare(`INSERT INTO idempotency_records(
         organization_id,idempotency_key,operation,fingerprint,result_kind,result_id,created_at)
         VALUES('org-idempotency','draft-from-proforma','create_draft_invoice_from_proforma',?,'draft','draft-1','2026-09-01T10:00:00.000Z')`)

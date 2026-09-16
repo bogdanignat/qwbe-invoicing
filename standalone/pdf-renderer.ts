@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url"
 import fontkit from "@pdf-lib/fontkit"
 import { Effect } from "effect"
 import { PDFDocument, type PDFImage, type PDFPage } from "pdf-lib"
+import { romanianCountyName } from "../cube/invoicing/index.ts"
 
 import {
   DocumentRenderingFailure,
@@ -34,8 +35,8 @@ import {
   wrapText,
 } from "./pdf-layout.ts"
 
-export const invoiceTemplateVersion = "invoice-v7"
-export const proformaTemplateVersion = "proforma-v6"
+export const invoiceTemplateVersion = "invoice-v8"
+export const proformaTemplateVersion = "proforma-v7"
 
 const regularFontPath = fileURLToPath(new URL("./assets/fonts/DejaVuSans.ttf", import.meta.url))
 const boldFontPath = fileURLToPath(new URL("./assets/fonts/DejaVuSans-Bold.ttf", import.meta.url))
@@ -92,13 +93,15 @@ export const formatRate = (rate: string): string => {
 
 export const partyIdentifierLine = (party: RenderableParty): string | undefined => party.fiscalIdentifier === ""
   ? undefined
-  : `${party.partyType === "individual" ? "CNP" : "CUI"}: ${party.fiscalIdentifier}`
+  : `${party.partyType === "individual" ? "CNP" : "CUI"}: ${party.fiscalIdentifier}${party.vatRegistered ? ` · Cod TVA: RO${party.fiscalIdentifier}` : ""}`
 
 export const documentDateLine = (document: Pick<RenderableDocument, "issueDate" | "dueDate">): string =>
   `Data emiterii: ${document.issueDate}${document.dueDate === null ? "" : `   Scadență: ${document.dueDate}`}`
 
-const partyAddressLines = (party: RenderableParty): ReadonlyArray<string> => {
-  const region = [party.address.county, party.address.postalCode].filter((part) => part !== undefined && part !== "")
+export const partyAddressLines = (party: RenderableParty): ReadonlyArray<string> => {
+  const region = [romanianCountyName(party.address.county),
+    party.address.sector === undefined ? undefined : `Sector ${String(party.address.sector)}`,
+    party.address.postalCode].filter((part) => part !== undefined && part !== "")
   return [
     party.address.street,
     [party.address.city, ...region].filter((part) => part !== "").join(", "),
@@ -173,7 +176,7 @@ const drawPartyColumn = (
   })
   const identifier = partyIdentifierLine(party)
   if (identifier !== undefined) {
-    cursor = putLines(sheet.page, [identifier], {
+    cursor = putLines(sheet.page, wrapText(sheet.fonts.regular, 8, options.width, identifier), {
       ...shared,
       top: cursor - 1,
       size: 8,

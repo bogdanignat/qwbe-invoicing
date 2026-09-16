@@ -3,17 +3,8 @@ import type { Issuer, VatCatalogue, VatConfiguration, VatRate } from "./models.t
 interface DraftTaxLine { readonly vatRateCode: string; readonly vatRate: string }
 interface SavedDraftTaxLine extends DraftTaxLine { readonly id: string }
 
-export const romanianCuiPattern = "(?:RO)?[1-9][0-9]{1,9}"
-export const normalizeRomanianCui = (value: string): string => value.trim().toUpperCase()
-
-export const shouldApplyVatInference = (input: {
-  readonly requestedFiscalIdentifier: string
-  readonly currentFiscalIdentifier: string
-  readonly requestIsCurrent: boolean
-  readonly manuallySelectedVat: boolean
-}): boolean => input.requestIsCurrent
-  && !input.manuallySelectedVat
-  && normalizeRomanianCui(input.requestedFiscalIdentifier) === normalizeRomanianCui(input.currentFiscalIdentifier)
+export const romanianCuiPattern = "[1-9][0-9]{1,9}"
+export const normalizeRomanianCui = (value: string): string => value.trim().toUpperCase().replace(/^RO/, "")
 
 const activeOn = (value: { readonly effectiveFrom: string; readonly effectiveTo?: string }, date: string): boolean =>
   value.effectiveFrom <= date && (value.effectiveTo === undefined || date <= value.effectiveTo)

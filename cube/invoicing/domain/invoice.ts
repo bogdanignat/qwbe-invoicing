@@ -4,14 +4,14 @@ export interface Address {
   readonly countryCode: string
   readonly city: string
   readonly street: string
-  readonly county?: string
+  readonly county: string
+  readonly sector?: number
   readonly postalCode?: string
 }
 
 export interface PartySnapshot {
   readonly name: string
-  // CUI/CIF for companies, CNP for individuals. For the issuer the RO prefix also
-  // marks VAT registration; e-Factura will later split it into BT-30 and BT-31.
+  // Canonical numeric CUI for companies/PFA; optional CNP for individuals.
   readonly fiscalIdentifier: string
   readonly address: Address
 }
@@ -47,6 +47,7 @@ export type PartyType = "company" | "individual"
 
 export interface BuyerSnapshot extends PartySnapshot {
   readonly partyType: PartyType
+  readonly vatRegistered: boolean
 }
 
 export interface DocumentSource {

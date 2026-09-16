@@ -14,16 +14,16 @@ void test("corrects an issued invoice exactly once with a negated immutable snap
     clock: fixedClock, ids: sequentialIds(), store: memoryStore(state), branding: brandingNormalizer, cubeIdentity: "invoicing",
   })
   await Effect.runPromise(service.configureIssuer({
-    name: "Exemplu SRL", fiscalIdentifier: "RO12345674",
-    address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" },
+    name: "Exemplu SRL", fiscalIdentifier: "12345674",
+    address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1", county: "RO-BT" },
     legalForm: "srl", tradeRegistryNumber: "J40/123/2020", socialCapital: "200.00", iban: "", bankName: "",
     defaultCurrency: "RON", defaultPaymentTermDays: 15, vatChange: { registered: true, effectiveFrom: "2025-08-01" }, branding: null,
   }))
   await Effect.runPromise(service.addDocumentSeries({ documentType: "invoice", series: "QWBE" }))
-  const customer = { partyType: "company" as const, name: "Client SRL", fiscalIdentifier: "RO87654329",
-    address: { countryCode: "RO", city: "Iași", street: "Strada Mică 2" } }
+  const customer = { partyType: "company" as const, name: "Client SRL", fiscalIdentifier: "87654329", vatRegistered: true,
+    address: { countryCode: "RO", city: "Iași", street: "Strada Mică 2", county: "RO-IS" } }
   const invoice = await Effect.runPromise(service.issueInvoice(idempotent({
-    customer, series: "QWBE", issueDate: "2026-09-01", currency: "RON" as const,
+    customer, series: "QWBE", issueDate: "2026-09-01", dueDate: "2026-09-16", currency: "RON" as const,
     source: { app: "shop", kind: "order", id: "order-7" },
     lines: [{ description: "Servicii", quantity: "1.2500", unitPrice: "100.00", unitOfMeasure: each, vatRateCode: "RO_STANDARD" }],
   })))

@@ -1,10 +1,12 @@
 import { issuerIssuanceWarning, normalizeIssuerLegalDetails, type IssuerLegalDetails, type LegalForm } from "./issuer-details.ts"
+import { isRomanianCountyCode } from "./romanian-counties.ts"
 
 export interface Address {
   readonly countryCode: string
   readonly city: string
   readonly street: string
-  readonly county?: string
+  readonly county: string
+  readonly sector?: number
   readonly postalCode?: string
 }
 
@@ -28,6 +30,7 @@ export interface IssuerBranding {
 export type { LegalForm } from "./issuer-details.ts"
 
 export interface IssuerCompanySnapshot extends Party {
+  readonly vatRegistered: boolean
   readonly legalForm: LegalForm
   readonly tradeRegistryNumber: string
   readonly iban: string
@@ -43,6 +46,7 @@ export type PartyType = "company" | "individual"
 
 export interface BuyerSnapshot extends Party {
   readonly partyType: PartyType
+  readonly vatRegistered: boolean
 }
 
 export interface Customer extends BuyerSnapshot {
@@ -90,10 +94,9 @@ export interface VatRate extends VatConfiguration {
 
 export interface VatCatalogue {
   readonly rates: ReadonlyArray<VatRate>
-  readonly inferredRegistration: boolean | null
 }
 
-export interface Issuer extends IssuerSnapshot {
+export interface Issuer extends Omit<IssuerSnapshot, "vatRegistered"> {
   readonly organizationId: string
   readonly defaultCurrency: string
   readonly defaultPaymentTermDays: number
@@ -267,6 +270,10 @@ const integer = (input: unknown, field: string): number => {
   if (typeof input !== "number" || !Number.isInteger(input)) throw new Error(`invalid ${field}`)
   return input
 }
+const boolean = (input: unknown, field: string): boolean => {
+  if (typeof input !== "boolean") throw new Error(`invalid ${field}`)
+  return input
+}
 const optionalText = (input: unknown, field: string): string | undefined =>
   input === undefined || input === null ? undefined : text(input, field)
 const optionalInteger = (input: unknown, field: string): number | undefined =>
@@ -280,13 +287,17 @@ const array = <Value>(input: unknown, decode: Decoder<Value>, field: string): Re
 
 const decodeAddress: Decoder<Address> = (input) => {
   const value = object(input)
-  const county = optionalText(value.county, "county")
+  const county = text(value.county, "county")
+  const sector = optionalInteger(value.sector, "sector")
   const postalCode = optionalText(value.postalCode, "postalCode")
+  if (!isRomanianCountyCode(county)) throw new Error("invalid county")
+  if (county === "RO-B" ? sector === undefined || sector < 1 || sector > 6 : sector !== undefined) throw new Error("invalid sector")
   return {
     countryCode: text(value.countryCode, "countryCode"),
     city: text(value.city, "city"),
     street: text(value.street, "street"),
-    ...(county === undefined ? {} : { county }),
+    county,
+    ...(sector === undefined ? {} : { sector }),
     ...(postalCode === undefined ? {} : { postalCode }),
   }
 }
@@ -300,7 +311,12 @@ const decodeParty: Decoder<Party> = (input) => {
   }
 }
 
-const decodeIssuerCompanySnapshot: Decoder<IssuerCompanySnapshot> = (input) => {
+const canonicalCui = (value: string): string => {
+  if (!/^[0-9]+$/.test(value)) throw new Error("invalid fiscalIdentifier")
+  return value
+}
+
+const decodeIssuerCompany = (input: unknown): Party & IssuerLegalDetails => {
   const value = object(input)
   const raw = {
     legalForm: text(value.legalForm, "legalForm"),
@@ -316,7 +332,13 @@ const decodeIssuerCompanySnapshot: Decoder<IssuerCompanySnapshot> = (input) => {
   for (const field of ["tradeRegistryNumber", "iban", "bankName", "socialCapital"] as const) {
     if (details[field] !== raw[field]) throw new Error(`invalid ${field}`)
   }
-  return { ...decodeParty(value), ...details }
+  const party = decodeParty(value)
+  return { ...party, fiscalIdentifier: canonicalCui(party.fiscalIdentifier), ...details }
+}
+
+const decodeIssuerCompanySnapshot: Decoder<IssuerCompanySnapshot> = (input) => {
+  const value = object(input)
+  return { ...decodeIssuerCompany(value), vatRegistered: boolean(value.vatRegistered, "vatRegistered") }
 }
 
 const decodeIssuedIssuerCompanySnapshot: Decoder<IssuerCompanySnapshot> = (input) => {
@@ -348,9 +370,9 @@ const decodeIssuerSnapshot: Decoder<IssuerSnapshot> = (input) => {
   return { ...decodeIssuedIssuerCompanySnapshot(value), branding: value.branding === null ? null : decodeIssuerBranding(value.branding) }
 }
 
-const decodeIssuerProfileSnapshot: Decoder<IssuerSnapshot> = (input) => {
+const decodeIssuerProfileSnapshot: Decoder<Omit<IssuerSnapshot, "vatRegistered">> = (input) => {
   const value = object(input)
-  return { ...decodeIssuerCompanySnapshot(value), branding: value.branding === null ? null : decodeIssuerBranding(value.branding) }
+  return { ...decodeIssuerCompany(value), branding: value.branding === null ? null : decodeIssuerBranding(value.branding) }
 }
 
 const decodePartyType = (input: unknown): PartyType => {
@@ -361,7 +383,13 @@ const decodePartyType = (input: unknown): PartyType => {
 
 const decodeBuyer: Decoder<BuyerSnapshot> = (input) => {
   const value = object(input)
-  return { ...decodeParty(value), partyType: decodePartyType(value.partyType) }
+  const partyType = decodePartyType(value.partyType)
+  const vatRegistered = boolean(value.vatRegistered, "vatRegistered")
+  if (partyType === "individual" && vatRegistered) throw new Error("invalid vatRegistered")
+  const party = decodeParty(value)
+  const fiscalIdentifier = partyType === "company" ? canonicalCui(party.fiscalIdentifier) : party.fiscalIdentifier
+  if (partyType === "individual" && fiscalIdentifier !== "" && !/^[0-9]{13}$/.test(fiscalIdentifier)) throw new Error("invalid fiscalIdentifier")
+  return { ...party, fiscalIdentifier, partyType, vatRegistered }
 }
 
 export const decodeUnitOfMeasure: Decoder<UnitOfMeasure> = (input) => {
@@ -422,8 +450,7 @@ const decodeVatRate: Decoder<VatRate> = (input) => {
 
 export const decodeVatCatalogue: Decoder<VatCatalogue> = (input) => {
   const value = object(input)
-  if (value.inferredRegistration !== null && typeof value.inferredRegistration !== "boolean") throw new Error("invalid inferredRegistration")
-  return { rates: array(value.rates, decodeVatRate, "rates"), inferredRegistration: value.inferredRegistration }
+  return { rates: array(value.rates, decodeVatRate, "rates") }
 }
 
 export const decodeDocumentSeries: Decoder<DocumentSeries> = (input) => {

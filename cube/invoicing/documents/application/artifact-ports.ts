@@ -28,19 +28,22 @@ export interface RequestContext {
 
 export interface RenderableParty {
   readonly partyType?: "company" | "individual"
+  readonly vatRegistered: boolean
   readonly name: string
   readonly fiscalIdentifier: string
   readonly address: {
     readonly countryCode: string
     readonly city: string
     readonly street: string
-    readonly county?: string
+    readonly county: string
+    readonly sector?: number
     readonly postalCode?: string
   }
 }
 
 export interface RenderableBuyer extends RenderableParty {
   readonly partyType: "company" | "individual"
+  readonly vatRegistered: boolean
 }
 
 export interface RenderableIssuer extends RenderableParty {

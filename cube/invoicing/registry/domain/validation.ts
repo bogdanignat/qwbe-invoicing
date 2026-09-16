@@ -3,9 +3,9 @@ import { normalizeMoney } from "../../domain/calculation.ts"
 import type { IssuerProfile, VatConfiguration } from "../../domain/invoice.ts"
 import type { CustomerInput, ProductPresetInput } from "../../domain/inputs.ts"
 import { normalizeUnitOfMeasure } from "../../domain/unit-of-measures.ts"
-import { isValidRomanianCui, maximumPaymentTermDays, validateBuyer, validateDate, validateParty } from "../../domain/validation.ts"
+import { maximumPaymentTermDays, validateDate } from "../../domain/validation.ts"
 import { normalizeIssuerDetails } from "./issuer-details.ts"
-import { currentVatRegistration } from "./vat-regime.ts"
+import { isValidRomanianCui, validateBuyer, validateParty } from "./party-validation.ts"
 
 export const resolveVatConfiguration = (
   issuer: IssuerProfile,
@@ -97,15 +97,7 @@ export const validateIssuerProfile = (issuer: Omit<IssuerProfile, "vatConfigurat
   if (issues.length > 0) throw new ValidationFailure({ issues })
 }
 
-export const validateIssuer = (issuer: IssuerProfile, currentDate: string): void => {
+export const validateIssuer = (issuer: IssuerProfile): void => {
   validateIssuerProfile(issuer)
   validateVatConfigurations(issuer.vatConfigurations)
-  const active = currentVatRegistration(issuer.vatConfigurations, currentDate)
-  if (active !== undefined) {
-    const nonVat = !active.registered
-    if (issuer.fiscalIdentifier.startsWith("RO") === nonVat) throw new ValidationFailure({
-      issues: [nonVat ? "fiscalIdentifier with RO prefix requires a VAT-registered vat configuration"
-        : "fiscalIdentifier without RO prefix requires RO_NON_VAT with rate 0"],
-    })
-  }
 }

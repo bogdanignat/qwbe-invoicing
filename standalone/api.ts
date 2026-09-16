@@ -158,10 +158,7 @@ const invoicingGroup = (runtime: ApiRuntime) => {
     .handle("listDocumentSeries", () => use((s) => s.invoicing.listDocumentSeries()).pipe(Effect.mapError(errors())))
     .handle("addDocumentSeries", ({ payload }) => use((s) => s.invoicing.addDocumentSeries(payload)).pipe(Effect.mapError(errors("ValidationFailure", "DomainConflict"))))
     .handle("listUnitOfMeasures", () => use((s) => s.invoicing.listUnitOfMeasures()).pipe(Effect.mapError(errors())))
-    .handle("listVatRegimes", ({ urlParams }) => use((s) => s.invoicing.getVatCatalogue(
-      urlParams.countryCode === undefined || urlParams.fiscalIdentifier === undefined ? undefined
-        : { countryCode: urlParams.countryCode, fiscalIdentifier: urlParams.fiscalIdentifier },
-    )).pipe(Effect.mapError(errors("ValidationFailure"))))
+    .handle("listVatRegimes", () => use((s) => s.invoicing.getVatCatalogue()).pipe(Effect.mapError(errors("ValidationFailure"))))
     .handle("listCustomers", ({ urlParams }) => use((s) => s.invoicing.listCustomers(urlParams)).pipe(Effect.mapError(errors("ValidationFailure"))))
     .handle("getCustomer", ({ path }) => use((s) => s.invoicing.getCustomer(path.id)).pipe(Effect.mapError(errors("ResourceNotFound"))))
     .handle("createCustomer", ({ payload }) => use((s) => s.invoicing.createCustomer(payload)).pipe(Effect.mapError(errors("ValidationFailure"))))

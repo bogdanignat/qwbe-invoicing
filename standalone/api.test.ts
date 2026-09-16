@@ -44,8 +44,8 @@ void test("requires host authentication and serves the complete invoice-core rou
     }
     const issuerBody = {
       name: "Exemplu SRL",
-      fiscalIdentifier: " ro12345674 ",
-      address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" },
+      fiscalIdentifier: " 12345674 ",
+      address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1", county: "RO-BT" },
       legalForm: "srl",
       tradeRegistryNumber: " j22/123/2020 ",
       iban: " ro49 aaaa 1b31 0075 9384 0000 ",
@@ -73,11 +73,6 @@ void test("requires host authentication and serves the complete invoice-core rou
     const rates = (vatCatalogue.body as { rates: ReadonlyArray<{ code: string; rate: string }> }).rates
     assert.ok(rates.some((rate) => rate.code === "RO_STANDARD" && rate.rate === "21.00"))
     assert.ok(rates.some((rate) => rate.code === "RO_REDUCED" && rate.rate === "11.00"))
-    const inferred = await handleApiRequest({ method: "GET",
-      url: "/api/vat-regimes?countryCode=RO&fiscalIdentifier=RO12345674", authorization, body: undefined }, runtime)
-    assert.equal((inferred.body as { inferredRegistration: boolean | null }).inferredRegistration, true)
-    assert.equal((await handleApiRequest({ method: "GET", url: "/api/vat-regimes?countryCode=RO",
-      authorization, body: undefined }, runtime)).status, 400)
     const mismatchedIssuer = await handleApiRequest({
       method: "PUT",
       url: "/api/issuer",
@@ -90,7 +85,7 @@ void test("requires host authentication and serves the complete invoice-core rou
     assert.equal(issuerAfterRejectedSave.status, 404)
     const issuer = await handleApiRequest({ method: "PUT", url: "/api/issuer", authorization, body: issuerBody }, runtime)
     assert.equal(issuer.status, 200)
-    assert.equal((issuer.body as { fiscalIdentifier: string }).fiscalIdentifier, "RO12345674")
+    assert.equal((issuer.body as { fiscalIdentifier: string }).fiscalIdentifier, "12345674")
     assert.deepEqual((issuer.body as { currentVat: unknown }).currentVat,
       { registered: true, effectiveFrom: "2025-08-01" })
     const canonicalIssuerDetails = {
@@ -142,7 +137,7 @@ void test("requires host authentication and serves the complete invoice-core rou
     }, runtime)
     assert.equal(rejectedUpdate.status, 400)
     const issuerAfterRejectedUpdate = await handleApiRequest({ method: "GET", url: "/api/issuer", authorization, body: undefined }, runtime)
-    assert.equal((issuerAfterRejectedUpdate.body as { fiscalIdentifier: string }).fiscalIdentifier, "RO12345674")
+    assert.equal((issuerAfterRejectedUpdate.body as { fiscalIdentifier: string }).fiscalIdentifier, "12345674")
     assert.deepEqual(detailsOf(issuerAfterRejectedUpdate.body), canonicalIssuerDetails)
     const customer = await handleApiRequest({
       method: "POST",
@@ -152,7 +147,8 @@ void test("requires host authentication and serves the complete invoice-core rou
         partyType: "individual",
         name: "Ion Popescu",
         fiscalIdentifier: " ",
-        address: { countryCode: "RO", city: "Iași", street: "Strada Mică 2" },
+        vatRegistered: false,
+        address: { countryCode: "RO", city: "Iași", street: "Strada Mică 2", county: "RO-IS" },
         defaultPaymentTermDays: 7,
       },
     }, runtime)
@@ -162,20 +158,22 @@ void test("requires host authentication and serves the complete invoice-core rou
     assert.equal((customer.body as { defaultPaymentTermDays: number }).defaultPaymentTermDays, 7)
     const companyWithoutCui = await handleApiRequest({
       method: "POST", url: "/api/customers", authorization,
-      body: { partyType: "company", name: "Fără CUI SRL", fiscalIdentifier: "", address: { countryCode: "RO", city: "Iași", street: "Strada 2" } },
+      body: { partyType: "company", name: "Fără CUI SRL", fiscalIdentifier: "", vatRegistered: false,
+        address: { countryCode: "RO", city: "Iași", street: "Strada 2", county: "RO-IS" } },
     }, runtime)
     assert.equal(companyWithoutCui.status, 400)
     assert.equal((companyWithoutCui.body as { issues: ReadonlyArray<string> }).issues.includes("fiscalIdentifier is required for company"), true)
     const draftWithoutCui = await handleApiRequest({
       method: "POST", url: "/api/drafts", authorization,
-      body: { customer: { partyType: "company", name: "Fără CUI SRL", fiscalIdentifier: "", address: { countryCode: "RO", city: "Iași", street: "Strada 2" } }, issueDate: "2026-09-01", series: "QWBE" },
+      body: { customer: { partyType: "company", name: "Fără CUI SRL", fiscalIdentifier: "", vatRegistered: false,
+        address: { countryCode: "RO", city: "Iași", street: "Strada 2", county: "RO-IS" } }, issueDate: "2026-09-01", series: "QWBE" },
     }, runtime)
     assert.equal(draftWithoutCui.status, 400)
     const customerId = (customer.body as { id: string }).id
     const updatedCustomer = await handleApiRequest({
       method: "PUT", url: `/api/customers/${customerId}`, authorization,
-      body: { partyType: "individual", name: "Ion Actualizat", fiscalIdentifier: "",
-        address: { countryCode: "RO", city: "Iași", street: "Strada Nouă 3" }, defaultPaymentTermDays: 21 },
+      body: { partyType: "individual", name: "Ion Actualizat", fiscalIdentifier: "", vatRegistered: false,
+        address: { countryCode: "RO", city: "Iași", street: "Strada Nouă 3", county: "RO-IS" }, defaultPaymentTermDays: 21 },
     }, runtime)
     assert.equal(updatedCustomer.status, 200)
     assert.equal((updatedCustomer.body as { defaultPaymentTermDays: number }).defaultPaymentTermDays, 21)
@@ -227,7 +225,8 @@ void test("requires host authentication and serves the complete invoice-core rou
     assert.equal(ambiguousBuyer.status, 400)
     const disposable = await handleApiRequest({
       method: "POST", url: "/api/drafts", authorization,
-      body: { customer: { partyType: "individual", name: "Client unic", fiscalIdentifier: "", address: { countryCode: "RO", city: "Iași", street: "Strada 3" } }, issueDate: "2026-09-01", series: "QWBE" },
+      body: { customer: { partyType: "individual", name: "Client unic", fiscalIdentifier: "", vatRegistered: false,
+        address: { countryCode: "RO", city: "Iași", street: "Strada 3", county: "RO-IS" } }, issueDate: "2026-09-01", series: "QWBE" },
     }, runtime)
     const disposableId = (disposable.body as { id: string }).id
     const drafts = await handleApiRequest({ method: "GET", url: "/api/drafts", authorization, body: undefined }, runtime)
@@ -237,7 +236,8 @@ void test("requires host authentication and serves the complete invoice-core rou
     })
     const updatedDraft = await handleApiRequest({
       method: "PUT", url: `/api/drafts/${draftId}`, authorization,
-      body: { customer: { partyType: "individual", name: "Maria Ionescu", fiscalIdentifier: "", address: { countryCode: "RO", city: "Iași", street: "Strada Nouă 4" } }, issueDate: "2026-09-01", dueDate: "2026-09-20" },
+      body: { customer: { partyType: "individual", name: "Maria Ionescu", fiscalIdentifier: "", vatRegistered: false,
+        address: { countryCode: "RO", city: "Iași", street: "Strada Nouă 4", county: "RO-IS" } }, issueDate: "2026-09-01", dueDate: "2026-09-20" },
     }, runtime)
     assert.equal((updatedDraft.body as { customer: { name: string } }).customer.name, "Maria Ionescu")
     const line = await handleApiRequest({
@@ -333,7 +333,7 @@ void test("requires host authentication and serves the complete invoice-core rou
     }, { status: "partially_paid", paidAmount: "50.00", remainingAmount: "71.00", count: 3 })
     const proformaDraft = await handleApiRequest({
       method: "POST", url: "/api/drafts", authorization,
-      body: { customerId, issueDate: "2026-09-05", dueDate: null, series: "QWBE",
+      body: { customerId, issueDate: "2026-09-05", dueDate: "2026-09-20", series: "QWBE",
         source: { app: "crm", kind: "offer", id: "offer-1" } },
     }, runtime)
     const proformaDraftId = (proformaDraft.body as { id: string }).id
@@ -353,7 +353,7 @@ void test("requires host authentication and serves the complete invoice-core rou
     assert.equal(proforma.status, 200)
     assert.equal((proforma.body as { actorId: string }).actorId, "standalone-owner")
     assert.deepEqual((proforma.body as { source?: unknown }).source, { app: "crm", kind: "offer", id: "offer-1" })
-    assert.equal((proforma.body as { dueDate: string | null }).dueDate, null)
+    assert.equal((proforma.body as { dueDate: string | null }).dueDate, "2026-09-20")
     assert.equal((proforma.body as { convertedDraftId: string | null }).convertedDraftId, null)
     assert.equal(Object.hasOwn(proforma.body as object, "invoiceSeries"), false)
     const proformaId = (proforma.body as { id: string }).id
@@ -407,7 +407,7 @@ void test("requires host authentication and serves the complete invoice-core rou
     }, runtime)
     assert.equal(converted.status, 200)
     assert.equal((converted.body as { actorId: string }).actorId, "standalone-owner")
-    assert.equal((converted.body as { dueDate: string | null }).dueDate, null)
+    assert.equal((converted.body as { dueDate: string | null }).dueDate, "2026-09-20")
     assert.equal((converted.body as { draftId: string | null }).draftId, null)
     assert.equal((converted.body as { sourceProformaId: string | null }).sourceProformaId, proformaId)
     assert.deepEqual((converted.body as { source?: unknown }).source, { app: "crm", kind: "offer", id: "offer-1" })
@@ -431,10 +431,10 @@ void test("requires host authentication and serves the complete invoice-core rou
     assert.equal(typeof ((await handleApiRequest({ method: "GET", url: `/api/invoices/${invoiceId}`, authorization, body: undefined }, runtime))
       .body as { issuer: { branding: { image: { pngBase64: string } } } }).issuer.branding.image.pngBase64, "string")
     const authoredBody = {
-      customer: { partyType: "company", name: "Client CRM SRL", fiscalIdentifier: "RO87654329",
-        address: { countryCode: "RO", city: "Iași", street: "Strada CRM 5" } },
+      customer: { partyType: "company", name: "Client CRM SRL", fiscalIdentifier: "87654329", vatRegistered: true,
+        address: { countryCode: "RO", city: "Iași", street: "Strada CRM 5", county: "RO-IS" } },
       source: { app: "crm", kind: "contract", id: "contract-123" },
-      series: "QWBE", issueDate: "2026-09-05", dueDate: null, currency: "RON",
+      series: "QWBE", issueDate: "2026-09-05", dueDate: "2026-09-20", currency: "RON",
       lines: [{ description: "Direct din CRM", quantity: "1", unitPrice: "25", unitOfMeasure: { code: "HUR", name: "oră" }, vatRateCode: "RO_STANDARD" }],
     }
     assert.equal((await handleApiRequest({ method: "POST", url: "/api/invoices", authorization,
@@ -672,8 +672,8 @@ void test("carries document remarks through the HTTP contract and rejects invali
     const call = (method: string, url: string, body?: unknown, idempotencyKey?: string) =>
       handleApiRequest({ method, url, authorization, body, ...(idempotencyKey === undefined ? {} : { idempotencyKey }) }, runtime)
     await call("PUT", "/api/issuer", {
-      name: "Exemplu SRL", fiscalIdentifier: "RO12345674",
-      address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" },
+      name: "Exemplu SRL", fiscalIdentifier: "12345674",
+      address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1", county: "RO-BT" },
       legalForm: "srl", tradeRegistryNumber: "J22/123/2020", iban: "RO49AAAA1B31007593840000",
       bankName: "Banca Română", socialCapital: "1000.00",
       defaultCurrency: "RON", defaultPaymentTermDays: 15,
@@ -682,19 +682,21 @@ void test("carries document remarks through the HTTP contract and rejects invali
     })
     await call("POST", "/api/document-series", { documentType: "invoice", series: "QWBE" })
     await call("POST", "/api/document-series", { documentType: "proforma", series: "PRO" })
-    const customer = { partyType: "company", name: "Client SRL", fiscalIdentifier: "RO87654329",
-      address: { countryCode: "RO", city: "Iași", street: "Strada Mică 2" } }
+    const customer = { partyType: "company", name: "Client SRL", fiscalIdentifier: "87654329", vatRegistered: true,
+      address: { countryCode: "RO", city: "Iași", street: "Strada Mică 2", county: "RO-IS" } }
     const remarks = "Plata în 15 zile.\nContact: birou vânzări."
     const notesOf = (response: { readonly body: unknown }): unknown => (response.body as { notes: unknown }).notes
 
-    const draft = await call("POST", "/api/drafts", { customer, issueDate: "2026-09-01", series: "QWBE", notes: remarks })
+    const draft = await call("POST", "/api/drafts", {
+      customer, issueDate: "2026-09-01", dueDate: "2026-09-16", series: "QWBE", notes: remarks,
+    })
     assert.equal(draft.status, 200)
     assert.equal(notesOf(draft), remarks)
     const draftId = (draft.body as { id: string }).id
     assert.equal(notesOf(await call("GET", `/api/drafts/${draftId}`)), remarks)
     assert.equal(notesOf(await call("PUT", `/api/drafts/${draftId}`, { customer, issueDate: "2026-09-01" })), remarks)
     assert.equal(notesOf(await call("PUT", `/api/drafts/${draftId}`, { customer, issueDate: "2026-09-01", notes: null })), null)
-    assert.equal(notesOf(await call("PUT", `/api/drafts/${draftId}`, { customer, issueDate: "2026-09-01", notes: remarks })), remarks)
+    assert.equal(notesOf(await call("PUT", `/api/drafts/${draftId}`, { customer, issueDate: "2026-09-01", dueDate: "2026-09-16", notes: remarks })), remarks)
     for (const notes of ["", "   ", " marginal ", "x".repeat(501), 7, "tab\tstop", "linie\u2028separata", "paragraf\u2029separat"]) {
       assert.equal((await call("POST", "/api/drafts", { customer, issueDate: "2026-09-01", series: "QWBE", notes })).status, 400, String(notes))
       assert.equal((await call("PUT", `/api/drafts/${draftId}`, { customer, issueDate: "2026-09-01", notes })).status, 400, String(notes))
@@ -703,9 +705,10 @@ void test("carries document remarks through the HTTP contract and rejects invali
       description: "Servicii", quantity: "1", unitPrice: "100", unitOfMeasure: each, vatRateCode: "RO_STANDARD",
     })
     const fromDraft = await call("POST", `/api/drafts/${draftId}/issue`, {}, "notes-draft-invoice")
+    assert.equal(fromDraft.status, 200)
     assert.equal(notesOf(fromDraft), remarks)
 
-    const authored = { customer, series: "QWBE", issueDate: "2026-09-01", dueDate: null, currency: "RON",
+    const authored = { customer, series: "QWBE", issueDate: "2026-09-01", dueDate: "2026-09-16", currency: "RON",
       lines: [{ description: "Servicii", quantity: "1", unitPrice: "100", unitOfMeasure: each, vatRateCode: "RO_STANDARD" }] }
     const direct = await call("POST", "/api/invoices", { ...authored, notes: remarks }, "notes-direct-invoice")
     assert.equal(notesOf(direct), remarks)

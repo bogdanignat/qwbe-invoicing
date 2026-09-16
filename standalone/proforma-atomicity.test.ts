@@ -23,13 +23,14 @@ const each = { code: "C62", name: "unitate" } as const
 const customer = {
   partyType: "company" as const,
   name: "Client SRL",
-  fiscalIdentifier: "RO87654329",
-  address: { countryCode: "RO", city: "Cluj", street: "Strada 2" },
+  fiscalIdentifier: "87654329",
+  vatRegistered: true,
+  address: { countryCode: "RO", city: "Cluj", street: "Strada 2", county: "RO-CJ" },
 }
 const issuer = {
   name: "Furnizor SRL",
-  fiscalIdentifier: "RO12345674",
-  address: { countryCode: "RO", city: "Iași", street: "Strada 1" },
+  fiscalIdentifier: "12345674",
+  address: { countryCode: "RO", city: "Iași", street: "Strada 1", county: "RO-IS" },
   legalForm: "srl" as const,
   tradeRegistryNumber: "J22/123/2020",
   iban: "RO49AAAA1B31007593840000",
@@ -86,7 +87,7 @@ const configure = async (value: Fixture, registered = true, effectiveFrom = "202
   const service = value.service()
   await Effect.runPromise(service.configureIssuer({
     ...issuer,
-    fiscalIdentifier: registered ? issuer.fiscalIdentifier : issuer.fiscalIdentifier.slice(2),
+    fiscalIdentifier: issuer.fiscalIdentifier,
     vatChange: { registered, effectiveFrom },
   }))
   await Effect.runPromise(service.addDocumentSeries({ documentType: "invoice", series: "INV" }))
@@ -263,7 +264,9 @@ void test("derived draft lineage, guards, replay, dates, and frozen copies survi
     ))), "derived_draft_cannot_issue_proforma")
     assert.deepEqual(databaseCounts(value.directory), guardBefore)
 
-    const ordinary = await Effect.runPromise(service.createDraft({ customer, series: "INV", issueDate: "2026-09-10" }))
+    const ordinary = await Effect.runPromise(service.createDraft({
+      customer, series: "INV", issueDate: "2026-09-10", dueDate: "2026-09-25",
+    }))
     await Effect.runPromise(service.addDraftLine({ draftId: ordinary.id, description: "Avans", quantity: "1", unitPrice: "10",
       unitOfMeasure: each, vatRateCode: "RO_STANDARD" }))
     const ordinaryProforma = await Effect.runPromise(service.issueProforma(idempotent(

@@ -2,13 +2,15 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useRef, useState } from "react"
 
 import { runUiEffect } from "./api.ts"
+import { issuerAddressSelection } from "./issuer-address-state.ts"
 import { formField, type FormSubmitEvent } from "./form.ts"
 import { today } from "./format.ts"
 import { invoicingClient, type IssuerInput } from "./invoicing-client.ts"
 import { beginBrandImageSelection, brandingDraftFromSaved, brandingImageSaveIssue, changeBrandImage, changeBrandText as changeBrandTextInDraft, createRevisionGuard, normalizeBrandText, removeBrandImage as removeBrandImageFromDraft, removeBranding as emptyBrandingDraft, validateBrandingDimensions, validateBrandingFile, validateBrandingFileInfo, type BrandingDraft, type RasterMime } from "./issuer-branding.ts"
 import { normalizeIssuerLegalDetails, type IssuerLegalDetails } from "./issuer-details.ts"
-import { fallbackVatRegistration, normalizeRomanianCui, shouldApplyVatInference, vatRegistrationHistory } from "./vat-defaults.ts"
+import { fallbackVatRegistration, normalizeRomanianCui, vatRegistrationHistory } from "./vat-defaults.ts"
 import { useVatCatalogue } from "./vat-hooks.ts"
+import { countyRequiresSector } from "./romanian-counties.ts"
 
 const decodeImageDimensions = async (blob: Blob): Promise<{ readonly width: number; readonly height: number }> => {
   if (typeof createImageBitmap === "function") {
@@ -43,17 +45,17 @@ export const useIssuerSettings = (notify: (message: string) => void) => {
   const [imagePending, setImagePending] = useState(false)
   const [formVersion, setFormVersion] = useState(0)
   const [vatOverride, setVatOverride] = useState<{ readonly registered: boolean; readonly effectiveFrom: string; readonly status: string }>()
-  const manualVat = useRef(false)
-  const latestFiscalIdentifier = useRef(issuerQuery.data?.fiscalIdentifier ?? "")
-  const vatInferenceGuard = useRef(createRevisionGuard())
+  const [countyOverride, setCountyOverride] = useState<string | undefined>()
+  const [sectorOverride, setSectorOverride] = useState<number | undefined>()
   const fileGuard = useRef(createRevisionGuard())
   const editGuard = useRef(createRevisionGuard())
   const issuer = issuerQuery.data ?? undefined
   const fallbackVat = issuer?.currentVat == null ? fallbackVatRegistration(issuer?.vatConfigurations ?? [], today()) : undefined
   const savedVat = issuer?.currentVat ?? fallbackVat
-  const vatRegistered = vatOverride?.registered ?? savedVat?.registered ?? true
+  const vatRegistered = vatOverride?.registered ?? savedVat?.registered ?? false
   const vatEffectiveFrom = vatOverride?.effectiveFrom ?? savedVat?.effectiveFrom ?? today()
   const branding = brandingOverride ?? brandingDraftFromSaved(issuer?.branding ?? null)
+  const { county, sector } = issuerAddressSelection(issuer?.address, countyOverride, sectorOverride)
 
   const saveIssuer = useMutation({
     mutationFn: ({ input }: { readonly input: IssuerInput; readonly revision: number }) => runUiEffect(invoicingClient.saveIssuer(input)),
@@ -62,37 +64,18 @@ export const useIssuerSettings = (notify: (message: string) => void) => {
       await queryClient.invalidateQueries({ queryKey: ["issuer"] })
       if (editGuard.current.isCurrent(variables.revision)) {
         fileGuard.current.invalidate()
-        vatInferenceGuard.current.invalidate()
         setBrandingOverride(undefined)
         setBrandingError(null)
         setImageError(null)
         setIssuerDetailsError(null)
         setVatOverride(undefined)
-        manualVat.current = false
+        setCountyOverride(undefined)
+        setSectorOverride(undefined)
         setFormVersion((value) => value + 1)
       }
       notify("Datele firmei au fost salvate.")
     },
   })
-  const inferVatRegistration = useMutation({
-    mutationFn: ({ inference }: { readonly inference: { readonly countryCode: string; readonly fiscalIdentifier: string }; readonly revision: number }) =>
-      runUiEffect(invoicingClient.getVatCatalogue(inference)),
-    onSuccess: ({ inferredRegistration }, { inference, revision }) => {
-      if (inferredRegistration === null || !shouldApplyVatInference({
-        requestedFiscalIdentifier: inference.fiscalIdentifier,
-        currentFiscalIdentifier: latestFiscalIdentifier.current,
-        requestIsCurrent: vatInferenceGuard.current.isCurrent(revision),
-        manuallySelectedVat: manualVat.current,
-      })) return
-      setVatOverride({
-        registered: inferredRegistration, effectiveFrom: today(),
-        status: inferredRegistration
-          ? "Prefix RO detectat: regimul plătitor de TVA este propus; îl poți schimba manual."
-          : "CUI fără prefix RO: regimul neplătitor de TVA este propus; îl poți schimba manual.",
-      })
-    },
-  })
-
   const changeBrandText = (text: string): void => {
     editGuard.current.invalidate()
     setBrandingOverride((current) => changeBrandTextInDraft(current ?? brandingDraftFromSaved(issuer?.branding ?? null), text))
@@ -164,9 +147,10 @@ export const useIssuerSettings = (notify: (message: string) => void) => {
       return
     }
     const county = formField(form, "county")
+    const sector = formField(form, "sector")
     const postalCode = formField(form, "postalCode")
     const countryCode = "RO"
-    const fiscalIdentifier = formField(form, "fiscalIdentifier")
+    const fiscalIdentifier = normalizeRomanianCui(formField(form, "fiscalIdentifier"))
     let brandText: string | null
     try { brandText = normalizeBrandText(branding.text) } catch (cause) {
       setBrandingError(cause instanceof Error ? cause : new Error("Textul de brand este invalid."))
@@ -189,7 +173,8 @@ export const useIssuerSettings = (notify: (message: string) => void) => {
       revision: editGuard.current.current(),
       input: {
         name: formField(form, "name"), fiscalIdentifier,
-        address: { countryCode, city: formField(form, "city"), street: formField(form, "street"), ...(county === "" ? {} : { county }), ...(postalCode === "" ? {} : { postalCode }) },
+        address: { countryCode, city: formField(form, "city"), street: formField(form, "street"), county,
+          ...(sector === "" ? {} : { sector: Number(sector) }), ...(postalCode === "" ? {} : { postalCode }) },
         ...legalDetails,
         defaultCurrency: "RON", defaultPaymentTermDays: Number(formField(form, "defaultPaymentTermDays")),
         vatChange: { registered: vatRegistered, effectiveFrom: formField(form, "taxEffectiveFrom") },
@@ -204,34 +189,23 @@ export const useIssuerSettings = (notify: (message: string) => void) => {
 
   return {
     issuerQuery, catalogueQuery, issuer, formKey: `${issuer?.organizationId ?? "new"}-${String(formVersion)}`,
-    fiscalIdentifier, vatRegistered, vatEffectiveFrom, vatHistory,
+    fiscalIdentifier, vatRegistered, vatEffectiveFrom, vatHistory, county, sector,
+    sectorRequired: countyRequiresSector(county),
     submit,
-    save: { pending: saveIssuer.isPending, error: issuerDetailsError ?? saveIssuer.error }, vatInferenceError: inferVatRegistration.error,
+    save: { pending: saveIssuer.isPending, error: issuerDetailsError ?? saveIssuer.error },
     branding: { ...branding, error: brandingError, imageError, discardRejectedImage, pending: imagePending, changeText: changeBrandText, selectImage: selectBrandImage, removeImage: removeBrandImage, removeAll: removeBranding },
     normalizeFiscalIdentifier: (input: HTMLInputElement) => {
       input.setCustomValidity("")
       input.value = normalizeRomanianCui(input.value)
-      latestFiscalIdentifier.current = input.value
-      vatInferenceGuard.current.invalidate()
     },
-    inferVat: (input: HTMLInputElement) => {
-      if (input.form === null) return
-      latestFiscalIdentifier.current = input.value
-      inferVatRegistration.mutate({
-        inference: { countryCode: formField(input.form, "countryCode"), fiscalIdentifier: input.value },
-        revision: vatInferenceGuard.current.begin(),
-      })
-    },
+    changeCounty: (value: string) => { setCountyOverride(value); setSectorOverride(undefined) },
+    changeSector: (value: string) => { setSectorOverride(Number(value)) },
     changeVatRegistration: (registered: boolean) => {
-      manualVat.current = true
-      vatInferenceGuard.current.invalidate()
       setVatOverride({ registered, effectiveFrom: today(), status: registered
         ? "Regimul plătitor de TVA a fost ales manual."
         : "Regimul neplătitor de TVA a fost ales manual." })
     },
     changeVatEffectiveFrom: (effectiveFrom: string) => {
-      manualVat.current = true
-      vatInferenceGuard.current.invalidate()
       setVatOverride({ registered: vatRegistered, effectiveFrom, status: vatOverride?.status ?? "Data schimbării regimului TVA a fost modificată." })
     },
     vatStatus: vatOverride?.status ?? (fallbackVat?.timing === "scheduled"

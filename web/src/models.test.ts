@@ -4,14 +4,22 @@ import test from "node:test"
 import { decodeCorrection, decodeCustomer, decodeDocumentSeries, decodeDocumentSeriesList, decodeDraft, decodeDrafts, decodeInvoice, decodeIssuer, decodePaymentSummary, decodeProductPreset, decodeProductPresetPage, decodeProductPresets, decodeProforma, decodeProformas, decodeUnitOfMeasures, decodeVatCatalogue, invoiceDocumentSeries, proformaDocumentSeries } from "./models.ts"
 const each = { code: "C62", name: "unitate" } as const
 
-void test("decodes optional address and payment fields without leaking null", () => {
+void test("requires canonical Romanian county and explicit buyer VAT state", () => {
   assert.deepEqual(decodeCustomer({
-    id: "customer-1", organizationId: "org-1", partyType: "company", name: "Client", fiscalIdentifier: "RO1",
-    address: { countryCode: "RO", city: "Botoșani", street: "Strada 1", county: null, postalCode: undefined },
+    id: "customer-1", organizationId: "org-1", partyType: "company", name: "Client", fiscalIdentifier: "1", vatRegistered: false,
+    address: { countryCode: "RO", city: "Botoșani", street: "Strada 1", county: "RO-BT", postalCode: undefined },
   }), {
-    id: "customer-1", organizationId: "org-1", partyType: "company", name: "Client", fiscalIdentifier: "RO1",
-    address: { countryCode: "RO", city: "Botoșani", street: "Strada 1" },
+    id: "customer-1", organizationId: "org-1", partyType: "company", name: "Client", fiscalIdentifier: "1", vatRegistered: false,
+    address: { countryCode: "RO", city: "Botoșani", street: "Strada 1", county: "RO-BT" },
   })
+  const buyer = { id: "customer-2", organizationId: "org-1", partyType: "individual", name: "Ana", fiscalIdentifier: "", vatRegistered: false,
+    address: { countryCode: "RO", city: "București", street: "Strada 2", county: "RO-B", sector: 6 } }
+  for (const sector of [1, 2, 3, 4, 5, 6]) assert.equal(decodeCustomer({ ...buyer, address: { ...buyer.address, sector } }).address.sector, sector)
+  assert.throws(() => decodeCustomer({ ...buyer, vatRegistered: true }), /invalid vatRegistered/)
+  assert.throws(() => decodeCustomer({ ...buyer, address: { ...buyer.address, sector: 7 } }), /invalid sector/)
+  assert.throws(() => decodeCustomer({ ...buyer, address: { ...buyer.address, county: "RO-IS", sector: 1 } }), /invalid sector/)
+  assert.throws(() => decodeCustomer({ ...buyer, address: { ...buyer.address, county: "Iași", sector: undefined } }), /invalid county/)
+  assert.throws(() => decodeCustomer({ ...buyer, partyType: "company", fiscalIdentifier: "RO12345674" }), /invalid fiscalIdentifier/)
   assert.deepEqual(decodePaymentSummary({ invoiceId: "invoice-1", status: "paid", paidAmount: "121.00", remainingAmount: "0.00", payments: [{ id: "payment-1", kind: "payment", actorId: "user-1", amount: "121.00", currency: "RON", paymentDate: "2026-08-31", method: "transfer", externalReference: null }] }).payments[0], {
     id: "payment-1", kind: "payment", actorId: "user-1", amount: "121.00", currency: "RON", paymentDate: "2026-08-31", method: "transfer",
   })
@@ -27,8 +35,8 @@ void test("rejects malformed external API values and unknown payment statuses", 
 
 void test("decodes customer payment terms and product presets", () => {
   const baseCustomer = {
-    id: "customer-1", organizationId: "org-1", partyType: "company", name: "Client", fiscalIdentifier: "RO1",
-    address: { countryCode: "RO", city: "Botoșani", street: "Strada 1" },
+    id: "customer-1", organizationId: "org-1", partyType: "company", name: "Client", fiscalIdentifier: "1", vatRegistered: false,
+    address: { countryCode: "RO", city: "Botoșani", street: "Strada 1", county: "RO-BT" },
   }
   assert.equal(decodeCustomer({ ...baseCustomer, defaultPaymentTermDays: 0 }).defaultPaymentTermDays, 0)
   assert.equal(decodeCustomer({ ...baseCustomer, defaultPaymentTermDays: null }).defaultPaymentTermDays, undefined)
@@ -46,8 +54,8 @@ void test("decodes customer payment terms and product presets", () => {
 
 void test("requires integer issuer terms and decodes tax configuration", () => {
   const input = {
-    organizationId: "org-1", name: "QWBE", fiscalIdentifier: "RO2",
-    address: { countryCode: "RO", city: "Botoșani", street: "Strada 2" },
+    organizationId: "org-1", name: "QWBE", fiscalIdentifier: "2", vatRegistered: true,
+    address: { countryCode: "RO", city: "Botoșani", street: "Strada 2", county: "RO-BT" },
     legalForm: "srl", tradeRegistryNumber: "J07/123/2020", iban: "", bankName: "", socialCapital: "200.00",
     branding: null, defaultCurrency: "RON", defaultPaymentTermDays: 15,
     vatConfigurations: [{ code: "RO_STANDARD", rate: "21.00", effectiveFrom: "2026-01-01", effectiveTo: null }],
@@ -83,8 +91,8 @@ void test("decodes document series and requires supported document types", () =>
 const commercialDocument = {
   id: "proforma-1", sourceDraftId: "draft-1", organizationId: "org-1", series: "PRO", number: 7, actorId: "user-1",
   issueDate: "2026-09-01", dueDate: null, issuedAt: "2026-09-01T10:00:00.000Z", currency: "RON", notes: null,
-  issuer: { name: "QWBE", fiscalIdentifier: "RO2", address: { countryCode: "RO", city: "Botoșani", street: "Strada 2" }, legalForm: "srl", tradeRegistryNumber: "J07/123/2020", iban: "", bankName: "", socialCapital: "200.00", branding: null },
-  customer: { partyType: "company", name: "Client", fiscalIdentifier: "RO1", address: { countryCode: "RO", city: "Iași", street: "Strada 1" } },
+  issuer: { name: "QWBE", fiscalIdentifier: "2", vatRegistered: true, address: { countryCode: "RO", city: "Botoșani", street: "Strada 2", county: "RO-BT" }, legalForm: "srl", tradeRegistryNumber: "J07/123/2020", iban: "", bankName: "", socialCapital: "200.00", branding: null },
+  customer: { partyType: "company", name: "Client", fiscalIdentifier: "1", vatRegistered: true, address: { countryCode: "RO", city: "Iași", street: "Strada 1", county: "RO-IS" } },
   lines: [{ id: "line-1", description: "Serviciu", quantity: "1.0000", unitPrice: "100.00", unitOfMeasure: each, vatRateCode: "RO_STANDARD", vatRate: "21.00", totalExcludingVat: "100.00", vatAmount: "21.00", totalIncludingVat: "121.00" }],
   vatBreakdown: [{ code: "RO_STANDARD", rate: "21.00", vatBaseAmount: "100.00", vatAmount: "21.00" }],
   totalExcludingVat: "100.00", vatTotal: "21.00", totalIncludingVat: "121.00",
@@ -114,8 +122,8 @@ void test("strictly decodes nullable commercial dates and proforma conversion st
 
 void test("strictly requires and decodes issuer branding on details while summaries omit it", () => {
   const issuerInput = {
-    organizationId: "org-1", name: "QWBE", fiscalIdentifier: "RO2",
-    address: { countryCode: "RO", city: "Botoșani", street: "Strada 2" },
+    organizationId: "org-1", name: "QWBE", fiscalIdentifier: "2", vatRegistered: true,
+    address: { countryCode: "RO", city: "Botoșani", street: "Strada 2", county: "RO-BT" },
     legalForm: "srl", tradeRegistryNumber: "J07/123/2020", iban: "", bankName: "", socialCapital: "200.00",
     defaultCurrency: "RON", defaultPaymentTermDays: 15, vatConfigurations: [], currentVat: null,
   }
@@ -128,7 +136,7 @@ void test("strictly requires and decodes issuer branding on details while summar
   assert.throws(() => decodeIssuer({ ...issuerInput, branding: {} }), /invalid branding.text/)
   assert.throws(() => decodeIssuer({ ...issuerInput, branding: { text: null, image: { ...image, width: 0 } } }), /invalid issuer branding image/)
   assert.throws(() => decodeProforma({ ...commercialDocument, issuer: { ...commercialDocument.issuer, branding: undefined } }), /expected object/)
-  const summaryIssuer = { name: "QWBE", fiscalIdentifier: "RO2", address: commercialDocument.issuer.address, legalForm: "srl", tradeRegistryNumber: "J07/123/2020", iban: "", bankName: "", socialCapital: "200.00" }
+  const summaryIssuer = { name: "QWBE", fiscalIdentifier: "2", vatRegistered: true, address: commercialDocument.issuer.address, legalForm: "srl", tradeRegistryNumber: "J07/123/2020", iban: "", bankName: "", socialCapital: "200.00" }
   const summary = decodeProformas([{ ...commercialDocument, issuer: summaryIssuer }])[0]
   assert.ok(summary)
   assert.equal("branding" in summary.issuer, false)
@@ -143,7 +151,7 @@ void test("strictly requires and decodes issuer branding on details while summar
 void test("requires the series fixed on a draft", () => {
   const draft = {
     id: "draft-1", organizationId: "org-1", customerId: "customer-1", sourceProformaId: null,
-    customer: { partyType: "company", name: "Client", fiscalIdentifier: "RO1", address: { countryCode: "RO", city: "Iași", street: "Strada 1" } },
+    customer: { partyType: "company", name: "Client", fiscalIdentifier: "1", vatRegistered: true, address: { countryCode: "RO", city: "Iași", street: "Strada 1", county: "RO-IS" } },
     series: "QWBE", issueDate: "2026-09-01", dueDate: "2026-09-16", currency: "RON", notes: null, status: "draft", lines: [],
     vatBreakdown: [], totalExcludingVat: "0.00", vatTotal: "0.00", totalIncludingVat: "0.00",
   }
@@ -156,7 +164,7 @@ void test("requires the series fixed on a draft", () => {
 })
 
 void test("strictly decodes correction issuers as company snapshots without branding", () => {
-  const issuer = { name: "QWBE", fiscalIdentifier: "RO2", address: commercialDocument.issuer.address, legalForm: "srl", tradeRegistryNumber: "J07/123/2020", iban: "", bankName: "", socialCapital: "200.00" }
+  const issuer = { name: "QWBE", fiscalIdentifier: "2", vatRegistered: true, address: commercialDocument.issuer.address, legalForm: "srl", tradeRegistryNumber: "J07/123/2020", iban: "", bankName: "", socialCapital: "200.00" }
   const decoded = decodeCorrection({ id: "correction-1", series: "QWBE", number: 9, issueDate: "2026-09-02", actorId: "user-1", reason: "Storno", currency: "RON", totalIncludingVat: "-121.00", issuer })
   assert.deepEqual(decoded.issuer, issuer)
   assert.equal(decoded.actorId, "user-1")
@@ -167,20 +175,18 @@ void test("strictly decodes correction issuers as company snapshots without bran
     actorId: "user-1", reason: "Storno", currency: "RON", totalIncludingVat: "-121.00" }), /expected object/)
 })
 
-void test("decodes VAT catalogue legal periods and nullable inference", () => {
+void test("decodes VAT catalogue legal periods without registration inference", () => {
   const catalogue = decodeVatCatalogue({ rates: [
     { code: "RO_STANDARD", rate: "19.00", kind: "standard", label: "TVA standard 19%", effectiveFrom: "2025-01-01", effectiveTo: "2025-07-31" },
     { code: "RO_STANDARD", rate: "21.00", kind: "standard", label: "TVA standard 21%", effectiveFrom: "2025-08-01" },
-  ], inferredRegistration: null })
+  ] })
   assert.equal(catalogue.rates[0]?.effectiveTo, "2025-07-31")
-  assert.equal(catalogue.inferredRegistration, null)
-  assert.throws(() => decodeVatCatalogue({ ...catalogue, inferredRegistration: "yes" }), /invalid inferredRegistration/)
 })
 
 void test("decodes inline individual buyers and complete server totals", () => {
   const decoded = decodeDraft({
     id: "draft-2", organizationId: "org-1", sourceProformaId: null,
-    customer: { partyType: "individual", name: "Ana Pop", fiscalIdentifier: "", address: { countryCode: "RO", city: "Iași", street: "Strada 2" } },
+    customer: { partyType: "individual", name: "Ana Pop", fiscalIdentifier: "", vatRegistered: false, address: { countryCode: "RO", city: "Iași", street: "Strada 2", county: "RO-IS" } },
     series: "QWBE", issueDate: "2026-09-01", dueDate: "2026-09-16", currency: "RON", notes: "Livrare in 3 transe.", status: "draft",
     source: { app: "crm", kind: "contract", id: "contract-1" },
     lines: [{ id: "line-1", description: "Serviciu", quantity: "1.0000", unitPrice: "100.00", unitOfMeasure: each, vatRateCode: "RO_STANDARD", vatRate: "21.00", totalExcludingVat: "100.00", vatAmount: "21.00", totalIncludingVat: "121.00" }],

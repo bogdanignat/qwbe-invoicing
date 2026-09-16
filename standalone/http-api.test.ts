@@ -47,7 +47,7 @@ void test("dueDate contracts accept absent, null, or string input and encode exp
   assert.throws(() => Schema.decodeUnknownSync(S.DraftInput)({ ...base, dueDate: 15 }))
   const draft = {
     id: "draft-1", organizationId: "org-1", sourceProformaId: null, customer: { partyType: "individual", name: "Ion", fiscalIdentifier: "",
-      address: { countryCode: "RO", city: "Iași", street: "Strada 1" } }, series: "QWBE", issueDate: "2026-09-01",
+      vatRegistered: false, address: { countryCode: "RO", city: "Iași", street: "Strada 1", county: "RO-IS" } }, series: "QWBE", issueDate: "2026-09-01",
     dueDate: null, currency: "RON", notes: null, status: "proforma_issued", lines: [], vatBreakdown: [], totalExcludingVat: "0.00",
     vatTotal: "0.00", totalIncludingVat: "0.00",
   } as const
@@ -55,9 +55,9 @@ void test("dueDate contracts accept absent, null, or string input and encode exp
   assert.equal(Schema.encodeSync(S.DraftInvoice)(draft).status, "proforma_issued")
   assert.equal(Schema.encodeSync(S.Proforma)({ ...draft, id: "proforma-1", sourceDraftId: "draft-1",
     convertedDraftId: null, convertedInvoiceId: null,
-    number: 1, issuedAt: "2026-09-01T00:00:00.000Z", actorId: "user-1", issuer: { name: "Furnizor", fiscalIdentifier: "RO12345674", vatRegistered: false, branding: null,
+    number: 1, issuedAt: "2026-09-01T00:00:00.000Z", actorId: "user-1", issuer: { name: "Furnizor", fiscalIdentifier: "12345674", vatRegistered: false, branding: null,
       legalForm: "srl", tradeRegistryNumber: "J22/123/2020", iban: "RO49AAAA1B31007593840000", bankName: "Banca", socialCapital: "1000.00",
-      address: { countryCode: "RO", city: "Iași", street: "Strada 2" } } }).convertedDraftId, null)
+      address: { countryCode: "RO", city: "Iași", street: "Strada 2", county: "RO-IS" } } }).convertedDraftId, null)
 })
 
 void test("proforma authoring and conversion expose only their dedicated series fields", () => {
@@ -74,9 +74,9 @@ void test("proforma authoring and conversion expose only their dedicated series 
 
 void test("issuer VAT status is required on document responses but absent from issuer configuration", () => {
   const company = {
-    name: "Furnizor SRL", fiscalIdentifier: "RO12345674", legalForm: "srl" as const,
+    name: "Furnizor SRL", fiscalIdentifier: "12345674", legalForm: "srl" as const,
     tradeRegistryNumber: "J22/123/2020", iban: "RO49AAAA1B31007593840000", bankName: "Banca", socialCapital: "1000.00",
-    address: { countryCode: "RO", city: "Iași", street: "Strada 2" },
+    address: { countryCode: "RO", city: "Iași", street: "Strada 2", county: "RO-IS" },
   }
   assert.doesNotThrow(() => Schema.decodeUnknownSync(S.IssuerInput)({
     ...company, defaultCurrency: "RON", defaultPaymentTermDays: 15,
@@ -86,18 +86,17 @@ void test("issuer VAT status is required on document responses but absent from i
   assert.throws(() => Schema.decodeUnknownSync(S.IssuerCompanySnapshot)(company))
 })
 
-void test("VAT catalogue response exposes legal rates and nullable inference", () => {
+void test("VAT catalogue response exposes legal rates without buyer inference", () => {
   const response = { rates: [
     { code: "RO_STANDARD", rate: "21.00", kind: "standard", label: "TVA standard 21%", effectiveFrom: "2025-08-01" },
     { code: "RO_REDUCED", rate: "11.00", kind: "reduced", label: "TVA redus 11%", effectiveFrom: "2025-08-01" },
-  ], inferredRegistration: null }
+  ] }
   assert.deepEqual(Schema.encodeSync(S.VatCatalogue)(Schema.decodeUnknownSync(S.VatCatalogue)(response)), response)
-  assert.throws(() => Schema.decodeUnknownSync(S.VatCatalogue)({ ...response, inferredRegistration: "yes" }))
 })
 
 void test("customer payment terms and monetary product presets have explicit wire types", () => {
-  const customer = { partyType: "individual", name: "Ion", fiscalIdentifier: "",
-    address: { countryCode: "RO", city: "Iași", street: "Strada 1" } }
+  const customer = { partyType: "individual", name: "Ion", fiscalIdentifier: "", vatRegistered: false,
+    address: { countryCode: "RO", city: "Iași", street: "Strada 1", county: "RO-IS" } }
   assert.doesNotThrow(() => Schema.decodeUnknownSync(S.CustomerInput)(customer))
   assert.equal(Schema.decodeUnknownSync(S.CustomerInput)({ ...customer, defaultPaymentTermDays: 0 }).defaultPaymentTermDays, 0)
   assert.throws(() => Schema.decodeUnknownSync(S.CustomerInput)({ ...customer, defaultPaymentTermDays: 1.5 }))

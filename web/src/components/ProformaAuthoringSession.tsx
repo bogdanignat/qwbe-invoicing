@@ -25,7 +25,7 @@ export const ProformaAuthoringSession = (props: ProformaAuthoringSessionInput) =
             <div className="static-field"><span>Monedă</span><span className="fixed-value">RON</span></div>
           </div></section>}
           issuer={<SellerSummary issuer={document.issuer} />}
-          customer={<BuyerEditor form={document.form} customers={document.customers} disabled={status.pending} onChange={actions.changeForm} onBuyerModeChange={actions.chooseBuyerMode} onSavedCustomerChange={actions.chooseCustomer} />}
+          customer={<BuyerEditor form={document.form} customers={document.customers} disabled={status.pending} sectorRequired={document.buyerSectorRequired} onChange={actions.changeForm} onBuyerModeChange={actions.chooseBuyerMode} onSavedCustomerChange={actions.chooseCustomer} onPartyTypeChange={actions.choosePartyType} onCountyChange={actions.chooseCounty} onFiscalIdentifierChange={actions.changeFiscalIdentifier} onSectorChange={actions.chooseSector} />}
         />
       </div>
       <div className="authoring-main"><div className="card authoring-section">

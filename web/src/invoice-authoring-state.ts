@@ -3,6 +3,8 @@ import {
   invoiceDocumentSeries, proformaDocumentSeries,
   type BuyerSnapshot, type Customer, type DocumentSeries, type DraftInvoice, type Issuer, type PartyType, type ProductPreset, type UnitOfMeasure,
 } from "./models.ts"
+import { countyRequiresSector } from "./romanian-counties.ts"
+import { normalizeRomanianCui } from "./vat-defaults.ts"
 
 export type BuyerMode = "saved" | "one-time"
 
@@ -26,10 +28,12 @@ export interface InvoiceAuthoringForm {
   readonly name: string
   readonly companyTaxIdentifier: string
   readonly individualTaxIdentifier: string
+  readonly vatRegistered: boolean
   readonly countryCode: "RO"
   readonly city: string
   readonly street: string
   readonly county: string
+  readonly sector: number | undefined
   readonly postalCode: string
   readonly series: string
   readonly issueDate: string
@@ -77,7 +81,8 @@ export const newAuthoringForm = (
   issueDate: string,
 ): InvoiceAuthoringForm => ({
   ...initialBuyerSelection(hasSavedCustomers), partyType: "company",
-  name: "", companyTaxIdentifier: "", individualTaxIdentifier: "", countryCode: "RO", city: "", street: "", county: "", postalCode: "",
+  name: "", companyTaxIdentifier: "", individualTaxIdentifier: "", vatRegistered: false,
+  countryCode: "RO", city: "", street: "", county: "", sector: undefined, postalCode: "",
   series, issueDate, dueDate: addCalendarDays(issueDate, issuer.defaultPaymentTermDays), dueDateEdited: false,
   notes: "",
 })
@@ -147,6 +152,21 @@ export type LineSaveOperation =
 export const selectedTaxIdentifier = (form: InvoiceAuthoringForm): string =>
   form.partyType === "company" ? form.companyTaxIdentifier : form.individualTaxIdentifier
 
+export const selectBuyerCounty = (form: InvoiceAuthoringForm, county: string): InvoiceAuthoringForm => ({
+  ...form,
+  county,
+  sector: countyRequiresSector(county) ? form.sector : undefined,
+})
+
+export const editBuyerFiscalIdentifier = (form: InvoiceAuthoringForm, value: string): InvoiceAuthoringForm => form.partyType === "company"
+  ? { ...form, companyTaxIdentifier: normalizeRomanianCui(value) }
+  : { ...form, individualTaxIdentifier: value.replace(/\D/g, "") }
+
+export const selectBuyerSector = (form: InvoiceAuthoringForm, sector: string): InvoiceAuthoringForm => ({
+  ...form,
+  sector: Number(sector),
+})
+
 const buyerPayload = (form: InvoiceAuthoringForm): { readonly customerId: string } | { readonly customer: BuyerSnapshot } =>
   form.buyerMode === "saved"
     ? { customerId: form.customerId }
@@ -154,12 +174,14 @@ const buyerPayload = (form: InvoiceAuthoringForm): { readonly customerId: string
         customer: {
           partyType: form.partyType,
           name: form.name,
-          fiscalIdentifier: selectedTaxIdentifier(form),
+          fiscalIdentifier: form.partyType === "company" ? normalizeRomanianCui(selectedTaxIdentifier(form)) : selectedTaxIdentifier(form),
+          vatRegistered: form.partyType === "company" && form.vatRegistered,
           address: {
             countryCode: form.countryCode,
             city: form.city,
             street: form.street,
-            ...(form.county === "" ? {} : { county: form.county }),
+            county: form.county,
+            ...(form.sector === undefined ? {} : { sector: form.sector }),
             ...(form.postalCode === "" ? {} : { postalCode: form.postalCode }),
           },
         },
@@ -171,6 +193,36 @@ export const documentNotesMaxLength = 500
 export const documentNotesIssue = (notes: string): string | null => {
   if (/(?!\n)[\p{Cc}\p{Zl}\p{Zp}]/u.test(notes)) return "Observatiile nu pot contine caractere de control; inlocuieste tab-urile cu spatii."
   return notes.trim().length > documentNotesMaxLength ? `Observatiile depasesc ${String(documentNotesMaxLength)} de caractere.` : null
+}
+
+const decimal = (value: string): number | undefined => {
+  const trimmed = value.trim()
+  if (!/^-?\d+(?:\.\d+)?$/.test(trimmed)) return undefined
+  const parsed = Number(trimmed)
+  return Number.isFinite(parsed) ? parsed : undefined
+}
+
+const nonNegativeScaled = (value: string, scale: number): bigint | undefined => {
+  const match = /^(\d+)(?:\.(\d+))?$/.exec(value.trim())
+  if (match === null || (match[2]?.length ?? 0) > scale) return undefined
+  return BigInt(match[1] ?? "0") * 10n ** BigInt(scale) + BigInt((match[2] ?? "").padEnd(scale, "0"))
+}
+
+export const positiveInvoiceRequiresDueDate = (
+  dueDate: string | null,
+  totalIncludingVat: string | undefined,
+  lines: ReadonlyArray<Pick<EditableInvoiceLine, "quantity" | "unitPrice">> = [],
+): boolean => {
+  if (dueDate !== null && dueDate !== "") return false
+  const total = totalIncludingVat === undefined ? undefined : decimal(totalIncludingVat)
+  if (total !== undefined) return total > 0
+  return lines.some((line) => {
+    const quantity = nonNegativeScaled(line.quantity, 4)
+    const unitPrice = nonNegativeScaled(line.unitPrice, 2)
+    // Domain rounds each nonnegative line net to cents, half-up. Nonnegative VAT
+    // cannot turn a zero base positive; any rounded positive base makes the total positive.
+    return quantity !== undefined && unitPrice !== undefined && (quantity * unitPrice + 5_000n) / 10_000n > 0n
+  })
 }
 
 export const createDraftPayload = (form: InvoiceAuthoringForm): CreateDraftInput => ({
@@ -196,8 +248,8 @@ export const authoringDocumentPayload = (
 ): AuthoringDocumentInput => ({ ...createDraftPayload(form), currency: "RON", lines: lines.map(draftLinePayload) })
 
 const sameBuyerSnapshot = (left: BuyerSnapshot, right: BuyerSnapshot): boolean =>
-  (["partyType", "name", "fiscalIdentifier"] as const).every((key) => left[key] === right[key])
-  && (["countryCode", "city", "street", "county", "postalCode"] as const).every((key) => left.address[key] === right.address[key])
+  (["partyType", "name", "fiscalIdentifier", "vatRegistered"] as const).every((key) => left[key] === right[key])
+  && (["countryCode", "city", "street", "county", "sector", "postalCode"] as const).every((key) => left.address[key] === right.address[key])
 
 export const authoringPayloadMatchesDraft = (payload: AuthoringDocumentInput, draft: DraftInvoice): boolean => {
   const sameBuyer = "customerId" in payload
@@ -222,6 +274,7 @@ export const switchBuyerMode = (form: InvoiceAuthoringForm, buyerMode: BuyerMode
 export const switchPartyType = (form: InvoiceAuthoringForm, partyType: PartyType): InvoiceAuthoringForm => ({
   ...form,
   partyType,
+  vatRegistered: partyType === "individual" ? false : form.vatRegistered,
 })
 
 export const formFromDraft = (draft: DraftInvoice): InvoiceAuthoringForm => ({
@@ -231,10 +284,12 @@ export const formFromDraft = (draft: DraftInvoice): InvoiceAuthoringForm => ({
   name: draft.customer.name,
   companyTaxIdentifier: draft.customer.partyType === "company" ? draft.customer.fiscalIdentifier : "",
   individualTaxIdentifier: draft.customer.partyType === "individual" ? draft.customer.fiscalIdentifier : "",
+  vatRegistered: draft.customer.vatRegistered,
   countryCode: "RO",
   city: draft.customer.address.city,
   street: draft.customer.address.street,
-  county: draft.customer.address.county ?? "",
+  county: draft.customer.address.county,
+  sector: draft.customer.address.sector,
   postalCode: draft.customer.address.postalCode ?? "",
   series: draft.series,
   issueDate: draft.issueDate,
@@ -255,10 +310,12 @@ export const headerMatchesDraft = (form: InvoiceAuthoringForm, draft: DraftInvoi
       && draft.customer.partyType === form.partyType
       && draft.customer.name === form.name
       && draft.customer.fiscalIdentifier === selectedTaxIdentifier(form)
+      && draft.customer.vatRegistered === (form.partyType === "company" && form.vatRegistered)
       && draft.customer.address.countryCode === form.countryCode
       && draft.customer.address.city === form.city
       && draft.customer.address.street === form.street
-      && (draft.customer.address.county ?? "") === form.county
+      && draft.customer.address.county === form.county
+      && draft.customer.address.sector === form.sector
       && (draft.customer.address.postalCode ?? "") === form.postalCode
   return sameBuyer && draft.series === form.series && draft.issueDate === form.issueDate
     && (draft.dueDate ?? "") === form.dueDate && (draft.notes ?? "") === form.notes.trim()

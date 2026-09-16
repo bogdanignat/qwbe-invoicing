@@ -8,6 +8,7 @@ import notes from "./document-notes-migrations.json" with { type: "json" }
 import audit from "./audit-migrations.json" with { type: "json" }
 import vat from "./issuer-vat-status-migrations.json" with { type: "json" }
 import workflow from "./proforma-workflow-migrations.json" with { type: "json" }
+import efacturaParties from "./efactura-party-migrations.json" with { type: "json" }
 export interface InvoicingMigration {
   readonly name: string
   readonly statements: ReadonlyArray<string>
@@ -24,4 +25,5 @@ export const invoicingMigrations = [
   audit,
   vat,
   workflow,
+  efacturaParties,
 ].flat() as ReadonlyArray<InvoicingMigration>

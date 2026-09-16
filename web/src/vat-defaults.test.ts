@@ -2,9 +2,9 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import type { Issuer, VatCatalogue } from "./models.ts"
-import { defaultVatCode, fallbackVatRegistration, hasStaleDraftTax, shouldApplyVatInference, staleDraftLineIds, vatRatesForIssuer, vatRegistrationHistory } from "./vat-defaults.ts"
+import { defaultVatCode, fallbackVatRegistration, hasStaleDraftTax, normalizeRomanianCui, staleDraftLineIds, vatRatesForIssuer, vatRegistrationHistory } from "./vat-defaults.ts"
 
-const catalogue: VatCatalogue = { inferredRegistration: null, rates: [
+const catalogue: VatCatalogue = { rates: [
   { code: "RO_STANDARD", rate: "19.00", kind: "standard", label: "19%", effectiveFrom: "2025-01-01", effectiveTo: "2025-07-31" },
   { code: "RO_REDUCED", rate: "9.00", kind: "reduced", label: "9%", effectiveFrom: "2025-01-01", effectiveTo: "2025-07-31" },
   { code: "RO_STANDARD", rate: "21.00", kind: "standard", label: "21%", effectiveFrom: "2025-08-01" },
@@ -12,7 +12,7 @@ const catalogue: VatCatalogue = { inferredRegistration: null, rates: [
   { code: "RO_NON_VAT", rate: "0.00", kind: "non_vat", label: "0%", effectiveFrom: "2025-01-01" },
 ] }
 const issuer = (vatConfigurations: Issuer["vatConfigurations"]): Issuer => ({
-  organizationId: "org-1", name: "Emitent", fiscalIdentifier: "RO12345674", address: { countryCode: "RO", city: "Iași", street: "Strada 1" },
+  organizationId: "org-1", name: "Emitent", fiscalIdentifier: "12345674", address: { countryCode: "RO", city: "Iași", street: "Strada 1", county: "RO-IS" },
   legalForm: "srl", tradeRegistryNumber: "J22/1/2020", iban: "", bankName: "", socialCapital: "200.00", branding: null,
   defaultCurrency: "RON", defaultPaymentTermDays: 15, vatConfigurations, currentVat: null,
 })
@@ -45,23 +45,9 @@ void test("selects a future registration explicitly when no registration is curr
   })
 })
 
-void test("rejects a deferred VAT inference after the CUI or form epoch changes", () => {
-  assert.equal(shouldApplyVatInference({
-    requestedFiscalIdentifier: "RO12345674", currentFiscalIdentifier: "12345674",
-    requestIsCurrent: true, manuallySelectedVat: false,
-  }), false)
-  assert.equal(shouldApplyVatInference({
-    requestedFiscalIdentifier: "RO12345674", currentFiscalIdentifier: "RO12345674",
-    requestIsCurrent: false, manuallySelectedVat: false,
-  }), false)
-  assert.equal(shouldApplyVatInference({
-    requestedFiscalIdentifier: "RO12345674", currentFiscalIdentifier: "RO12345674",
-    requestIsCurrent: true, manuallySelectedVat: true,
-  }), false)
-  assert.equal(shouldApplyVatInference({
-    requestedFiscalIdentifier: " ro12345674 ", currentFiscalIdentifier: "RO12345674",
-    requestIsCurrent: true, manuallySelectedVat: false,
-  }), true)
+void test("normalizes an optional RO input prefix to canonical numeric CUI", () => {
+  assert.equal(normalizeRomanianCui(" ro12345674 "), "12345674")
+  assert.equal(normalizeRomanianCui("12345674"), "12345674")
 })
 
 void test("identifies saved draft lines whose snapshot rate is stale despite an unchanged code", () => {

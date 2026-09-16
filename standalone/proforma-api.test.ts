@@ -23,8 +23,8 @@ void test("direct proforma authoring needs only a proforma series configuration"
       now: () => new Date("2026-09-05T10:00:00.000Z"),
     }
     const issuer = await handleApiRequest({ method: "PUT", url: "/api/issuer", authorization, body: {
-      name: "Furnizor SRL", fiscalIdentifier: "RO12345674",
-      address: { countryCode: "RO", city: "Iași", street: "Strada 1" }, legalForm: "srl",
+      name: "Furnizor SRL", fiscalIdentifier: "12345674",
+      address: { countryCode: "RO", city: "Iași", street: "Strada 1", county: "RO-IS" }, legalForm: "srl",
       tradeRegistryNumber: "J22/123/2020", iban: "RO49AAAA1B31007593840000", bankName: "Banca",
       socialCapital: "1000", defaultCurrency: "RON", defaultPaymentTermDays: 15,
       vatChange: { registered: true, effectiveFrom: "2025-08-01" }, branding: null,
@@ -35,9 +35,9 @@ void test("direct proforma authoring needs only a proforma series configuration"
 
     const created = await handleApiRequest({ method: "POST", url: "/api/proformas", authorization,
       idempotencyKey: "proforma-without-invoice-series", body: {
-        customer: { partyType: "company", name: "Client SRL", fiscalIdentifier: "RO87654329",
-          address: { countryCode: "RO", city: "Iași", street: "Strada 2" } },
-        proformaSeries: "PRO", issueDate: "2026-09-05", currency: "RON",
+        customer: { partyType: "company", name: "Client SRL", fiscalIdentifier: "87654329", vatRegistered: true,
+          address: { countryCode: "RO", city: "Iași", street: "Strada 2", county: "RO-IS" } },
+        proformaSeries: "PRO", issueDate: "2026-09-05", dueDate: "2026-09-20", currency: "RON",
         lines: [{ description: "Servicii", quantity: "1", unitPrice: "100", unitOfMeasure: { code: "HUR", name: "oră" },
           vatRateCode: "RO_STANDARD" }],
       } }, runtime)

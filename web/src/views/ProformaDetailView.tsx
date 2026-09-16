@@ -23,7 +23,8 @@ export const ProformaDetailView = ({ id }: { readonly id: string }) => {
           ? <><p><span className="badge info">Draft factură creat</span></p><ButtonLink variant="secondary" href={state.conversion.converted.href}>Deschide draftul creat anterior</ButtonLink></>
           : <><label>Serie factură<select value={state.conversion.selectedSeries} disabled={state.conversion.pending || state.conversion.series.length === 0} onChange={(event) => { state.conversion.selectSeries(event.currentTarget.value) }}><option value="" disabled>Alege seria facturii</option>{state.conversion.series.map((series) => <option key={series} value={series}>{series}</option>)}</select></label>
             {state.conversion.series.length === 0 ? <p className="status-note warning">Configurează o serie de factură în <a href="/settings">setări</a>.</p> : null}
-            <div className="button-row"><Button disabled={!state.conversion.canConvert} onClick={state.conversion.issueInvoice}>{state.conversion.pending ? "Operație în curs…" : "Emite factura"}</Button><Button variant="secondary" disabled={!state.conversion.canConvert} onClick={state.conversion.createDraft}>Creează draft de factură</Button></div></>}
+            {state.conversion.dueDateIssue === null ? null : <p className="status-note warning">{state.conversion.dueDateIssue}</p>}
+            <div className="button-row"><Button disabled={!state.conversion.canIssueInvoice} onClick={state.conversion.issueInvoice}>{state.conversion.pending ? "Operație în curs…" : "Emite factura"}</Button><Button variant="secondary" disabled={!state.conversion.canCreateDraft} onClick={state.conversion.createDraft}>Creează draft de factură</Button></div></>}
     </section>
   </Page>
 }

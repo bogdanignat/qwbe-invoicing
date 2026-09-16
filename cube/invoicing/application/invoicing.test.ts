@@ -23,8 +23,8 @@ void test("refuses missing permissions and cross-organization reads", async () =
 
   const failure = await Effect.runPromise(Effect.flip(denied.configureIssuer({
     name: "Exemplu SRL",
-    fiscalIdentifier: "RO12345674",
-    address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1" },
+    fiscalIdentifier: "12345674",
+    address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1", county: "RO-BT" },
     legalForm: "srl", tradeRegistryNumber: "J40/123/2020", socialCapital: "200.00", iban: "", bankName: "",
     defaultCurrency: "RON",
     defaultPaymentTermDays: 15,
@@ -36,7 +36,7 @@ void test("refuses missing permissions and cross-organization reads", async () =
     description: "Servicii", unitPrice: "1.00", unitOfMeasure: each,
   }))) instanceof PermissionDenied, true)
   assert.equal(await Effect.runPromise(Effect.flip(denied.updateCustomer({
-    id: "missing", partyType: "individual", name: "Ion", fiscalIdentifier: "",
-    address: { countryCode: "RO", city: "Iași", street: "Strada 1" },
+    id: "missing", partyType: "individual", name: "Ion", fiscalIdentifier: "", vatRegistered: false,
+    address: { countryCode: "RO", city: "Iași", street: "Strada 1", county: "RO-IS" },
   }))) instanceof PermissionDenied, true)
 })

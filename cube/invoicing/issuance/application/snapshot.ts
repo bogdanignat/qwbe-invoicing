@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 
 import type { InvoicingTransaction } from "../../application/ports.ts"
-import { checked, copyIssuerSnapshot, copySource, missing } from "../../application/support.ts"
+import { checked, copyBuyer, copyIssuerSnapshot, copySource, missing } from "../../application/support.ts"
 import { DomainConflict, ValidationFailure } from "../../contracts/failures.ts"
 import type { IdGenerator } from "../../contracts/host.ts"
 import type { DraftInvoice, IssuerProfile, IssuerSnapshot } from "../../domain/invoice.ts"
@@ -33,7 +33,7 @@ export const numberedSnapshot = (draft: SnapshotContent, issuer: IssuerSnapshot,
   ...identity, issuedAt: identity.issuedAt.toISOString(), organizationId: draft.organizationId,
   ...(draft.source === undefined ? {} : { source: copySource(draft.source) }),
   issueDate: draft.issueDate, dueDate: draft.dueDate, currency: draft.currency, notes: draft.notes,
-  issuer: copyIssuerSnapshot(issuer), customer: structuredClone(draft.customer), lines: structuredClone(draft.lines),
+  issuer: copyIssuerSnapshot(issuer), customer: copyBuyer(draft.customer), lines: structuredClone(draft.lines),
   vatBreakdown: structuredClone(draft.vatBreakdown), totalExcludingVat: draft.totalExcludingVat,
   vatTotal: draft.vatTotal, totalIncludingVat: draft.totalIncludingVat,
 })
