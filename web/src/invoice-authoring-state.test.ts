@@ -4,6 +4,7 @@ import test from "node:test"
 import { addCalendarDays, applyProductPreset, authoringAccess, authoringDocumentPayload, authoringPayloadMatchesDraft, authoringReadiness, authoringSeriesOptions, authoringTaxReadiness, createDraftPayload, documentNotesIssue, documentNotesMaxLength, draftLinePayload, draftLinesForEditing, editDueDate, formFromDraft, headerMatchesDraft, initialBuyerSelection, linesMatchDraft, newAuthoringForm, newEditableInvoiceLine, pendingLineOperations, positiveInvoiceRequiresDueDate, preferredUnitOfMeasure, selectBuyerCounty, selectBuyerMode, selectIssueDate, selectedSavedCustomer, selectSavedCustomer, switchBuyerMode, switchPartyType, updateDraftPayload, type InvoiceAuthoringForm } from "./invoice-authoring-state.ts"
 import type { Customer, DraftInvoice, Issuer, ProductPreset } from "./models.ts"
 const each = { code: "C62", name: "unitate" } as const
+const standardTreatment = { vatCategoryCode: "S", vatExemptionReason: null } as const
 
 const manualForm: InvoiceAuthoringForm = {
   buyerMode: "one-time", customerId: "", partyType: "individual", name: "Ana Pop", companyTaxIdentifier: "RO123", individualTaxIdentifier: "", vatRegistered: false,
@@ -190,7 +191,7 @@ void test("encodes a cleared due date as null and rehydrates null as a blank con
 })
 
 void test("detects edited and queued lines before issue", () => {
-  const withLine: DraftInvoice = { ...draft, lines: [{ id: "line-1", description: "Serviciu", quantity: "1.0000", unitPrice: "100.00", unitOfMeasure: each, vatRateCode: "RO_STANDARD", vatRate: "21.00", totalExcludingVat: "100.00", vatAmount: "21.00", totalIncludingVat: "121.00" }] }
+  const withLine: DraftInvoice = { ...draft, lines: [{ ...standardTreatment, id: "line-1", description: "Serviciu", quantity: "1.0000", unitPrice: "100.00", unitOfMeasure: each, vatRateCode: "RO_STANDARD", vatRate: "21.00", totalExcludingVat: "100.00", vatAmount: "21.00", totalIncludingVat: "121.00" }] }
   const lines = draftLinesForEditing(withLine)
   assert.equal(linesMatchDraft(lines, withLine), true)
   assert.equal(linesMatchDraft([{ ...lines[0] as NonNullable<typeof lines[0]>, quantity: "2" }], withLine), false)
@@ -218,14 +219,14 @@ void test("locks issued and proforma-issued draft routes while keeping new and d
   assert.equal(proformaAccess.editable ? undefined : proformaAccess.registryHref, "/proformas")
   assert.equal(authoringReadiness(manualForm, [], undefined, false).editable, true)
   for (const status of ["issued", "proforma_issued"] as const) {
-    const sealed = { ...draft, status, lines: [{ id: "line-1", description: "Serviciu", quantity: "1.0000", unitPrice: "100.00", unitOfMeasure: each, vatRateCode: "RO_STANDARD", vatRate: "21.00", totalExcludingVat: "100.00", vatAmount: "21.00", totalIncludingVat: "121.00" }] }
+    const sealed = { ...draft, status, lines: [{ ...standardTreatment, id: "line-1", description: "Serviciu", quantity: "1.0000", unitPrice: "100.00", unitOfMeasure: each, vatRateCode: "RO_STANDARD", vatRate: "21.00", totalExcludingVat: "100.00", vatAmount: "21.00", totalIncludingVat: "121.00" }] }
     const readiness = authoringReadiness(formFromDraft(sealed), draftLinesForEditing(sealed), sealed, false)
     assert.deepEqual(readiness, { editable: false, synchronized: false, hasLines: true, canIssue: false })
   }
 })
 
 void test("selects only remaining new or changed lines for a resumed save", () => {
-  const withLine: DraftInvoice = { ...draft, lines: [{ id: "line-1", description: "Serviciu", quantity: "1.0000", unitPrice: "100.00", unitOfMeasure: each, vatRateCode: "RO_STANDARD", vatRate: "21.00", totalExcludingVat: "100.00", vatAmount: "21.00", totalIncludingVat: "121.00" }] }
+  const withLine: DraftInvoice = { ...draft, lines: [{ ...standardTreatment, id: "line-1", description: "Serviciu", quantity: "1.0000", unitPrice: "100.00", unitOfMeasure: each, vatRateCode: "RO_STANDARD", vatRate: "21.00", totalExcludingVat: "100.00", vatAmount: "21.00", totalIncludingVat: "121.00" }] }
   const persisted = draftLinesForEditing(withLine)[0]
   assert.ok(persisted)
   const queued = { key: "local-2", description: "Transport", quantity: "1", unitPrice: "20", unitOfMeasure: each, vatRateCode: "RO_STANDARD" }
@@ -234,7 +235,7 @@ void test("selects only remaining new or changed lines for a resumed save", () =
 })
 
 void test("forces a stale same-code saved line update and stops resending after server refresh", () => {
-  const stale = { ...draft, lines: [{ id: "line-1", description: "Serviciu", quantity: "1.0000", unitPrice: "100.00", unitOfMeasure: each, vatRateCode: "RO_STANDARD", vatRate: "19.00", totalExcludingVat: "100.00", vatAmount: "19.00", totalIncludingVat: "119.00" }] }
+  const stale = { ...draft, lines: [{ ...standardTreatment, id: "line-1", description: "Serviciu", quantity: "1.0000", unitPrice: "100.00", unitOfMeasure: each, vatRateCode: "RO_STANDARD", vatRate: "19.00", totalExcludingVat: "100.00", vatAmount: "19.00", totalIncludingVat: "119.00" }] }
   const editable = draftLinesForEditing(stale)
   assert.deepEqual(pendingLineOperations(editable, stale, ["line-1"]).map((operation) => operation.kind), ["update"])
   const refreshed = { ...stale, lines: [{ ...stale.lines[0] as NonNullable<typeof stale.lines[0]>, vatRate: "21.00", vatAmount: "21.00", totalIncludingVat: "121.00" }] }
@@ -244,12 +245,12 @@ void test("forces a stale same-code saved line update and stops resending after 
 })
 
 void test("does not resend an unchanged valid saved line when no forced update is requested", () => {
-  const valid = { ...draft, lines: [{ id: "line-1", description: "Serviciu", quantity: "1.0000", unitPrice: "100.00", unitOfMeasure: each, vatRateCode: "RO_STANDARD", vatRate: "21.00", totalExcludingVat: "100.00", vatAmount: "21.00", totalIncludingVat: "121.00" }] }
+  const valid = { ...draft, lines: [{ ...standardTreatment, id: "line-1", description: "Serviciu", quantity: "1.0000", unitPrice: "100.00", unitOfMeasure: each, vatRateCode: "RO_STANDARD", vatRate: "21.00", totalExcludingVat: "100.00", vatAmount: "21.00", totalIncludingVat: "121.00" }] }
   assert.deepEqual(pendingLineOperations(draftLinesForEditing(valid), valid, []), [])
 })
 
 void test("retries only the remaining forced stale line after a partial multi-line save", () => {
-  const line = { description: "Serviciu", quantity: "1.0000", unitPrice: "100.00", unitOfMeasure: each, vatRateCode: "RO_STANDARD", vatRate: "19.00", totalExcludingVat: "100.00", vatAmount: "19.00", totalIncludingVat: "119.00" }
+  const line = { ...standardTreatment, description: "Serviciu", quantity: "1.0000", unitPrice: "100.00", unitOfMeasure: each, vatRateCode: "RO_STANDARD", vatRate: "19.00", totalExcludingVat: "100.00", vatAmount: "19.00", totalIncludingVat: "119.00" }
   const initial = { ...draft, lines: [{ ...line, id: "line-1" }, { ...line, id: "line-2", description: "Transport" }] }
   assert.deepEqual(pendingLineOperations(draftLinesForEditing(initial), initial, ["line-1", "line-2"]).map((operation) => operation.line.lineId), ["line-1", "line-2"])
   const afterFirstSave = { ...initial, lines: [{ ...initial.lines[0] as NonNullable<typeof initial.lines[0]>, vatRate: "21.00" }, initial.lines[1] as NonNullable<typeof initial.lines[1]>] }

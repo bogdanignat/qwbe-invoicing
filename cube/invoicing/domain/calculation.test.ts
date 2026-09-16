@@ -2,13 +2,15 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import { ValidationFailure } from "../contracts/failures.ts"
-import { calculateLine, calculateTotals } from "./calculation.ts"
+import { calculateLine, calculateTotals, validateFiscalDocument } from "./calculation.ts"
+import { article310VatExemptionReason, validateVatTreatment } from "./validation.ts"
 const each = { code: "C62", name: "unitate" } as const
 
 const tax = (code: string, rate: string) => ({
   code,
-
   rate,
+  vatCategoryCode: "S" as const,
+  vatExemptionReason: null,
   effectiveFrom: "2025-08-01",
 })
 
@@ -39,6 +41,8 @@ void test("calculates quantity, configured VAT, grouped breakdown, and totals wi
     vatRateCode: "RO_STANDARD",
 
     vatRate: "21.00",
+    vatCategoryCode: "S",
+    vatExemptionReason: null,
     totalExcludingVat: "12.36",
     vatAmount: "2.60",
     totalIncludingVat: "14.96",
@@ -48,8 +52,8 @@ void test("calculates quantity, configured VAT, grouped breakdown, and totals wi
     vatTotal: "2.61",
     totalIncludingVat: "15.07",
     vatBreakdown: [
-      { code: "RO_STANDARD", rate: "21.00", vatBaseAmount: "12.36", vatAmount: "2.60" },
-      { code: "RO_REDUCED", rate: "9.00", vatBaseAmount: "0.10", vatAmount: "0.01" },
+      { code: "RO_STANDARD", rate: "21.00", vatCategoryCode: "S", vatExemptionReason: null, vatBaseAmount: "12.36", vatAmount: "2.60" },
+      { code: "RO_REDUCED", rate: "9.00", vatCategoryCode: "S", vatExemptionReason: null, vatBaseAmount: "0.10", vatAmount: "0.01" },
     ],
   })
 })
@@ -70,8 +74,22 @@ void test("computes category VAT from the summed base, not from the rounded line
     totalExcludingVat: "3.33",
     vatTotal: "0.70",
     totalIncludingVat: "4.03",
-    vatBreakdown: [{ code: "RO_STANDARD", rate: "21.00", vatBaseAmount: "3.33", vatAmount: "0.70" }],
+    vatBreakdown: [{ code: "RO_STANDARD", rate: "21.00", vatCategoryCode: "S", vatExemptionReason: null, vatBaseAmount: "3.33", vatAmount: "0.70" }],
   })
+})
+
+void test("groups article 310 lines into one E breakdown and validates the complete positive snapshot", () => {
+  const vat = { code: "RO_NON_VAT", rate: "0.00", vatCategoryCode: "E" as const,
+    vatExemptionReason: article310VatExemptionReason, effectiveFrom: "2025-08-01" }
+  const lines = ["10", "0"].map((unitPrice, index) => calculateLine({ id: `e-${String(index)}`, description: "Serviciu",
+    quantity: "1", unitPrice, unitOfMeasure: each, vat }))
+  const document = { lines, ...calculateTotals(lines) }
+  assert.deepEqual(document.vatBreakdown, [{ code: "RO_NON_VAT", rate: "0.00", vatCategoryCode: "E",
+    vatExemptionReason: article310VatExemptionReason, vatBaseAmount: "10.00", vatAmount: "0.00" }])
+  assert.doesNotThrow(() => { validateFiscalDocument(document) })
+  assert.throws(() => { validateFiscalDocument({ ...document,
+    vatBreakdown: [{ ...document.vatBreakdown[0] as NonNullable<typeof document.vatBreakdown[0]>, vatBaseAmount: "9.99" }] }) }, ValidationFailure)
+  assert.throws(() => { calculateTotals(lines.map((line, index) => index === 0 ? { ...line, vatRateCode: "RO_STANDARD" } : line)) }, ValidationFailure)
 })
 
 void test("rejects excess precision and impossible configured rates instead of rounding input", () => {
@@ -97,4 +115,15 @@ void test("rejects excess precision and impossible configured rates instead of r
     }),
     (error: unknown) => error instanceof ValidationFailure,
   )
+})
+
+void test("accepts only canonical S and explicit article 310 E treatment tuples", () => {
+  assert.doesNotThrow(() => { validateVatTreatment("RO_STANDARD", "21.00", "S", null) })
+  assert.doesNotThrow(() => { validateVatTreatment("RO_NON_VAT", "0.00", "E", article310VatExemptionReason) })
+  for (const tuple of [
+    ["RO_STANDARD", "21.00", "S", article310VatExemptionReason],
+    ["RO_STANDARD", "0.00", "S", null], ["RO_NON_VAT", "0.00", "E", null], ["OTHER", "21.00", "S", null],
+  ] satisfies ReadonlyArray<readonly [string, string, string, string | null]>) {
+    assert.throws(() => { validateVatTreatment(tuple[0], tuple[1], tuple[2], tuple[3]) }, ValidationFailure)
+  }
 })

@@ -78,12 +78,15 @@ void test("round-trips frozen issuer VAT status for invoices, proformas, convers
 
     now = new Date("2026-09-02T10:00:00.000Z")
     await Effect.runPromise(service.configureIssuer({ ...issuer, fiscalIdentifier: "12345674",
-      vatChange: { registered: false, effectiveFrom: "2026-09-02" } }))
+      vatChange: { registered: false, nonVatBasis: "article_310", effectiveFrom: "2026-09-02" } }))
     const profile = await Effect.runPromise(service.getIssuer())
     assert.equal("vatRegistered" in profile, false)
     const nonVatInvoice = await Effect.runPromise(service.issueInvoice(request({ draftId: (await issueDraft("RO_NON_VAT")).id })))
     const nonVatProforma = await Effect.runPromise(service.issueProforma(request({
       draftId: (await issueDraft("RO_NON_VAT")).id, series: "PRO",
+    })))
+    const nonVatCorrection = await Effect.runPromise(service.createCorrection(request({
+      originalInvoiceId: nonVatInvoice.id, reason: "Corecție regim art. 310",
     })))
     const conversionState = () => {
       const database = new DatabaseSync(databasePath(directory))
@@ -112,6 +115,8 @@ void test("round-trips frozen issuer VAT status for invoices, proformas, convers
     assert.equal((await Effect.runPromise(restarted.getProforma(registeredProforma.id))).issuer.vatRegistered, true)
     assert.equal((await Effect.runPromise(restarted.getIssuedInvoice(converted.id))).issuer.vatRegistered, true)
     assert.equal((await Effect.runPromise(restarted.getCorrection(correction.id))).issuer.vatRegistered, true)
+    assert.deepEqual((await Effect.runPromise(restarted.getCorrection(nonVatCorrection.id))).lines[0], nonVatCorrection.lines[0])
+    assert.deepEqual((await Effect.runPromise(restarted.getCorrection(nonVatCorrection.id))).vatBreakdown[0], nonVatCorrection.vatBreakdown[0])
     assert.equal((await Effect.runPromise(restarted.getIssuedInvoice(nonVatInvoice.id))).issuer.vatRegistered, false)
     assert.equal((await Effect.runPromise(restarted.getProforma(nonVatProforma.id))).issuer.vatRegistered, false)
     assert.equal((await Effect.runPromise(restarted.listIssuedInvoices())).items.find(({ id }) => id === nonVatInvoice.id)?.issuer.vatRegistered, false)
@@ -124,10 +129,36 @@ void test("round-trips frozen issuer VAT status for invoices, proformas, convers
 
     const database = new DatabaseSync(databasePath(directory))
     try {
+      assert.deepEqual({ ...database.prepare(`SELECT code,rate,category,vat_exemption_reason
+        FROM issuer_tax_configurations WHERE organization_id=? AND code='RO_NON_VAT'`).get("org-1") }, {
+        code: "RO_NON_VAT", rate: "0.00", category: "E",
+        vat_exemption_reason: "Regim special de scutire conform art. 310 din Codul fiscal",
+      })
+      for (const [table, parentColumn, parentId, categoryColumn, rateColumn] of [
+        ["draft_lines", "draft_id", nonVatInvoice.draftId, "tax_category", "tax_rate"],
+        ["issued_lines", "invoice_id", nonVatInvoice.id, "tax_category", "tax_rate"],
+        ["issued_tax_breakdown", "invoice_id", nonVatInvoice.id, "category", "rate"],
+        ["proforma_lines", "proforma_id", nonVatProforma.id, "tax_category", "tax_rate"],
+        ["proforma_tax_breakdown", "proforma_id", nonVatProforma.id, "category", "rate"],
+        ["correction_lines", "correction_id", nonVatCorrection.id, "tax_category", "tax_rate"],
+        ["correction_tax_breakdown", "correction_id", nonVatCorrection.id, "category", "rate"],
+      ] as const) {
+        assert.deepEqual({ ...database.prepare(`SELECT tax_code,${categoryColumn} AS category,${rateColumn} AS rate,
+          vat_exemption_reason FROM ${table} WHERE ${parentColumn}=?`).get(parentId) }, {
+          tax_code: "RO_NON_VAT", category: "E", rate: "0.00",
+          vat_exemption_reason: "Regim special de scutire conform art. 310 din Codul fiscal",
+        }, table)
+      }
+      for (const table of ["issuer_tax_configurations", "draft_lines", "issued_lines", "issued_tax_breakdown",
+        "proforma_lines", "proforma_tax_breakdown", "correction_lines", "correction_tax_breakdown"]) {
+        assert.equal(database.prepare(`SELECT 1 FROM pragma_table_info(?) WHERE name='non_vat_basis'`).get(table), undefined)
+      }
       assert.equal(database.prepare("SELECT issuer_vat_registered FROM issued_invoices WHERE id=?").get(nonVatInvoice.id)?.issuer_vat_registered, 0)
       assert.throws(() => database.prepare("UPDATE issued_invoices SET issuer_vat_registered=1 WHERE id=?").run(nonVatInvoice.id))
       assert.throws(() => database.prepare("UPDATE proformas SET issuer_vat_registered=1 WHERE id=?").run(nonVatProforma.id))
       assert.throws(() => database.prepare("UPDATE correction_documents SET issuer_vat_registered=0 WHERE id=?").run(correction.id))
+      assert.throws(() => database.prepare("UPDATE correction_lines SET vat_exemption_reason=NULL WHERE correction_id=?").run(nonVatCorrection.id))
+      assert.throws(() => database.prepare("UPDATE correction_tax_breakdown SET category='S' WHERE correction_id=?").run(nonVatCorrection.id))
     } finally { database.close() }
   } finally { rmSync(directory, { recursive: true, force: true }) }
 })

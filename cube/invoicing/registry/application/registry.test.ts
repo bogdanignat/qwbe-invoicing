@@ -7,13 +7,17 @@ import { createInvoicingService } from "../../application/invoicing.ts"
 import { brandingNormalizer, contextProvider, each, emptyState, fixedClock, identity, memoryStore, sequentialIds } from "../../application/memory-store.test-support.ts"
 import { DomainConflict, ResourceNotFound, ValidationFailure } from "../../contracts/index.ts"
 import { PermissionDenied } from "../../contracts/failures.ts"
+import type { ConfigureIssuerInput, VatChange } from "../../domain/inputs.ts"
 
-const issuerInput = (branding: Parameters<ReturnType<typeof createInvoicingService>["configureIssuer"]>[0]["branding"]) => ({
+const vatChange = (registered: boolean, effectiveFrom: string): VatChange => registered
+  ? { registered: true, effectiveFrom }
+  : { registered: false, effectiveFrom, nonVatBasis: "article_310" }
+const issuerInput = (branding: Parameters<ReturnType<typeof createInvoicingService>["configureIssuer"]>[0]["branding"]): ConfigureIssuerInput => ({
   name: "Exemplu SRL", fiscalIdentifier: "12345674",
   address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1", county: "RO-BT" },
   legalForm: "srl" as const, tradeRegistryNumber: "J40/123/2020", socialCapital: "200.00", iban: "", bankName: "",
   defaultCurrency: "RON", defaultPaymentTermDays: 15,
-  vatChange: { registered: true, effectiveFrom: "2025-08-01" }, branding,
+  vatChange: vatChange(true, "2025-08-01"), branding,
 })
 
 void test("updates tenant customers and manages hard-deleted product presets", async () => {
@@ -140,10 +144,10 @@ void test("schedules future VAT transitions with a canonical CUI independent of 
       branding: brandingNormalizer, cubeIdentity: "invoicing",
     })
     const input = { ...issuerInput(null), fiscalIdentifier: "12345674",
-      vatChange: { registered, effectiveFrom: "2026-01-01" } }
+      vatChange: vatChange(registered, "2026-01-01") }
     await Effect.runPromise(service.configureIssuer(input))
     const scheduled = await Effect.runPromise(service.configureIssuer({ ...input,
-      vatChange: { registered: !registered, effectiveFrom: "2027-01-01" } }))
+      vatChange: vatChange(!registered, "2027-01-01") }))
     assert.equal(scheduled.currentVat?.registered, registered)
     assert.equal(scheduled.fiscalIdentifier, input.fiscalIdentifier)
     const saved = await Effect.runPromise(service.configureIssuer({ ...input, name: "Updated company" }))

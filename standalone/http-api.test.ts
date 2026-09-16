@@ -80,7 +80,7 @@ void test("issuer VAT status is required on document responses but absent from i
   }
   assert.doesNotThrow(() => Schema.decodeUnknownSync(S.IssuerInput)({
     ...company, defaultCurrency: "RON", defaultPaymentTermDays: 15,
-    vatChange: { registered: false, effectiveFrom: "2026-09-01" }, branding: null,
+    vatChange: { registered: false, effectiveFrom: "2026-09-01", nonVatBasis: "article_310" }, branding: null,
   }))
   assert.deepEqual(Schema.encodeSync(S.IssuerCompanySnapshot)({ ...company, vatRegistered: false }), { ...company, vatRegistered: false })
   assert.throws(() => Schema.decodeUnknownSync(S.IssuerCompanySnapshot)(company))
@@ -88,8 +88,10 @@ void test("issuer VAT status is required on document responses but absent from i
 
 void test("VAT catalogue response exposes legal rates without buyer inference", () => {
   const response = { rates: [
-    { code: "RO_STANDARD", rate: "21.00", kind: "standard", label: "TVA standard 21%", effectiveFrom: "2025-08-01" },
-    { code: "RO_REDUCED", rate: "11.00", kind: "reduced", label: "TVA redus 11%", effectiveFrom: "2025-08-01" },
+    { code: "RO_STANDARD", rate: "21.00", vatCategoryCode: "S", vatExemptionReason: null,
+      kind: "standard", label: "TVA standard 21%", effectiveFrom: "2025-08-01" },
+    { code: "RO_REDUCED", rate: "11.00", vatCategoryCode: "S", vatExemptionReason: null,
+      kind: "reduced", label: "TVA redus 11%", effectiveFrom: "2025-08-01" },
   ] }
   assert.deepEqual(Schema.encodeSync(S.VatCatalogue)(Schema.decodeUnknownSync(S.VatCatalogue)(response)), response)
 })

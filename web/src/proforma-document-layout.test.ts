@@ -5,6 +5,7 @@ import test from "node:test"
 import { createServer } from "vite"
 
 import type { IssuedInvoice, Proforma } from "./models.ts"
+import { ARTICLE_310_EXEMPTION_REASON } from "./models.ts"
 
 type Snapshot = Pick<Proforma, "currency" | "customer" | "dueDate" | "issueDate" | "issuer" | "lines" | "notes" | "vatBreakdown" | "totalExcludingVat" | "vatTotal" | "totalIncludingVat">
 type Identity = { readonly kind: "invoice" | "proforma"; readonly series: string; readonly number: number }
@@ -55,6 +56,21 @@ void test("requires and renders real invoice and proforma identities in the shar
   assert.match(renderedInvoice, /INV 781/)
   assert.match(renderedInvoice, /Data emiterii.*2026-09-14.*Scadență.*2026-09-29.*Monedă.*RON/)
   assert.doesNotMatch(renderedInvoice, /DOCUMENT NEFISCAL|document-meta|invoice-parties|Număr factură[^<]*PRO|INV 0/)
+
+  const exemptInvoice: IssuedInvoice = {
+    ...invoice,
+    issuer: { ...invoice.issuer, vatRegistered: false },
+    lines: [{ id: "line-e", description: "Serviciu scutit", quantity: "1.0000", unitPrice: "100.00", unitOfMeasure: { code: "C62", name: "unitate" },
+      vatRateCode: "RO_NON_VAT", vatRate: "0.00", vatCategoryCode: "E", vatExemptionReason: ARTICLE_310_EXEMPTION_REASON,
+      totalExcludingVat: "100.00", vatAmount: "0.00", totalIncludingVat: "100.00" }],
+    vatBreakdown: [{ code: "RO_NON_VAT", rate: "0.00", vatCategoryCode: "E", vatExemptionReason: ARTICLE_310_EXEMPTION_REASON,
+      vatBaseAmount: "100.00", vatAmount: "0.00" }],
+    totalExcludingVat: "100.00", vatTotal: "0.00", totalIncludingVat: "100.00",
+  }
+  const renderedExempt = renderToStaticMarkup(createElement(invoiceModule.InvoiceDocument, { invoice: exemptInvoice }))
+  assert.match(renderedExempt, /Scutit TVA — art\. 310/)
+  assert.equal(renderedExempt.match(new RegExp(ARTICLE_310_EXEMPTION_REASON, "g"))?.length, 1)
+  assert.doesNotMatch(renderedExempt, /Cod TVA: RO2|TVA 0\.00%/)
 
   const withoutDueDate = renderToStaticMarkup(createElement(documentModule.CommercialDocument, {
     snapshot: { ...snapshot, currency: "EUR", dueDate: null }, identity: { kind: "proforma", series: "P", number: 1 }, lineCaption: "Linii proformă",

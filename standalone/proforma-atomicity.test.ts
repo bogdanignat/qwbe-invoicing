@@ -88,7 +88,9 @@ const configure = async (value: Fixture, registered = true, effectiveFrom = "202
   await Effect.runPromise(service.configureIssuer({
     ...issuer,
     fiscalIdentifier: issuer.fiscalIdentifier,
-    vatChange: { registered, effectiveFrom },
+    vatChange: registered
+      ? { registered: true, effectiveFrom }
+      : { registered: false, effectiveFrom, nonVatBasis: "article_310" },
   }))
   await Effect.runPromise(service.addDocumentSeries({ documentType: "invoice", series: "INV" }))
   await Effect.runPromise(service.addDocumentSeries({ documentType: "proforma", series: "PRO" }))

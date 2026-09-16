@@ -1,8 +1,10 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { decodeCorrection, decodeCustomer, decodeDocumentSeries, decodeDocumentSeriesList, decodeDraft, decodeDrafts, decodeInvoice, decodeIssuer, decodePaymentSummary, decodeProductPreset, decodeProductPresetPage, decodeProductPresets, decodeProforma, decodeProformas, decodeUnitOfMeasures, decodeVatCatalogue, invoiceDocumentSeries, proformaDocumentSeries } from "./models.ts"
+import { ARTICLE_310_EXEMPTION_REASON, decodeCorrection, decodeCustomer, decodeDocumentSeries, decodeDocumentSeriesList, decodeDraft, decodeDrafts, decodeInvoice, decodeIssuer, decodePaymentSummary, decodeProductPreset, decodeProductPresetPage, decodeProductPresets, decodeProforma, decodeProformas, decodeUnitOfMeasures, decodeVatCatalogue, invoiceDocumentSeries, proformaDocumentSeries } from "./models.ts"
 const each = { code: "C62", name: "unitate" } as const
+const standard = { vatCategoryCode: "S", vatExemptionReason: null } as const
+const exempt = { vatCategoryCode: "E", vatExemptionReason: ARTICLE_310_EXEMPTION_REASON } as const
 
 void test("requires canonical Romanian county and explicit buyer VAT state", () => {
   assert.deepEqual(decodeCustomer({
@@ -58,13 +60,18 @@ void test("requires integer issuer terms and decodes tax configuration", () => {
     address: { countryCode: "RO", city: "Botoșani", street: "Strada 2", county: "RO-BT" },
     legalForm: "srl", tradeRegistryNumber: "J07/123/2020", iban: "", bankName: "", socialCapital: "200.00",
     branding: null, defaultCurrency: "RON", defaultPaymentTermDays: 15,
-    vatConfigurations: [{ code: "RO_STANDARD", rate: "21.00", effectiveFrom: "2026-01-01", effectiveTo: null }],
+    vatConfigurations: [{ ...standard, code: "RO_STANDARD", rate: "21.00", effectiveFrom: "2026-01-01", effectiveTo: null }],
     currentVat: { registered: true, effectiveFrom: "2026-01-01", effectiveTo: null },
   }
   assert.equal(decodeIssuer(input).vatConfigurations[0]?.effectiveTo, undefined)
   assert.deepEqual(decodeIssuer(input).currentVat, { registered: true, effectiveFrom: "2026-01-01" })
   assert.throws(() => decodeIssuer({ ...input, currentVat: undefined }))
   assert.throws(() => decodeIssuer({ ...input, currentVat: { registered: "yes", effectiveFrom: "2026-01-01" } }))
+  assert.throws(() => decodeIssuer({ ...input, currentVat: { registered: true, effectiveFrom: "2026-01-01", nonVatBasis: "article_310" } }), /invalid nonVatBasis/)
+  assert.throws(() => decodeIssuer({ ...input, currentVat: { registered: false, effectiveFrom: "2026-01-01" } }), /invalid nonVatBasis/)
+  assert.deepEqual(decodeIssuer({ ...input, vatConfigurations: [{ ...exempt, code: "RO_NON_VAT", rate: "0.00", effectiveFrom: "2026-01-01" }], currentVat: { registered: false, effectiveFrom: "2026-01-01", nonVatBasis: "article_310" } }).currentVat,
+    { registered: false, effectiveFrom: "2026-01-01", nonVatBasis: "article_310" })
+  assert.throws(() => decodeIssuer({ ...input, currentVat: { registered: false, effectiveFrom: "2026-01-01", nonVatBasis: "article_310" } }), /invalid currentVat projection/)
   assert.throws(() => decodeIssuer({ ...input, defaultPaymentTermDays: "15" }), /invalid defaultPaymentTermDays/)
 })
 
@@ -93,8 +100,8 @@ const commercialDocument = {
   issueDate: "2026-09-01", dueDate: null, issuedAt: "2026-09-01T10:00:00.000Z", currency: "RON", notes: null,
   issuer: { name: "QWBE", fiscalIdentifier: "2", vatRegistered: true, address: { countryCode: "RO", city: "Botoșani", street: "Strada 2", county: "RO-BT" }, legalForm: "srl", tradeRegistryNumber: "J07/123/2020", iban: "", bankName: "", socialCapital: "200.00", branding: null },
   customer: { partyType: "company", name: "Client", fiscalIdentifier: "1", vatRegistered: true, address: { countryCode: "RO", city: "Iași", street: "Strada 1", county: "RO-IS" } },
-  lines: [{ id: "line-1", description: "Serviciu", quantity: "1.0000", unitPrice: "100.00", unitOfMeasure: each, vatRateCode: "RO_STANDARD", vatRate: "21.00", totalExcludingVat: "100.00", vatAmount: "21.00", totalIncludingVat: "121.00" }],
-  vatBreakdown: [{ code: "RO_STANDARD", rate: "21.00", vatBaseAmount: "100.00", vatAmount: "21.00" }],
+  lines: [{ ...standard, id: "line-1", description: "Serviciu", quantity: "1.0000", unitPrice: "100.00", unitOfMeasure: each, vatRateCode: "RO_STANDARD", vatRate: "21.00", totalExcludingVat: "100.00", vatAmount: "21.00", totalIncludingVat: "121.00" }],
+  vatBreakdown: [{ ...standard, code: "RO_STANDARD", rate: "21.00", vatBaseAmount: "100.00", vatAmount: "21.00" }],
   totalExcludingVat: "100.00", vatTotal: "21.00", totalIncludingVat: "121.00",
   convertedDraftId: null, convertedInvoiceId: null,
 }
@@ -118,6 +125,14 @@ void test("strictly decodes nullable commercial dates and proforma conversion st
   assert.equal(decodeProforma({ ...commercialDocument, notes: "Mentiune" }).notes, "Mentiune")
   assert.equal(decodeInvoice({ ...commercialDocument, draftId: null, sourceProformaId: null, eFacturaStatus: "not_sent", notes: "Mentiune" }).notes, "Mentiune")
   assert.throws(() => decodeProforma({ ...commercialDocument, notes: undefined }), /invalid notes/)
+  for (const collection of ["lines", "vatBreakdown"] as const) {
+    const item = { ...commercialDocument[collection][0] } as Record<string, unknown>
+    delete item.vatCategoryCode
+    assert.throws(() => decodeProforma({ ...commercialDocument, [collection]: [item] }), /invalid vatCategoryCode/)
+    const withoutReason = { ...commercialDocument[collection][0] } as Record<string, unknown>
+    delete withoutReason.vatExemptionReason
+    assert.throws(() => decodeProforma({ ...commercialDocument, [collection]: [withoutReason] }), /invalid vatExemptionReason/)
+  }
 })
 
 void test("strictly requires and decodes issuer branding on details while summaries omit it", () => {
@@ -177,10 +192,24 @@ void test("strictly decodes correction issuers as company snapshots without bran
 
 void test("decodes VAT catalogue legal periods without registration inference", () => {
   const catalogue = decodeVatCatalogue({ rates: [
-    { code: "RO_STANDARD", rate: "19.00", kind: "standard", label: "TVA standard 19%", effectiveFrom: "2025-01-01", effectiveTo: "2025-07-31" },
-    { code: "RO_STANDARD", rate: "21.00", kind: "standard", label: "TVA standard 21%", effectiveFrom: "2025-08-01" },
+    { ...standard, code: "RO_STANDARD", rate: "19.00", kind: "standard", label: "TVA standard 19%", effectiveFrom: "2025-01-01", effectiveTo: "2025-07-31" },
+    { ...standard, code: "RO_STANDARD", rate: "21.00", kind: "standard", label: "TVA standard 21%", effectiveFrom: "2025-08-01" },
+    { ...exempt, code: "RO_NON_VAT", rate: "0.00", kind: "non_vat", label: "Scutit TVA — art. 310", effectiveFrom: "2025-01-01" },
   ] })
   assert.equal(catalogue.rates[0]?.effectiveTo, "2025-07-31")
+  assert.equal(catalogue.rates[2]?.vatCategoryCode, "E")
+  for (const missing of ["vatCategoryCode", "vatExemptionReason"] as const) {
+    const rate = catalogue.rates[0]
+    assert.ok(rate)
+    const withoutTreatment = { code: rate.code, rate: rate.rate, kind: rate.kind, label: rate.label, effectiveFrom: rate.effectiveFrom,
+      ...(rate.effectiveTo === undefined ? {} : { effectiveTo: rate.effectiveTo }) }
+    const malformed = missing === "vatCategoryCode" ? { ...withoutTreatment, vatExemptionReason: rate.vatExemptionReason }
+      : { ...withoutTreatment, vatCategoryCode: rate.vatCategoryCode }
+    assert.throws(() => decodeVatCatalogue({ rates: [malformed] }), new RegExp(`invalid ${missing}`))
+  }
+  assert.throws(() => decodeVatCatalogue({ rates: [{ ...exempt, code: "RO_NON_VAT", rate: "0.00", kind: "non_vat", label: "E", effectiveFrom: "2025-01-01", vatCategoryCode: "O" }] }), /invalid vatCategoryCode/)
+  assert.throws(() => decodeVatCatalogue({ rates: [{ ...standard, code: "RO_ZERO", rate: "0.00", kind: "reduced", label: "Z", effectiveFrom: "2025-01-01" }] }), /invalid S VAT treatment/)
+  assert.throws(() => decodeVatCatalogue({ rates: [{ ...standard, code: "RO_OTHER", rate: "5.00", kind: "reduced", label: "O", effectiveFrom: "2025-01-01" }] }), /invalid S VAT treatment/)
 })
 
 void test("decodes inline individual buyers and complete server totals", () => {
@@ -189,8 +218,8 @@ void test("decodes inline individual buyers and complete server totals", () => {
     customer: { partyType: "individual", name: "Ana Pop", fiscalIdentifier: "", vatRegistered: false, address: { countryCode: "RO", city: "Iași", street: "Strada 2", county: "RO-IS" } },
     series: "QWBE", issueDate: "2026-09-01", dueDate: "2026-09-16", currency: "RON", notes: "Livrare in 3 transe.", status: "draft",
     source: { app: "crm", kind: "contract", id: "contract-1" },
-    lines: [{ id: "line-1", description: "Serviciu", quantity: "1.0000", unitPrice: "100.00", unitOfMeasure: each, vatRateCode: "RO_STANDARD", vatRate: "21.00", totalExcludingVat: "100.00", vatAmount: "21.00", totalIncludingVat: "121.00" }],
-    vatBreakdown: [{ code: "RO_STANDARD", rate: "21.00", vatBaseAmount: "100.00", vatAmount: "21.00" }],
+    lines: [{ ...standard, id: "line-1", description: "Serviciu", quantity: "1.0000", unitPrice: "100.00", unitOfMeasure: each, vatRateCode: "RO_STANDARD", vatRate: "21.00", totalExcludingVat: "100.00", vatAmount: "21.00", totalIncludingVat: "121.00" }],
+    vatBreakdown: [{ ...standard, code: "RO_STANDARD", rate: "21.00", vatBaseAmount: "100.00", vatAmount: "21.00" }],
     totalExcludingVat: "100.00", vatTotal: "21.00", totalIncludingVat: "121.00",
   })
   assert.equal(decoded.customerId, undefined)

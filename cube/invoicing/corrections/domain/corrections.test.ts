@@ -7,7 +7,8 @@ import { negateMoney, validateCreateCorrectionInput } from "./corrections.ts"
 void test("negates money amounts symmetrically", () => {
   assert.equal(negateMoney("151.25"), "-151.25")
   assert.equal(negateMoney("-151.25"), "151.25")
-  assert.equal(negateMoney("0.00"), "-0.00")
+  assert.equal(negateMoney("0.00"), "0.00")
+  assert.equal(negateMoney("-0.00"), "0.00")
 })
 
 void test("validates correction input: original invoice, reason length and calendar date", () => {

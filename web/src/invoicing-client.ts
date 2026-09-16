@@ -5,7 +5,7 @@ import {
   decodeCorrection, decodeCorrections, decodeCustomer, decodeCustomerPage, decodeDeleted, decodeDraft, decodeDraftPage,
   decodeDocumentSeries, decodeDocumentSeriesList, decodeInvoice, decodeInvoicePage, decodeIssuer, decodePaymentSummary,
   decodeProductPreset, decodeProductPresetPage, decodeProforma, decodeProformaPage, decodeUnitOfMeasures, decodeVatCatalogue,
-  type Address, type BuyerSnapshot, type CorrectionDocument, type Customer, type DocumentSeries, type DocumentSource, type DocumentType, type DraftInvoice, type IssuedInvoice, type IssuedInvoiceSummary, type Issuer, type LegalForm, type PageRequest, type PaymentSummary, type ProductPreset, type Proforma, type ProformaSummary, type UnitOfMeasure, type VatCatalogue, type VatRate,
+  type Address, type BuyerSnapshot, type CorrectionDocument, type Customer, type DocumentSeries, type DocumentSource, type DocumentType, type DraftInvoice, type IssuedInvoice, type IssuedInvoiceSummary, type Issuer, type LegalForm, type PageRequest, type PaymentSummary, type ProductPreset, type Proforma, type ProformaSummary, type UnitOfMeasure, type VatCatalogue, type VatChange, type VatRate,
 } from "./models.ts"
 
 const ignored = (): undefined => undefined
@@ -43,7 +43,7 @@ export interface IssuerInput {
   readonly socialCapital: string
   readonly defaultCurrency: string
   readonly defaultPaymentTermDays: number
-  readonly vatChange: { readonly registered: boolean; readonly effectiveFrom: string }
+  readonly vatChange: VatChange
   readonly branding: {
     readonly text: string | null
     readonly image: { readonly dataBase64: string } | null

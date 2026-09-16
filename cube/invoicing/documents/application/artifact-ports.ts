@@ -1,25 +1,7 @@
-import { Data, type Effect } from "effect"
-
-export class DocumentsPermissionDenied extends Data.TaggedError("DocumentsPermissionDenied")<{
-  readonly permission: string
-}> {}
-export class DocumentNotFound extends Data.TaggedError("DocumentNotFound")<{
-  readonly resource: string
-  readonly id: string
-}> {}
-export class DocumentPersistenceFailure extends Data.TaggedError("DocumentPersistenceFailure")<{
-  readonly operation: string
-}> {}
-export class DocumentRenderingFailure extends Data.TaggedError("DocumentRenderingFailure")<{
-  readonly template: string
-}> {}
-export class ArtifactConflict extends Data.TaggedError("ArtifactConflict")<{
-  readonly documentKind: DocumentKind
-  readonly documentId: string
-}> {}
-
-export type DocumentsFailure = DocumentsPermissionDenied | DocumentNotFound
-  | DocumentPersistenceFailure | DocumentRenderingFailure | ArtifactConflict
+import type { Effect } from "effect"
+import type { ArtifactConflict, DocumentPersistenceFailure, DocumentRenderingFailure } from "../contracts/failures.ts"
+export { ArtifactConflict, DocumentNotFound, DocumentPersistenceFailure, DocumentRenderingFailure, DocumentsPermissionDenied } from "../contracts/failures.ts"
+export type { DocumentKind, DocumentsFailure } from "../contracts/failures.ts"
 
 export interface RequestContext {
   readonly identity: { readonly id: string; readonly permissions: ReadonlyArray<string> }
@@ -65,12 +47,12 @@ export interface RenderableLine {
   readonly unitPrice: string
   readonly unitOfMeasure: { readonly code: string; readonly name: string }
   readonly vatRate: string
+  readonly vatCategoryCode: "S" | "E"
+  readonly vatExemptionReason: string | null
   readonly totalExcludingVat: string
   readonly vatAmount: string
   readonly totalIncludingVat: string
 }
-
-export type DocumentKind = "invoice" | "proforma"
 
 interface RenderableNumberedDocument {
   readonly id: string
@@ -87,6 +69,8 @@ interface RenderableNumberedDocument {
   readonly lines: ReadonlyArray<RenderableLine>
   readonly vatBreakdown: ReadonlyArray<{
     readonly rate: string
+    readonly vatCategoryCode: "S" | "E"
+    readonly vatExemptionReason: string | null
     readonly vatBaseAmount: string
     readonly vatAmount: string
   }>

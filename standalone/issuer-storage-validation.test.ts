@@ -27,7 +27,7 @@ void test("strict issuer reads refuse corrupt or noncanonical profile, invoice, 
       address: { countryCode: "RO", city: "Iași", street: "Test 1", county: "RO-IS" },
       legalForm: "srl" as const, tradeRegistryNumber: "J40/123/2020", socialCapital: "200.00", bankName: "Banca Test", iban: "RO49AAAA1B31007593840000",
       branding: null, defaultCurrency: "RON", defaultPaymentTermDays: 15,
-      vatChange: { registered: true, effectiveFrom: "2025-08-01" },
+      vatChange: { registered: true as const, effectiveFrom: "2025-08-01" },
     }
     await Effect.runPromise(service.configureIssuer(profile))
     await Effect.runPromise(service.addDocumentSeries({ documentType: "invoice", series: "INV" }))
@@ -78,6 +78,32 @@ void test("strict issuer reads refuse corrupt or noncanonical profile, invoice, 
             database.prepare(`UPDATE ${table} SET ${prefix}${String(field)}=?`).run(original ?? "")
           }
         }
+      } finally { database.close() }
+    }
+    const treatmentCases: { table: string; reads: (() => Effect.Effect<unknown, InvoicingFailure>)[] }[] = [
+      { table: "issuer_tax_configurations", reads: [() => service.getIssuer()] },
+      { table: "issued_lines", reads: [() => service.getIssuedInvoice(invoice.id), () => service.listIssuedInvoices()] },
+      { table: "issued_tax_breakdown", reads: [() => service.getIssuedInvoice(invoice.id), () => service.listIssuedInvoices()] },
+      { table: "proforma_lines", reads: [() => service.getProforma(proforma.id), () => service.listProformas()] },
+      { table: "proforma_tax_breakdown", reads: [() => service.getProforma(proforma.id), () => service.listProformas()] },
+      { table: "correction_lines", reads: [() => service.getCorrection(correction.id), () => service.listCorrections(invoice.id)] },
+      { table: "correction_tax_breakdown", reads: [() => service.getCorrection(correction.id), () => service.listCorrections(invoice.id)] },
+    ]
+    for (const { table, reads } of treatmentCases) {
+      const database = new DatabaseSync(databasePath(directory))
+      try {
+        for (const trigger of database.prepare("SELECT name FROM sqlite_master WHERE type='trigger' AND tbl_name=?").all(table)) {
+          database.exec(`DROP TRIGGER "${String(trigger.name).replaceAll('"', '""')}"`)
+        }
+        database.exec("PRAGMA ignore_check_constraints=ON")
+        const category = table.includes("lines") ? "tax_category" : "category"
+        database.prepare(`UPDATE ${table} SET ${category}='E',vat_exemption_reason=NULL`).run()
+        for (const read of reads) {
+          const result = await Effect.runPromise(Effect.either(read()))
+          assert.equal(result._tag, "Left", table)
+          assert.ok(result.left instanceof PersistenceFailure)
+        }
+        database.prepare(`UPDATE ${table} SET ${category}='S',vat_exemption_reason=NULL`).run()
       } finally { database.close() }
     }
     // Incomplete profiles are legitimate, unlike incomplete issued snapshots.

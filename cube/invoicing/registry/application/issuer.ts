@@ -9,7 +9,8 @@ import { validateDate, validateDocumentSeries } from "../../domain/validation.ts
 import { normalizeBrandingText, validateIssuer, validateIssuerProfile } from "../domain/validation.ts"
 import { normalizeIssuerDetails } from "../domain/issuer-details.ts"
 import { decodeStrictBase64, validateCanonicalImage } from "../domain/branding.ts"
-import { romanianVatRates, scheduleVatRegistration } from "../domain/vat-regime.ts"
+import { romanianVatRates } from "../domain/vat-catalogue.ts"
+import { scheduleVatRegistration } from "../domain/vat-regime.ts"
 import { issuerView, type IssuerView, type VatCatalogue } from "./issuer-view.ts"
 export type { IssuerView, VatCatalogue } from "./issuer-view.ts"
 

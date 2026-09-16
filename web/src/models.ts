@@ -77,14 +77,36 @@ export interface DocumentSource {
 export interface VatConfiguration {
   readonly code: string
   readonly rate: string
+  readonly vatCategoryCode: VatCategoryCode
+  readonly vatExemptionReason: string | null
   readonly effectiveFrom: string
   readonly effectiveTo?: string
 }
 
-export interface VatRegistration {
-  readonly registered: boolean
+export type VatCategoryCode = "S" | "E"
+export type NonVatBasis = "article_310"
+
+interface VatRegistrationPeriod {
   readonly effectiveFrom: string
   readonly effectiveTo?: string
+}
+
+export type VatRegistration = VatRegistrationPeriod & ({
+  readonly registered: true
+  readonly nonVatBasis?: never
+} | {
+  readonly registered: false
+  readonly nonVatBasis: NonVatBasis
+})
+
+export type VatChange = {
+  readonly registered: true
+  readonly effectiveFrom: string
+  readonly nonVatBasis?: never
+} | {
+  readonly registered: false
+  readonly effectiveFrom: string
+  readonly nonVatBasis: NonVatBasis
 }
 
 export interface VatRate extends VatConfiguration {
@@ -130,6 +152,8 @@ export interface DraftLine {
   readonly unitOfMeasure: UnitOfMeasure
   readonly vatRateCode: string
   readonly vatRate: string
+  readonly vatCategoryCode: VatCategoryCode
+  readonly vatExemptionReason: string | null
   readonly totalExcludingVat: string
   readonly vatAmount: string
   readonly totalIncludingVat: string
@@ -158,6 +182,8 @@ export interface DraftInvoice {
 export interface VatBreakdown {
   readonly code: string
   readonly rate: string
+  readonly vatCategoryCode: VatCategoryCode
+  readonly vatExemptionReason: string | null
   readonly vatBaseAmount: string
   readonly vatAmount: string
 }
@@ -424,28 +450,56 @@ export const decodeProductPreset: Decoder<ProductPreset> = (input) => {
   }
 }
 
+export const ARTICLE_310_EXEMPTION_REASON = "Regim special de scutire conform art. 310 din Codul fiscal"
+export const isTaxableVatCode = (code: string): boolean => ["RO_STANDARD", "RO_REDUCED", "RO_REDUCED_5"].includes(code)
+
+const decodeVatCategoryCode = (input: unknown): VatCategoryCode => {
+  const value = text(input, "vatCategoryCode")
+  if (value !== "S" && value !== "E") throw new Error("invalid vatCategoryCode")
+  return value
+}
+
+const canonicalVatTreatment = (code: string, rate: string, vatCategoryCode: VatCategoryCode, vatExemptionReason: string | null): void => {
+  const numericRate = Number(rate)
+  if (!/^(?:0|[1-9]\d?|100)(?:\.\d{1,2})?$/.test(rate) || numericRate > 100) throw new Error("invalid rate")
+  if (vatCategoryCode === "S" && (numericRate <= 0 || vatExemptionReason !== null || !isTaxableVatCode(code))) throw new Error("invalid S VAT treatment")
+  if (vatCategoryCode === "E" && (code !== "RO_NON_VAT" || numericRate !== 0 || vatExemptionReason !== ARTICLE_310_EXEMPTION_REASON)) throw new Error("invalid E VAT treatment")
+}
+
 const decodeVatConfiguration: Decoder<VatConfiguration> = (input) => {
   const value = object(input)
   const effectiveTo = optionalText(value.effectiveTo, "effectiveTo")
-  return {
-    code: text(value.code, "code"), rate: text(value.rate, "rate"),
+  const configuration = {
+    code: text(value.code, "code"), rate: text(value.rate, "rate"), vatCategoryCode: decodeVatCategoryCode(value.vatCategoryCode),
+    vatExemptionReason: nullableText(value.vatExemptionReason, "vatExemptionReason"),
     effectiveFrom: text(value.effectiveFrom, "effectiveFrom"),
     ...(effectiveTo === undefined ? {} : { effectiveTo }),
   }
+  canonicalVatTreatment(configuration.code, configuration.rate, configuration.vatCategoryCode, configuration.vatExemptionReason)
+  return configuration
 }
 
 const decodeVatRegistration: Decoder<VatRegistration> = (input) => {
   const value = object(input)
   if (typeof value.registered !== "boolean") throw new Error("invalid registered")
   const effectiveTo = optionalText(value.effectiveTo, "effectiveTo")
-  return { registered: value.registered, effectiveFrom: text(value.effectiveFrom, "effectiveFrom"), ...(effectiveTo === undefined ? {} : { effectiveTo }) }
+  const period = { effectiveFrom: text(value.effectiveFrom, "effectiveFrom"), ...(effectiveTo === undefined ? {} : { effectiveTo }) }
+  if (value.registered) {
+    if (Object.hasOwn(value, "nonVatBasis")) throw new Error("invalid nonVatBasis")
+    return { registered: true, ...period }
+  }
+  if (value.nonVatBasis !== "article_310") throw new Error("invalid nonVatBasis")
+  return { registered: false, nonVatBasis: "article_310", ...period }
 }
 
 const decodeVatRate: Decoder<VatRate> = (input) => {
   const value = object(input)
   const kind = text(value.kind, "kind")
   if (kind !== "standard" && kind !== "reduced" && kind !== "non_vat") throw new Error("invalid VAT kind")
-  return { ...decodeVatConfiguration(value), kind, label: text(value.label, "label") }
+  const configuration = decodeVatConfiguration(value)
+  if ((kind === "non_vat") !== (configuration.vatCategoryCode === "E")) throw new Error("invalid VAT kind treatment")
+  if ((kind === "standard") !== (configuration.code === "RO_STANDARD") || (kind === "reduced") !== ["RO_REDUCED", "RO_REDUCED_5"].includes(configuration.code)) throw new Error("invalid VAT kind code")
+  return { ...configuration, kind, label: text(value.label, "label") }
 }
 
 export const decodeVatCatalogue: Decoder<VatCatalogue> = (input) => {
@@ -466,33 +520,49 @@ export const decodeDocumentSeries: Decoder<DocumentSeries> = (input) => {
 
 export const decodeIssuer: Decoder<Issuer> = (input) => {
   const value = object(input)
+  const vatConfigurations = array(value.vatConfigurations, decodeVatConfiguration, "vatConfigurations")
+  const currentVat = value.currentVat === null ? null : decodeVatRegistration(value.currentVat)
+  if (currentVat !== null) {
+    const active = vatConfigurations.filter(({ effectiveFrom, effectiveTo }) => effectiveFrom <= currentVat.effectiveFrom
+      && (effectiveTo === undefined || currentVat.effectiveFrom <= effectiveTo))
+    const validProjection = active.length > 0 && (currentVat.registered
+      ? active.every(({ vatCategoryCode }) => vatCategoryCode === "S")
+      : active.every(({ vatCategoryCode }) => vatCategoryCode === "E"))
+    if (!validProjection) throw new Error("invalid currentVat projection")
+  }
   return {
     ...decodeIssuerProfileSnapshot(value), organizationId: text(value.organizationId, "organizationId"),
     defaultCurrency: text(value.defaultCurrency, "defaultCurrency"),
     defaultPaymentTermDays: integer(value.defaultPaymentTermDays, "defaultPaymentTermDays"),
-    vatConfigurations: array(value.vatConfigurations, decodeVatConfiguration, "vatConfigurations"),
-    currentVat: value.currentVat === null ? null : decodeVatRegistration(value.currentVat),
+    vatConfigurations,
+    currentVat,
   }
 }
 
 const decodeDraftLine: Decoder<DraftLine> = (input) => {
   const value = object(input)
-  return {
+  const line = {
     id: text(value.id, "id"), description: text(value.description, "description"),
     quantity: text(value.quantity, "quantity"), unitPrice: text(value.unitPrice, "unitPrice"),
     unitOfMeasure: decodeUnitOfMeasure(value.unitOfMeasure),
     vatRateCode: text(value.vatRateCode, "vatRateCode"), vatRate: text(value.vatRate, "vatRate"),
+    vatCategoryCode: decodeVatCategoryCode(value.vatCategoryCode), vatExemptionReason: nullableText(value.vatExemptionReason, "vatExemptionReason"),
     totalExcludingVat: text(value.totalExcludingVat, "totalExcludingVat"),
     vatAmount: text(value.vatAmount, "vatAmount"), totalIncludingVat: text(value.totalIncludingVat, "totalIncludingVat"),
   }
+  canonicalVatTreatment(line.vatRateCode, line.vatRate, line.vatCategoryCode, line.vatExemptionReason)
+  return line
 }
 
 const decodeVatBreakdown: Decoder<VatBreakdown> = (input) => {
   const value = object(input)
-  return {
-    code: text(value.code, "code"), rate: text(value.rate, "rate"),
+  const breakdown = {
+    code: text(value.code, "code"), rate: text(value.rate, "rate"), vatCategoryCode: decodeVatCategoryCode(value.vatCategoryCode),
+    vatExemptionReason: nullableText(value.vatExemptionReason, "vatExemptionReason"),
     vatBaseAmount: text(value.vatBaseAmount, "vatBaseAmount"), vatAmount: text(value.vatAmount, "vatAmount"),
   }
+  canonicalVatTreatment(breakdown.code, breakdown.rate, breakdown.vatCategoryCode, breakdown.vatExemptionReason)
+  return breakdown
 }
 
 export const decodeDraft: Decoder<DraftInvoice> = (input) => {

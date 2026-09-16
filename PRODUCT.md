@@ -277,9 +277,13 @@ a fiscal receipt.
 The invoice owns immutable fiscal facts exposed through its public document contract;
 the future e-Factura cube consumes those facts, not private tables or current profiles.
 County/sector, canonical CUI and explicit party VAT registration now round-trip through
-registry, drafts, issued snapshots, proformas and full corrections. This is not complete
-EN 16931/CIUS-RO readiness: category and exemption reasons (including verified Article
-310 mapping) are still outstanding, and no XML exporter is included yet.
+registry, drafts, issued snapshots, proformas and full corrections. VAT treatment is
+explicit and frozen: S for positive standard/reduced rates, E/0.00 with legal reason
+text generated automatically for the supported non-VAT/Article 310 workflow, without
+asking for a second confirmation after the issuer registration setting. Other VAT
+categories/exemptions remain unsupported. This is not complete EN 16931/CIUS-RO
+readiness: no XML exporter or full XML/business-rule validation is included yet.
+The scope and inspected rule evidence are recorded in [VAT_TREATMENT.md](docs/VAT_TREATMENT.md).
 
 The target commercial invoice model must eventually preserve the information needed
 by EN 16931 and the Romanian CIUS profile; this list is a target, not a claim that all

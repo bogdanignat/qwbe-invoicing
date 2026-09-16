@@ -65,6 +65,7 @@ const excludeFreshOnlyMigrations = (directory: string): void => {
     database.prepare("INSERT INTO schema_migrations(name,applied_at)VALUES('017-issuer-vat-status','2026-01-01')").run()
     database.prepare("INSERT INTO schema_migrations(name,applied_at)VALUES('018-proforma-workflow','2026-01-01')").run()
     database.prepare("INSERT INTO schema_migrations(name,applied_at)VALUES('019-efactura-party-snapshots','2026-01-01')").run()
+    database.prepare("INSERT INTO schema_migrations(name,applied_at)VALUES('020-vat-treatment-snapshots','2026-01-01')").run()
   } finally { database.close() }
 }
 
@@ -84,7 +85,8 @@ void test("upgrades a populated version-six database without rewriting migration
         "004-invoice-delete-last", "005-allow-e-factura-status-update", "006-customer-soft-delete", "007-complete-invoice-authoring",
          "008-proforma-workflow", "009-proforma-direct-invoice", "010-product-presets-payment-terms",
          "011-external-api-snapshots", "012-payment-idempotency", "013-document-notes", "014-issuer-branding", "015-issuer-details",
-           "016-fiscal-audit", "017-issuer-vat-status", "018-proforma-workflow", "019-efactura-party-snapshots"])
+            "016-fiscal-audit", "017-issuer-vat-status", "018-proforma-workflow", "019-efactura-party-snapshots",
+            "020-vat-treatment-snapshots"])
       const columns = database.prepare("PRAGMA table_info(invoice_drafts)").all()
       assert.equal(columns.some((row) => row.name === "customer_id" && row.notnull === 0), true)
       assert.equal(columns.some((row) => row.name === "due_date" && row.notnull === 0), true)
@@ -269,6 +271,49 @@ void test("019 rejects populated storage atomically without changing schema or d
       assert.equal(unchanged.prepare("SELECT 1 FROM schema_migrations WHERE name='019-efactura-party-snapshots'").get(), undefined)
       assert.equal(unchanged.prepare("SELECT 1 FROM pragma_table_info('issuers') WHERE name='sector'").get(), undefined)
       assert.equal(unchanged.prepare("SELECT 1 FROM sqlite_master WHERE name='migration_019_fresh_guard'").get(), undefined)
+    } finally { unchanged.close() }
+  } finally { rmSync(directory, { recursive: true, force: true }) }
+})
+
+void test("020 rejects populated pre-020 VAT facts atomically without changing schema, data, or history", () => {
+  const directory = mkdtempSync(join(tmpdir(), "qwbe-vat-treatment-upgrade-"))
+  try {
+    const database = new DatabaseSync(databasePath(directory))
+    let beforeSchema: unknown
+    let beforeData: unknown
+    let beforeHistory: unknown
+    try {
+      database.exec("PRAGMA foreign_keys=ON")
+      database.exec("CREATE TABLE schema_migrations(name TEXT PRIMARY KEY,applied_at TEXT NOT NULL)STRICT")
+      database.prepare("INSERT INTO schema_migrations VALUES('000-foundation','2026-01-01')").run()
+      const migrations = [...invoicingMigrations, ...paymentsMigrations]
+        .filter(({ name }) => name <= "019-efactura-party-snapshots").sort((left, right) => left.name.localeCompare(right.name))
+      for (const migration of migrations) {
+        if (migration.foreignKeys === "off") database.exec("PRAGMA foreign_keys=OFF")
+        database.exec("BEGIN")
+        for (const statement of migration.statements) database.exec(statement)
+        database.prepare("INSERT INTO schema_migrations VALUES(?,?)").run(migration.name, "2026-01-01")
+        database.exec("COMMIT")
+        if (migration.foreignKeys === "off") database.exec("PRAGMA foreign_keys=ON")
+      }
+      database.exec(`
+        INSERT INTO issuers(organization_id,legal_name,tax_identifier,country_code,city,street,county,
+          default_currency,default_payment_term_days,legal_form,trade_registry_number,iban,bank_name,social_capital)
+          VALUES('org-1','Furnizor SRL','12345674','RO','Iași','Strada 1','RO-IS','RON',15,'srl','J22/1/2020','','','200.00');
+        INSERT INTO issuer_tax_configurations VALUES('org-1','RO_STANDARD','standard','21.00','2025-08-01',NULL);
+      `)
+      beforeSchema = database.prepare("SELECT type,name,tbl_name,sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY type,name").all()
+      beforeData = database.prepare("SELECT * FROM issuer_tax_configurations ORDER BY organization_id,code,effective_from").all()
+      beforeHistory = database.prepare("SELECT * FROM schema_migrations ORDER BY name").all()
+    } finally { database.close() }
+    assert.throws(() => applyMigrations(directory), /CHECK constraint failed: fact_count=0/)
+    const unchanged = new DatabaseSync(databasePath(directory), { readOnly: true })
+    try {
+      assert.deepEqual(unchanged.prepare("SELECT type,name,tbl_name,sql FROM sqlite_master WHERE sql IS NOT NULL ORDER BY type,name").all(), beforeSchema)
+      assert.deepEqual(unchanged.prepare("SELECT * FROM issuer_tax_configurations ORDER BY organization_id,code,effective_from").all(), beforeData)
+      assert.deepEqual(unchanged.prepare("SELECT * FROM schema_migrations ORDER BY name").all(), beforeHistory)
+      assert.equal(unchanged.prepare("SELECT 1 FROM pragma_table_info('issuer_tax_configurations') WHERE name='vat_exemption_reason'").get(), undefined)
+      assert.equal(unchanged.prepare("SELECT 1 FROM sqlite_master WHERE name='migration_020_fresh_guard'").get(), undefined)
     } finally { unchanged.close() }
   } finally { rmSync(directory, { recursive: true, force: true }) }
 })

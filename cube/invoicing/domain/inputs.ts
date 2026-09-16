@@ -1,12 +1,13 @@
 import type { BuyerSnapshot, DocumentSeries, DocumentSource, IssuerProfile, ProductPreset } from "./invoice.ts"
 import type { UnitOfMeasure } from "./unit-of-measures.ts"
 
-// Request shapes accepted by the components; the persisted model lives in invoice.ts.
 export type ConfigureDocumentSeriesInput = Pick<DocumentSeries, "documentType" | "series">
 
 export interface RawIssuerBrandingImage { readonly dataBase64: string }
 export interface RawIssuerBranding { readonly text:string|null; readonly image:RawIssuerBrandingImage|null }
-export interface VatChange{ readonly registered:boolean; readonly effectiveFrom:string }
+export type VatChange =
+  | { readonly registered: true; effectiveFrom: string; readonly nonVatBasis?: never }
+  | { readonly registered: false; effectiveFrom: string; readonly nonVatBasis: "article_310" }
 export type ConfigureIssuerInput = Omit<IssuerProfile,"organizationId"|"branding"|"vatConfigurations"> & { readonly branding:RawIssuerBranding|null; readonly vatChange:VatChange }
 
 export type CustomerInput = BuyerSnapshot & { readonly defaultPaymentTermDays?: number }

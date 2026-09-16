@@ -266,11 +266,11 @@ void test("persists an issued snapshot across store recreation and isolates orga
       assert.equal(database.prepare("SELECT actor_id FROM proforma_invoice_conversions WHERE proforma_id=?").get(proforma.id)?.actor_id, "user-1")
       assert.throws(() => database.prepare(`INSERT INTO proforma_lines(
         id,proforma_id,organization_id,line_position,description,quantity,unit_price,tax_code,tax_category,
-        tax_rate,total_excluding_tax,tax_amount,total_including_tax,unit_code,unit_name)
+        tax_rate,vat_exemption_reason,total_excluding_tax,tax_amount,total_including_tax,unit_code,unit_name)
         SELECT 'late-line',proforma_id,organization_id,line_position+10,description,quantity,unit_price,tax_code,tax_category,
-        tax_rate,total_excluding_tax,tax_amount,total_including_tax,unit_code,unit_name FROM proforma_lines WHERE proforma_id=? LIMIT 1`).run(proforma.id))
+        tax_rate,vat_exemption_reason,total_excluding_tax,tax_amount,total_including_tax,unit_code,unit_name FROM proforma_lines WHERE proforma_id=? LIMIT 1`).run(proforma.id))
       assert.throws(() => database.prepare(`INSERT INTO proforma_tax_breakdown
-        SELECT proforma_id,organization_id,line_position+10,tax_code,category,rate,taxable_amount,tax_amount
+        SELECT proforma_id,organization_id,line_position+10,tax_code,category,rate,vat_exemption_reason,taxable_amount,tax_amount
         FROM proforma_tax_breakdown WHERE proforma_id=? LIMIT 1`).run(proforma.id))
       assert.throws(() => database.prepare("DELETE FROM proforma_lines WHERE proforma_id=?").run(proforma.id))
       assert.throws(() => database.prepare("DELETE FROM proforma_tax_breakdown WHERE proforma_id=?").run(proforma.id))

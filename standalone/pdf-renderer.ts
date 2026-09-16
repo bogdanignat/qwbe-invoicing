@@ -35,8 +35,8 @@ import {
   wrapText,
 } from "./pdf-layout.ts"
 
-export const invoiceTemplateVersion = "invoice-v8"
-export const proformaTemplateVersion = "proforma-v7"
+export const invoiceTemplateVersion = "invoice-v9"
+export const proformaTemplateVersion = "proforma-v8"
 
 const regularFontPath = fileURLToPath(new URL("./assets/fonts/DejaVuSans.ttf", import.meta.url))
 const boldFontPath = fileURLToPath(new URL("./assets/fonts/DejaVuSans-Bold.ttf", import.meta.url))
@@ -320,7 +320,7 @@ const drawTableRow = (sheet: Sheet, line: RenderableLine, index: number): void =
     unitLabel(sheet, line.unitOfMeasure),
     formatAmount(line.unitPrice),
     formatAmount(line.totalExcludingVat),
-    `${formatRate(line.vatRate)}%`,
+    line.vatCategoryCode === "E" ? "Scutit" : `${formatRate(line.vatRate)}%`,
     formatAmount(line.vatAmount),
   ]
   cells.forEach((value, cellIndex) => {
@@ -377,7 +377,8 @@ const drawTotals = (sheet: Sheet, document: RenderableDocument, isProforma: bool
   }
   row("Total fără TVA", money(document.totalExcludingVat))
   for (const vat of document.vatBreakdown) {
-    row(`TVA ${formatRate(vat.rate)}% din ${formatAmount(vat.vatBaseAmount)}`, formatAmount(vat.vatAmount), { small: true })
+    const label = vat.vatCategoryCode === "E" ? "Scutit TVA (art. 310)" : `TVA ${formatRate(vat.rate)}% din ${formatAmount(vat.vatBaseAmount)}`
+    row(label, formatAmount(vat.vatAmount), { small: true })
   }
   horizontalRule(sheet.page, cursor + 7, { color: rule })
   cursor -= 3
@@ -446,7 +447,7 @@ const drawProformaNotice = (sheet: Sheet, top: number, isProforma: boolean): num
  * Draws the free-form document remarks full width under the summary area. The
  * text is never truncated: whatever does not fit continues on a new page.
  */
-const drawDocumentNotes = (sheet: Sheet, notes: string | null, top: number): void => {
+const drawDocumentNotes = (sheet: Sheet, notes: string | null, top: number, title = "OBSERVAȚII"): void => {
   if (notes === null) return
   const width = contentWidth
   const innerWidth = width - 20
@@ -464,7 +465,7 @@ const drawDocumentNotes = (sheet: Sheet, notes: string | null, top: number): voi
     const height = chunk.length * 11 + 22
     sheet.page.drawRectangle({ x: margin, y: blockTop - height, width, height, color: noteFill })
     sheet.page.drawRectangle({ x: margin, y: blockTop - height, width: 2.5, height, color: accent })
-    const cursor = putLines(sheet.page, ["OBSERVAȚII"], {
+    const cursor = putLines(sheet.page, [title], {
       x: margin + 10,
       width: innerWidth,
       top: blockTop - 12,
@@ -555,7 +556,10 @@ const renderPdf = async (
   const summaryTop = sheet.y
   drawTotals(sheet, document, isProforma)
   const noticeBottom = drawProformaNotice(sheet, summaryTop, isProforma)
-  drawDocumentNotes(sheet, document.notes, Math.min(sheet.y, noticeBottom) - 14)
+  sheet.y = Math.min(sheet.y, noticeBottom)
+  const exemptionReason = document.vatBreakdown.find(({ vatCategoryCode }) => vatCategoryCode === "E")?.vatExemptionReason ?? null
+  drawDocumentNotes(sheet, exemptionReason, sheet.y - 14, "REGIM TVA")
+  drawDocumentNotes(sheet, document.notes, sheet.y - 14)
   drawFooters(sheet, isProforma)
 
   return pdf.save({ useObjectStreams: false, addDefaultPage: false, updateFieldAppearances: false })

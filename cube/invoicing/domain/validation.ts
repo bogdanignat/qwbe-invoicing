@@ -4,15 +4,20 @@ import type { DocumentSeries, DocumentSource } from "./invoice.ts"
 export { isValidRomanianCui, validateBuyer, validateParty } from "../registry/domain/party-validation.ts"
 
 export const maximumPaymentTermDays = 3650
+export const article310VatExemptionReason = "Regim special de scutire conform art. 310 din Codul fiscal"
 
-// The product serves Romanian issuers only; "today" for fiscal rules is the Romanian calendar day.
+export const validateVatTreatment = (code: string, rate: string, category: string, reason: string | null): void => {
+  const amount = /^(?:0|[1-9]\d?|100)(?:\.\d{1,2})?$/.test(rate) ? Number(rate) : NaN
+  const knownTaxable = ["RO_STANDARD", "RO_REDUCED", "RO_REDUCED_5"].includes(code)
+  const valid = code === "RO_NON_VAT"
+    ? amount === 0 && category === "E" && reason === article310VatExemptionReason
+    : knownTaxable && amount > 0 && amount <= 100 && category === "S" && reason === null
+  if (!valid) throw new ValidationFailure({ issues: ["Invalid VAT tuple"] })
+}
+
 export const organizationTimeZone = "Europe/Bucharest"
 export const calendarDate = (instant: Date, timeZone: string = organizationTimeZone): string =>
   new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(instant)
-
-const required = (value: string | undefined, field: string, issues: Array<string>) => {
-  if (value === undefined || value.trim().length === 0) issues.push(`${field} is required`)
-}
 
 export const validateDate = (value: string, field: string): void => {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
@@ -35,7 +40,7 @@ export const validateDocumentSeries = (documentSeries: DocumentSeries): void => 
 }
 
 const freeText = (field: string, value: string, maximum: number, issues: Array<string>, newlines = false): void => {
-  required(value, field, issues)
+  if (value.trim().length === 0) issues.push(`${field} is required`)
   if (value !== value.trim()) issues.push(`${field} must not have surrounding whitespace`)
   if (value.length > maximum) issues.push(`${field} must be at most ${String(maximum)} characters`)
   if ((newlines ? /(?!\n)[\p{Cc}\p{Zl}\p{Zp}]/u : /[\p{Cc}\p{Zl}\p{Zp}]/u).test(value)) issues.push(`${field} must not contain control characters`)
@@ -49,11 +54,6 @@ export const validateDocumentSource = (source: DocumentSource): void => {
   if (issues.length > 0) throw new ValidationFailure({ issues })
 }
 
-/**
- * Document remarks are optional free text. Newlines are allowed so the PDF can
- * render paragraphs; every other control character is rejected. Nothing is
- * normalised silently — the SQLite CHECK is a safety net, this is the real gate.
- */
 export const validateDocumentNotes = (notes: string | null | undefined): void => {
   if (notes === null || notes === undefined) return
   const issues: Array<string> = []

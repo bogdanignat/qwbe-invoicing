@@ -32,6 +32,7 @@ export const createRegistryOperations = (
 export { normalizeProductPreset, resolveVatConfiguration, validateCustomer, validateIssuer } from "./domain/validation.ts"
 export { normalizeIssuerDetails, validateIssuerForIssuance } from "./domain/issuer-details.ts"
 export { currentVatRegistration, validateVatForIssuance } from "./domain/vat-regime.ts"
-export type { VatRate, VatRegistration } from "./domain/vat-regime.ts"
+export type { VatRegistration } from "./domain/vat-regime.ts"
+export type { VatRate } from "./domain/vat-catalogue.ts"
 export type { IssuerView, VatCatalogue } from "./application/issuer.ts"
 export type { CustomerOperations, IssuerOperations, ProductPresetOperations }

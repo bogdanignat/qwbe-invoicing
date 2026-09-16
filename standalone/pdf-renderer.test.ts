@@ -7,6 +7,7 @@ import { PDFDocument } from "pdf-lib"
 import type { RenderableInvoice, RenderableProforma } from "../cube/invoicing/documents/index.ts"
 import { createPdfRenderer, documentDateLine, formatAmount, formatRate, invoiceTemplateVersion, issuerLegalLines, partyIdentifierLine, proformaTemplateVersion } from "./pdf-renderer.ts"
 
+const article310VatExemptionReason = "Regim special de scutire conform art. 310 din Codul fiscal"
 const invoice: RenderableInvoice = {
   id: "invoice-1",
   organizationId: "org-1",
@@ -42,11 +43,14 @@ const invoice: RenderableInvoice = {
     unitPrice: "100.00",
     unitOfMeasure: { code: "HUR", name: "oră" },
     vatRate: "21.00",
+    vatCategoryCode: "S",
+    vatExemptionReason: null,
     totalExcludingVat: "100.00",
     vatAmount: "21.00",
     totalIncludingVat: "121.00",
   }],
-  vatBreakdown: [{ rate: "21.00", vatBaseAmount: "100.00", vatAmount: "21.00" }],
+  vatBreakdown: [{ rate: "21.00", vatCategoryCode: "S", vatExemptionReason: null,
+    vatBaseAmount: "100.00", vatAmount: "21.00" }],
   totalExcludingVat: "100.00",
   vatTotal: "21.00",
   totalIncludingVat: "121.00",
@@ -92,7 +96,8 @@ void test("labels the frozen issuer VAT status for SRL and PFA without inventing
       assert.equal(lines.some((line) => line.startsWith("Capital social:")), legalForm === "srl")
       // Even with zero VAT, the renderer must use only the snapshot flag.
       const rendered = await Effect.runPromise(createPdfRenderer().render({ ...invoice, issuer,
-        vatTotal: "0.00", lines: invoice.lines.map((line) => ({ ...line, vatRate: "0.00", vatAmount: "0.00" })) }))
+        vatTotal: "0.00", lines: invoice.lines.map((line) => ({ ...line, vatRate: "0.00", vatCategoryCode: "E",
+          vatExemptionReason: article310VatExemptionReason, vatAmount: "0.00" })) }))
       assert.equal((await PDFDocument.load(rendered.bytes, { updateMetadata: false })).getPageCount(), 1)
     }
   }
@@ -172,12 +177,14 @@ void test("keeps the redesigned template on a single page for a multi-rate invoi
     lines: [
       { ...base, vatRate: "21.00" },
       { ...base, description: "Suport", vatRate: "11.00", vatAmount: "11.00" },
-      { ...base, description: "Transport", vatRate: "0.00", vatAmount: "0.00" },
+      { ...base, description: "Transport", vatRate: "0.00", vatCategoryCode: "E",
+        vatExemptionReason: article310VatExemptionReason, vatAmount: "0.00" },
     ],
     vatBreakdown: [
-      { rate: "21.00", vatBaseAmount: "100.00", vatAmount: "21.00" },
-      { rate: "11.00", vatBaseAmount: "100.00", vatAmount: "11.00" },
-      { rate: "0.00", vatBaseAmount: "100.00", vatAmount: "0.00" },
+      { rate: "21.00", vatCategoryCode: "S", vatExemptionReason: null, vatBaseAmount: "100.00", vatAmount: "21.00" },
+      { rate: "11.00", vatCategoryCode: "S", vatExemptionReason: null, vatBaseAmount: "100.00", vatAmount: "11.00" },
+      { rate: "0.00", vatCategoryCode: "E", vatExemptionReason: article310VatExemptionReason,
+        vatBaseAmount: "100.00", vatAmount: "0.00" },
     ],
   }
   const rendered = await Effect.runPromise(createPdfRenderer().render(multiRate))

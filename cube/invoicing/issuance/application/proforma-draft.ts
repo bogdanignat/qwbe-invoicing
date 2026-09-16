@@ -1,8 +1,8 @@
 import { Effect } from "effect"
 import { findIdempotencyReplay, idempotencyRecord, missingIdempotencyResult } from "../../application/idempotency.ts"
-import { copyBuyer, recordAuditEvent, type Authorize, type OperationDependencies } from "../../application/support.ts"
+import { checked, copyBuyer, recordAuditEvent, type Authorize, type OperationDependencies } from "../../application/support.ts"
 import type { InvoicingPermissions } from "../../contracts/permissions.ts"
-import { calculateTotals } from "../../domain/calculation.ts"
+import { calculateTotals, validateFiscalDocument } from "../../domain/calculation.ts"
 import type { DraftInvoice, Idempotent } from "../../domain/invoice.ts"
 import type { ConvertProformaInput } from "../domain/proforma.ts"
 import { conversionDates, conversionSource } from "./proforma-conversion-context.ts"
@@ -19,6 +19,7 @@ export const createProformaDraftOperation = (dependencies: OperationDependencies
         return replay === undefined ? yield* Effect.fail(missingIdempotencyResult("draft")) : structuredClone(replay)
       }
       const proforma = yield* conversionSource(transaction, org, input)
+      yield* checked(() => { validateFiscalDocument(proforma) })
       const convertedAt = yield* dependencies.clock.now
       const id = yield* dependencies.ids.next
       // Copy the offered lines; normal draft editing/issuance will validate any later VAT/date changes.

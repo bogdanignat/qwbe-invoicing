@@ -8,15 +8,24 @@ import sharp from "sharp"
 import type { RenderableInvoice, RenderableProforma } from "../cube/invoicing/documents/index.ts"
 import { createPdfRenderer } from "./pdf-renderer.ts"
 
-const invoice: RenderableInvoice = {
+type VatTreatment = { readonly vatCategoryCode: "S" | "E"; readonly vatExemptionReason: string | null }
+type RenderableInvoiceFixture = Omit<RenderableInvoice, "lines" | "vatBreakdown"> & {
+  readonly lines: ReadonlyArray<RenderableInvoice["lines"][number] & VatTreatment>
+  readonly vatBreakdown: ReadonlyArray<RenderableInvoice["vatBreakdown"][number] & VatTreatment>
+}
+
+const invoice: RenderableInvoiceFixture = {
   id: "brand-invoice", organizationId: "org", series: "F", number: 1,
   issueDate: "2026-09-10", dueDate: "2026-09-10", issuedAt: "2026-09-10T10:00:00Z", currency: "RON", notes: null,
   issuer: { name: "Legal Issuer SRL", fiscalIdentifier: "12345674", address: { countryCode: "RO", city: "Iași", street: "Strada 1", county: "RO-IS" },
     legalForm: "srl", vatRegistered: true, tradeRegistryNumber: "J22/123/2020", iban: "RO49AAAA1B31007593840000",
     bankName: "Banca Română", socialCapital: "1000.00", branding: null },
   customer: { name: "Client SRL", fiscalIdentifier: "87654329", partyType: "company", vatRegistered: true, address: { countryCode: "RO", city: "Iași", street: "Strada 2", county: "RO-IS" } },
-  lines: [{ description: "Servicii", quantity: "1", unitPrice: "100", unitOfMeasure: { code: "HUR", name: "oră" }, vatRate: "21", totalExcludingVat: "100", vatAmount: "21", totalIncludingVat: "121" }],
-  vatBreakdown: [{ rate: "21", vatBaseAmount: "100", vatAmount: "21" }], totalExcludingVat: "100", vatTotal: "21", totalIncludingVat: "121",
+  lines: [{ description: "Servicii", quantity: "1", unitPrice: "100", unitOfMeasure: { code: "HUR", name: "oră" },
+    vatRate: "21", vatCategoryCode: "S", vatExemptionReason: null,
+    totalExcludingVat: "100", vatAmount: "21", totalIncludingVat: "121" }],
+  vatBreakdown: [{ rate: "21", vatCategoryCode: "S", vatExemptionReason: null,
+    vatBaseAmount: "100", vatAmount: "21" }], totalExcludingVat: "100", vatTotal: "21", totalIncludingVat: "121",
 }
 
 void test("renders none, custom text, image and both deterministically in invoice and proforma PDFs", async () => {
@@ -28,7 +37,7 @@ void test("renders none, custom text, image and both deterministically in invoic
   for (const branding of [null, { text, image: null }, { text: null, image }, { text, image }]) {
     const source = { ...invoice, issuer: { ...invoice.issuer, branding } }
     const proforma: RenderableProforma = { ...source, sourceDraftId: null, convertedDraftId: null, convertedInvoiceId: null }
-    for (const [render, version] of [[() => renderer.render(source), "invoice-v8"], [() => renderer.renderProforma(proforma), "proforma-v7"]] as const) {
+    for (const [render, version] of [[() => renderer.render(source), "invoice-v9"], [() => renderer.renderProforma(proforma), "proforma-v8"]] as const) {
       const first = await Effect.runPromise(render())
       assert.equal(first.templateVersion, version)
       assert.deepEqual(first.bytes, (await Effect.runPromise(render())).bytes)
