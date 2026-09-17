@@ -36,6 +36,20 @@ test("counts a nested template literal as the code it is", () => {
   assert.equal(stripCommentsAndBlankLines(source), "const q = `a${`b/* not a comment */c`}d`\nconst n = 2")
 })
 
+test("strips a comment that shares its line with the code before it", () => {
+  // `getLeadingCommentRanges` only starts collecting at the start of the file
+  // or after a line break, so these three were counted as code in full.
+  assert.equal(stripCommentsAndBlankLines("const x = 1 // note\nconst y = 2\n"),
+    "const x = 1 \nconst y = 2")
+  assert.equal(stripCommentsAndBlankLines("const x = /* note */ 1\n"), "const x =  1")
+  assert.equal(stripCommentsAndBlankLines("const x = 1 // last line, no newline"), "const x = 1 ")
+})
+
+test("strips a doc comment without counting the code it documents twice", () => {
+  const source = "/** What it is.\n * Why it is.\n */\nexport const x = 1 // and how\n"
+  assert.equal(stripCommentsAndBlankLines(source), "export const x = 1 ")
+})
+
 test("rejects file, unit, and file-count cap violations", () => {
   const measurement = {
     files: [{ path: "cube/invoicing/index.ts", code: 11, raw: 11 }],
