@@ -57,6 +57,6 @@ export const validateDocumentSource = (source: DocumentSource): void => {
 export const validateDocumentNotes = (notes: string | null | undefined): void => {
   if (notes === null || notes === undefined) return
   const issues: Array<string> = []
-  freeText("notes", notes, 500, issues, true)
+  freeText("notes", notes, 300, issues, true)
   if (issues.length > 0) throw new ValidationFailure({ issues })
 }

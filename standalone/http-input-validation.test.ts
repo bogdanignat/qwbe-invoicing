@@ -127,17 +127,17 @@ void test("every buyer contract requires exactly one buyer and normalizes inline
 
 void test("notes keep null/omission/paragraphs and collect every rule in stable order", () => {
   for (const { schema, decode, value } of buyerInputs) {
-    for (const notes of [null, "Linie unu\nLinie doi", "x".repeat(500)]) {
+    for (const notes of [null, "Linie unu\nLinie doi", "x".repeat(300)]) {
       assert.equal((decode({ ...value, notes }) as { notes: unknown }).notes, notes)
     }
     assert.equal(Object.hasOwn(decode(value) as object, "notes"), false)
-    for (const notes of ["", " ", " marginal ", "x".repeat(501), "a\tb", "a\rb", "a\u0000b", "a\u007fb", "a\u0085b", "a\u2028b", "a\u2029b", 7, false, [], {}]) {
+    for (const notes of ["", " ", " marginal ", "x".repeat(301), "a\tb", "a\rb", "a\u0000b", "a\u007fb", "a\u0085b", "a\u2028b", "a\u2029b", 7, false, [], {}]) {
       const raw = { ...value, notes }
       assert.deepEqual(issuesOf(() => decode(raw)), schemaIssues(schema, raw))
     }
-    assert.deepEqual(issuesOf(() => decode({ ...value, notes: "\t".repeat(501) })), [
+    assert.deepEqual(issuesOf(() => decode({ ...value, notes: "\t".repeat(301) })), [
       "notes: notes is required", "notes: notes must not have surrounding whitespace",
-      "notes: notes must be at most 500 characters", "notes: notes must not contain control characters",
+      "notes: notes must be at most 300 characters", "notes: notes must not contain control characters",
     ])
   }
 })
@@ -225,7 +225,7 @@ void test("Swagger exposes one buyer object plus notes and limit constraints", (
     assert.ok(schema.properties?.customerId)
     assert.ok(schema.properties.customer)
     assert.match(schema.description ?? "", /exactly one/i)
-    assert.match(JSON.stringify(schema.properties.notes), /"maxLength":500/)
+    assert.match(JSON.stringify(schema.properties.notes), /"maxLength":300/)
   }
   const limit = spec.paths["/api/customers"]?.get?.parameters.find((parameter) => parameter.name === "limit")
   assert.match(JSON.stringify(limit), /\\d\{1,6\}/)

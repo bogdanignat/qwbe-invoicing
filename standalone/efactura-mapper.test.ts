@@ -177,7 +177,7 @@ void test("maps a correction to a credit note in positive amounts", () => {
   assert.equal(mapped.id, "QWBE-STORNO 3")
   assert.equal(mapped.dueDate, null)
   assert.deepEqual(mapped.precedingInvoice, { id: "QWBE 7", issueDate: "2026-09-01" })
-  assert.equal(mapped.note, "Stornare integrală: servicii nelivrate")
+  assert.deepEqual(mapped.notes, ["Stornare integrală: servicii nelivrate"])
   assert.equal(mapped.lineExtensionAmount, "300.00")
   assert.equal(mapped.taxAmount, "63.00")
   assert.equal(mapped.payableAmount, "363.00")
@@ -252,8 +252,8 @@ void test("renders an Article 310 invoice as not subject to VAT, with no percent
   assert.equal(mapped.lines[0]?.vatRate, null)
   assert.deepEqual(mapped.taxSubtotals, [{ taxableAmount: "300.00", taxAmount: "0.00", category: "O",
     percent: null, exemptionReason: null, exemptionReasonCode: "VATEX-EU-O" }])
-  // The legal ground moves from BT-120 to BT-22, where BR-RO-060 expects it.
-  assert.equal(mapped.note, ARTICLE_310)
+  // The legal ground moves from BT-120 to BT-22, where ANAF's recommendation puts it.
+  assert.deepEqual(mapped.notes, [ARTICLE_310])
   const xml = renderEFacturaXml(mapped)
   assert.equal(xml.includes("cbc:Percent"), false, xml)
   assert.equal(xml.includes("cbc:TaxExemptionReason>"), false, xml)
@@ -276,15 +276,23 @@ void test("drops a VAT-registered buyer's VAT identifier on an Article 310 docum
 void test("keeps the seller's own remarks whole beside the legal reference", () => {
   const notes = "Livrare în tranșe & recepție <parțială>.\nGaranție 24 de luni."
   const mapped = mapIssuedInvoice({ ...article310Invoice, notes })
-  assert.equal(mapped.note, `${ARTICLE_310}\n${notes}`)
+  assert.deepEqual(mapped.notes, [ARTICLE_310, notes])
   const xml = renderEFacturaXml(mapped)
   assert.ok(xml.includes("recepție &lt;parțială&gt;"), xml)
   assert.ok(xml.includes("tranșe &amp; recepție"), xml)
-  // The product allows 500 characters of remarks; the legal reference is added
-  // to them, never in place of them, so nothing is truncated to make room.
-  const maximum = mapIssuedInvoice({ ...article310Invoice, notes: "ș".repeat(500) })
-  assert.equal(maximum.note, `${ARTICLE_310}\n${"ș".repeat(500)}`)
-  assert.equal(mapIssuedInvoice({ ...article310Invoice, notes: "   " }).note, ARTICLE_310)
+  // Each note has its own 300-character budget (BR-RO-L300), which is why the
+  // legal reference never shortens the seller's remarks: the product caps
+  // remarks at 300 and the reference is a separate BT-22 occurrence.
+  const maximum = mapIssuedInvoice({ ...article310Invoice, notes: "ș".repeat(300) })
+  assert.deepEqual(maximum.notes, [ARTICLE_310, "ș".repeat(300)])
+  assert.deepEqual(mapIssuedInvoice({ ...article310Invoice, notes: "   " }).notes, [ARTICLE_310])
+})
+
+void test("refuses a note longer than one BT-22 may carry", () => {
+  // The invoicing domain caps notes at 300, so this shape cannot be issued;
+  // the generator still refuses it rather than truncating a fiscal text.
+  refuses(() => mapIssuedInvoice({ ...article310Invoice, notes: "ș".repeat(301) }),
+    /notes\[1\] exceeds 300 characters after normalize-space \(BR-RO-L300\)/u)
 })
 
 void test("states the legal reference once, however many Article 310 lines there are", () => {
@@ -296,7 +304,7 @@ void test("states the legal reference once, however many Article 310 lines there
     totalExcludingVat: "600.00",
     totalIncludingVat: "600.00",
   })
-  assert.equal(mapped.note, ARTICLE_310)
+  assert.deepEqual(mapped.notes, [ARTICLE_310])
   assert.equal(mapped.taxSubtotals.length, 1)
   assert.deepEqual(mapped.lines.map((mappedLine) => mappedLine.vatRate), [null, null])
 })
@@ -304,7 +312,7 @@ void test("states the legal reference once, however many Article 310 lines there
 void test("carries both the legal reference and the reason on an Article 310 credit note", () => {
   const mapped = mapCorrection(article310Correction, article310Invoice)
   assert.equal(mapped.kind, "credit_note")
-  assert.equal(mapped.note, `${ARTICLE_310}\nStornare integrală: servicii nelivrate`)
+  assert.deepEqual(mapped.notes, [ARTICLE_310, "Stornare integrală: servicii nelivrate"])
   assert.deepEqual(mapped.precedingInvoice, { id: "QWBE 7", issueDate: "2026-09-01" })
   assert.equal(mapped.dueDate, null)
   assert.deepEqual(mapped.taxSubtotals.map((subtotal) => [subtotal.percent, subtotal.exemptionReasonCode]),
@@ -312,15 +320,17 @@ void test("carries both the legal reference and the reason on an Article 310 cre
   assert.equal(mapped.payableAmount, "300.00")
   const xml = renderEFacturaXml(mapped)
   assert.equal(xml.includes("cbc:DueDate"), false, xml)
-  assert.ok(xml.includes(`<cbc:Note>${ARTICLE_310}\nStornare integrală: servicii nelivrate</cbc:Note>`), xml)
+  const reference = xml.indexOf(`<cbc:Note>${ARTICLE_310}</cbc:Note>`)
+  const storno = xml.indexOf("<cbc:Note>Stornare integrală: servicii nelivrate</cbc:Note>")
+  assert.ok(reference !== -1 && storno > reference, xml)
 })
 
 void test("leaves a taxed document exactly as it was", () => {
   const mapped = mapIssuedInvoice(invoice)
-  assert.equal(mapped.note, null)
+  assert.deepEqual(mapped.notes, [])
   assert.equal(mapped.lines[0]?.vatRate, "21.00")
   assert.deepEqual(mapped.taxSubtotals, [{ taxableAmount: "300.00", taxAmount: "63.00", category: "S",
     percent: "21.00", exemptionReason: null, exemptionReasonCode: null }])
   assert.equal(mapped.buyer.vatIdentifier, "RO87654329")
-  assert.equal(mapCorrection(correction, invoice).note, "Stornare integrală: servicii nelivrate")
+  assert.deepEqual(mapCorrection(correction, invoice).notes, ["Stornare integrală: servicii nelivrate"])
 })

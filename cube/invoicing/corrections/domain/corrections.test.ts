@@ -18,7 +18,7 @@ void test("validates correction input: original invoice, reason length and calen
   assert.doesNotThrow(() => { validateCreateCorrectionInput({ originalInvoiceId: "inv-1", reason: "Storno", issueDate: "2028-02-29" }) })
   assert.throws(() => { validateCreateCorrectionInput({ originalInvoiceId: " ", reason: "Storno" }) }, hasIssue("originalInvoiceId is required"))
   assert.throws(() => { validateCreateCorrectionInput({ originalInvoiceId: "inv-1", reason: "  " }) }, hasIssue("reason is required"))
-  assert.throws(() => { validateCreateCorrectionInput({ originalInvoiceId: "inv-1", reason: "x".repeat(501) }) }, hasIssue("reason must be at most 500 characters"))
+  assert.throws(() => { validateCreateCorrectionInput({ originalInvoiceId: "inv-1", reason: "x".repeat(301) }) }, hasIssue("reason must be at most 300 characters"))
   assert.throws(() => { validateCreateCorrectionInput({ originalInvoiceId: "inv-1", reason: "Storno", issueDate: "2026/09/01" }) }, hasIssue("issueDate must be YYYY-MM-DD"))
   assert.throws(() => { validateCreateCorrectionInput({ originalInvoiceId: "inv-1", reason: "Storno", issueDate: "2027-02-29" }) }, hasIssue("issueDate must be a valid calendar date"))
 })

@@ -96,10 +96,10 @@ const mapLine = (line: DraftLine, position: number): EFacturaLine => ({
  *
  * For `O` the three exempt-shaped fields change together, because the category
  * fixes all of them: BT-119 is absent (BR-O-05), BT-121 is `VATEX-EU-O` — the
- * only code BR-O-10 accepts — and BT-120 is absent, because the legal text the
- * snapshot stores belongs in BT-22 for this treatment, where BR-RO-060 expects
- * it. Emitting both would state the same ground twice, in two places whose
- * rules disagree about which is authoritative.
+ * only code BR-O-10 accepts — and BT-120 is absent, because ANAF's technical
+ * recommendation puts the legal text of this treatment in BT-22 instead.
+ * Emitting both would state the same ground twice, in two places whose rules
+ * disagree about which is authoritative.
  */
 const mapSubtotal = (breakdown: VatBreakdown): EFacturaTaxSubtotal => ({
   taxableAmount: breakdown.vatBaseAmount,
@@ -117,20 +117,17 @@ const legalReference = (vatBreakdown: ReadonlyArray<VatBreakdown>): string | nul
   vatBreakdown.find((breakdown) => breakdown.vatCategoryCode === "O")?.vatExemptionReason ?? null
 
 /**
- * BT-22, which here carries up to two distinct things.
+ * BG-1, which here carries up to two distinct statements.
  *
- * An Article 310 document must state its legal ground in BT-22, and a credit
- * note must state why it reverses an invoice; a document can be both. The two
- * texts are kept whole and separated by a line feed, the legal reference first,
- * because dropping or truncating either loses a statement the document is
- * required to make. BT-22 repeats in UBL, but one note holding both is what the
- * validator has seen, and splitting them would also split the correction reason
- * from the document it explains.
+ * An Article 310 document must state its legal ground and a credit note must
+ * state why it reverses an invoice; a document can be both. BT-22 repeats — up
+ * to twenty times (BR-RO-A020) — so each statement is its own note, the legal
+ * reference first. Joining them into one text would read as a single remark
+ * and would also share one 300-character budget (BR-RO-L300), which is how a
+ * mandatory legal reference ends up shortening a mandatory storno reason.
  */
-const composeNote = (reference: string | null, own: string | null): string | null => {
-  if (reference === null) return own
-  return own === null || own.trim() === "" ? reference : `${reference}\n${own}`
-}
+const documentNotes = (reference: string | null, own: string | null): ReadonlyArray<string> =>
+  [reference, own].filter((note): note is string => note !== null && note.trim() !== "")
 
 /** Whether BR-O-02 applies, read from the lines rather than the breakdown: the
  * lines are what the rule is written about (BT-151), and a snapshot whose two
@@ -145,7 +142,7 @@ export const mapIssuedInvoice = (invoice: IssuedInvoice): EFacturaDocument => {
     issueDate: invoice.issueDate,
     dueDate: invoice.dueDate,
     currencyCode: invoice.currency,
-    note: composeNote(legalReference(invoice.vatBreakdown), invoice.notes),
+    notes: documentNotes(legalReference(invoice.vatBreakdown), invoice.notes),
     precedingInvoice: null,
     seller: seller(invoice.issuer),
     buyer: buyer(invoice.customer, notSubjectToVat(invoice.lines)),
@@ -254,7 +251,7 @@ export const mapCorrection = (correction: CorrectionDocument, original: IssuedIn
     // A credit note is not a demand for payment, so it carries no due date.
     dueDate: null,
     currencyCode: correction.currency,
-    note: composeNote(legalReference(vatBreakdown), correction.reason),
+    notes: documentNotes(legalReference(vatBreakdown), correction.reason),
     precedingInvoice: { id: documentNumber(original), issueDate: original.issueDate },
     seller: seller(correction.issuer),
     buyer: buyer(correction.customer, notSubjectToVat(lines)),

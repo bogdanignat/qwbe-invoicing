@@ -243,7 +243,7 @@ void test("renders document remarks without truncation and keeps the proforma le
   const plain = await Effect.runPromise(renderer.render(invoice))
   assert.ok(first.bytes.length > plain.bytes.length)
 
-  const maximum = await Effect.runPromise(renderer.render({ ...invoice, notes: "ș".repeat(500) }))
+  const maximum = await Effect.runPromise(renderer.render({ ...invoice, notes: "ș".repeat(300) }))
   assert.equal((await PDFDocument.load(maximum.bytes, { updateMetadata: false })).getPageCount(), 1)
 
   const base = invoice.lines[0]

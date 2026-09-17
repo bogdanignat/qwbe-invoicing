@@ -97,7 +97,9 @@ const header = (document: EFacturaDocument, profile: EFacturaProfile,
   // caller never gets the chance to place one.
   ...(document.kind === "invoice" ? optional("cbc:DueDate", document.dueDate) : []),
   text(typeCodeName, typeCode),
-  ...optional("cbc:Note", document.note),
+  // BT-22 repeats: each note is its own element, in the order the mapper put
+  // them, so a legal reference and a correction reason stay two statements.
+  ...document.notes.map((note) => text("cbc:Note", note)),
   text("cbc:DocumentCurrencyCode", document.currencyCode),
 ]
 

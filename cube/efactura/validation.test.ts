@@ -33,7 +33,7 @@ const invoice = (overrides: Partial<EFacturaDocument> = {}): EFacturaDocument =>
   issueDate: "2026-09-17",
   dueDate: "2026-10-17",
   currencyCode: "RON",
-  note: null,
+  notes: [],
   precedingInvoice: null,
   seller,
   buyer,
@@ -247,7 +247,7 @@ const notSubjectInvoice = (overrides: Partial<EFacturaDocument> = {}): EFacturaD
   // BR-O-02: neither party may state a VAT registration here, so the buyer is
   // identified by BT-47 alone.
   buyer: { ...buyer, vatIdentifier: null, legalRegistrationIdentifier: "87654321" },
-  note: ARTICLE_310,
+  notes: [ARTICLE_310],
   lines: [{ id: "1", name: "Consultanță", quantity: "1.0000", unitCode: "HUR", netAmount: "100.00", unitPrice: "100.00", vatCategory: "O", vatRate: null }],
   taxSubtotals: [{ taxableAmount: "100.00", taxAmount: "0.00", category: "O", percent: null, exemptionReason: null, exemptionReasonCode: VATEX_NOT_SUBJECT }],
   taxAmount: "0.00",
@@ -365,4 +365,39 @@ void test("refuses an exemption reason or code that is stated but empty", () => 
   rejects(exemptInvoice({
     taxSubtotals: [{ taxableAmount: "100.00", taxAmount: "0.00", category: "E", percent: "0.00", exemptionReason: null, exemptionReasonCode: " " }],
   }), /BR-E-10/u)
+})
+
+void test("holds every text to the CIUS-RO length limit instead of shortening it", () => {
+  // The limits are fatal rules in the official Schematron, counted the way
+  // XPath counts them: after normalize-space, in characters.
+  validateEFacturaDocument(invoice({ notes: ["x".repeat(300)] }))
+  validateEFacturaDocument(invoice({ notes: [`a${" ".repeat(400)}b`] }))
+  validateEFacturaDocument(invoice({ notes: ["😀".repeat(300)] }))
+  rejects(invoice({ notes: ["x".repeat(301)] }),
+    /notes\[0\] exceeds 300 characters after normalize-space \(BR-RO-L300\)/u)
+  rejects(invoice({ lines: [{ ...standardLine, name: "x".repeat(101) }] }),
+    /lines\[0\]\.name exceeds 100 characters after normalize-space \(BR-RO-L100\)/u)
+  rejects(invoice({ buyer: { ...buyer, registrationName: "x".repeat(201) } }),
+    /buyer\.registrationName exceeds 200 characters/u)
+  rejects(invoice({ seller: { ...seller, address: { ...seller.address, cityName: "x".repeat(51) } } }),
+    /seller\.address\.cityName exceeds 50 characters/u)
+  rejects(invoice({ seller: { ...seller, address: { ...seller.address, streetName: "x".repeat(151) } } }),
+    /seller\.address\.streetName exceeds 150 characters/u)
+  rejects(invoice({ seller: { ...seller, address: { ...seller.address, postalZone: "x".repeat(21) } } }),
+    /seller\.address\.postalZone exceeds 20 characters/u)
+})
+
+void test("holds BT-22 to its own occurrence rules", () => {
+  validateEFacturaDocument(invoice({ notes: Array.from({ length: 20 }, (_, index) => `nota ${String(index)}`) }))
+  rejects(invoice({ notes: Array.from({ length: 21 }, () => "nota") }),
+    /a document carries at most 20 notes, got 21 \(BR-RO-A020\)/u)
+  // The renderer drops an element with no content, so a blank note would pass
+  // the limit here and then be missing from the XML ANAF reads.
+  rejects(invoice({ notes: [" \t "] }), /notes\[0\] is stated but empty/u)
+})
+
+void test("refuses a document number that names no number, before ANAF does", () => {
+  // BR-RO-010 runs ahead of every fiscal rule in the official validator.
+  rejects(invoice({ id: "QWBE-FARA-NUMAR" }), /id must contain at least one digit \(BR-RO-010\)/u)
+  rejects(invoice({ id: `QWBE ${"9".repeat(200)}` }), /id exceeds 200 characters/u)
 })

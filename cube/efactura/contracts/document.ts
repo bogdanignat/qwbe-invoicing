@@ -125,9 +125,16 @@ export interface EFacturaDocument {
   readonly dueDate: string | null
   /** BT-5 — ISO 4217. Only `RON` is supported today. */
   readonly currencyCode: string
-  /** BT-22 — free-text note. Carries the correction reason and, for an
-   * Article 310 issuer, the legal reference BR-RO-060 expects here. */
-  readonly note: string | null
+  /**
+   * BG-1 — the invoice notes, one `cbc:Note` each.
+   *
+   * BT-22 is a repeating element, and CIUS-RO limits a single occurrence to
+   * 300 characters (BR-RO-L300) while allowing twenty of them (BR-RO-A020).
+   * An Article 310 document states its legal ground here and a credit note
+   * states why it reverses an invoice; a document that is both keeps the two
+   * as two notes, because they are two statements, not one longer one.
+   */
+  readonly notes: ReadonlyArray<string>
   readonly precedingInvoice: EFacturaPrecedingReference | null
   readonly seller: EFacturaParty
   readonly buyer: EFacturaParty

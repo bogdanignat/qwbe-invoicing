@@ -113,7 +113,7 @@ void test("captures, replaces and clears free-form remarks on a draft", async ()
   const cleared = await Effect.runPromise(service.updateDraft({ customer: buyer, draftId: draft.id, issueDate: "2025-08-01", notes: null }))
   assert.equal(cleared.notes, null)
   assert.equal((await Effect.runPromise(service.getDraft(draft.id))).notes, null)
-  const maximum = "x".repeat(500)
+  const maximum = "x".repeat(300)
   assert.equal((await Effect.runPromise(service.createDraft({ ...header, notes: maximum }))).notes, maximum)
   for (const notes of ["", "   ", " marginal ", `${maximum}x`, "tab\tstop", "linie\u2028separata", "paragraf\u2029separat"]) {
     const created = await Effect.runPromise(Effect.flip(service.createDraft({ ...header, notes })))

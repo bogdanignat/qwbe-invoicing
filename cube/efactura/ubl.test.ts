@@ -3,7 +3,8 @@ import test from "node:test"
 
 import { EFacturaContractViolation } from "./contracts/failures.ts"
 import {
-  article310AsExempt, article310AsNotSubject, fullCreditNote, standardB2B, standardB2C, syntheticFixtures,
+  article310AsExempt, article310AsNotSubject, article310CreditNote, fullCreditNote, standardB2B, standardB2C,
+  syntheticFixtures,
 } from "./fixtures.test-support.ts"
 import { DEFAULT_CIUS_RO_PROFILE } from "./profile.ts"
 import { renderEFacturaXml } from "./ubl.ts"
@@ -57,7 +58,8 @@ void test("renders an out-of-scope document with no VAT percentage anywhere", ()
   assert.equal(element(xml, "cbc:Percent").length, 0)
   assert.deepEqual(element(xml, "cbc:TaxExemptionReasonCode"), ["VATEX-EU-O"])
   assert.equal(element(xml, "cbc:TaxExemptionReason").length, 0)
-  // BR-RO-060 places the Article 310 reference in BT-22, not in BT-120.
+  // ANAF's technical recommendation places the Article 310 reference in BT-22,
+  // not in BT-120.
   assert.match(element(xml, "cbc:Note")[0] ?? "", /art\. 310/u)
 })
 
@@ -126,4 +128,14 @@ void test("renders every synthetic fixture, always to the same bytes", () => {
     assert.ok(once.endsWith("\n"), fixture.name)
     assert.ok(!once.includes("undefined"), fixture.name)
   }
+})
+
+void test("renders each note as its own BT-22, in the order it was given", () => {
+  // BT-22 repeats: a legal reference and a storno reason are two statements,
+  // and CIUS-RO gives each occurrence its own 300-character budget.
+  assert.deepEqual(element(renderEFacturaXml(article310CreditNote), "cbc:Note"), [
+    "Regim special de scutire conform art. 310 din Codul fiscal",
+    "Stornare integrala: serviciile nu au fost livrate",
+  ])
+  assert.equal(element(renderEFacturaXml(standardB2B), "cbc:Note").length, 0)
 })

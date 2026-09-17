@@ -13,6 +13,7 @@ and no write to `eFacturaStatus`. Transport to the SPV stays in T-1346.
 | --- | --- |
 | `cube/efactura/contracts/document.ts` | `EFacturaDocument` — the normalized fiscal contract, every amount a decimal string, every value already positive |
 | `cube/efactura/validation.ts` + `totals.ts`, `vat-rules.ts`, `vat-groups.ts` | the EN 16931 rules checkable without the official validator |
+| `cube/efactura/cius-limits.ts` | the CIUS-RO length and occurrence limits, read from the official Schematron |
 | `cube/efactura/xml.ts` | deterministic serializer: element order is array order, no mixed content, no unrepresentable characters |
 | `cube/efactura/ubl.ts`, `ubl-party.ts` | the UBL document and party builders, in `xsd:sequence` order |
 | `cube/efactura/profile.ts` | the CIUS-RO constants, injected rather than hard-coded |
@@ -57,6 +58,16 @@ offending field at once.
   limit counts characters, not UTF-16 code units.
 - Parties: ISO 3166-1 alpha-2 country, ISO 3166-2 subentity for RO, and the
   seller identifiable by BT-31 **or** BT-32.
+- The CIUS-RO length and occurrence limits for everything we emit, in
+  `cius-limits.ts`: BT-22 at most 300 characters each and at most twenty of them
+  (BR-RO-L300, BR-RO-A020), item name 100, party name 200, street 150, city 50,
+  post code 20, document and preceding-invoice number 200, and BR-RO-010 — a
+  document number has to contain a digit, which the official validator checks
+  before any fiscal rule. They are measured after `normalize-space` and in
+  characters, and an offending text is refused rather than shortened: a
+  truncated fiscal text is a statement the document never made. Limits for
+  elements we do not emit are deliberately absent rather than written against
+  nothing.
 
 Deliberate omissions, each with a reason rather than an oversight:
 
@@ -157,7 +168,7 @@ The difference is structural, not cosmetic:
 | BT-118 / BT-151 | `E` | `O` |
 | BT-119 / BT-152 | `0.00`, present | **absent** |
 | BT-121 | absent | `VATEX-EU-O` |
-| Legal reference | BT-120 text | BT-22 (BR-RO-060) |
+| Legal reference | BT-120 text | BT-22, as its own note |
 
 **The validator did not settle this.** Both fixture 04 (`E`) and fixture 05
 (`O`) were accepted without a single assertion, so the choice was a fiscal
@@ -180,25 +191,33 @@ identifier, even for a VAT-registered buyer, who is named by BT-47 instead.
 
 BT-22 now carries up to two statements. The legal reference is mandatory for
 this treatment and a correction reason is mandatory for a storno, so a document
-that is both carries both — whole, the reference first, separated by a line
-feed. Neither is dropped or truncated: the note is the only place each of them
-exists. Fixtures 09 and 10 exist precisely because the accepted fixture 05
-carries a one-sentence BT-22 and says nothing about the composed form.
+that is both carries both — as **two notes**, the reference first. BT-22 repeats
+in UBL (BG-1, up to twenty occurrences under BR-RO-A020) and CIUS-RO limits a
+single occurrence to 300 characters (BR-RO-L300), so joining the two into one
+text would make a mandatory legal reference eat into a mandatory storno reason.
+Neither is dropped or truncated: the note is the only place each of them exists.
+Fixtures 09 and 10 exist precisely because the accepted fixture 05 carries a
+single one-sentence BT-22 and says nothing about the two-note form.
 
 ## What is still unverified
 
-- The official `ro16931-ubl` Schematron package could not be downloaded from
-  `mfinante.gov.ro` (connection reset, repeatedly, across sessions). The local
-  rules were therefore written from EN 16931, ANAF's technical recommendation
-  and the validator's own responses — not from the rule file itself. A rule
-  that no fixture exercises is a rule nobody has checked.
+- The official `ro16931-ubl-1.0.9` package is **not** reachable over HTTP from
+  here (`mfinante.gov.ro` resets the connection, repeatedly, across sessions),
+  but the extracted copy in the project's Drive materials is readable locally at
+  `~/gdrive/PROIECTE DEVELOPMENT/RO_E_FACTURA/ro16931-ubl-1.0.9`. The national
+  rules in `cius-limits.ts` were read from its flattened
+  `preprocessed/ROeFactura-UBL-validation-Invoice_v1.0.8.sch`; the EN 16931
+  rules still come from the abstract model files and the validator's own
+  responses. Nothing here executes the Schematron: there is no XSLT engine in
+  this environment, so a rule no fixture exercises is still a rule nobody has
+  run.
 - **Fixtures 09 and 10 have not been uploaded.** They are the only documents
-  with a composed BT-22 — legal reference plus storno reason (09, `FCN`), legal
-  reference plus seller remarks (10, `FACT1`) — and the accepted fixture 05 does
-  not cover that shape. Extrapolating its acceptance to them would be a guess
-  about a fiscal document, so the composed note stays unverified until ANAF
-  answers. Fixtures 01–08 regenerate byte for byte identical after T-1383, so
-  what ANAF did accept has not drifted.
+  with two BT-22 occurrences — legal reference plus storno reason (09, `FCN`),
+  legal reference plus seller remarks (10, `FACT1`) — and the accepted fixture
+  05 carries exactly one. Extrapolating its acceptance to them would be a guess
+  about a fiscal document, so the repeated note stays unverified until ANAF
+  answers. Fixtures 01–08 regenerate byte for byte identical after T-1383 and
+  after the move to two notes, so what ANAF did accept has not drifted.
 - The validator checks schema and Schematron. It does not check that the
   document states the truth: correct totals with the wrong VAT category pass.
 - Nothing here has been sent to the SPV. Acceptance by the validator is not

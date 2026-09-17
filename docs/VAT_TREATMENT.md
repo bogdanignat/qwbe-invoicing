@@ -25,11 +25,15 @@ why the PDF and the UI say "Scutit TVA (art. 310)" from the *category*, and why
 `vatTreatmentLabel` never formats a percentage for `O`.
 
 The legal text moves with it. For `E` it belonged in BT-120; for `O` that element
-is absent and the reference belongs in BT-22 (BR-RO-060), where the mapper puts
-it — composed with the seller's own remarks, or with the mandatory storno reason,
-whole and separated by a line feed. BT-121 carries `VATEX-EU-O`, the only code
-BR-O-10 accepts. BR-O-02 then removes the buyer's VAT identifier even when the
-buyer is VAT registered; the buyer keeps its identity through BT-47.
+is absent and the reference belongs in BT-22, where ANAF's technical
+recommendation puts it. BT-22 repeats, so the reference is its own note and the
+seller's remarks — or the mandatory storno reason — are a second one, in that
+order. Each occurrence has its own 300-character budget (BR-RO-L300) and there
+may be twenty of them (BR-RO-A020), which is why document notes and correction
+reasons are capped at 300 characters on input: what the product lets you write
+has to be something e-Factura can carry. BT-121 carries `VATEX-EU-O`, the only
+code BR-O-10 accepts. BR-O-02 then removes the buyer's VAT identifier even when
+the buyer is VAT registered; the buyer keeps its identity through BT-47.
 
 `vatCategoryCode` and `vatExemptionReason` are required properties in configuration,
 line and VAT-breakdown responses. A null reason means legally absent for S, not a
@@ -78,6 +82,11 @@ extracted dependency previews on 2026-09-16, not inferred from the root alone.
 - `cius-ro/RO16931-rules.sch` (`1NxhRyPCphVyMeh9gq_EBpdUAWYc3ewZf`):
   BR-RO-L100 limits BT-120 to 100 characters after `normalize-space`;
   BR-RO-065 accepts the seller tax registration ID as an alternative to VAT ID.
+  The flattened `preprocessed/ROeFactura-UBL-validation-Invoice_v1.0.8.sch` was
+  read in full on 2026-09-17 and is where `cube/efactura/cius-limits.ts` comes
+  from. It also settles a citation this file used to carry: there is **no**
+  BR-RO-060 in CIUS-RO 1.0.1 — BT-22 as the place for the Article 310 reference
+  rests on ANAF's technical recommendation alone.
 - `UBL/EN16931-UBL-model.sch` (`1WI_4BXpu_mabZdph-m6eBqDHkLs4h-Ed`) and
   `codelist/EN16931-UBL-codes.sch` (`1qeo90pxiZkwzb9iKkIOQzzUJAfO8J-Hw`).
   BR-CL-22 requires VATEX when a reason code is supplied. The VATEX mapping for

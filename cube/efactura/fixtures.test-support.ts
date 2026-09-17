@@ -32,8 +32,8 @@ import { VATEX_NOT_SUBJECT } from "./vat-rules.ts"
  *
  * | Fixture | Question it answers |
  * | --- | --- |
- * | 09 | an Article 310 credit note: legal reference **and** storno reason in BT-22 |
- * | 10 | an Article 310 invoice whose BT-22 also carries the seller's remarks |
+ * | 09 | an Article 310 credit note: legal reference **and** storno reason, as two BT-22 |
+ * | 10 | an Article 310 invoice that adds the seller's remarks as a second BT-22 |
  *
  * They are the regression set for the profile constants: re-uploading them
  * after a change to `profile.ts` or `ubl.ts` is what says the change is safe.
@@ -128,7 +128,7 @@ const base = {
   issueDate: "2026-09-17",
   dueDate: "2026-10-17",
   currencyCode: "RON",
-  note: null,
+  notes: [],
   precedingInvoice: null,
 } as const
 
@@ -207,27 +207,26 @@ export const article310AsExempt: EFacturaDocument = {
 
 /** Article 310 rendered the way ANAF's technical recommendation prescribes:
  * category `O`, no percent at all, BT-121 = VATEX-EU-O, legal reference in
- * BT-22 (BR-RO-060). The buyer keeps its CUI but loses BT-48, which BR-O-02
- * forbids on a document that is not subject to VAT. */
+ * BT-22. The buyer keeps its CUI but loses BT-48, which BR-O-02 forbids on a
+ * document that is not subject to VAT. */
 export const article310AsNotSubject: EFacturaDocument = {
   ...article310AsExempt,
   id: "QWBE 1005",
-  note: ARTICLE_310,
+  notes: [ARTICLE_310],
   buyer: companyBuyerWithoutVatId,
   lines: [line("1", "Servicii de consultanta", "5.0000", "HUR", "120.00", "600.00", "O", null)],
   taxSubtotals: [subtotal("600.00", "0.00", "O", null, null, VATEX_NOT_SUBJECT)],
 }
 
 /**
- * BT-22 with two statements in it.
+ * BG-1 with two statements in it.
  *
  * An Article 310 document must state its legal ground, and a credit note must
  * state why it reverses an invoice. Both are mandatory, so a storno issued by
- * an Article 310 seller carries both, whole, separated by a line feed. Neither
- * may be dropped or shortened to fit: the note is the only place each of them
- * exists.
+ * an Article 310 seller carries both — as two notes, because BT-22 repeats and
+ * each occurrence has its own 300-character budget (BR-RO-L300, BR-RO-A020).
  */
-const composedNote = (own: string): string => `${ARTICLE_310}\n${own}`
+const composedNotes = (own: string): ReadonlyArray<string> => [ARTICLE_310, own]
 
 /** A full reversal of `standardB2B`, in the positive amounts UBL expects. */
 export const fullCreditNote: EFacturaDocument = {
@@ -235,7 +234,7 @@ export const fullCreditNote: EFacturaDocument = {
   kind: "credit_note",
   id: "QWBE-STORNO 7",
   dueDate: null,
-  note: "Stornare integrala a facturii QWBE 1001",
+  notes: ["Stornare integrala a facturii QWBE 1001"],
   precedingInvoice: { id: standardB2B.id, issueDate: standardB2B.issueDate },
 }
 
@@ -251,7 +250,7 @@ export const article310CreditNote: EFacturaDocument = {
   kind: "credit_note",
   id: "QWBE-STORNO 9",
   dueDate: null,
-  note: composedNote("Stornare integrala: serviciile nu au fost livrate"),
+  notes: composedNotes("Stornare integrala: serviciile nu au fost livrate"),
   precedingInvoice: { id: article310AsNotSubject.id, issueDate: article310AsNotSubject.issueDate },
 }
 
@@ -261,7 +260,7 @@ export const article310CreditNote: EFacturaDocument = {
 export const article310WithRemarks: EFacturaDocument = {
   ...article310AsNotSubject,
   id: "QWBE 1010",
-  note: composedNote("Livrare in transe conform contractului 42/2026. Garantie 24 de luni."),
+  notes: composedNotes("Livrare in transe conform contractului 42/2026. Garantie 24 de luni."),
 }
 
 export const syntheticFixtures: ReadonlyArray<EFacturaFixture> = [

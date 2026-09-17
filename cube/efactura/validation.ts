@@ -1,5 +1,6 @@
 import type { EFacturaDocument } from "./contracts/document.ts"
 import { EFacturaContractViolation } from "./contracts/failures.ts"
+import { checkCiusLimits } from "./cius-limits.ts"
 import { amountOrSkip, isCalendarDate } from "./decimals.ts"
 import { checkTotals } from "./totals.ts"
 import { checkVatGroups } from "./vat-groups.ts"
@@ -93,6 +94,7 @@ export const validateEFacturaDocument = (document: EFacturaDocument): void => {
   const issues: Array<string> = []
   checkIdentity(document, issues)
   checkParties(document, issues)
+  checkCiusLimits(document, issues)
   let lineSum: bigint | null = 0n
   for (const [index, line] of document.lines.entries()) {
     const net = checkLine(line, index, issues)
