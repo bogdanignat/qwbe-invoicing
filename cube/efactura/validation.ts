@@ -54,11 +54,12 @@ const checkIdentity = (document: EFacturaDocument, issues: Array<string>): void 
 /**
  * An identifier made of whitespace identifies nobody.
  *
- * The renderer omits an empty element rather than emitting one, so a blank
- * identifier would vanish between the rule that accepted it and the XML that
- * ANAF reads — the document would then fail there for a field we believed was
- * present. Blank is therefore both absent, for the rules below, and refused, so
- * the caller hears about it instead of the identity disappearing in silence.
+ * The rules below ask whether an identifier exists, so blank has to count as
+ * absent for them. The renderer does not settle that on its own and the two
+ * halves disagree: BT-30 goes through `optional` and disappears when blank,
+ * while BT-31 and BT-32 go through `text` and would leave as an empty
+ * `cbc:CompanyID` — existing for BR-CO-26, naming nobody for a reader. Blank is
+ * therefore refused outright below, so neither shape can be emitted at all.
  */
 const stated = (value: string | null): boolean => value !== null && value.trim().length > 0
 
@@ -68,9 +69,13 @@ const checkParties = (document: EFacturaDocument, issues: Array<string>): void =
     const address = party.address
     if (address.streetName.trim().length === 0) issues.push(`${role}.address.streetName is required`)
     if (address.cityName.trim().length === 0) issues.push(`${role}.address.cityName is required`)
-    if (address.countrySubentity.trim().length === 0) {
-      issues.push(`${role}.address.countrySubentity is required`)
-    }
+    // BT-39/BT-54 is demanded only of a Romanian address, by BR-RO-110/111,
+    // which reject everything outside the ISO 3166-2:RO list — the empty string
+    // included, so `checkRomanianAddress` already covers it. No rule asks a
+    // foreign party for a subdivision: BR-RO-211 reads like one but its context
+    // is the delivery address, which we do not emit. A German buyer without a
+    // Bundesland is therefore a document ANAF accepts, and the renderer leaves
+    // the element out instead of sending it empty.
     for (const field of ["vatIdentifier", "taxRegistrationIdentifier", "legalRegistrationIdentifier"] as const) {
       const value = party[field]
       if (value !== null && value.trim().length === 0) {

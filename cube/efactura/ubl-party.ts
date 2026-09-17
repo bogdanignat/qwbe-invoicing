@@ -16,7 +16,9 @@ const postalAddress = (address: EFacturaAddress): XmlElement =>
     text("cbc:StreetName", address.streetName),
     text("cbc:CityName", address.cityName),
     ...optional("cbc:PostalZone", address.postalZone),
-    text("cbc:CountrySubentity", address.countrySubentity),
+    // BT-39/BT-54 is mandatory for a Romanian address and unasked for anywhere
+    // else, so a blank one is omitted rather than sent as an empty element.
+    ...optional("cbc:CountrySubentity", address.countrySubentity),
     element("cac:Country", [text("cbc:IdentificationCode", address.countryCode)]),
   ])
 

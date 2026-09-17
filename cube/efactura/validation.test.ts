@@ -236,6 +236,28 @@ void test("refuses a code that is shaped right and names nothing", () => {
   rejects(exemptInvoice({ taxSubtotals: [{ taxableAmount: "100.00", taxAmount: "0.00", category: "E", percent: "0.00", exemptionReason: null, exemptionReasonCode: "VATEX-EU-999" }] }), /BR-CL-22/u)
 })
 
+void test("reads a padded country code the way the national rules read it", () => {
+  // BR-RO-100/110 compare `normalize-space(BT-40)` with `RO`, so " RO " is
+  // Romania to ANAF. Comparing the raw string here let a padded code skip both
+  // the county and the sector on documents the rules do cover.
+  rejects(invoice({ seller: { ...seller, address: { ...seller.address, countryCode: " RO ", countrySubentity: "RO-XX" } } }), /BR-RO-110/u)
+  rejects(invoice({ buyer: { ...buyer, address: { ...buyer.address, countryCode: "\tRO\n", cityName: "București" } } }), /BR-RO-100/u)
+})
+
+void test("accepts a foreign address that names no subdivision", () => {
+  // Only a Romanian address is asked for BT-39/BT-54, by BR-RO-110/111.
+  // BR-RO-211 asks unconditionally, but of the delivery address, which we never
+  // emit; a German buyer without a Bundesland is a document ANAF accepts.
+  validateEFacturaDocument(invoice({ buyer: { ...buyer, address: { ...buyer.address, countryCode: "DE", cityName: "München", countrySubentity: "" } } }))
+})
+
+void test("accepts a VATEX code in the case BR-CL-22 folds away", () => {
+  // BR-CL-22 is the one list that tests `upper-case()`; refusing this would
+  // refuse a document the official validator accepts.
+  validateEFacturaDocument(exemptInvoice({ taxSubtotals: [{ taxableAmount: "100.00", taxAmount: "0.00", category: "E", percent: "0.00", exemptionReason: null, exemptionReasonCode: "vatex-eu-132-1a" }] }))
+  validateEFacturaDocument(notSubjectInvoice({ taxSubtotals: [{ taxableAmount: "100.00", taxAmount: "0.00", category: "O", percent: null, exemptionReason: null, exemptionReasonCode: "vatex-eu-o" }] }))
+})
+
 void test("refuses a seller that only a tax registration identifier names", () => {
   // BR-RO-065 is happy with BT-32 alone; BR-CO-26 is not, because it counts
   // only BT-29, BT-30 and BT-31.
@@ -295,13 +317,15 @@ void test("refuses an out-of-scope document that still states a VAT registration
   rejects(notSubjectInvoice({ buyer }), /BR-O-02/u)
 })
 
-// The line cites BR-O-05, which forbids BT-152 outright; the breakdown cites
-// BR-48, which only stops requiring BT-119 here. Omitting it there is ANAF's
-// recommended shape and this product's rule, so the message says so.
+// The line cites BR-O-05, which forbids BT-152 outright. The breakdown cites no
+// rule at all: BR-48 is satisfied by the category alone and stays satisfied with
+// the rate present, so naming it would name a rule nobody broke. Omitting BT-119
+// there is ANAF's recommended shape and this product's rule, and the message
+// says exactly that — a refusal that lies about its authority is worse than none.
 void test("refuses category O that carries a VAT rate, zero included", () => {
   rejects(notSubjectInvoice({
     taxSubtotals: [{ taxableAmount: "100.00", taxAmount: "0.00", category: "O", percent: "0.00", exemptionReason: null, exemptionReasonCode: VATEX_NOT_SUBJECT }],
-  }), /no VAT rate at all.*\(BR-48\)/u)
+  }), /no VAT rate at all.*\(product rule, not BR-48/u)
   rejects(notSubjectInvoice({
     lines: [{ id: "1", name: "x", quantity: "1.0000", unitCode: "HUR", netAmount: "100.00", unitPrice: "100.00", vatCategory: "O", vatRate: "0.00" }],
   }), /BR-O-05/u)
@@ -381,8 +405,9 @@ void test("holds each VAT breakdown to the lines that belong to it", () => {
 })
 
 void test("refuses an identifier that is stated but empty, rather than letting it vanish", () => {
-  // The renderer drops an empty element, so a blank identifier would satisfy a
-  // rule here and be missing from the XML ANAF reads.
+  // A blank identifier satisfies an `exists()` rule and names nobody. The two
+  // halves of the renderer even disagree about it — BT-30 disappears, BT-31 and
+  // BT-32 go out as an empty `cbc:CompanyID` — so it is refused here instead.
   rejects(invoice({ buyer: { ...buyer, vatIdentifier: "   " } }), /buyer\.vatIdentifier is stated but empty/u)
   rejects(invoice({ seller: { ...seller, legalRegistrationIdentifier: "" } }),
     /seller\.legalRegistrationIdentifier is stated but empty/u)

@@ -10,9 +10,15 @@ import { normalizeSpace } from "./decimals.ts"
  * an invented VATEX code reads like a legal ground while naming none. Both are
  * fatal at ANAF, so they are refused here by name instead.
  *
- * Only the lists reachable from what we emit are here. Unit codes are not: the
- * host picks them from a closed catalogue whose eight entries were checked
- * against the official list, so no caller can name a ninth.
+ * Only the lists reachable from what we emit are here. Unit codes are not:
+ * BR-CL-23 stays unchecked because the invoicing host picks the code from a
+ * closed catalogue of eight, each verified against the official list. That is
+ * a guarantee of the host, not of this cube — a caller that builds an
+ * `EFacturaDocument` itself can still name a unit ANAF has never heard of.
+ *
+ * The comparisons follow each rule exactly. BR-CL-22 folds case before it
+ * looks the code up, so `vatex-eu-o` is the same code to ANAF; BR-CL-14 and
+ * the national lists do not fold, so `ro` is not `RO` and `de` is not `DE`.
  */
 
 /** BR-CL-14 — ISO 3166-1 alpha-2 as EN 16931 publishes it, which is why `1A`
@@ -64,7 +70,9 @@ export const checkCodelists = (document: EFacturaDocument, issues: Array<string>
   for (const [index, subtotal] of document.taxSubtotals.entries()) {
     const code = subtotal.exemptionReasonCode
     if (code === null || code.trim().length === 0) continue
-    if (!VATEX_CODES.has(normalizeSpace(code))) {
+    // BR-CL-22 alone tests `normalize-space(upper-case(.))`, so refusing a
+    // lower-case VATEX code would refuse one the validator accepts.
+    if (!VATEX_CODES.has(normalizeSpace(code).toUpperCase())) {
       issues.push(`taxSubtotals[${String(index)}].exemptionReasonCode must be a VATEX code, `
         + `got "${code}" (BR-CL-22)`)
     }

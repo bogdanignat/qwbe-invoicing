@@ -35,11 +35,13 @@ const BUCHAREST_SECTORS = new Set(["SECTOR1", "SECTOR2", "SECTOR3", "SECTOR4", "
  * The two national address rules, which only apply to a Romanian address.
  *
  * A foreign address keeps whatever its own country uses; these rules are
- * conditioned on BT-40/BT-55 being `RO` in the Schematron too.
+ * conditioned on BT-40/BT-55 being `RO` in the Schematron too — which they
+ * read through `normalize-space`, so " RO " is Romania to them and has to be
+ * Romania here as well, or a padded country code leaves the county unchecked.
  */
 const checkRomanianAddress = (role: string, party: EFacturaParty, issues: Array<string>): void => {
   const { countryCode, countrySubentity, cityName } = party.address
-  if (countryCode !== "RO") return
+  if (normalizeSpace(countryCode) !== "RO") return
   if (!ROMANIAN_COUNTIES.has(normalizeSpace(countrySubentity))) {
     issues.push(`${role}.address.countrySubentity must be an ISO 3166-2:RO code such as RO-CJ, `
       + `got "${countrySubentity}" (BR-RO-110)`)

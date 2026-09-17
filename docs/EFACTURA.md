@@ -44,8 +44,12 @@ offending field at once.
   — `1A` and `XI` are in it, `UK` is not) and the VAT exemption reason code
   (BR-CL-22). A code list is not a shape: `XX` is two capital letters and no
   country, and an invented VATEX code names a legal ground that does not exist.
-  Unit codes need no check: the host picks them from a closed catalogue of
-  eight, each verified against the official list.
+  Each comparison follows its own rule: BR-CL-22 is the one that tests
+  `upper-case()`, so `vatex-eu-o` is the same code, while BR-CL-14 and the
+  national lists are case-sensitive. BR-CL-23 is **not** checked here: the
+  invoicing host picks the unit from a closed catalogue of eight, each verified
+  against the official list, but that is a guarantee of the host — a caller that
+  builds an `EFacturaDocument` itself can still name a unit that does not exist.
 - BR-O-02: a document that is not subject to VAT states no VAT registration at
   all — neither BT-31 nor BT-48. Also returned verbatim by the validator.
 - BR-CO-25: an invoice with a positive amount due needs a due date. This mirrors
@@ -80,6 +84,12 @@ offending field at once.
   the sector is the city-level unit, and "București" is a rejection. The mapper
   never invents a sector for an address that lacks one: it is already required
   when the party is saved, and choosing one here would invent a fiscal fact.
+  Both rules read BT-40/BT-55 through `normalize-space`, so `" RO "` is Romania
+  here too — comparing it raw let a padded country code skip both checks. The
+  other direction holds as well: no rule asks a **foreign** address for a
+  subdivision (BR-RO-211 does, but of the delivery address, which we never
+  emit), so a blank BT-39/BT-54 outside Romania is accepted and the element is
+  omitted rather than sent empty.
 - The CIUS-RO length and occurrence limits for everything we emit, in
   `cius-limits.ts`: BT-22 at most 300 characters each and at most twenty of them
   (BR-RO-L300, BR-RO-A020), item name 100, party name 200, street 150, city 50,
@@ -206,7 +216,12 @@ Article 310 tuple only under `O`, and `E` is refused everywhere — by the domai
 validator, by the database and by the web decoder — even when the rest of the
 tuple is exactly right. The stored rate stays `0.00`, because the model requires
 a rate and the tax due really is nothing; the **mapper** produces the absence of
-BT-119/BT-152, which is a rule of the standard rather than a fact about the sale.
+BT-119/BT-152, which is a statement about the category rather than about the
+sale. The two absences do not rest on the same ground: BR-O-05 forbids BT-152 on
+a line outright, while nothing forbids BT-119 on the breakdown — BR-48 merely
+stops requiring it there and stays satisfied even if a rate is present. Omitting
+it is ANAF's recommended shape and this product's rule, and the refusal says so
+instead of citing BR-48 for a violation BR-48 does not define.
 
 BR-O-02 propagates: an Article 310 invoice does not carry the buyer's VAT
 identifier, even for a VAT-registered buyer, who is named by BT-47 instead.
@@ -224,10 +239,16 @@ single one-sentence BT-22 and says nothing about the two-note form.
 Document notes and correction reasons are capped at 300 characters on input too,
 so the product refuses at the keyboard what e-Factura would refuse at the gate.
 That input cap is a **product** limit, not a copy of BR-RO-L300: it counts
-UTF-16 code units on the raw text, while `cius-limits.ts` counts characters
-after `normalize-space`. It is therefore the stricter of the two for every text
-— an emoji costs two there and one here — and never the looser, which is the
-only direction that matters. `CorrectionInput.reason` carries the cap in the
+UTF-16 code units, while `cius-limits.ts` counts characters after
+`normalize-space`. For a note, which is stored as it was typed, that makes it
+the stricter of the two — an emoji costs two there and one here — and never the
+looser, which is the only direction that matters. A correction reason is counted
+after `trim()`, and `trim()` removes more than `normalize-space` collapses: a
+reason padded with a no-break space is 300 to the input cap and 301 to
+BR-RO-L300. It never arrives that way, because the same layer stores the reason
+trimmed, so the text the mapper reads is the text that was counted — the
+guarantee holds for the stored value, not for every raw string a caller could
+hand in. `CorrectionInput.reason` carries the cap in the
 corrections domain rather than in the HTTP schema, because the storno reason is
 a fiscal element of the document, and the rule holds for every caller, not only
 for the one that arrives over HTTP.

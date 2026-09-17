@@ -20,9 +20,11 @@ export const VATEX_NOT_SUBJECT = "VATEX-EU-O"
  * `O` means "not subject to VAT", so a rate of any value — zero included —
  * asserts something the category denies. The two places differ in what backs
  * the refusal: BR-O-05 forbids BT-152 on a line outright, while BR-48 merely
- * stops requiring BT-119 on a breakdown that is not subject to VAT. Nothing
- * forbids BT-119 there, so omitting it is ANAF's recommended shape and this
- * product's rule rather than a rule of the standard.
+ * stops requiring BT-119 on a breakdown that is not subject to VAT — its test
+ * is satisfied by the category alone and stays true even if the rate is there.
+ * No EN 16931 or CIUS-RO rule forbids BT-119 on such a breakdown, so refusing
+ * it is this product's rule following ANAF's recommended shape, and `rule` says
+ * so rather than naming a rule that was never broken.
  */
 const percentage = (value: string | null, category: EFacturaVatCategory, where: string, rule: string,
   issues: Array<string>): bigint | null => {
@@ -64,7 +66,8 @@ const checkSubtotalArithmetic = (subtotal: EFacturaTaxSubtotal, percent: bigint 
 /** BR-S-05/10, BR-E-05/10, BR-O-05/10, BR-CO-17 and BR-RO-L100 on one breakdown. */
 export const checkVatSubtotal = (subtotal: EFacturaTaxSubtotal, index: number, issues: Array<string>): void => {
   const where = `taxSubtotals[${String(index)}]`
-  const percent = percentage(subtotal.percent, subtotal.category, where, "BR-48", issues)
+  const percent = percentage(subtotal.percent, subtotal.category, where,
+    "product rule, not BR-48: a breakdown that is not subject to VAT states no rate", issues)
   checkSubtotalArithmetic(subtotal, percent, where, issues)
   const reason = subtotal.exemptionReason === null ? "" : normalizeSpace(subtotal.exemptionReason)
   if (characterCount(reason) > 100) {
@@ -105,8 +108,10 @@ export const checkVatSubtotal = (subtotal: EFacturaTaxSubtotal, index: number, i
 
   // BR-O-10, as published by ANAF: the exemption reason code is used only
   // together with category O — and for this category it is what identifies the
-  // case, so we require it rather than accepting free text alone.
-  if (code !== VATEX_NOT_SUBJECT) {
+  // case, so we require it rather than accepting free text alone. The case
+  // folds the way BR-CL-22 folds it, so one code written two ways stays one
+  // code here too instead of being refused for a second, unrelated reason.
+  if (code === null || normalizeSpace(code).toUpperCase() !== VATEX_NOT_SUBJECT) {
     issues.push(`${where} is category O and needs exemption reason code ${VATEX_NOT_SUBJECT} (BR-O-10)`)
   }
 }

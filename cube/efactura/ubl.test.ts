@@ -88,6 +88,21 @@ void test("identifies a private individual without claiming a VAT registration",
   assert.match(buyerPart, /<cbc:RegistrationName>Ionescu Exemplu<\/cbc:RegistrationName>\s*<cbc:CompanyID>0{13}</u)
 })
 
+void test("omits the country subdivision a foreign address does not have", () => {
+  // BT-39/BT-54 is mandatory only for a Romanian address, by BR-RO-110/111. An
+  // empty element would state that the subdivision is nothing, which is not
+  // what a party outside Romania is saying by not having one.
+  const buyer = standardB2B.buyer
+  const xml = renderEFacturaXml({
+    ...standardB2B,
+    buyer: { ...buyer, vatIdentifier: "DE811234567",
+      address: { ...buyer.address, countryCode: "DE", cityName: "München", countrySubentity: "" } },
+  })
+  const split = xml.indexOf("<cac:AccountingCustomerParty>")
+  assert.ok(!xml.slice(split, xml.indexOf("<cac:TaxTotal>")).includes("CountrySubentity"))
+  assert.match(xml.slice(0, split), /<cbc:CountrySubentity>RO-/u)
+})
+
 void test("drops both VAT identifiers on a document that is not subject to VAT", () => {
   // BR-O-02: the parties keep their identity through BT-32 and BT-47. The
   // `VAT` scheme still appears under cac:TaxCategory, where it names the tax
