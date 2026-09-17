@@ -204,9 +204,12 @@ void test("refuses dates that look right but are not real days", () => {
 
 void test("refuses a currency other than RON, because nothing converts it yet", () => {
   rejects(invoice({ currencyCode: "EUR" }), /only RON is supported/u)
-  // BR-CL-04 and BR-RO-030 read BT-5 through `normalize-space`, so padding is
-  // not a different currency to the validator and must not be one here.
-  validateEFacturaDocument(invoice({ currencyCode: " RON " }))
+  // BR-CL-04 would read a padded code as RON, but BT-5 is written twice — as
+  // the element and as every amount's `currencyID` — and BR-CO-15 compares the
+  // two as strings. XML normalises whitespace in an attribute and not in
+  // element content, so a tab would arrive as two different currencies.
+  rejects(invoice({ currencyCode: " RON " }), /only RON is supported/u)
+  rejects(invoice({ currencyCode: "\tRON" }), /only RON is supported/u)
 })
 
 void test("requires an address the Romanian rules can accept", () => {

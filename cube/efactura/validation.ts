@@ -2,7 +2,7 @@ import type { EFacturaDocument } from "./contracts/document.ts"
 import { EFacturaContractViolation } from "./contracts/failures.ts"
 import { checkCiusLimits } from "./cius-limits.ts"
 import { checkCodelists } from "./codelists.ts"
-import { amountOrSkip, isCalendarDate, normalizeSpace } from "./decimals.ts"
+import { amountOrSkip, isCalendarDate } from "./decimals.ts"
 import { checkTotals } from "./totals.ts"
 import { checkVatGroups } from "./vat-groups.ts"
 import { checkLine, checkVatSubtotal } from "./vat-rules.ts"
@@ -19,10 +19,14 @@ import { checkLine, checkVatSubtotal } from "./vat-rules.ts"
 const checkIdentity = (document: EFacturaDocument, issues: Array<string>): void => {
   if (document.id.trim().length === 0) issues.push("id is required (BT-1)")
   if (!isCalendarDate(document.issueDate)) issues.push("issueDate must be a valid YYYY-MM-DD date (BT-2)")
-  // BR-CL-04 and BR-RO-030 read BT-5 through `normalize-space`, so a padded
-  // "RON" is RON to them; read it the same way here instead of refusing a
-  // currency ANAF accepts.
-  if (normalizeSpace(document.currencyCode) !== "RON") {
+  // Exactly "RON", not "RON" after normalising. BR-CL-04 and BR-RO-030 would
+  // read a padded one as RON, but BT-5 is not rendered once: it is the element
+  // and the `currencyID` of every amount, and BR-CO-15 compares those two by
+  // string equality. XML normalises whitespace inside an attribute value and
+  // leaves it alone in element content, so a tab would reach ANAF as a tab in
+  // one place and a space in the other, and the two would no longer be the same
+  // currency. Refusing anything but the bare code keeps them identical.
+  if (document.currencyCode !== "RON") {
     issues.push(`only RON is supported, got "${document.currencyCode}" (BT-5)`)
   }
   if (document.lines.length === 0) issues.push("a document must carry at least one line")
@@ -79,6 +83,7 @@ const checkParties = (document: EFacturaDocument, issues: Array<string>): void =
     // is the delivery address, which we do not emit. A German buyer without a
     // Bundesland is therefore a document ANAF accepts, and the renderer leaves
     // the element out instead of sending it empty.
+
     for (const field of ["vatIdentifier", "taxRegistrationIdentifier", "legalRegistrationIdentifier"] as const) {
       const value = party[field]
       if (value !== null && value.trim().length === 0) {
