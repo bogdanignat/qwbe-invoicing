@@ -46,8 +46,10 @@ export const checkCiusLimits = (document: EFacturaDocument, issues: Array<string
   }
   for (const [index, note] of document.notes.entries()) {
     const where = `notes[${String(index)}]`
-    // The renderer drops an element with no content, so a blank note would
-    // satisfy the limit here and then be missing from the XML ANAF reads.
+    // Not a Schematron rule: the renderer emits `<cbc:Note></cbc:Note>` for a
+    // blank string, so nothing downstream would catch a statement the caller
+    // meant to make and left empty. Omitting the note says the same thing
+    // honestly, so the empty one is refused rather than sent.
     if (normalizeSpace(note).length === 0) issues.push(`${where} is stated but empty; omit it instead`)
     limit(note, 300, where, "BR-RO-L300", issues)
   }

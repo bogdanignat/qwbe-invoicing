@@ -49,9 +49,12 @@ offending field at once.
   `21.00` are one group, not two. When a line's group is missing, the refusal
   cites BR-\*-01 only if the *category* is absent; a category present at another
   rate keeps that rule satisfied, so that message carries no rule number.
-- Anything stated but empty is refused rather than dropped. The renderer omits
-  an empty element, so a blank identifier or exemption code would satisfy a rule
-  here and then be missing from the XML ANAF reads.
+- Anything stated but empty is refused rather than dropped, for two different
+  reasons. An optional element — an exemption code, a due date — is omitted by
+  the renderer when blank, so it would satisfy a rule here and then be missing
+  from the XML ANAF reads. A note is rendered unconditionally, so a blank one
+  would instead be sent as `<cbc:Note></cbc:Note>`: a statement nobody made.
+  Both are caller mistakes, and both are named before the document is built.
 - BT-120 is measured the way XPath measures it: only space, tab, CR and LF
   collapse **or trim** (a no-break space is a character, at the ends as much as
   in the middle, which is why `String.trim` is not used), and the 100-character
@@ -198,6 +201,17 @@ text would make a mandatory legal reference eat into a mandatory storno reason.
 Neither is dropped or truncated: the note is the only place each of them exists.
 Fixtures 09 and 10 exist precisely because the accepted fixture 05 carries a
 single one-sentence BT-22 and says nothing about the two-note form.
+
+Document notes and correction reasons are capped at 300 characters on input too,
+so the product refuses at the keyboard what e-Factura would refuse at the gate.
+That input cap is a **product** limit, not a copy of BR-RO-L300: it counts
+UTF-16 code units on the raw text, while `cius-limits.ts` counts characters
+after `normalize-space`. It is therefore the stricter of the two for every text
+— an emoji costs two there and one here — and never the looser, which is the
+only direction that matters. `CorrectionInput.reason` carries the cap in the
+corrections domain rather than in the HTTP schema, because the storno reason is
+a fiscal element of the document, and the rule holds for every caller, not only
+for the one that arrives over HTTP.
 
 ## What is still unverified
 

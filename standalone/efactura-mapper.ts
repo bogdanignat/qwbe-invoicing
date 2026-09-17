@@ -95,11 +95,13 @@ const mapLine = (line: DraftLine, position: number): EFacturaLine => ({
  * The VAT breakdown, BG-23.
  *
  * For `O` the three exempt-shaped fields change together, because the category
- * fixes all of them: BT-119 is absent (BR-O-05), BT-121 is `VATEX-EU-O` — the
- * only code BR-O-10 accepts — and BT-120 is absent, because ANAF's technical
- * recommendation puts the legal text of this treatment in BT-22 instead.
- * Emitting both would state the same ground twice, in two places whose rules
- * disagree about which is authoritative.
+ * fixes all of them. BT-119 is absent: BR-48 stops requiring it once the
+ * document is not subject to VAT, and ANAF's recommendation shows the category
+ * without a percentage. BT-121 is `VATEX-EU-O`; BR-O-10 accepts a code *or* the
+ * equivalent text, and the code is the unambiguous half. BT-120 is absent
+ * because the same recommendation puts the legal text of this treatment in
+ * BT-22 instead, and stating the ground twice would put it in two places whose
+ * rules disagree about which is authoritative.
  */
 const mapSubtotal = (breakdown: VatBreakdown): EFacturaTaxSubtotal => ({
   taxableAmount: breakdown.vatBaseAmount,

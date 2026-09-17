@@ -14,13 +14,20 @@ import { amountOrSkip, characterCount, normalizeSpace, scaled } from "./decimals
 /** BT-121 for a supply by a person not registered for VAT. */
 export const VATEX_NOT_SUBJECT = "VATEX-EU-O"
 
-/** Reads the percentage, enforcing presence exactly where the category needs
- * it. `O` means "not subject to VAT", so a rate of any value — including zero
- * — asserts something the category denies. */
-const percentage = (value: string | null, category: EFacturaVatCategory, where: string,
+/**
+ * Reads the percentage, enforcing presence exactly where the category needs it.
+ *
+ * `O` means "not subject to VAT", so a rate of any value — zero included —
+ * asserts something the category denies. The two places differ in what backs
+ * the refusal: BR-O-05 forbids BT-152 on a line outright, while BR-48 merely
+ * stops requiring BT-119 on a breakdown that is not subject to VAT. Nothing
+ * forbids BT-119 there, so omitting it is ANAF's recommended shape and this
+ * product's rule rather than a rule of the standard.
+ */
+const percentage = (value: string | null, category: EFacturaVatCategory, where: string, rule: string,
   issues: Array<string>): bigint | null => {
   if (category === "O") {
-    if (value !== null) issues.push(`${where} is category O and must carry no VAT rate at all, got "${value}" (BR-O-05)`)
+    if (value !== null) issues.push(`${where} is category O and must carry no VAT rate at all, got "${value}" (${rule})`)
     return null
   }
   if (value === null) {
@@ -57,7 +64,7 @@ const checkSubtotalArithmetic = (subtotal: EFacturaTaxSubtotal, percent: bigint 
 /** BR-S-05/10, BR-E-05/10, BR-O-05/10, BR-CO-17 and BR-RO-L100 on one breakdown. */
 export const checkVatSubtotal = (subtotal: EFacturaTaxSubtotal, index: number, issues: Array<string>): void => {
   const where = `taxSubtotals[${String(index)}]`
-  const percent = percentage(subtotal.percent, subtotal.category, where, issues)
+  const percent = percentage(subtotal.percent, subtotal.category, where, "BR-48", issues)
   checkSubtotalArithmetic(subtotal, percent, where, issues)
   const reason = subtotal.exemptionReason === null ? "" : normalizeSpace(subtotal.exemptionReason)
   if (characterCount(reason) > 100) {
@@ -114,7 +121,7 @@ export const checkLine = (line: EFacturaLine, index: number, issues: Array<strin
   const quantity = scaled(line.quantity, 4, `${where}.quantity`, issues)
   if (quantity === 0n) issues.push(`${where}.quantity must be greater than zero`)
   scaled(line.unitPrice, 2, `${where}.unitPrice`, issues)
-  const percent = percentage(line.vatRate, line.vatCategory, where, issues)
+  const percent = percentage(line.vatRate, line.vatCategory, where, "BR-O-05", issues)
   if (line.vatCategory === "S" && percent === 0n) {
     issues.push(`${where} is category S but its rate is zero (BR-S-05)`)
   }

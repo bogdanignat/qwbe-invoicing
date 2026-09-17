@@ -265,10 +265,13 @@ void test("refuses an out-of-scope document that still states a VAT registration
   rejects(notSubjectInvoice({ buyer }), /BR-O-02/u)
 })
 
+// The line cites BR-O-05, which forbids BT-152 outright; the breakdown cites
+// BR-48, which only stops requiring BT-119 here. Omitting it there is ANAF's
+// recommended shape and this product's rule, so the message says so.
 void test("refuses category O that carries a VAT rate, zero included", () => {
   rejects(notSubjectInvoice({
     taxSubtotals: [{ taxableAmount: "100.00", taxAmount: "0.00", category: "O", percent: "0.00", exemptionReason: null, exemptionReasonCode: VATEX_NOT_SUBJECT }],
-  }), /BR-O-05/u)
+  }), /no VAT rate at all.*\(BR-48\)/u)
   rejects(notSubjectInvoice({
     lines: [{ id: "1", name: "x", quantity: "1.0000", unitCode: "HUR", netAmount: "100.00", unitPrice: "100.00", vatCategory: "O", vatRate: "0.00" }],
   }), /BR-O-05/u)
@@ -391,8 +394,8 @@ void test("holds BT-22 to its own occurrence rules", () => {
   validateEFacturaDocument(invoice({ notes: Array.from({ length: 20 }, (_, index) => `nota ${String(index)}`) }))
   rejects(invoice({ notes: Array.from({ length: 21 }, () => "nota") }),
     /a document carries at most 20 notes, got 21 \(BR-RO-A020\)/u)
-  // The renderer drops an element with no content, so a blank note would pass
-  // the limit here and then be missing from the XML ANAF reads.
+  // The renderer would emit an empty element rather than dropping it, so a
+  // blank note is refused here instead of being sent as a statement nobody made.
   rejects(invoice({ notes: [" \t "] }), /notes\[0\] is stated but empty/u)
 })
 
