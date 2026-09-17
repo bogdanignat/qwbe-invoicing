@@ -4,8 +4,17 @@ Scope of this step: a pure generator that turns a frozen fiscal snapshot into
 UBL 2.1 / CIUS-RO XML, plus the host mapping from the invoicing model and
 synthetic fixtures for the official validator.
 
-**Nothing is activated.** There is no API endpoint, no UI action, no migration
-and no write to `eFacturaStatus`. Transport to the SPV stays in T-1346.
+**Nothing is transmitted.** The only thing exposed is a download: `GET
+/api/invoices/{id}/efactura.xml` and `GET /api/corrections/{id}/efactura.xml`,
+plus the button beside "Descarcă PDF" on an issued invoice. Both routes read a
+frozen snapshot and render it on the spot — no migration, no write to
+`eFacturaStatus`, nothing stored and nothing sent. Transport to the SPV stays in
+T-1346 (T-1395).
+
+A refusal is reachable today: the invoicing domain does not cap line
+descriptions or party names at input, while CIUS-RO does at export (T-1390), so
+an invoice can be issued — and, being immutable, stays issued — that the export
+answers with `400` and the list of limits it breaks.
 
 ## Layout
 
@@ -19,6 +28,7 @@ and no write to `eFacturaStatus`. Transport to the SPV stays in T-1346.
 | `cube/efactura/ubl.ts`, `ubl-party.ts` | the UBL document and party builders, in `xsd:sequence` order |
 | `cube/efactura/profile.ts` | the CIUS-RO constants, injected rather than hard-coded |
 | `standalone/efactura-mapper.ts` | the host translation from `IssuedInvoice` / `CorrectionDocument` |
+| `standalone/api.ts` — `efacturaXml` | renders the download; a mapping refusal travels as the list of reasons, not as a 500 |
 | `cube/efactura/fixtures.test-support.ts` | the synthetic documents, all invented |
 
 The generator never imports the invoicing cube, and the mapper is the only code
@@ -300,6 +310,18 @@ node scripts/efactura-fixtures.mjs          # writes .local/efactura-fixtures/*.
 
 Upload each file at <https://www.anaf.ro/uploadxmi/>, standard `FACT1` — except
 the credit notes (06, 09), which go as `FCN`.
+
+A document issued in the running application is exported the same way, through
+the button on its page or directly:
+
+```
+curl -H "Authorization: Bearer $TOKEN" -OJ http://localhost:3000/api/invoices/$ID/efactura.xml
+```
+
+That file is uploaded at the same address and under the same rule as the
+fixtures: only invented parties. A local invoice is issued against whatever
+issuer profile is configured, so check who the document names before it leaves
+the machine.
 
 Only synthetic documents go there: the validator is a third-party service and an
 uploaded file is out of our hands. Every identifier in the fixtures is invented

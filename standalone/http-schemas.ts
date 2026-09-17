@@ -435,6 +435,7 @@ export const ProformaArtifact = Schema.Struct({
   generatedAt: Schema.String,
 })
 export const Pdf = HttpApiSchema.Uint8Array({ contentType: "application/pdf" })
+export const EFacturaXml = HttpApiSchema.Uint8Array({ contentType: "application/xml" })
 export const Deleted = Schema.Struct({ deleted: Schema.Literal(true) })
 export const LoginInput = Schema.Struct({ token: Schema.String })
 export const AuthenticatedSession = Schema.Struct({ authenticated: Schema.Literal(true), csrfToken: Schema.String })

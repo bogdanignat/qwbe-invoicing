@@ -22,6 +22,7 @@ export const operationNames = [
   "addDraftLine", "updateDraftLine", "deleteDraftLine", "issueDraftInvoice", "issueInvoice",
   "listPayments", "recordPayment", "reversePayment", "createCorrection", "listCorrections", "getCorrection",
   "listIssuedInvoices", "getIssuedInvoice", "renderInvoicePdf", "downloadInvoicePdf",
+  "downloadInvoiceEFactura", "downloadCorrectionEFactura",
   "issueDraftProforma", "issueProforma", "listProformas", "getProforma", "issueInvoiceFromProforma", "createDraftInvoiceFromProforma",
   "renderProformaPdf", "downloadProformaPdf",
   "getSession", "createSession", "deleteSession",
@@ -166,9 +167,17 @@ const invoicing = HttpApiGroup.make("invoicing")
   .add(invoicingBase(conflict(notFound(validation(idempotentBody(HttpApiEndpoint.post("createCorrection")`/invoices/${invoiceId}/corrections`.setPayload(S.CorrectionInput).addSuccess(S.Correction)))))))
   .add(invoicingBase(validation(HttpApiEndpoint.get("listCorrections")`/invoices/${invoiceId}/corrections`.setUrlParams(S.SourceFilter).addSuccess(Schema.Array(S.Correction)))))
   .add(invoicingBase(notFound(HttpApiEndpoint.get("getCorrection")`/corrections/${id}`.addSuccess(S.Correction))))
+  // The e-Factura XML is a function of the frozen snapshot, so it is served by
+  // the group that owns that snapshot rather than by `documents`, which hands
+  // back stored artifacts. Nothing is persisted here: the same document always
+  // renders the same bytes, and the document can no longer change.
+  .add(invoicingBase(validation(notFound(HttpApiEndpoint.get("downloadCorrectionEFactura")`/corrections/${id}/efactura.xml`
+    .addSuccess(S.EFacturaXml)))))
   .add(invoicingBase(validation(HttpApiEndpoint.get("listIssuedInvoices", "/invoices").setUrlParams(S.ListQuery).addSuccess(S.IssuedInvoicePage))))
   .add(invoicingBase(conflict(notFound(validation(idempotentBody(HttpApiEndpoint.post("issueInvoice", "/invoices").setPayload(S.AuthoringDocumentInput).addSuccess(S.IssuedInvoice)))))))
   .add(invoicingBase(notFound(HttpApiEndpoint.get("getIssuedInvoice")`/invoices/${id}`.addSuccess(S.IssuedInvoice))))
+  .add(invoicingBase(validation(notFound(HttpApiEndpoint.get("downloadInvoiceEFactura")`/invoices/${id}/efactura.xml`
+    .addSuccess(S.EFacturaXml)))))
   .add(invoicingBase(conflict(notFound(validation(idempotentBody(HttpApiEndpoint.post("issueDraftProforma")`/drafts/${draftId}/proformas`
     .setPayload(S.IssueProformaInput).addSuccess(S.Proforma)))))))
   .add(invoicingBase(validation(HttpApiEndpoint.get("listProformas", "/proformas").setUrlParams(S.ListQuery).addSuccess(S.ProformaPage))))

@@ -27,8 +27,16 @@ export const handleApiRequest = async (request: ApiRequest, runtime: ApiRuntime)
       ...(withBody ? { body: JSON.stringify(request.body ?? {}) } : {}),
     }))
     const bytes = new Uint8Array(await response.arrayBuffer())
-    if (response.headers.get("content-type")?.startsWith("application/pdf") === true) {
+    const contentType = response.headers.get("content-type") ?? ""
+    if (contentType.startsWith("application/pdf")) {
       return { status: response.status, body: bytes, headers: Object.fromEntries(response.headers.entries()) }
+    }
+    // e-Factura is text and every assertion about it is an assertion about that
+    // text, so it is decoded once here, from the bytes the client receives, and
+    // a test never has to decide the encoding a second time.
+    if (contentType.startsWith("application/xml")) {
+      return { status: response.status, body: Buffer.from(bytes).toString("utf8"),
+        headers: Object.fromEntries(response.headers.entries()) }
     }
     return {
       status: response.status,
