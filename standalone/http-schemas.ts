@@ -89,7 +89,7 @@ export const CustomerInput = Schema.Struct({
 }).annotations(bodyObject)
 
 const VatTreatmentFields = {
-  vatCategoryCode: Schema.Literal("S", "E"),
+  vatCategoryCode: Schema.Literal("S", "O"),
   vatExemptionReason: nullableString,
 }
 export const VatConfiguration = Schema.Struct({

@@ -10,19 +10,30 @@ import { VATEX_NOT_SUBJECT } from "./vat-rules.ts"
  * valid check digit, because the validator refuses a malformed one before it
  * ever reaches the fiscal rules — and belong to nobody.
  *
- * Each fixture isolates one question, so a rejection names its own cause. All
- * eight were accepted by the official validator on 2026-09-17:
+ * Each fixture isolates one question, so a rejection names its own cause. The
+ * first eight were accepted by the official validator on 2026-09-17:
  *
  * | Fixture | Question it answers |
  * | --- | --- |
  * | 01 | the plain rated B2B path |
  * | 02 | a consumer identified by the placeholder BT-47 (BR-RO-120) |
  * | 03 | `SECTOR3` as BT-52 with `RO-B` as BT-54 |
- * | 04 | Article 310 as category `E`, the way the repository does it |
+ * | 04 | Article 310 as category `E`, the shape the product no longer issues |
  * | 05 | Article 310 as category `O`, the way ANAF recommends |
  * | 06 | a credit note with no payment due date |
  * | 07 | a consumer identified by a CNP instead of the placeholder |
  * | 08 | a buyer company without a VAT registration, on BT-47 alone |
+ *
+ * Two more were added when Article 310 moved to `O` and have **not** been
+ * uploaded yet. They exist because the accepted fixture 05 carries a BT-22 of
+ * exactly one sentence, while a real Article 310 document composes that legal
+ * reference with the seller's own remarks or with a mandatory correction
+ * reason — a shape no accepted fixture covers:
+ *
+ * | Fixture | Question it answers |
+ * | --- | --- |
+ * | 09 | an Article 310 credit note: legal reference **and** storno reason in BT-22 |
+ * | 10 | an Article 310 invoice whose BT-22 also carries the seller's remarks |
  *
  * They are the regression set for the profile constants: re-uploading them
  * after a change to `profile.ts` or `ubl.ts` is what says the change is safe.
@@ -207,6 +218,17 @@ export const article310AsNotSubject: EFacturaDocument = {
   taxSubtotals: [subtotal("600.00", "0.00", "O", null, null, VATEX_NOT_SUBJECT)],
 }
 
+/**
+ * BT-22 with two statements in it.
+ *
+ * An Article 310 document must state its legal ground, and a credit note must
+ * state why it reverses an invoice. Both are mandatory, so a storno issued by
+ * an Article 310 seller carries both, whole, separated by a line feed. Neither
+ * may be dropped or shortened to fit: the note is the only place each of them
+ * exists.
+ */
+const composedNote = (own: string): string => `${ARTICLE_310}\n${own}`
+
 /** A full reversal of `standardB2B`, in the positive amounts UBL expects. */
 export const fullCreditNote: EFacturaDocument = {
   ...standardB2B,
@@ -222,6 +244,26 @@ export interface EFacturaFixture {
   readonly document: EFacturaDocument
 }
 
+/** Fixture 09: the credit note an Article 310 seller actually issues — the
+ * reversal of fixture 05, with the reason the product requires. */
+export const article310CreditNote: EFacturaDocument = {
+  ...article310AsNotSubject,
+  kind: "credit_note",
+  id: "QWBE-STORNO 9",
+  dueDate: null,
+  note: composedNote("Stornare integrala: serviciile nu au fost livrate"),
+  precedingInvoice: { id: article310AsNotSubject.id, issueDate: article310AsNotSubject.issueDate },
+}
+
+/** Fixture 10: the same invoice as 05, with the remarks a seller is free to
+ * add. The legal reference stays first, so it reads as the ground of the
+ * document rather than as an afterthought to a delivery note. */
+export const article310WithRemarks: EFacturaDocument = {
+  ...article310AsNotSubject,
+  id: "QWBE 1010",
+  note: composedNote("Livrare in transe conform contractului 42/2026. Garantie 24 de luni."),
+}
+
 export const syntheticFixtures: ReadonlyArray<EFacturaFixture> = [
   { name: "01-standard-b2b", document: standardB2B },
   { name: "02-consumer-placeholder-id", document: standardB2C },
@@ -231,4 +273,6 @@ export const syntheticFixtures: ReadonlyArray<EFacturaFixture> = [
   { name: "06-credit-note", document: fullCreditNote },
   { name: "07-consumer-cnp", document: consumerWithCnp },
   { name: "08-buyer-without-vat-registration", document: saleToUnregisteredCompany },
+  { name: "09-article310-credit-note", document: article310CreditNote },
+  { name: "10-article310-with-remarks", document: article310WithRemarks },
 ]

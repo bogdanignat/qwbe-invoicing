@@ -131,7 +131,7 @@ void test("round-trips frozen issuer VAT status for invoices, proformas, convers
     try {
       assert.deepEqual({ ...database.prepare(`SELECT code,rate,category,vat_exemption_reason
         FROM issuer_tax_configurations WHERE organization_id=? AND code='RO_NON_VAT'`).get("org-1") }, {
-        code: "RO_NON_VAT", rate: "0.00", category: "E",
+        code: "RO_NON_VAT", rate: "0.00", category: "O",
         vat_exemption_reason: "Regim special de scutire conform art. 310 din Codul fiscal",
       })
       for (const [table, parentColumn, parentId, categoryColumn, rateColumn] of [
@@ -145,7 +145,7 @@ void test("round-trips frozen issuer VAT status for invoices, proformas, convers
       ] as const) {
         assert.deepEqual({ ...database.prepare(`SELECT tax_code,${categoryColumn} AS category,${rateColumn} AS rate,
           vat_exemption_reason FROM ${table} WHERE ${parentColumn}=?`).get(parentId) }, {
-          tax_code: "RO_NON_VAT", category: "E", rate: "0.00",
+          tax_code: "RO_NON_VAT", category: "O", rate: "0.00",
           vat_exemption_reason: "Regim special de scutire conform art. 310 din Codul fiscal",
         }, table)
       }

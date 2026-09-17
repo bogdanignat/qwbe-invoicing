@@ -9,7 +9,7 @@ import { applyMigrations, databasePath } from "./migrations.ts"
 
 const reason = "Regim special de scutire conform art. 310 din Codul fiscal"
 
-void test("020 enforces canonical S/E treatment tuples in every persistent VAT table", () => {
+void test("020 enforces canonical S/O treatment tuples in every persistent VAT table", () => {
   const directory = mkdtempSync(join(tmpdir(), "qwbe-vat-treatment-schema-"))
   try {
     applyMigrations(directory)
@@ -38,16 +38,26 @@ void test("020 enforces canonical S/E treatment tuples in every persistent VAT t
         `INSERT INTO correction_tax_breakdown VALUES('missing',0,'RO_NON_VAT','E','0.00',NULL,'-1.00','-0.00')`,
       ]
       for (const statement of breakdownInserts) assert.throws(() => { database.exec(statement) }, /CHECK constraint failed/)
+
+      // The exempt category is refused even when everything else about the row
+      // is the canonical article 310 tuple: the treatment this product issues is
+      // `O`, and the database is the last place that can still say so.
+      assert.throws(() => database.prepare(`INSERT INTO correction_tax_breakdown
+        (correction_id,line_position,tax_code,category,rate,vat_exemption_reason,taxable_amount,tax_amount)
+        VALUES('missing',1,'RO_NON_VAT','E','0.00',?,'-1.00','-0.00')`).run(reason), /CHECK constraint failed/)
+      assert.throws(() => database.prepare(`INSERT INTO correction_tax_breakdown
+        (correction_id,line_position,tax_code,category,rate,vat_exemption_reason,taxable_amount,tax_amount)
+        VALUES('missing',2,'RO_NON_VAT','O','0.00',NULL,'-1.00','-0.00')`).run(), /CHECK constraint failed/)
       assert.throws(() => database.prepare(`INSERT INTO issuer_tax_configurations
         (organization_id,code,category,rate,vat_exemption_reason,effective_from)
         VALUES('missing','RO_NON_VAT','E','0.00',NULL,'2026-01-01')`).run(), /CHECK constraint failed/)
 
       database.prepare(`INSERT INTO correction_lines(id,correction_id,line_position,description,quantity,unit_price,unit_code,unit_name,
         tax_code,tax_category,tax_rate,vat_exemption_reason,total_excluding_tax,tax_amount,total_including_tax)
-        VALUES('valid-zero','missing',0,'X','1.0000','-1.00','C62','unitate','RO_NON_VAT','E','0.00',?,'-1.00','-0.00','-1.00')`).run(reason)
+        VALUES('valid-zero','missing',0,'X','1.0000','-1.00','C62','unitate','RO_NON_VAT','O','0.00',?,'-1.00','-0.00','-1.00')`).run(reason)
       database.prepare(`INSERT INTO correction_tax_breakdown
         (correction_id,line_position,tax_code,category,rate,vat_exemption_reason,taxable_amount,tax_amount)
-        VALUES('missing',0,'RO_NON_VAT','E','0.00',?,'-1.00','-0.00')`).run(reason)
+        VALUES('missing',0,'RO_NON_VAT','O','0.00',?,'-1.00','-0.00')`).run(reason)
       assert.equal(database.prepare("SELECT tax_amount FROM correction_lines WHERE id='valid-zero'").get()?.tax_amount, "-0.00")
 
       for (const table of ["issuer_tax_configurations", "draft_lines", "issued_lines", "issued_tax_breakdown",

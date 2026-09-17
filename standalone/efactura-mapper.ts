@@ -1,5 +1,6 @@
 import type { EFacturaDocument, EFacturaLine, EFacturaParty, EFacturaTaxSubtotal } from "../cube/efactura/index.ts"
-import { ANONYMOUS_BUYER_IDENTIFIER, EFacturaContractViolation, validateEFacturaDocument } from "../cube/efactura/index.ts"
+import { ANONYMOUS_BUYER_IDENTIFIER, EFacturaContractViolation, VATEX_NOT_SUBJECT,
+  validateEFacturaDocument } from "../cube/efactura/index.ts"
 import type { Address, BuyerSnapshot, CorrectionDocument, DraftLine, IssuedInvoice, IssuerCompanySnapshot, VatBreakdown } from "../cube/invoicing/index.ts"
 import { isValidRomanianCnp, validateFiscalDocument } from "../cube/invoicing/index.ts"
 
@@ -63,16 +64,22 @@ const consumerIdentifier = (fiscalIdentifier: string): string => {
  * VAT registered is named through BT-47 — its CUI — rather than through a tax
  * scheme the standard reserves for the seller.
  */
-const buyer = (customer: BuyerSnapshot): EFacturaParty => ({
+const buyer = (customer: BuyerSnapshot, notSubjectToVat: boolean): EFacturaParty => ({
   registrationName: customer.name,
   address: address(customer.address),
-  vatIdentifier: customer.partyType === "company" && customer.vatRegistered
+  // BR-O-02: a document that is not subject to VAT states no VAT identifier at
+  // all, so a VAT-registered buyer of an Article 310 seller loses BT-48 here —
+  // and keeps its identity through BT-47, which the rule does not touch.
+  vatIdentifier: !notSubjectToVat && customer.partyType === "company" && customer.vatRegistered
     ? vatIdentifier(customer.fiscalIdentifier) : null,
   taxRegistrationIdentifier: null,
   legalRegistrationIdentifier: customer.partyType === "company"
     ? customer.fiscalIdentifier.trim() || null : consumerIdentifier(customer.fiscalIdentifier),
 })
 
+/** An Article 310 line is `O`, and `O` carries no percentage at all: BT-152
+ * must be absent, not zero. The zero the invoicing model stores is a
+ * placeholder for a rate that does not exist, so it stops here. */
 const mapLine = (line: DraftLine, position: number): EFacturaLine => ({
   id: String(position + 1),
   name: line.description,
@@ -81,22 +88,55 @@ const mapLine = (line: DraftLine, position: number): EFacturaLine => ({
   netAmount: line.totalExcludingVat,
   unitPrice: line.unitPrice,
   vatCategory: line.vatCategoryCode,
-  vatRate: line.vatRate,
+  vatRate: line.vatCategoryCode === "O" ? null : line.vatRate,
 })
 
+/**
+ * The VAT breakdown, BG-23.
+ *
+ * For `O` the three exempt-shaped fields change together, because the category
+ * fixes all of them: BT-119 is absent (BR-O-05), BT-121 is `VATEX-EU-O` — the
+ * only code BR-O-10 accepts — and BT-120 is absent, because the legal text the
+ * snapshot stores belongs in BT-22 for this treatment, where BR-RO-060 expects
+ * it. Emitting both would state the same ground twice, in two places whose
+ * rules disagree about which is authoritative.
+ */
 const mapSubtotal = (breakdown: VatBreakdown): EFacturaTaxSubtotal => ({
   taxableAmount: breakdown.vatBaseAmount,
   taxAmount: breakdown.vatAmount,
   category: breakdown.vatCategoryCode,
-  percent: breakdown.rate,
-  exemptionReason: breakdown.vatExemptionReason,
-  // BT-121. The invoicing model stores only the exemption *text* today, and it
-  // knows no `O` category, so there is no VATEX code to carry: `E` is accepted
-  // by BR-E-10 on the text alone. If the Article 310 treatment moves to `O`,
-  // this is where the code it mandates comes from — not a default invented
-  // here, because the wrong VATEX code states the wrong legal ground.
-  exemptionReasonCode: null,
+  percent: breakdown.vatCategoryCode === "O" ? null : breakdown.rate,
+  exemptionReason: breakdown.vatCategoryCode === "O" ? null : breakdown.vatExemptionReason,
+  exemptionReasonCode: breakdown.vatCategoryCode === "O" ? VATEX_NOT_SUBJECT : null,
 })
+
+/** The Article 310 legal text as the document itself recorded it. It is read
+ * from the snapshot's own breakdown, never from the issuer's current profile:
+ * an invoice keeps stating the ground it was issued on. */
+const legalReference = (vatBreakdown: ReadonlyArray<VatBreakdown>): string | null =>
+  vatBreakdown.find((breakdown) => breakdown.vatCategoryCode === "O")?.vatExemptionReason ?? null
+
+/**
+ * BT-22, which here carries up to two distinct things.
+ *
+ * An Article 310 document must state its legal ground in BT-22, and a credit
+ * note must state why it reverses an invoice; a document can be both. The two
+ * texts are kept whole and separated by a line feed, the legal reference first,
+ * because dropping or truncating either loses a statement the document is
+ * required to make. BT-22 repeats in UBL, but one note holding both is what the
+ * validator has seen, and splitting them would also split the correction reason
+ * from the document it explains.
+ */
+const composeNote = (reference: string | null, own: string | null): string | null => {
+  if (reference === null) return own
+  return own === null || own.trim() === "" ? reference : `${reference}\n${own}`
+}
+
+/** Whether BR-O-02 applies, read from the lines rather than the breakdown: the
+ * lines are what the rule is written about (BT-151), and a snapshot whose two
+ * halves disagree must be refused by the generator, not quietly repaired. */
+const notSubjectToVat = (lines: ReadonlyArray<DraftLine>): boolean =>
+  lines.some((line) => line.vatCategoryCode === "O")
 
 export const mapIssuedInvoice = (invoice: IssuedInvoice): EFacturaDocument => {
   const document: EFacturaDocument = {
@@ -105,10 +145,10 @@ export const mapIssuedInvoice = (invoice: IssuedInvoice): EFacturaDocument => {
     issueDate: invoice.issueDate,
     dueDate: invoice.dueDate,
     currencyCode: invoice.currency,
-    note: invoice.notes,
+    note: composeNote(legalReference(invoice.vatBreakdown), invoice.notes),
     precedingInvoice: null,
     seller: seller(invoice.issuer),
-    buyer: buyer(invoice.customer),
+    buyer: buyer(invoice.customer, notSubjectToVat(invoice.lines)),
     lines: invoice.lines.map(mapLine),
     taxSubtotals: invoice.vatBreakdown.map(mapSubtotal),
     lineExtensionAmount: invoice.totalExcludingVat,
@@ -214,10 +254,10 @@ export const mapCorrection = (correction: CorrectionDocument, original: IssuedIn
     // A credit note is not a demand for payment, so it carries no due date.
     dueDate: null,
     currencyCode: correction.currency,
-    note: correction.reason,
+    note: composeNote(legalReference(vatBreakdown), correction.reason),
     precedingInvoice: { id: documentNumber(original), issueDate: original.issueDate },
     seller: seller(correction.issuer),
-    buyer: buyer(correction.customer),
+    buyer: buyer(correction.customer, notSubjectToVat(lines)),
     lines: lines.map(mapLine),
     taxSubtotals: vatBreakdown.map(mapSubtotal),
     lineExtensionAmount: credit.totalExcludingVat,

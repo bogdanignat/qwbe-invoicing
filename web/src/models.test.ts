@@ -4,7 +4,7 @@ import test from "node:test"
 import { ARTICLE_310_EXEMPTION_REASON, decodeCorrection, decodeCustomer, decodeDocumentSeries, decodeDocumentSeriesList, decodeDraft, decodeDrafts, decodeInvoice, decodeIssuer, decodePaymentSummary, decodeProductPreset, decodeProductPresetPage, decodeProductPresets, decodeProforma, decodeProformas, decodeUnitOfMeasures, decodeVatCatalogue, invoiceDocumentSeries, proformaDocumentSeries } from "./models.ts"
 const each = { code: "C62", name: "unitate" } as const
 const standard = { vatCategoryCode: "S", vatExemptionReason: null } as const
-const exempt = { vatCategoryCode: "E", vatExemptionReason: ARTICLE_310_EXEMPTION_REASON } as const
+const notSubject = { vatCategoryCode: "O", vatExemptionReason: ARTICLE_310_EXEMPTION_REASON } as const
 
 void test("requires canonical Romanian county and explicit buyer VAT state", () => {
   assert.deepEqual(decodeCustomer({
@@ -69,7 +69,7 @@ void test("requires integer issuer terms and decodes tax configuration", () => {
   assert.throws(() => decodeIssuer({ ...input, currentVat: { registered: "yes", effectiveFrom: "2026-01-01" } }))
   assert.throws(() => decodeIssuer({ ...input, currentVat: { registered: true, effectiveFrom: "2026-01-01", nonVatBasis: "article_310" } }), /invalid nonVatBasis/)
   assert.throws(() => decodeIssuer({ ...input, currentVat: { registered: false, effectiveFrom: "2026-01-01" } }), /invalid nonVatBasis/)
-  assert.deepEqual(decodeIssuer({ ...input, vatConfigurations: [{ ...exempt, code: "RO_NON_VAT", rate: "0.00", effectiveFrom: "2026-01-01" }], currentVat: { registered: false, effectiveFrom: "2026-01-01", nonVatBasis: "article_310" } }).currentVat,
+  assert.deepEqual(decodeIssuer({ ...input, vatConfigurations: [{ ...notSubject, code: "RO_NON_VAT", rate: "0.00", effectiveFrom: "2026-01-01" }], currentVat: { registered: false, effectiveFrom: "2026-01-01", nonVatBasis: "article_310" } }).currentVat,
     { registered: false, effectiveFrom: "2026-01-01", nonVatBasis: "article_310" })
   assert.throws(() => decodeIssuer({ ...input, currentVat: { registered: false, effectiveFrom: "2026-01-01", nonVatBasis: "article_310" } }), /invalid currentVat projection/)
   assert.throws(() => decodeIssuer({ ...input, defaultPaymentTermDays: "15" }), /invalid defaultPaymentTermDays/)
@@ -194,10 +194,10 @@ void test("decodes VAT catalogue legal periods without registration inference", 
   const catalogue = decodeVatCatalogue({ rates: [
     { ...standard, code: "RO_STANDARD", rate: "19.00", kind: "standard", label: "TVA standard 19%", effectiveFrom: "2025-01-01", effectiveTo: "2025-07-31" },
     { ...standard, code: "RO_STANDARD", rate: "21.00", kind: "standard", label: "TVA standard 21%", effectiveFrom: "2025-08-01" },
-    { ...exempt, code: "RO_NON_VAT", rate: "0.00", kind: "non_vat", label: "Scutit TVA — art. 310", effectiveFrom: "2025-01-01" },
+    { ...notSubject, code: "RO_NON_VAT", rate: "0.00", kind: "non_vat", label: "Scutit TVA — art. 310", effectiveFrom: "2025-01-01" },
   ] })
   assert.equal(catalogue.rates[0]?.effectiveTo, "2025-07-31")
-  assert.equal(catalogue.rates[2]?.vatCategoryCode, "E")
+  assert.equal(catalogue.rates[2]?.vatCategoryCode, "O")
   for (const missing of ["vatCategoryCode", "vatExemptionReason"] as const) {
     const rate = catalogue.rates[0]
     assert.ok(rate)
@@ -207,9 +207,14 @@ void test("decodes VAT catalogue legal periods without registration inference", 
       : { ...withoutTreatment, vatCategoryCode: rate.vatCategoryCode }
     assert.throws(() => decodeVatCatalogue({ rates: [malformed] }), new RegExp(`invalid ${missing}`))
   }
-  assert.throws(() => decodeVatCatalogue({ rates: [{ ...exempt, code: "RO_NON_VAT", rate: "0.00", kind: "non_vat", label: "E", effectiveFrom: "2025-01-01", vatCategoryCode: "O" }] }), /invalid vatCategoryCode/)
-  assert.throws(() => decodeVatCatalogue({ rates: [{ ...standard, code: "RO_ZERO", rate: "0.00", kind: "reduced", label: "Z", effectiveFrom: "2025-01-01" }] }), /invalid S VAT treatment/)
-  assert.throws(() => decodeVatCatalogue({ rates: [{ ...standard, code: "RO_OTHER", rate: "5.00", kind: "reduced", label: "O", effectiveFrom: "2025-01-01" }] }), /invalid S VAT treatment/)
+  // `E` is refused at the door. The server cannot issue it, and a category that
+  // reaches the treatment check without belonging to any branch would be
+  // accepted by silence — which is how the exempt tuple used to slip through.
+  assert.throws(() => decodeVatCatalogue({ rates: [{ ...notSubject, code: "RO_NON_VAT", rate: "0.00", kind: "non_vat", label: "Scutit", effectiveFrom: "2025-01-01", vatCategoryCode: "E" }] }), /invalid vatCategoryCode/)
+  assert.throws(() => decodeVatCatalogue({ rates: [{ ...notSubject, code: "RO_NON_VAT", rate: "0.00", kind: "non_vat", label: "Scutit", effectiveFrom: "2025-01-01", vatExemptionReason: "Scutit" }] }), /invalid VAT treatment/)
+  assert.throws(() => decodeVatCatalogue({ rates: [{ ...notSubject, code: "RO_NON_VAT", rate: "21.00", kind: "non_vat", label: "Scutit", effectiveFrom: "2025-01-01" }] }), /invalid VAT treatment/)
+  assert.throws(() => decodeVatCatalogue({ rates: [{ ...standard, code: "RO_ZERO", rate: "0.00", kind: "reduced", label: "Z", effectiveFrom: "2025-01-01" }] }), /invalid VAT treatment/)
+  assert.throws(() => decodeVatCatalogue({ rates: [{ ...standard, code: "RO_OTHER", rate: "5.00", kind: "reduced", label: "O", effectiveFrom: "2025-01-01" }] }), /invalid VAT treatment/)
 })
 
 void test("decodes inline individual buyers and complete server totals", () => {

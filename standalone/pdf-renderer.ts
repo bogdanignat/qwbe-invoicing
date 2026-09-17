@@ -320,7 +320,7 @@ const drawTableRow = (sheet: Sheet, line: RenderableLine, index: number): void =
     unitLabel(sheet, line.unitOfMeasure),
     formatAmount(line.unitPrice),
     formatAmount(line.totalExcludingVat),
-    line.vatCategoryCode === "E" ? "Scutit" : `${formatRate(line.vatRate)}%`,
+    line.vatCategoryCode === "O" ? "Scutit" : `${formatRate(line.vatRate)}%`,
     formatAmount(line.vatAmount),
   ]
   cells.forEach((value, cellIndex) => {
@@ -377,7 +377,7 @@ const drawTotals = (sheet: Sheet, document: RenderableDocument, isProforma: bool
   }
   row("Total fără TVA", money(document.totalExcludingVat))
   for (const vat of document.vatBreakdown) {
-    const label = vat.vatCategoryCode === "E" ? "Scutit TVA (art. 310)" : `TVA ${formatRate(vat.rate)}% din ${formatAmount(vat.vatBaseAmount)}`
+    const label = vat.vatCategoryCode === "O" ? "Scutit TVA (art. 310)" : `TVA ${formatRate(vat.rate)}% din ${formatAmount(vat.vatBaseAmount)}`
     row(label, formatAmount(vat.vatAmount), { small: true })
   }
   horizontalRule(sheet.page, cursor + 7, { color: rule })
@@ -557,7 +557,7 @@ const renderPdf = async (
   drawTotals(sheet, document, isProforma)
   const noticeBottom = drawProformaNotice(sheet, summaryTop, isProforma)
   sheet.y = Math.min(sheet.y, noticeBottom)
-  const exemptionReason = document.vatBreakdown.find(({ vatCategoryCode }) => vatCategoryCode === "E")?.vatExemptionReason ?? null
+  const exemptionReason = document.vatBreakdown.find(({ vatCategoryCode }) => vatCategoryCode === "O")?.vatExemptionReason ?? null
   drawDocumentNotes(sheet, exemptionReason, sheet.y - 14, "REGIM TVA")
   drawDocumentNotes(sheet, document.notes, sheet.y - 14)
   drawFooters(sheet, isProforma)

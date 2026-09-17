@@ -6,13 +6,36 @@ a future XML exporter consumes public snapshots, not private tables or live prof
 | Selection | UNCL5305 category | Rate | Exemption reason |
 | --- | --- | --- | --- |
 | VAT-registered, standard or reduced legal rate | S | Positive | `null` |
-| Non-VAT issuer, supported Article 310 regime | E | 0.00 | `Regim special de scutire conform art. 310 din Codul fiscal` |
+| Non-VAT issuer, supported Article 310 regime | O | 0.00 | `Regim special de scutire conform art. 310 din Codul fiscal` |
+
+Article 310 is category **O**, not `E` (T-1383). ANAF's technical recommendation
+assigns `O` + `VATEX-EU-O` to supplies by taxable persons not registered for VAT,
+and `E` + `VATEX-EU-309` to a different case entirely — the travel agents' margin
+scheme, which this product does not issue. `E` is therefore absent from
+`VatCategoryCode`: a category nothing can produce would only leave branches no
+document reaches. `cube/efactura` still knows all three, because it renders the
+standard rather than this product's subset.
+
+The stored rate stays `0.00` while the UBL percentage is **absent**. These are
+not in conflict: internally a rate is required and the tax due really is nothing,
+while `O` forbids BT-119/BT-152 outright. The mapper — not the model — produces
+that absence, because it is a rule of the standard rather than a fact about the
+sale. A consumer reading the rate alone would misread it as "VAT 0%", which is
+why the PDF and the UI say "Scutit TVA (art. 310)" from the *category*, and why
+`vatTreatmentLabel` never formats a percentage for `O`.
+
+The legal text moves with it. For `E` it belonged in BT-120; for `O` that element
+is absent and the reference belongs in BT-22 (BR-RO-060), where the mapper puts
+it — composed with the seller's own remarks, or with the mandatory storno reason,
+whole and separated by a line feed. BT-121 carries `VATEX-EU-O`, the only code
+BR-O-10 accepts. BR-O-02 then removes the buyer's VAT identifier even when the
+buyer is VAT registered; the buyer keeps its identity through BT-47.
 
 `vatCategoryCode` and `vatExemptionReason` are required properties in configuration,
 line and VAT-breakdown responses. A null reason means legally absent for S, not a
 legacy fallback. `RO_STANDARD`, `RO_REDUCED`, `RO_REDUCED_5`, `RO_NON_VAT` are internal
 catalogue codes, not UNCL5305 categories or VATEX codes. A zero document total does
-not change an S line into E. Reduced positive rates also use S, never Z.
+not change an S line into O. Reduced positive rates also use S, never Z.
 
 The API non-VAT input requires `vatChange.nonVatBasis = "article_310"`; the UI generates
 this field automatically from the existing issuer VAT-registration setting. There is
@@ -22,13 +45,14 @@ as the complete configuration tuple (code/category/rate/reason). `currentVat` pr
 its basis from that validated tuple, not from the registration boolean or zero rate
 alone. Automatic UI generation is the product rule for the supported Article 310
 workflow, not an external verification of a company's fiscal status. Other
-non-registration grounds and O/Z/AE/other exemptions are unsupported. Client entry
+non-registration grounds and E/Z/AE/other categories are unsupported. Client entry
 and prefix handling are unchanged; external CUI verification is deferred to T-1371.
 
 Issuer configuration is dated. Authoring displays the registration at issueDate;
 issued invoices/proformas/corrections use frozen facts. Invoice issuance validates
-line calculations, VAT groups and document totals before numbering. E has exactly
-one breakdown. S is grouped by category/rate, using the existing cent-rounding rule.
+line calculations, VAT groups and document totals before numbering. O has exactly
+one breakdown — the zero beside it is a placeholder, not a rate to group by. S is
+grouped by category/rate, using the existing cent-rounding rule.
 Proforma-to-invoice checks compatibility at the conversion date. Proforma-to-draft
 preserves a valid offered snapshot even if it must be edited before later issuance.
 Full correction preserves the original treatment and negates amounts, normalizing
@@ -56,8 +80,10 @@ extracted dependency previews on 2026-09-16, not inferred from the root alone.
   BR-RO-065 accepts the seller tax registration ID as an alternative to VAT ID.
 - `UBL/EN16931-UBL-model.sch` (`1WI_4BXpu_mabZdph-m6eBqDHkLs4h-Ed`) and
   `codelist/EN16931-UBL-codes.sch` (`1qeo90pxiZkwzb9iKkIOQzzUJAfO8J-Hw`).
-  BR-CL-22 requires VATEX when a reason code is supplied. No specific VATEX mapping
-  for Article 310 has been asserted; BT-120 text is used instead of guessing a code.
+  BR-CL-22 requires VATEX when a reason code is supplied. The VATEX mapping for
+  Article 310 was asserted later, by ANAF's own technical recommendation
+  (`VATEX-EU-O`, with category `O`); see docs/EFACTURA.md. Until then BT-120 text
+  was used rather than guessing a code.
 
 These are inspected rules, not an executed full XSLT/UBL validation or a general
 compliance certificate. XML generation, complete schema/business-rule validation
@@ -65,7 +91,7 @@ and ANAF transport remain separate work.
 
 ## Development migration
 
-020 replaces placeholder `standard` persistence with constrained S/E tuples and
+020 replaces placeholder `standard` persistence with constrained S/O tuples and
 reason fields across issuer configurations and draft/issued/proforma/correction
 lines and tax breakdowns. It is fresh-only, with no legacy decoder, backfill or
 automatic data deletion. The populated-data guard runs before 020's DDL. The
@@ -78,7 +104,7 @@ separate operational action; running these tests does not reset the existing app
 ## Remaining work
 
 - **T-1345 — XML export:** deterministic UBL generation from public snapshots,
-  official XSD/Schematron CIUS-RO validation and fixtures for supported S/E,
+  official XSD/Schematron CIUS-RO validation and fixtures for supported S/O,
   SRL/PFA and B2B/B2C cases. The inspected SCH materials already exist in Drive.
 - **T-1346 — ANAF transport:** authentication, submission, status/response handling,
   safe retries, idempotency and audit. Separate from producing the XML file.

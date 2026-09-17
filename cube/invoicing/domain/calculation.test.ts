@@ -78,13 +78,13 @@ void test("computes category VAT from the summed base, not from the rounded line
   })
 })
 
-void test("groups article 310 lines into one E breakdown and validates the complete positive snapshot", () => {
-  const vat = { code: "RO_NON_VAT", rate: "0.00", vatCategoryCode: "E" as const,
+void test("groups article 310 lines into one O breakdown and validates the complete positive snapshot", () => {
+  const vat = { code: "RO_NON_VAT", rate: "0.00", vatCategoryCode: "O" as const,
     vatExemptionReason: article310VatExemptionReason, effectiveFrom: "2025-08-01" }
   const lines = ["10", "0"].map((unitPrice, index) => calculateLine({ id: `e-${String(index)}`, description: "Serviciu",
     quantity: "1", unitPrice, unitOfMeasure: each, vat }))
   const document = { lines, ...calculateTotals(lines) }
-  assert.deepEqual(document.vatBreakdown, [{ code: "RO_NON_VAT", rate: "0.00", vatCategoryCode: "E",
+  assert.deepEqual(document.vatBreakdown, [{ code: "RO_NON_VAT", rate: "0.00", vatCategoryCode: "O",
     vatExemptionReason: article310VatExemptionReason, vatBaseAmount: "10.00", vatAmount: "0.00" }])
   assert.doesNotThrow(() => { validateFiscalDocument(document) })
   assert.throws(() => { validateFiscalDocument({ ...document,
@@ -117,12 +117,16 @@ void test("rejects excess precision and impossible configured rates instead of r
   )
 })
 
-void test("accepts only canonical S and explicit article 310 E treatment tuples", () => {
+void test("accepts only canonical S and explicit article 310 O treatment tuples", () => {
   assert.doesNotThrow(() => { validateVatTreatment("RO_STANDARD", "21.00", "S", null) })
-  assert.doesNotThrow(() => { validateVatTreatment("RO_NON_VAT", "0.00", "E", article310VatExemptionReason) })
+  assert.doesNotThrow(() => { validateVatTreatment("RO_NON_VAT", "0.00", "O", article310VatExemptionReason) })
   for (const tuple of [
     ["RO_STANDARD", "21.00", "S", article310VatExemptionReason],
-    ["RO_STANDARD", "0.00", "S", null], ["RO_NON_VAT", "0.00", "E", null], ["OTHER", "21.00", "S", null],
+    ["RO_STANDARD", "0.00", "S", null], ["RO_NON_VAT", "0.00", "O", null], ["OTHER", "21.00", "S", null],
+    // `E` is not a treatment this product issues: the exempt category belongs to
+    // cases we do not sell, so the exact article 310 tuple is refused under it.
+    ["RO_NON_VAT", "0.00", "E", article310VatExemptionReason], ["RO_NON_VAT", "0.00", "", article310VatExemptionReason],
+    ["RO_NON_VAT", "21.00", "O", article310VatExemptionReason], ["RO_NON_VAT", "0.00", "O", "Scutit"],
   ] satisfies ReadonlyArray<readonly [string, string, string, string | null]>) {
     assert.throws(() => { validateVatTreatment(tuple[0], tuple[1], tuple[2], tuple[3]) }, ValidationFailure)
   }

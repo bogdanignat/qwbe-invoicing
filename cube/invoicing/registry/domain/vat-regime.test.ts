@@ -14,7 +14,7 @@ const issuer = (vatConfigurations: IssuerProfile["vatConfigurations"]): IssuerPr
   defaultCurrency: "RON", defaultPaymentTermDays: 15, vatConfigurations, branding: null,
 })
 const taxable = { vatCategoryCode: "S" as const, vatExemptionReason: null }
-const exempt = { vatCategoryCode: "E" as const, vatExemptionReason: article310VatExemptionReason }
+const notSubject = { vatCategoryCode: "O" as const, vatExemptionReason: article310VatExemptionReason }
 const taxableLine = (vatRateCode: string, vatRate: string) => ({ vatRateCode, vatRate, ...taxable })
 
 void test("serves distinct historical and current legal VAT pairs", () => {
@@ -24,7 +24,7 @@ void test("serves distinct historical and current legal VAT pairs", () => {
   assert.equal(romanianVatRates.filter(({ kind }) => kind !== "non_vat")
     .every(({ rate, vatCategoryCode, vatExemptionReason }) => Number(rate) > 0 && vatCategoryCode === "S" && vatExemptionReason === null), true)
   assert.deepEqual(romanianVatRates.find(({ code }) => code === "RO_NON_VAT"), {
-    code: "RO_NON_VAT", rate: "0.00", vatCategoryCode: "E", vatExemptionReason: article310VatExemptionReason,
+    code: "RO_NON_VAT", rate: "0.00", vatCategoryCode: "O", vatExemptionReason: article310VatExemptionReason,
     kind: "non_vat", label: "Scutit TVA — art. 310", effectiveFrom: "2025-01-01",
   })
 })
@@ -51,13 +51,13 @@ void test("same-state saves are no-ops and preserve later registration transitio
   assert.deepEqual(scheduleVatRegistration(withFuture, { registered: false, effectiveFrom: "2026-09-01", nonVatBasis: "article_310" }), [
     { code: "RO_STANDARD", rate: "21.00", ...taxable, effectiveFrom: "2025-08-01", effectiveTo: "2026-08-31" },
     { code: "RO_REDUCED", rate: "11.00", ...taxable, effectiveFrom: "2025-08-01", effectiveTo: "2026-08-31" },
-    { code: "RO_NON_VAT", rate: "0.00", ...exempt, effectiveFrom: "2026-09-01" },
+    { code: "RO_NON_VAT", rate: "0.00", ...notSubject, effectiveFrom: "2026-09-01" },
   ])
 })
 
 void test("current registration is absent before a future activation and after expiry", () => {
-  assert.equal(currentVatRegistration([{ code: "RO_NON_VAT", rate: "0", ...exempt, effectiveFrom: "2027-01-01" }], "2026-01-01"), undefined)
-  assert.equal(currentVatRegistration([{ code: "RO_NON_VAT", rate: "0", ...exempt, effectiveFrom: "2025-01-01", effectiveTo: "2025-12-31" }], "2026-01-01"), undefined)
+  assert.equal(currentVatRegistration([{ code: "RO_NON_VAT", rate: "0", ...notSubject, effectiveFrom: "2027-01-01" }], "2026-01-01"), undefined)
+  assert.equal(currentVatRegistration([{ code: "RO_NON_VAT", rate: "0", ...notSubject, effectiveFrom: "2025-01-01", effectiveTo: "2025-12-31" }], "2026-01-01"), undefined)
 })
 
 void test("issuance guard permits mixed standard/reduced lines and rejects stale or registration-invalid pairs", () => {

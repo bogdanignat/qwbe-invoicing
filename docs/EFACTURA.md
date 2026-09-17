@@ -123,13 +123,13 @@ valid**, no assertion of any kind. That settles several things at once.
 | Does BR-CO-25 apply to a credit note? | No — a credit note with no due date and no payment terms is valid. |
 | What identifies a consumer? | Both a real CNP and the placeholder `0000000000000` are accepted, so the CNP is sent when the invoice has one and the placeholder stands in when it does not. |
 | Can a buyer company without a VAT registration be named by BT-47 alone? | Yes. |
-| Is Article 310 `E` or `O`? | **Both are accepted.** See below. |
+| Is Article 310 `E` or `O`? | **Both are accepted**, so the validator did not decide it. The product issues `O`; see below. |
 
-## VAT category for Article 310 issuers: the repository and ANAF disagree
+## VAT category for Article 310 issuers: `O`, as ANAF recommends (T-1383)
 
-`docs/VAT_TREATMENT.md` and migration 020 chose category **E** with the Article
-310 text in BT-120, recording that "no specific VATEX mapping for Article 310
-has been asserted".
+`docs/VAT_TREATMENT.md` and migration 020 originally chose category **E** with
+the Article 310 text in BT-120, recording that "no specific VATEX mapping for
+Article 310 has been asserted".
 
 ANAF asserts one. From
 [Completare informații de interes referitoare la implementarea sistemului
@@ -152,28 +152,38 @@ travel agents' margin scheme under article 309 of Directive 2006/112/EC.
 
 The difference is structural, not cosmetic:
 
-| | Repository today (E) | ANAF recommendation (O) |
+| | Former shape (E) | Shape issued today (O) |
 | --- | --- | --- |
 | BT-118 / BT-151 | `E` | `O` |
 | BT-119 / BT-152 | `0.00`, present | **absent** |
 | BT-121 | absent | `VATEX-EU-O` |
 | Legal reference | BT-120 text | BT-22 (BR-RO-060) |
 
-**The validator does not settle this.** Both fixture 04 (`E`) and fixture 05
-(`O`) were accepted without a single assertion, so the choice is a fiscal
-interpretation and not a schema constraint. What is left is the asymmetry in
+**The validator did not settle this.** Both fixture 04 (`E`) and fixture 05
+(`O`) were accepted without a single assertion, so the choice was a fiscal
+interpretation and not a schema constraint. What settled it is the asymmetry in
 the evidence: ANAF's own technical recommendation names `O` for this exact case
 and `E` for a different one, and nothing in the repository's history cites a
-source for `E`.
+source for `E`. Fixture 04 is therefore a shape the product no longer issues —
+not a shape ANAF rejected.
 
-Switching is a mapping change, not a rewrite — the generator already renders all
-three categories. What it would touch outside the generator: `VatCategoryCode`
-in `cube/invoicing/domain/invoice.ts`, the `tax_category` CHECK constraint in
-migration 020, the VAT catalogue, and `docs/VAT_TREATMENT.md`. It would also
-propagate BR-O-02: an Article 310 invoice could no longer carry the buyer's VAT
-identifier, even for a VAT-registered buyer, who would be named by BT-47.
+The product now issues `O` end to end (T-1383). `VatCategoryCode` is `"S" | "O"`
+in the invoicing model, the eight CHECK constraints in migration 020 accept the
+Article 310 tuple only under `O`, and `E` is refused everywhere — by the domain
+validator, by the database and by the web decoder — even when the rest of the
+tuple is exactly right. The stored rate stays `0.00`, because the model requires
+a rate and the tax due really is nothing; the **mapper** produces the absence of
+BT-119/BT-152, which is a rule of the standard rather than a fact about the sale.
 
-Pending that decision the repository stays on `E`, which is valid.
+BR-O-02 propagates: an Article 310 invoice does not carry the buyer's VAT
+identifier, even for a VAT-registered buyer, who is named by BT-47 instead.
+
+BT-22 now carries up to two statements. The legal reference is mandatory for
+this treatment and a correction reason is mandatory for a storno, so a document
+that is both carries both — whole, the reference first, separated by a line
+feed. Neither is dropped or truncated: the note is the only place each of them
+exists. Fixtures 09 and 10 exist precisely because the accepted fixture 05
+carries a one-sentence BT-22 and says nothing about the composed form.
 
 ## What is still unverified
 
@@ -182,6 +192,13 @@ Pending that decision the repository stays on `E`, which is valid.
   rules were therefore written from EN 16931, ANAF's technical recommendation
   and the validator's own responses — not from the rule file itself. A rule
   that no fixture exercises is a rule nobody has checked.
+- **Fixtures 09 and 10 have not been uploaded.** They are the only documents
+  with a composed BT-22 — legal reference plus storno reason (09, `FCN`), legal
+  reference plus seller remarks (10, `FACT1`) — and the accepted fixture 05 does
+  not cover that shape. Extrapolating its acceptance to them would be a guess
+  about a fiscal document, so the composed note stays unverified until ANAF
+  answers. Fixtures 01–08 regenerate byte for byte identical after T-1383, so
+  what ANAF did accept has not drifted.
 - The validator checks schema and Schematron. It does not check that the
   document states the truth: correct totals with the wrong VAT category pass.
 - Nothing here has been sent to the SPV. Acceptance by the validator is not
@@ -193,7 +210,8 @@ Pending that decision the repository stays on `E`, which is valid.
 node scripts/efactura-fixtures.mjs          # writes .local/efactura-fixtures/*.xml
 ```
 
-Upload each file at <https://www.anaf.ro/uploadxmi/>, standard `FACT1`.
+Upload each file at <https://www.anaf.ro/uploadxmi/>, standard `FACT1` — except
+the credit notes (06, 09), which go as `FCN`.
 
 Only synthetic documents go there: the validator is a third-party service and an
 uploaded file is out of our hands. Every identifier in the fixtures is invented

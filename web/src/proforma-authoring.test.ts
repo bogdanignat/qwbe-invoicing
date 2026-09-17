@@ -18,8 +18,8 @@ void test("renders an independent proforma authoring session with one persistenc
       tradeRegistryNumber: "F22/1/2020", socialCapital: "", iban: "", bankName: "", branding: { text: "Brand", image: null },
       address: { countryCode: "RO", city: "Iași", street: "Strada foarte lungă ".repeat(12), county: "RO-IS" },
       defaultCurrency: "RON", defaultPaymentTermDays: 15, currentVat: { registered: false, nonVatBasis: "article_310", effectiveFrom: "2025-08-01" },
-      vatConfigurations: [{ code: "RO_NON_VAT", rate: "0.00", vatCategoryCode: "E", vatExemptionReason: "Regim special de scutire conform art. 310 din Codul fiscal", effectiveFrom: "2025-08-01" }] },
-    vatCatalogue: { rates: [{ code: "RO_NON_VAT", rate: "0.00", vatCategoryCode: "E", vatExemptionReason: "Regim special de scutire conform art. 310 din Codul fiscal", effectiveFrom: "2025-08-01", kind: "non_vat", label: "Scutit TVA — art. 310" }] },
+      vatConfigurations: [{ code: "RO_NON_VAT", rate: "0.00", vatCategoryCode: "O", vatExemptionReason: "Regim special de scutire conform art. 310 din Codul fiscal", effectiveFrom: "2025-08-01" }] },
+    vatCatalogue: { rates: [{ code: "RO_NON_VAT", rate: "0.00", vatCategoryCode: "O", vatExemptionReason: "Regim special de scutire conform art. 310 din Codul fiscal", effectiveFrom: "2025-08-01", kind: "non_vat", label: "Scutit TVA — art. 310" }] },
     customers: [], proformaSeries: ["PRO"], unitOfMeasures: [{ code: "C62", name: "unitate" }], backgroundErrors: [],
   }
   const client = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })

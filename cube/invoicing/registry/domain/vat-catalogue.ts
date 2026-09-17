@@ -22,7 +22,11 @@ export const romanianVatRates: ReadonlyArray<VatRate> = [
   taxable("RO_REDUCED_5", "5.00", "reduced", "TVA redus 5%", "2025-01-01", "2025-07-31"),
   taxable("RO_STANDARD", "21.00", "standard", "TVA standard 21%", "2025-08-01"),
   taxable("RO_REDUCED", "11.00", "reduced", "TVA redus 11%", "2025-08-01"),
-  { code: "RO_NON_VAT", rate: "0.00", vatCategoryCode: "E", vatExemptionReason: article310VatExemptionReason,
+  // Article 310: the rate stays "0.00" internally because the model requires a
+  // rate and the tax due really is nothing; the e-Factura mapper turns that into
+  // the *absent* BT-152/BT-119 the `O` category demands. The stored reason is
+  // the legal text, which the mapper moves from BT-120 to BT-22.
+  { code: "RO_NON_VAT", rate: "0.00", vatCategoryCode: "O", vatExemptionReason: article310VatExemptionReason,
     kind: "non_vat", label: "Scutit TVA — art. 310", effectiveFrom: "2025-01-01" },
 ]
 

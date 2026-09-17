@@ -88,7 +88,7 @@ void test("HTTP preserves explicit article310 facts through query, proforma conv
     assert.equal(saved.vatConfigurations[0]?.vatExemptionReason, reason)
     assert.deepEqual((await value.call("GET", "/api/issuer")).body, configured.body)
     const catalogue = decodeVatCatalogue((await value.call("GET", "/api/vat-regimes")).body)
-    assert.ok(catalogue.rates.some((vat) => vat.vatCategoryCode === "E" && vat.vatExemptionReason === reason))
+    assert.ok(catalogue.rates.some((vat) => vat.vatCategoryCode === "O" && vat.vatExemptionReason === reason))
     for (const [documentType, series] of [["invoice", "INV"], ["proforma", "PRO"]]) {
       assert.equal((await value.call("POST", "/api/document-series", { documentType, series })).status, 200)
     }
@@ -99,10 +99,10 @@ void test("HTTP preserves explicit article310 facts through query, proforma conv
     const invoice = Schema.decodeUnknownSync(S.IssuedInvoice)(issued.body)
     assert.equal(invoice.vatBreakdown.length, 1)
     assert.equal(invoice.vatBreakdown[0]?.vatExemptionReason, reason)
-    assert.equal(invoice.vatBreakdown[0].vatCategoryCode, "E")
+    assert.equal(invoice.vatBreakdown[0].vatCategoryCode, "O")
     assert.equal(invoice.vatTotal, "0.00")
     assert.equal(invoice.totalIncludingVat, "200.00")
-    assert.ok(invoice.lines.every((entry) => entry.vatCategoryCode === "E" && entry.vatRate === "0.00"))
+    assert.ok(invoice.lines.every((entry) => entry.vatCategoryCode === "O" && entry.vatRate === "0.00"))
     assert.doesNotThrow(() => decodeInvoice(issued.body))
     const offered = await value.call("POST", "/api/proformas", { ...input, proformaSeries: "PRO" }, "article310-proforma")
     assert.equal(offered.status, 200)
@@ -119,7 +119,7 @@ void test("HTTP preserves explicit article310 facts through query, proforma conv
     assert.equal(corrected.status, 200)
     const correction = Schema.decodeUnknownSync(S.Correction)(corrected.body)
     assert.equal(correction.vatBreakdown[0]?.vatExemptionReason, reason)
-    assert.equal(correction.vatBreakdown[0].vatCategoryCode, "E")
+    assert.equal(correction.vatBreakdown[0].vatCategoryCode, "O")
     assert.equal(correction.vatTotal, "0.00")
     assert.equal(correction.totalIncludingVat, "-200.00")
   } finally { value.close() }
