@@ -109,10 +109,6 @@ export const mapIssuedInvoice = (invoice: IssuedInvoice): EFacturaDocument => {
     precedingInvoice: null,
     seller: seller(invoice.issuer),
     buyer: buyer(invoice.customer),
-    // BG-16 is omitted: holding the seller's IBAN is not evidence of the
-    // payment means agreed with the buyer, and BT-81 has no source in the
-    // snapshot. Guessing a code would assert something the invoice never said.
-    paymentMeans: null,
     lines: invoice.lines.map(mapLine),
     taxSubtotals: invoice.vatBreakdown.map(mapSubtotal),
     lineExtensionAmount: invoice.totalExcludingVat,
@@ -222,7 +218,6 @@ export const mapCorrection = (correction: CorrectionDocument, original: IssuedIn
     precedingInvoice: { id: documentNumber(original), issueDate: original.issueDate },
     seller: seller(correction.issuer),
     buyer: buyer(correction.customer),
-    paymentMeans: null,
     lines: lines.map(mapLine),
     taxSubtotals: vatBreakdown.map(mapSubtotal),
     lineExtensionAmount: credit.totalExcludingVat,

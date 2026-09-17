@@ -37,8 +37,12 @@ const assertRenderable = (value: string, where: string, issues: Array<string>): 
   }
 }
 
+/** A literal carriage return does not survive parsing: XML 1.0 line-ending
+ * normalization turns CR and CRLF into a single LF before an application ever
+ * sees them. Escaping it keeps the text ANAF parses identical to the text the
+ * invoice was issued with, instead of quietly losing a character. */
 const escapeText = (value: string): string =>
-  value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
+  value.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll("\r", "&#13;")
 
 const escapeAttribute = (value: string): string =>
   escapeText(value).replaceAll("\"", "&quot;").replaceAll("'", "&apos;")

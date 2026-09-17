@@ -107,8 +107,6 @@ void test("maps an issued invoice without recomputing any of its amounts", () =>
   assert.deepEqual(mapped.lines.map((mappedLine) => mappedLine.id), ["1"])
   assert.equal(mapped.lines[0]?.unitCode, "HUR")
   assert.equal(mapped.precedingInvoice, null)
-  // BG-16 has no source in the snapshot, so it is omitted rather than guessed.
-  assert.equal(mapped.paymentMeans, null)
 })
 
 void test("derives the VAT prefix without doubling one that is already stored", () => {

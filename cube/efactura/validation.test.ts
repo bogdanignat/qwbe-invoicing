@@ -37,7 +37,6 @@ const invoice = (overrides: Partial<EFacturaDocument> = {}): EFacturaDocument =>
   precedingInvoice: null,
   seller,
   buyer,
-  paymentMeans: null,
   lines: [standardLine],
   taxSubtotals: [{ taxableAmount: "100.00", taxAmount: "21.00", category: "S", percent: "21.00", exemptionReason: null, exemptionReasonCode: null }],
   lineExtensionAmount: "100.00",
@@ -114,6 +113,24 @@ void test("refuses a zero-rated standard category and a non-zero exempt one", ()
 
 void test("measures the exemption reason the way the Romanian rule does", () => {
   assert.equal(normalizeSpace("  a   b \n c "), "a b c")
+  // XPath collapses only space, tab, CR and LF. A no-break space is a character
+  // to the validator, so collapsing it here would pass a document ANAF refuses.
+  assert.equal(normalizeSpace("a\u00A0\u00A0b"), "a\u00A0\u00A0b")
+  // Nor is it trimmed. `String.trim` would drop it, and then a reason of
+  // exactly 100 characters plus a no-break space would measure 100 here and
+  // 101 at ANAF — the one length that decides the rule.
+  assert.equal(normalizeSpace(" \u00A0a\u00A0 "), "\u00A0a\u00A0")
+  rejects(exemptInvoice({
+    taxSubtotals: [{ taxableAmount: "100.00", taxAmount: "0.00", category: "E", percent: "0.00", exemptionReason: `${"x".repeat(100)}\u00A0`, exemptionReasonCode: null }],
+  }), /BR-RO-L100/u)
+  rejects(exemptInvoice({
+    taxSubtotals: [{ taxableAmount: "100.00", taxAmount: "0.00", category: "E", percent: "0.00", exemptionReason: `${"x".repeat(50)}\u00A0\u00A0${"y".repeat(49)}`, exemptionReasonCode: null }],
+  }), /BR-RO-L100/u)
+  // And the limit counts characters, not UTF-16 code units: 60 code points
+  // outside the BMP are 120 units and still well inside a 100-character limit.
+  validateEFacturaDocument(exemptInvoice({
+    taxSubtotals: [{ taxableAmount: "100.00", taxAmount: "0.00", category: "E", percent: "0.00", exemptionReason: "𐊀".repeat(60), exemptionReasonCode: null }],
+  }))
   validateEFacturaDocument(exemptInvoice({
     taxSubtotals: [{ taxableAmount: "100.00", taxAmount: "0.00", category: "E", percent: "0.00", exemptionReason: `  ${"x".repeat(50)}   ${"y".repeat(49)}  `, exemptionReasonCode: null }],
   }))
@@ -132,13 +149,28 @@ void test("allows at most one exempt group", () => {
 })
 
 void test("refuses a line whose VAT group is missing from the breakdown", () => {
+  // The breakdown does carry category S, so BR-S-01 holds and is not cited:
+  // what is missing is a group for the second line's rate.
   rejects(invoice({
     lines: [
       { id: "1", name: "a", quantity: "1.0000", unitCode: "H87", netAmount: "50.00", unitPrice: "50.00", vatCategory: "S", vatRate: "21.00" },
       { id: "2", name: "b", quantity: "1.0000", unitCode: "H87", netAmount: "50.00", unitPrice: "50.00", vatCategory: "S", vatRate: "11.00" },
     ],
     taxSubtotals: [{ taxableAmount: "100.00", taxAmount: "21.00", category: "S", percent: "21.00", exemptionReason: null, exemptionReasonCode: null }],
-  }), /BR-CO-18/u)
+  }), /covers category S at another rate/u)
+  // Here the category itself is absent, which is what BR-S-01 forbids.
+  rejects(invoice({
+    taxSubtotals: [{ taxableAmount: "100.00", taxAmount: "0.00", category: "E", percent: "0.00", exemptionReason: ARTICLE_310, exemptionReasonCode: null }],
+  }), /BR-S-01/u)
+})
+
+void test("reads a VAT rate as a number, so the same group written two ways stays one group", () => {
+  // "21" and "21.00" are the same rate. Keying a group on the raw text would
+  // refuse this document for a difference of notation that no rule makes.
+  validateEFacturaDocument(invoice({ lines: [{ ...standardLine, vatRate: "21" }] }))
+  validateEFacturaDocument(invoice({
+    taxSubtotals: [{ taxableAmount: "100.00", taxAmount: "21.00", category: "S", percent: "21", exemptionReason: null, exemptionReasonCode: null }],
+  }))
 })
 
 void test("catches totals that disagree by a single cent", () => {
@@ -146,7 +178,8 @@ void test("catches totals that disagree by a single cent", () => {
   rejects(invoice({ taxAmount: "21.01", taxInclusiveAmount: "121.01", payableAmount: "121.01" }), /BR-CO-14/u)
   rejects(invoice({ taxInclusiveAmount: "121.01", payableAmount: "121.01" }), /BR-CO-15/u)
   rejects(invoice({ payableAmount: "120.00" }), /BR-CO-16/u)
-  rejects(invoice({ taxSubtotals: [{ taxableAmount: "99.99", taxAmount: "21.00", category: "S", percent: "21.00", exemptionReason: null, exemptionReasonCode: null }] }), /BR-CO-14/u)
+  rejects(invoice({ taxSubtotals: [{ taxableAmount: "99.99", taxAmount: "21.00", category: "S", percent: "21.00", exemptionReason: null, exemptionReasonCode: null }] }),
+    /taxable amounts do not sum to taxExclusiveAmount/u)
 })
 
 void test("refuses amounts that are negative or carry excess precision", () => {
@@ -311,5 +344,25 @@ void test("holds each VAT breakdown to the lines that belong to it", () => {
       { taxableAmount: "100.00", taxAmount: "21.00", category: "S", percent: "21.00", exemptionReason: null, exemptionReasonCode: null },
       { taxableAmount: "0.00", taxAmount: "0.00", category: "S", percent: "11.00", exemptionReason: null, exemptionReasonCode: null },
     ],
-  }), /describes a VAT group no line belongs to/u)
+  }), /describes VAT group S at rate 11\.00, which no line belongs to/u)
+})
+
+void test("refuses an identifier that is stated but empty, rather than letting it vanish", () => {
+  // The renderer drops an empty element, so a blank identifier would satisfy a
+  // rule here and be missing from the XML ANAF reads.
+  rejects(invoice({ buyer: { ...buyer, vatIdentifier: "   " } }), /buyer\.vatIdentifier is stated but empty/u)
+  rejects(invoice({ seller: { ...seller, legalRegistrationIdentifier: "" } }),
+    /seller\.legalRegistrationIdentifier is stated but empty/u)
+  rejects(invoice({ buyer: { ...buyer, vatIdentifier: " " } }), /BR-RO-120/u)
+  rejects(invoice({ seller: { ...seller, vatIdentifier: " ", taxRegistrationIdentifier: null } }), /BR-RO-065/u)
+})
+
+void test("refuses an exemption reason or code that is stated but empty", () => {
+  rejects(exemptInvoice({
+    taxSubtotals: [{ taxableAmount: "100.00", taxAmount: "0.00", category: "E", percent: "0.00", exemptionReason: ARTICLE_310, exemptionReasonCode: "  " }],
+  }), /exemptionReasonCode is stated but empty/u)
+  // A blank code does not satisfy BR-E-10 either: nothing would be sent.
+  rejects(exemptInvoice({
+    taxSubtotals: [{ taxableAmount: "100.00", taxAmount: "0.00", category: "E", percent: "0.00", exemptionReason: null, exemptionReasonCode: " " }],
+  }), /BR-E-10/u)
 })

@@ -10,11 +10,29 @@ import { amountOrSkip } from "./decimals.ts"
  * total. Those are the rules collected here.
  */
 
-const groupKey = (category: EFacturaVatCategory, rate: string | null): string => `${category}:${rate ?? "-"}`
+/**
+ * A VAT group is a category and a rate, and the rate is compared as a number.
+ *
+ * `21` and `21.00` are the same group: keying on the raw string would split
+ * them and refuse a document over a difference that does not exist. A rate that
+ * does not parse keeps its raw text, because the rule that owns it reports it
+ * already and this must not turn one fault into two.
+ */
+const groupKey = (category: EFacturaVatCategory, rate: string | null): string => {
+  if (rate === null) return `${category}:none`
+  const parsed = amountOrSkip(rate)
+  return `${category}:${parsed === null ? rate : String(parsed)}`
+}
 
-/** BR-E-01, BR-O-11..14 and BR-CO-18: at most one exempt or out-of-scope
- * group, `O` never mixed with a taxed category, and every line's group present
- * in the breakdown. */
+/** The same group as a human reads it, for messages: the key is normalized for
+ * comparison, so printing it would name a rate nobody wrote. */
+const groupLabel = (category: EFacturaVatCategory, rate: string | null): string =>
+  `${category} at rate ${rate ?? "none"}`
+
+/** BR-E-01, BR-O-01/02/11..14, BR-S-01 and BR-*-08: at most one exempt or
+ * out-of-scope group, `O` never mixed with a taxed category nor stated beside a
+ * VAT registration, and every line's group present in the breakdown and totalled
+ * by it. */
 export const checkVatGroups = (document: EFacturaDocument, issues: Array<string>): void => {
   const categories = new Set(document.taxSubtotals.map((subtotal) => subtotal.category))
   for (const exclusive of ["E", "O"] as const) {
@@ -46,23 +64,37 @@ export const checkVatGroups = (document: EFacturaDocument, issues: Array<string>
     const net = amountOrSkip(line.netAmount)
     const running = lineSums.get(key)
     lineSums.set(key, running === undefined ? net : running === null || net === null ? null : running + net)
+    // BR-S-01 / BR-E-01 / BR-O-01 oblige the document to carry a breakdown for
+    // the category a line belongs to, and say nothing about its rate. So the
+    // two faults are reported apart: a missing category cites them, while a
+    // category present at other rates only is refused without a rule number.
+    // That second document is still wrong — no group totals the line, which
+    // BR-*-08 needs — but citing a rule it satisfies would name a false ground.
     if (!document.taxSubtotals.some((subtotal) => groupKey(subtotal.category, subtotal.percent) === key)) {
-      issues.push(`lines[${String(index)}] has no matching VAT breakdown for category `
-        + `${line.vatCategory} at rate ${line.vatRate ?? "none"} (BR-CO-18)`)
+      issues.push(categories.has(line.vatCategory)
+        ? `lines[${String(index)}] belongs to VAT group ${groupLabel(line.vatCategory, line.vatRate)}, which the `
+          + `VAT breakdown does not contain, though it covers category ${line.vatCategory} at another rate`
+        : `lines[${String(index)}] is category ${line.vatCategory}, which the VAT breakdown does not contain `
+          + `(BR-${line.vatCategory}-01)`)
     }
   }
 
   const covered = new Set<string>()
   for (const [index, subtotal] of document.taxSubtotals.entries()) {
     const key = groupKey(subtotal.category, subtotal.percent)
-    if (covered.has(key)) issues.push(`the VAT breakdown repeats the group ${key} (BR-CO-18)`)
+    // No numbered rule forbids the repetition outright; it is refused because a
+    // group stated twice makes BR-*-08 ambiguous about which half to check.
+    if (covered.has(key)) {
+      issues.push(`the VAT breakdown states VAT group ${groupLabel(subtotal.category, subtotal.percent)} twice`)
+    }
     covered.add(key)
     // BR-S-08 / BR-E-08 / BR-O-08: a breakdown states the total of exactly the
     // lines in its own group, so a line moved between rates cannot go unnoticed.
     const sum = lineSums.get(key)
     const taxable = amountOrSkip(subtotal.taxableAmount)
     if (sum === undefined) {
-      issues.push(`taxSubtotals[${String(index)}] describes a VAT group no line belongs to (BR-CO-18)`)
+      issues.push(`taxSubtotals[${String(index)}] describes VAT group `
+        + `${groupLabel(subtotal.category, subtotal.percent)}, which no line belongs to`)
     } else if (sum !== null && taxable !== null && sum !== taxable) {
       issues.push(`taxSubtotals[${String(index)}].taxableAmount does not equal the net amounts of its own `
         + `lines (BR-${subtotal.category}-08)`)

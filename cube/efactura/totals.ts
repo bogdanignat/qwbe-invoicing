@@ -36,9 +36,15 @@ export const checkTotals = (document: EFacturaDocument, lineSum: bigint | null, 
     issues.push("taxExclusiveAmount does not equal lineExtensionAmount; "
       + "document allowances and charges are not supported (BR-CO-13)")
   }
+  // Derived rather than quoted: EN 16931 states BT-110 = sum(BT-117) in BR-CO-14
+  // and pins each group's taxable amount to its own lines in BR-S-08 / BR-E-08 /
+  // BR-O-08, which together force this equality without naming it. Citing a rule
+  // number here would claim a source that does not exist.
   if (exclusive !== null && taxableSum !== null && taxableSum !== exclusive) {
-    issues.push("the VAT breakdown taxable amounts do not sum to taxExclusiveAmount (BR-CO-14)")
+    issues.push("the VAT breakdown does not cover the whole document: "
+      + "its taxable amounts do not sum to taxExclusiveAmount")
   }
+  // BR-CO-14 proper: BT-110 is the sum of BT-117.
   if (taxAmount !== null && subtotalTaxSum !== null && subtotalTaxSum !== taxAmount) {
     issues.push("the VAT breakdown tax amounts do not sum to taxAmount (BR-CO-14)")
   }

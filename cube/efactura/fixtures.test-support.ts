@@ -119,7 +119,6 @@ const base = {
   currencyCode: "RON",
   note: null,
   precedingInvoice: null,
-  paymentMeans: null,
 } as const
 
 /** Standard rated, two rates, company to company. */

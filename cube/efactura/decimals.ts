@@ -41,7 +41,23 @@ export const isCalendarDate = (value: string): boolean => {
   return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day
 }
 
-/** XSLT `normalize-space`: collapse internal whitespace runs, then trim. The
- * RO rules measure BT-120 after this transform (BR-RO-L100), so a length check
- * on the raw string would disagree with the validator. */
-export const normalizeSpace = (value: string): string => value.replace(/\s+/gu, " ").trim()
+/**
+ * XPath `normalize-space`: collapse internal whitespace runs, then trim. The RO
+ * rules measure BT-120 after this transform (BR-RO-L100), so a length check on
+ * the raw string would disagree with the validator.
+ *
+ * Only the four characters XML calls whitespace count — space, tab, CR, LF.
+ * JavaScript's `\s` is far wider: a no-break space is whitespace to `\s` and a
+ * plain character to XPath, so using it would shorten a string the validator
+ * still measures at full length, and let a document through that ANAF rejects.
+ * `String.trim` is the same trap at the two ends, which is why the collapse
+ * above — leaving at most one space at each end — does the trimming as well.
+ */
+export const normalizeSpace = (value: string): string =>
+  value.replace(/[\t\n\r ]+/gu, " ").replace(/^ | $/gu, "")
+
+/** XPath `string-length` counts characters, while `String.length` counts UTF-16
+ * code units, so anything outside the BMP would count double. The diacritics in
+ * a Romanian exemption reason are safe either way; an emoji in a free-text note
+ * is not, and BR-RO-L100 is a hard limit. */
+export const characterCount = (value: string): number => Array.from(value).length

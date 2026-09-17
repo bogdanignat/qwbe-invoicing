@@ -1,5 +1,5 @@
 import type { EFacturaLine, EFacturaTaxSubtotal, EFacturaVatCategory } from "./contracts/document.ts"
-import { amountOrSkip, normalizeSpace, scaled } from "./decimals.ts"
+import { amountOrSkip, characterCount, normalizeSpace, scaled } from "./decimals.ts"
 
 /**
  * EN 16931 / CIUS-RO VAT rules that hold for a single line or a single
@@ -60,9 +60,20 @@ export const checkVatSubtotal = (subtotal: EFacturaTaxSubtotal, index: number, i
   const percent = percentage(subtotal.percent, subtotal.category, where, issues)
   checkSubtotalArithmetic(subtotal, percent, where, issues)
   const reason = subtotal.exemptionReason === null ? "" : normalizeSpace(subtotal.exemptionReason)
-  if (reason.length > 100) {
+  if (characterCount(reason) > 100) {
     issues.push(`${where}.exemptionReason exceeds 100 characters after normalize-space (BR-RO-L100)`)
   }
+  // A value made of whitespace is dropped by the renderer, so a rule satisfied
+  // by one would be satisfied by an element ANAF never receives. Blank counts
+  // as absent below, and is refused here so the caller learns which it is.
+  for (const [field, value] of [["exemptionReason", subtotal.exemptionReason],
+    ["exemptionReasonCode", subtotal.exemptionReasonCode]] as const) {
+    if (value !== null && value.trim().length === 0) {
+      issues.push(`${where}.${field} is stated but empty; omit it instead of sending nothing`)
+    }
+  }
+  const code = subtotal.exemptionReasonCode !== null && subtotal.exemptionReasonCode.trim().length > 0
+    ? subtotal.exemptionReasonCode : null
 
   if (subtotal.category === "S") {
     if (percent === 0n) issues.push(`${where} is category S but its rate is zero (BR-S-05)`)
@@ -79,7 +90,7 @@ export const checkVatSubtotal = (subtotal: EFacturaTaxSubtotal, index: number, i
     if (percent !== null && percent !== 0n) {
       issues.push(`${where} is category E but its rate is not zero (BR-E-05)`)
     }
-    if (reason.length === 0 && subtotal.exemptionReasonCode === null) {
+    if (reason.length === 0 && code === null) {
       issues.push(`${where} is category E and needs an exemption reason code or text (BR-E-10)`)
     }
     return
@@ -88,7 +99,7 @@ export const checkVatSubtotal = (subtotal: EFacturaTaxSubtotal, index: number, i
   // BR-O-10, as published by ANAF: the exemption reason code is used only
   // together with category O — and for this category it is what identifies the
   // case, so we require it rather than accepting free text alone.
-  if (subtotal.exemptionReasonCode !== VATEX_NOT_SUBJECT) {
+  if (code !== VATEX_NOT_SUBJECT) {
     issues.push(`${where} is category O and needs exemption reason code ${VATEX_NOT_SUBJECT} (BR-O-10)`)
   }
 }

@@ -101,16 +101,19 @@ export interface EFacturaPrecedingReference {
   readonly issueDate: string
 }
 
-/** BG-16 — how the buyer is expected to pay. Omitted entirely when unknown:
- * holding an IBAN is not by itself evidence of the agreed payment means. */
-export interface EFacturaPaymentMeans {
-  /** BT-81 — UNCL4461 payment means code. */
-  readonly code: string
-  /** BT-84 */
-  readonly payeeIban: string
-  /** BT-85 */
-  readonly payeeBankName: string | null
-}
+/**
+ * BG-16 — how the buyer is expected to pay — has no field here.
+ *
+ * It was modelled before it could be rendered, which made the contract promise
+ * an element the generator silently dropped. Nothing feeds it either: BT-81
+ * (payment means code) has no source in the snapshot, and an IBAN on the issuer
+ * profile is not by itself evidence of the means agreed with the buyer.
+ *
+ * When it does arrive it needs BT-84 as `cac:PayeeFinancialAccount/cbc:ID`,
+ * BT-85 as that account's `cbc:Name` — the account name, not the bank's, which
+ * the earlier shape had wrong — and BT-86 as the branch identifier. It goes
+ * into the UBL sequence after the customer party and before `cac:TaxTotal`.
+ */
 
 export interface EFacturaDocument {
   readonly kind: EFacturaDocumentKind
@@ -128,7 +131,6 @@ export interface EFacturaDocument {
   readonly precedingInvoice: EFacturaPrecedingReference | null
   readonly seller: EFacturaParty
   readonly buyer: EFacturaParty
-  readonly paymentMeans: EFacturaPaymentMeans | null
   readonly lines: ReadonlyArray<EFacturaLine>
   readonly taxSubtotals: ReadonlyArray<EFacturaTaxSubtotal>
   /** BT-106 — sum of line net amounts. */

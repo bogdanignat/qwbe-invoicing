@@ -39,9 +39,22 @@ offending field at once.
 - Totals: BR-CO-10, BR-CO-13, BR-CO-14, BR-CO-15, BR-CO-16 — as strict
   equalities, because document allowances, charges and prepaid amounts are out
   of scope. BR-CO-17 recomputes each category's VAT with half-up rounding on
-  scaled integers.
-- VAT categories: BR-S-05/08/10, BR-E-01/05/08/09/10, BR-O-05/08/09/10/11..14,
-  BR-CO-18, BR-RO-L100 (BT-120 measured after `normalize-space`), BR-RO-065.
+  scaled integers. One further check — that the breakdown's taxable amounts sum
+  to BT-109 — carries no rule number on purpose: it follows from BR-CO-10 and
+  BR-\*-08 without EN 16931 stating it, and a citation would invent a source.
+- VAT categories: BR-S-01/05/08/10, BR-E-01/05/08/09/10, BR-O-01/05/08/09/10/11..14,
+  BR-CO-18 (a document has at least one breakdown), BR-RO-L100, BR-RO-065.
+- A VAT group is a category and a rate compared **as a number**: `21` and
+  `21.00` are one group, not two. When a line's group is missing, the refusal
+  cites BR-\*-01 only if the *category* is absent; a category present at another
+  rate keeps that rule satisfied, so that message carries no rule number.
+- Anything stated but empty is refused rather than dropped. The renderer omits
+  an empty element, so a blank identifier or exemption code would satisfy a rule
+  here and then be missing from the XML ANAF reads.
+- BT-120 is measured the way XPath measures it: only space, tab, CR and LF
+  collapse **or trim** (a no-break space is a character, at the ends as much as
+  in the middle, which is why `String.trim` is not used), and the 100-character
+  limit counts characters, not UTF-16 code units.
 - Parties: ISO 3166-1 alpha-2 country, ISO 3166-2 subentity for RO, and the
   seller identifiable by BT-31 **or** BT-32.
 
@@ -49,6 +62,10 @@ Deliberate omissions, each with a reason rather than an oversight:
 
 - **BG-16 payment means.** An IBAN on the issuer profile is not evidence of the
   payment means agreed with the buyer, and BT-81 has no source in the snapshot.
+  The contract carries no field for it either: it had one, unrendered, which
+  made the shape promise an element the generator silently dropped — and got
+  BT-85 wrong while doing so (it is the payment *account* name, not the bank's).
+  `contracts/document.ts` records what it will need when a source exists.
 - **A consumer without a CNP.** BR-RO-120 demands *an* identifier and the only
   one a private individual has is a CNP, which the product keeps optional. When
   the invoice carries one it is sent as BT-47; when it does not, or when the
