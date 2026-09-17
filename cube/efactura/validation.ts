@@ -19,13 +19,13 @@ import { checkLine, checkVatSubtotal } from "./vat-rules.ts"
 const checkIdentity = (document: EFacturaDocument, issues: Array<string>): void => {
   if (document.id.trim().length === 0) issues.push("id is required (BT-1)")
   if (!isCalendarDate(document.issueDate)) issues.push("issueDate must be a valid YYYY-MM-DD date (BT-2)")
-  // Exactly "RON", not "RON" after normalising. BR-CL-04 and BR-RO-030 would
-  // read a padded one as RON, but BT-5 is not rendered once: it is the element
-  // and the `currencyID` of every amount, and BR-CO-15 compares those two by
-  // string equality. XML normalises whitespace inside an attribute value and
-  // leaves it alone in element content, so a tab would reach ANAF as a tab in
-  // one place and a space in the other, and the two would no longer be the same
-  // currency. Refusing anything but the bare code keeps them identical.
+  // Exactly "RON", not "RON" after normalising. BR-CL-04 and BR-RO-030 do read
+  // BT-5 through `normalize-space`, and the renderer escapes whitespace inside
+  // an attribute as a character reference, so a padded code would survive both
+  // those rules and BR-CO-15's comparison of BT-5 against every `currencyID`.
+  // It is refused anyway, and the refusal says why: one currency is supported,
+  // spelled one way. BT-5 is written into the document in a dozen places and
+  // there is no reading of it here that a second reader could disagree with.
   if (document.currencyCode !== "RON") {
     issues.push(`only RON is supported, got "${document.currencyCode}" (BT-5)`)
   }

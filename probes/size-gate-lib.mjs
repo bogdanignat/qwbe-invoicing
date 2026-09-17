@@ -45,10 +45,11 @@ const isJsDoc = (node) =>
  *
  * A shebang is not a comment and the parser does not report it as one — it
  * skips it before reading the first token — but it still sits inside that
- * token's full span, which is what gets scanned below. `#!/usr/bin/env node`
- * would lose `/usr/bin/env node` to the expression above and stop being
- * counted. It was counted as code before and stays code, so the scan starts
- * after it.
+ * token's full span, which is what gets scanned below. Everything from a `//`
+ * onwards would be stripped out of it, and on a shebang line there is no such
+ * thing: `#!/usr/bin/env node // note` runs to the end of the line, comment
+ * marker and all. The line is code, as it was before this scan existed, so the
+ * scan starts after it.
  */
 const afterShebang = (source) => {
   if (!source.startsWith("#!")) return 0

@@ -52,6 +52,9 @@ offending field at once.
   number to ANAF. BR-CL-23 is checked by half: the rule refuses any unit code
   that still holds a space after `normalize-space`, and that half is here,
   because it is one comparison and it catches two codes written into one field.
+  Emptiness is read with `String.trim` instead, and deliberately: XPath knows
+  only the four XML space characters, so a field holding nothing but U+00A0
+  is an empty field to a reader and a code no list contains to ANAF.
   Membership in UN/ECE Recommendation 20 is not: 2162 codes do not fit the
   cube's size budget. The invoicing host picks the unit from a closed catalogue
   of eight, each verified against the official list, but that is a guarantee of

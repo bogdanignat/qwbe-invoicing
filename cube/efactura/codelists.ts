@@ -10,10 +10,13 @@ import { normalizeSpace } from "./decimals.ts"
  * an invented VATEX code reads like a legal ground while naming none. Both are
  * fatal at ANAF, so they are refused here by name instead.
  *
- * Only the lists reachable from what we emit are here. Unit codes are not:
- * BR-CL-23 stays unchecked because the invoicing host picks the code from a
- * closed catalogue of eight, each verified against the official list. That is
- * a guarantee of the host, not of this cube — a caller that builds an
+ * Only the lists reachable from what we emit are here. The UN/ECE unit codes
+ * are not, or not entirely: BR-CL-23 asks two things, and `vat-rules.ts` checks
+ * the half that costs one comparison — nothing left holding a space after
+ * `normalize-space`. Membership in the list itself is unchecked, because 2162
+ * codes do not fit the cube's budget. The invoicing host picks the unit from a
+ * closed catalogue of eight, each verified against the official list, but that
+ * is a guarantee of the host, not of this cube — a caller that builds an
  * `EFacturaDocument` itself can still name a unit ANAF has never heard of.
  *
  * The comparisons follow each rule exactly. BR-CL-22 folds case before it

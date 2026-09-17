@@ -131,10 +131,15 @@ export const checkLine = (line: EFacturaLine, index: number, issues: Array<strin
   // that as the host's guarantee. The other half costs one comparison: the rule
   // reads the code through `normalize-space` and refuses whatever still holds a
   // space, which is the shape two codes take when they arrive in one field.
-  // A blank code normalises to nothing, so it fails only the check above.
-  const unit = normalizeSpace(line.unitCode)
-  if (unit.length === 0) issues.push(`${where}.unitCode is required (BT-130)`)
-  if (unit.includes(" ")) {
+  //
+  // The two tests below read whitespace differently, and have to. XPath's
+  // `normalize-space` knows only the four XML space characters, so `normalizeSpace`
+  // leaves a non-breaking space standing exactly as ANAF would — which is why the
+  // emptiness test stays on `String.trim`, which does strip it. A field holding
+  // nothing but U+00A0 is an empty field to a reader and an unknown code to the
+  // validator; both readings refuse it, and only one of them says "required".
+  if (line.unitCode.trim().length === 0) issues.push(`${where}.unitCode is required (BT-130)`)
+  if (normalizeSpace(line.unitCode).includes(" ")) {
     issues.push(`${where}.unitCode must be a single UN/ECE Recommendation 20 code, `
       + `got "${line.unitCode}" (BR-CL-23)`)
   }

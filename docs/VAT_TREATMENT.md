@@ -31,9 +31,11 @@ seller's remarks — or the mandatory storno reason — are a second one, in tha
 order. Each occurrence has its own 300-character budget (BR-RO-L300) and there
 may be twenty of them (BR-RO-A020), which is why document notes and correction
 reasons are capped at 300 characters on input: what the product lets you write
-has to be something e-Factura can carry. BT-121 carries `VATEX-EU-O`, the only
-code BR-O-10 accepts. BR-O-02 then removes the buyer's VAT identifier even when
-the buyer is VAT registered; the buyer keeps its identity through BT-47.
+has to be something e-Factura can carry. BT-121 carries `VATEX-EU-O`. BR-O-10
+itself asks only that a reason be present — the code or the text — so the code
+is what this product requires, following ANAF's recommendation, not what the
+rule compels. BR-O-02 then removes the buyer's VAT identifier even when the
+buyer is VAT registered; the buyer keeps its identity through BT-47.
 
 `vatCategoryCode` and `vatExemptionReason` are required properties in configuration,
 line and VAT-breakdown responses. A null reason means legally absent for S, not a

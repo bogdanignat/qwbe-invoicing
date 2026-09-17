@@ -204,10 +204,9 @@ void test("refuses dates that look right but are not real days", () => {
 
 void test("refuses a currency other than RON, because nothing converts it yet", () => {
   rejects(invoice({ currencyCode: "EUR" }), /only RON is supported/u)
-  // BR-CL-04 would read a padded code as RON, but BT-5 is written twice — as
-  // the element and as every amount's `currencyID` — and BR-CO-15 compares the
-  // two as strings. XML normalises whitespace in an attribute and not in
-  // element content, so a tab would arrive as two different currencies.
+  // A padded code would pass BR-CL-04, which normalises before it looks up the
+  // list. It does not pass here: one currency, spelled one way, so BT-5 reads
+  // identically in the element and in every `currencyID` that repeats it.
   rejects(invoice({ currencyCode: " RON " }), /only RON is supported/u)
   rejects(invoice({ currencyCode: "\tRON" }), /only RON is supported/u)
 })
@@ -280,6 +279,17 @@ void test("refuses two unit codes written into one field", () => {
   // The rule normalises before it looks for a space, so padding alone is not
   // two codes; the list membership itself is the invoicing host's guarantee.
   validateEFacturaDocument(invoice({ lines: [{ ...standardLine, unitCode: " HUR " }] }))
+})
+
+void test("refuses a unit code that only XPath would read as non-empty", () => {
+  // `normalize-space` leaves U+00A0 standing, so a field holding nothing but a
+  // non-breaking space is a code to the validator — one no list contains. It is
+  // an empty field to everyone else, and it is refused as one.
+  rejects(invoice({ lines: [{ ...standardLine, unitCode: "\u00A0" }] }), /unitCode is required/u)
+  rejects(invoice({ lines: [{ ...standardLine, unitCode: " \u00A0 " }] }), /unitCode is required/u)
+  // Mixed into a real code it is not emptiness, and the space beside it is what
+  // BR-CL-23 refuses.
+  rejects(invoice({ lines: [{ ...standardLine, unitCode: "H87 \u00A0X" }] }), /BR-CL-23/u)
 })
 
 void test("refuses a seller that only a tax registration identifier names", () => {
