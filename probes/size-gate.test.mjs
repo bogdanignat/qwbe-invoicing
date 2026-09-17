@@ -24,6 +24,18 @@ test("does not mistake comment markers inside regular expressions for comments",
   assert.equal(stripCommentsAndBlankLines(source), source.trim())
 })
 
+test("keeps reading a file correctly after a template literal with substitutions", () => {
+  // The scanner this used to use lost the grammar here: it read `//` in the
+  // tail as a comment and then stopped recognising the real comment below it.
+  const source = 'const url = `http://${host}//${path}`\n// removed\nconst after = 1\n'
+  assert.equal(stripCommentsAndBlankLines(source), "const url = `http://${host}//${path}`\nconst after = 1")
+})
+
+test("counts a nested template literal as the code it is", () => {
+  const source = 'const q = `a${`b/* not a comment */c`}d`\n/* removed */\nconst n = 2\n'
+  assert.equal(stripCommentsAndBlankLines(source), "const q = `a${`b/* not a comment */c`}d`\nconst n = 2")
+})
+
 test("rejects file, unit, and file-count cap violations", () => {
   const measurement = {
     files: [{ path: "cube/invoicing/index.ts", code: 11, raw: 11 }],
