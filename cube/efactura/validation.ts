@@ -1,6 +1,7 @@
 import type { EFacturaDocument } from "./contracts/document.ts"
 import { EFacturaContractViolation } from "./contracts/failures.ts"
 import { checkCiusLimits } from "./cius-limits.ts"
+import { checkCodelists } from "./codelists.ts"
 import { amountOrSkip, isCalendarDate } from "./decimals.ts"
 import { checkTotals } from "./totals.ts"
 import { checkVatGroups } from "./vat-groups.ts"
@@ -65,7 +66,6 @@ const checkParties = (document: EFacturaDocument, issues: Array<string>): void =
   for (const [role, party] of [["seller", document.seller], ["buyer", document.buyer]] as const) {
     if (party.registrationName.trim().length === 0) issues.push(`${role}.registrationName is required`)
     const address = party.address
-    if (address.countryCode.length !== 2) issues.push(`${role}.address.countryCode must be ISO 3166-1 alpha-2`)
     if (address.streetName.trim().length === 0) issues.push(`${role}.address.streetName is required`)
     if (address.cityName.trim().length === 0) issues.push(`${role}.address.cityName is required`)
     if (address.countrySubentity.trim().length === 0) {
@@ -81,6 +81,16 @@ const checkParties = (document: EFacturaDocument, issues: Array<string>): void =
   if (!stated(document.seller.vatIdentifier) && !stated(document.seller.taxRegistrationIdentifier)) {
     issues.push("the seller needs either a VAT identifier or a tax registration identifier (BR-RO-065)")
   }
+  // BR-CO-26 counts a narrower set than BR-RO-065: BT-31 under the `VAT` tax
+  // scheme, BT-30, or BT-29 — and not BT-32, which we render under a scheme of
+  // its own precisely because it is not a VAT registration. A seller with only
+  // BT-32 therefore satisfies the national rule and fails the European one. The
+  // trade registry number is required before issuance, so the product cannot
+  // reach this today; the contract can, and ANAF would be the one to say so.
+  if (!stated(document.seller.vatIdentifier) && !stated(document.seller.legalRegistrationIdentifier)) {
+    issues.push("the seller needs a VAT identifier or a legal registration identifier; a tax "
+      + "registration identifier alone does not identify it (BR-CO-26)")
+  }
   // BR-RO-120, as returned verbatim by the official validator: the buyer is
   // identified by BT-47 and/or BT-48. Unlike the seller, a buyer's BT-32 does
   // not exist, so a buyer company that is not VAT registered has to be named
@@ -95,6 +105,7 @@ export const validateEFacturaDocument = (document: EFacturaDocument): void => {
   checkIdentity(document, issues)
   checkParties(document, issues)
   checkCiusLimits(document, issues)
+  checkCodelists(document, issues)
   let lineSum: bigint | null = 0n
   for (const [index, line] of document.lines.entries()) {
     const net = checkLine(line, index, issues)

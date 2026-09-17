@@ -228,6 +228,20 @@ void test("requires a Bucharest address to name a sector, not the city", () => {
   validateEFacturaDocument(invoice({ seller: { ...seller, address: { ...bucharest, cityName: "SECTOR3" } } }))
 })
 
+void test("refuses a code that is shaped right and names nothing", () => {
+  rejects(invoice({ buyer: { ...buyer, address: { ...buyer.address, countryCode: "XX" } } }), /BR-CL-14/u)
+  rejects(invoice({ seller: { ...seller, address: { ...seller.address, countryCode: "UK" } } }), /BR-CL-14/u)
+  // `1A` and `XI` are in the EN 16931 list even though they read like typos.
+  validateEFacturaDocument(invoice({ buyer: { ...buyer, address: { ...buyer.address, countryCode: "XI", countrySubentity: "GB-NIR" } } }))
+  rejects(exemptInvoice({ taxSubtotals: [{ taxableAmount: "100.00", taxAmount: "0.00", category: "E", percent: "0.00", exemptionReason: null, exemptionReasonCode: "VATEX-EU-999" }] }), /BR-CL-22/u)
+})
+
+void test("refuses a seller that only a tax registration identifier names", () => {
+  // BR-RO-065 is happy with BT-32 alone; BR-CO-26 is not, because it counts
+  // only BT-29, BT-30 and BT-31.
+  rejects(exemptInvoice({ seller: { ...seller, vatIdentifier: null, taxRegistrationIdentifier: "12345678", legalRegistrationIdentifier: null } }), /BR-CO-26/u)
+})
+
 void test("requires the seller to be identifiable when it is not VAT registered", () => {
   rejects(invoice({ seller: { ...seller, vatIdentifier: null, taxRegistrationIdentifier: null } }), /BR-RO-065/u)
   validateEFacturaDocument(exemptInvoice())

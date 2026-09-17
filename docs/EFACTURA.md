@@ -13,7 +13,8 @@ and no write to `eFacturaStatus`. Transport to the SPV stays in T-1346.
 | --- | --- |
 | `cube/efactura/contracts/document.ts` | `EFacturaDocument` — the normalized fiscal contract, every amount a decimal string, every value already positive |
 | `cube/efactura/validation.ts` + `totals.ts`, `vat-rules.ts`, `vat-groups.ts` | the EN 16931 rules checkable without the official validator |
-| `cube/efactura/cius-limits.ts` | the CIUS-RO length and occurrence limits, read from the official Schematron |
+| `cube/efactura/cius-limits.ts` | the CIUS-RO limits and address rules, read from the official Schematron |
+| `cube/efactura/codelists.ts` | the EN 16931 code lists we can violate: countries and VATEX |
 | `cube/efactura/xml.ts` | deterministic serializer: element order is array order, no mixed content, no unrepresentable characters |
 | `cube/efactura/ubl.ts`, `ubl-party.ts` | the UBL document and party builders, in `xsd:sequence` order |
 | `cube/efactura/profile.ts` | the CIUS-RO constants, injected rather than hard-coded |
@@ -33,6 +34,18 @@ offending field at once.
 - Identity and dates: BT-1, BT-2, BT-5 (RON only), BT-9, BT-25/26, BG-3.
 - BR-RO-120: the buyer carries BT-47 and/or BT-48. Added after the validator
   returned it verbatim; see "What the validator said" below.
+- BR-CO-26: the seller is identified by BT-29, BT-30 or BT-31 — and **not** by
+  BT-32, which we render under its own tax scheme precisely because it is not a
+  VAT registration. BR-RO-065 accepts BT-32 and BR-CO-26 does not, so a seller
+  carrying only that one satisfies the national rule and fails the European
+  one. Issuance already requires the trade registry number (BT-30), so the
+  product cannot reach this; the contract can.
+- Code lists, in `codelists.ts`: the country code (BR-CL-14, the EN 16931 list
+  — `1A` and `XI` are in it, `UK` is not) and the VAT exemption reason code
+  (BR-CL-22). A code list is not a shape: `XX` is two capital letters and no
+  country, and an invented VATEX code names a legal ground that does not exist.
+  Unit codes need no check: the host picks them from a closed catalogue of
+  eight, each verified against the official list.
 - BR-O-02: a document that is not subject to VAT states no VAT registration at
   all — neither BT-31 nor BT-48. Also returned verbatim by the validator.
 - BR-CO-25: an invoice with a positive amount due needs a due date. This mirrors
