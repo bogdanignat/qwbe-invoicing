@@ -1,0 +1,5 @@
+{
+  "name": "efactura",
+  "kind": "cube",
+  "summary": "Deterministic UBL 2.1 / CIUS-RO rendering of issued fiscal documents"
+}

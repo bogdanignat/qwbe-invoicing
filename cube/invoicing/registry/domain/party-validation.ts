@@ -42,7 +42,7 @@ export const validateParty = (party: PartySnapshot): void => {
   if (issues.length > 0) throw new ValidationFailure({ issues })
 }
 
-const isValidRomanianCnp = (value: string): boolean => {
+export const isValidRomanianCnp = (value: string): boolean => {
   if (!/^\d{13}$/.test(value)) return false
   const key = "279146358279"
   let sum = 0

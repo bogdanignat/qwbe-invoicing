@@ -1,0 +1,315 @@
+import assert from "node:assert/strict"
+import test from "node:test"
+
+import type { EFacturaDocument, EFacturaLine, EFacturaParty } from "./contracts/document.ts"
+import { EFacturaContractViolation } from "./contracts/failures.ts"
+import { normalizeSpace } from "./decimals.ts"
+import { VATEX_NOT_SUBJECT } from "./vat-rules.ts"
+import { validateEFacturaDocument } from "./validation.ts"
+
+const ARTICLE_310 = "Regim special de scutire conform art. 310 din Codul fiscal"
+
+const standardLine: EFacturaLine = { id: "1", name: "Consultanță", quantity: "1.0000", unitCode: "HUR", netAmount: "100.00", unitPrice: "100.00", vatCategory: "S", vatRate: "21.00" }
+
+const seller: EFacturaParty = {
+  registrationName: "Acme Software SRL",
+  address: { countryCode: "RO", cityName: "Cluj-Napoca", streetName: "Strada Memorandumului 28", countrySubentity: "RO-CJ", postalZone: "400114" },
+  vatIdentifier: "RO12345678",
+  taxRegistrationIdentifier: null,
+  legalRegistrationIdentifier: "J12/123/2020",
+}
+const buyer: EFacturaParty = {
+  registrationName: "Client SRL",
+  address: { countryCode: "RO", cityName: "SECTOR1", streetName: "Bulevardul Aviatorilor 1", countrySubentity: "RO-B", postalZone: null },
+  vatIdentifier: "RO87654321",
+  taxRegistrationIdentifier: null,
+  legalRegistrationIdentifier: null,
+}
+
+/** A standard-rated single-line invoice: 100.00 net, 21% VAT, 121.00 payable. */
+const invoice = (overrides: Partial<EFacturaDocument> = {}): EFacturaDocument => ({
+  kind: "invoice",
+  id: "QWBE 42",
+  issueDate: "2026-09-17",
+  dueDate: "2026-10-17",
+  currencyCode: "RON",
+  note: null,
+  precedingInvoice: null,
+  seller,
+  buyer,
+  paymentMeans: null,
+  lines: [standardLine],
+  taxSubtotals: [{ taxableAmount: "100.00", taxAmount: "21.00", category: "S", percent: "21.00", exemptionReason: null, exemptionReasonCode: null }],
+  lineExtensionAmount: "100.00",
+  taxExclusiveAmount: "100.00",
+  taxAmount: "21.00",
+  taxInclusiveAmount: "121.00",
+  payableAmount: "121.00",
+  ...overrides,
+})
+
+/** An Article 310 exempt invoice: zero-rated, reason carried as BT-120 text. */
+const exemptInvoice = (overrides: Partial<EFacturaDocument> = {}): EFacturaDocument => invoice({
+  seller: { ...seller, vatIdentifier: null, taxRegistrationIdentifier: "12345678" },
+  lines: [{ id: "1", name: "Consultanță", quantity: "1.0000", unitCode: "HUR", netAmount: "100.00", unitPrice: "100.00", vatCategory: "E", vatRate: "0.00" }],
+  taxSubtotals: [{ taxableAmount: "100.00", taxAmount: "0.00", category: "E", percent: "0.00", exemptionReason: ARTICLE_310, exemptionReasonCode: null }],
+  taxAmount: "0.00",
+  taxInclusiveAmount: "100.00",
+  payableAmount: "100.00",
+  ...overrides,
+})
+
+const issues = (document: EFacturaDocument): ReadonlyArray<string> => {
+  try {
+    validateEFacturaDocument(document)
+  } catch (error) {
+    assert.ok(error instanceof EFacturaContractViolation)
+    return error.issues
+  }
+  return assert.fail("expected the document to be refused")
+}
+
+const rejects = (document: EFacturaDocument, pattern: RegExp): void => {
+  assert.ok(issues(document).some((issue) => pattern.test(issue)),
+    `expected an issue matching ${pattern.source}, got ${JSON.stringify(issues(document))}`)
+}
+
+void test("accepts the supported document shapes", () => {
+  validateEFacturaDocument(invoice())
+  validateEFacturaDocument(exemptInvoice())
+  validateEFacturaDocument(invoice({
+    kind: "credit_note", dueDate: null, precedingInvoice: { id: "QWBE 41", issueDate: "2026-09-01" },
+  }))
+})
+
+void test("accepts several standard rates side by side, including historical ones", () => {
+  validateEFacturaDocument(invoice({
+    lines: [
+      { id: "1", name: "Consultanță", quantity: "1.0000", unitCode: "HUR", netAmount: "100.00", unitPrice: "100.00", vatCategory: "S", vatRate: "21.00" },
+      { id: "2", name: "Manual tipărit", quantity: "2.0000", unitCode: "H87", netAmount: "50.00", unitPrice: "25.00", vatCategory: "S", vatRate: "11.00" },
+    ],
+    taxSubtotals: [
+      { taxableAmount: "100.00", taxAmount: "21.00", category: "S", percent: "21.00", exemptionReason: null, exemptionReasonCode: null },
+      { taxableAmount: "50.00", taxAmount: "5.50", category: "S", percent: "11.00", exemptionReason: null, exemptionReasonCode: null },
+    ],
+    lineExtensionAmount: "150.00", taxExclusiveAmount: "150.00", taxAmount: "26.50",
+    taxInclusiveAmount: "176.50", payableAmount: "176.50",
+  }))
+})
+
+void test("refuses an exempt breakdown without a reason, and a standard one carrying it", () => {
+  rejects(exemptInvoice({ taxSubtotals: [{ taxableAmount: "100.00", taxAmount: "0.00", category: "E", percent: "0.00", exemptionReason: null, exemptionReasonCode: null }] }), /BR-E-10/u)
+  rejects(exemptInvoice({ taxSubtotals: [{ taxableAmount: "100.00", taxAmount: "0.00", category: "E", percent: "0.00", exemptionReason: "   ", exemptionReasonCode: null }] }), /BR-E-10/u)
+  rejects(invoice({ taxSubtotals: [{ taxableAmount: "100.00", taxAmount: "21.00", category: "S", percent: "21.00", exemptionReason: ARTICLE_310, exemptionReasonCode: null }] }), /BR-S-10/u)
+})
+
+void test("refuses a zero-rated standard category and a non-zero exempt one", () => {
+  rejects(invoice({
+    lines: [{ id: "1", name: "x", quantity: "1.0000", unitCode: "H87", netAmount: "100.00", unitPrice: "100.00", vatCategory: "S", vatRate: "0.00" }],
+    taxSubtotals: [{ taxableAmount: "100.00", taxAmount: "0.00", category: "S", percent: "0.00", exemptionReason: null, exemptionReasonCode: null }],
+    taxAmount: "0.00", taxInclusiveAmount: "100.00", payableAmount: "100.00",
+  }), /BR-S-05/u)
+  rejects(exemptInvoice({ taxSubtotals: [{ taxableAmount: "100.00", taxAmount: "0.00", category: "E", percent: "21.00", exemptionReason: ARTICLE_310, exemptionReasonCode: null }] }), /BR-E-05/u)
+})
+
+void test("measures the exemption reason the way the Romanian rule does", () => {
+  assert.equal(normalizeSpace("  a   b \n c "), "a b c")
+  validateEFacturaDocument(exemptInvoice({
+    taxSubtotals: [{ taxableAmount: "100.00", taxAmount: "0.00", category: "E", percent: "0.00", exemptionReason: `  ${"x".repeat(50)}   ${"y".repeat(49)}  `, exemptionReasonCode: null }],
+  }))
+  rejects(exemptInvoice({
+    taxSubtotals: [{ taxableAmount: "100.00", taxAmount: "0.00", category: "E", percent: "0.00", exemptionReason: "x".repeat(101), exemptionReasonCode: null }],
+  }), /BR-RO-L100/u)
+})
+
+void test("allows at most one exempt group", () => {
+  rejects(exemptInvoice({
+    taxSubtotals: [
+      { taxableAmount: "60.00", taxAmount: "0.00", category: "E", percent: "0.00", exemptionReason: ARTICLE_310, exemptionReasonCode: null },
+      { taxableAmount: "40.00", taxAmount: "0.00", category: "E", percent: "0.00", exemptionReason: ARTICLE_310, exemptionReasonCode: null },
+    ],
+  }), /BR-E-01/u)
+})
+
+void test("refuses a line whose VAT group is missing from the breakdown", () => {
+  rejects(invoice({
+    lines: [
+      { id: "1", name: "a", quantity: "1.0000", unitCode: "H87", netAmount: "50.00", unitPrice: "50.00", vatCategory: "S", vatRate: "21.00" },
+      { id: "2", name: "b", quantity: "1.0000", unitCode: "H87", netAmount: "50.00", unitPrice: "50.00", vatCategory: "S", vatRate: "11.00" },
+    ],
+    taxSubtotals: [{ taxableAmount: "100.00", taxAmount: "21.00", category: "S", percent: "21.00", exemptionReason: null, exemptionReasonCode: null }],
+  }), /BR-CO-18/u)
+})
+
+void test("catches totals that disagree by a single cent", () => {
+  rejects(invoice({ lineExtensionAmount: "100.01" }), /BR-CO-10/u)
+  rejects(invoice({ taxAmount: "21.01", taxInclusiveAmount: "121.01", payableAmount: "121.01" }), /BR-CO-14/u)
+  rejects(invoice({ taxInclusiveAmount: "121.01", payableAmount: "121.01" }), /BR-CO-15/u)
+  rejects(invoice({ payableAmount: "120.00" }), /BR-CO-16/u)
+  rejects(invoice({ taxSubtotals: [{ taxableAmount: "99.99", taxAmount: "21.00", category: "S", percent: "21.00", exemptionReason: null, exemptionReasonCode: null }] }), /BR-CO-14/u)
+})
+
+void test("refuses amounts that are negative or carry excess precision", () => {
+  rejects(invoice({ payableAmount: "-121.00" }), /payableAmount must be a non-negative decimal/u)
+  rejects(invoice({ taxAmount: "21.000" }), /taxAmount carries more than 2 decimal places/u)
+  rejects(invoice({ lines: [{ ...standardLine, quantity: "0.00000" }] }), /quantity carries more than 4 decimal/u)
+  rejects(invoice({ lines: [{ ...standardLine, quantity: "0.0000" }] }), /quantity must be greater than zero/u)
+})
+
+void test("holds a credit note to its own shape: a reference, and no due date", () => {
+  rejects(invoice({ kind: "credit_note", dueDate: null, precedingInvoice: null }), /BG-3/u)
+  rejects(invoice({ kind: "credit_note", dueDate: "2026-10-17", precedingInvoice: { id: "QWBE 41", issueDate: "2026-09-01" } }), /BT-9/u)
+  rejects(invoice({ kind: "credit_note", dueDate: null, precedingInvoice: { id: " ", issueDate: "2026-09-01" } }), /BT-25/u)
+  rejects(invoice({ kind: "credit_note", dueDate: null, precedingInvoice: { id: "QWBE 41", issueDate: "2026-02-30" } }), /BT-26/u)
+})
+
+void test("refuses dates that look right but are not real days", () => {
+  rejects(invoice({ issueDate: "2026-02-30" }), /BT-2/u)
+  rejects(invoice({ issueDate: "17-09-2026" }), /BT-2/u)
+  rejects(invoice({ dueDate: "2026-13-01" }), /BT-9/u)
+})
+
+void test("refuses a currency other than RON, because nothing converts it yet", () => {
+  rejects(invoice({ currencyCode: "EUR" }), /only RON is supported/u)
+})
+
+void test("requires an address the Romanian rules can accept", () => {
+  rejects(invoice({ seller: { ...seller, address: { ...seller.address, countrySubentity: "Cluj" } } }), /ISO 3166-2/u)
+  rejects(invoice({ buyer: { ...buyer, address: { ...buyer.address, streetName: "  " } } }), /buyer\.address\.streetName is required/u)
+  rejects(invoice({ buyer: { ...buyer, address: { ...buyer.address, cityName: "" } } }), /buyer\.address\.cityName is required/u)
+})
+
+void test("requires the seller to be identifiable when it is not VAT registered", () => {
+  rejects(invoice({ seller: { ...seller, vatIdentifier: null, taxRegistrationIdentifier: null } }), /BR-RO-065/u)
+  validateEFacturaDocument(exemptInvoice())
+})
+
+const consumer: EFacturaParty = {
+  registrationName: "Ion Popescu",
+  address: { countryCode: "RO", cityName: "Iași", streetName: "Strada Lăpușneanu 10", countrySubentity: "RO-IS", postalZone: null },
+  vatIdentifier: null, taxRegistrationIdentifier: null, legalRegistrationIdentifier: null,
+}
+
+void test("requires the buyer to be identifiable, by BT-47 when there is no BT-48", () => {
+  rejects(invoice({ buyer: consumer }), /BR-RO-120/u)
+  validateEFacturaDocument(invoice({ buyer: { ...consumer, legalRegistrationIdentifier: "0000000000000" } }))
+  validateEFacturaDocument(invoice({
+    buyer: { ...buyer, vatIdentifier: null, legalRegistrationIdentifier: "87654321" },
+  }))
+})
+
+void test("collects every problem in one refusal instead of stopping at the first", () => {
+  const reported = issues(invoice({ id: "  ", issueDate: "nope", currencyCode: "EUR", payableAmount: "0.00" }))
+  assert.ok(reported.length >= 4, JSON.stringify(reported))
+})
+
+/**
+ * A supply outside the scope of VAT: no percentage anywhere, BT-121 carrying
+ * `VATEX-EU-O`, and the Article 310 reference in BT-22 rather than BT-120 —
+ * the shape ANAF's technical recommendation prescribes for an issuer that is
+ * not registered for VAT.
+ */
+const notSubjectInvoice = (overrides: Partial<EFacturaDocument> = {}): EFacturaDocument => invoice({
+  seller: { ...seller, vatIdentifier: null, taxRegistrationIdentifier: "12345678" },
+  // BR-O-02: neither party may state a VAT registration here, so the buyer is
+  // identified by BT-47 alone.
+  buyer: { ...buyer, vatIdentifier: null, legalRegistrationIdentifier: "87654321" },
+  note: ARTICLE_310,
+  lines: [{ id: "1", name: "Consultanță", quantity: "1.0000", unitCode: "HUR", netAmount: "100.00", unitPrice: "100.00", vatCategory: "O", vatRate: null }],
+  taxSubtotals: [{ taxableAmount: "100.00", taxAmount: "0.00", category: "O", percent: null, exemptionReason: null, exemptionReasonCode: VATEX_NOT_SUBJECT }],
+  taxAmount: "0.00",
+  taxInclusiveAmount: "100.00",
+  payableAmount: "100.00",
+  ...overrides,
+})
+
+void test("accepts a document that is not subject to VAT, with no percentage at all", () => {
+  validateEFacturaDocument(notSubjectInvoice())
+})
+
+void test("refuses an out-of-scope document that still states a VAT registration", () => {
+  rejects(notSubjectInvoice({ seller: { ...seller, taxRegistrationIdentifier: "12345678" } }), /BR-O-02/u)
+  rejects(notSubjectInvoice({ buyer }), /BR-O-02/u)
+})
+
+void test("refuses category O that carries a VAT rate, zero included", () => {
+  rejects(notSubjectInvoice({
+    taxSubtotals: [{ taxableAmount: "100.00", taxAmount: "0.00", category: "O", percent: "0.00", exemptionReason: null, exemptionReasonCode: VATEX_NOT_SUBJECT }],
+  }), /BR-O-05/u)
+  rejects(notSubjectInvoice({
+    lines: [{ id: "1", name: "x", quantity: "1.0000", unitCode: "HUR", netAmount: "100.00", unitPrice: "100.00", vatCategory: "O", vatRate: "0.00" }],
+  }), /BR-O-05/u)
+})
+
+void test("requires VATEX-EU-O on an out-of-scope breakdown", () => {
+  rejects(notSubjectInvoice({
+    taxSubtotals: [{ taxableAmount: "100.00", taxAmount: "0.00", category: "O", percent: null, exemptionReason: ARTICLE_310, exemptionReasonCode: null }],
+  }), /BR-O-10/u)
+  rejects(notSubjectInvoice({
+    taxSubtotals: [{ taxableAmount: "100.00", taxAmount: "0.00", category: "O", percent: null, exemptionReason: null, exemptionReasonCode: "VATEX-EU-309" }],
+  }), /BR-O-10/u)
+})
+
+void test("refuses a document that is out of scope and taxed at the same time", () => {
+  rejects(notSubjectInvoice({
+    lines: [
+      { id: "1", name: "a", quantity: "1.0000", unitCode: "HUR", netAmount: "100.00", unitPrice: "100.00", vatCategory: "O", vatRate: null },
+      { id: "2", name: "b", quantity: "1.0000", unitCode: "HUR", netAmount: "100.00", unitPrice: "100.00", vatCategory: "S", vatRate: "21.00" },
+    ],
+    taxSubtotals: [
+      { taxableAmount: "100.00", taxAmount: "0.00", category: "O", percent: null, exemptionReason: null, exemptionReasonCode: VATEX_NOT_SUBJECT },
+      { taxableAmount: "100.00", taxAmount: "21.00", category: "S", percent: "21.00", exemptionReason: null, exemptionReasonCode: null },
+    ],
+    lineExtensionAmount: "200.00", taxExclusiveAmount: "200.00", taxAmount: "21.00",
+    taxInclusiveAmount: "221.00", payableAmount: "221.00",
+  }), /BR-O-11/u)
+})
+
+void test("requires a rate on the categories that are defined by one", () => {
+  rejects(invoice({
+    lines: [{ id: "1", name: "x", quantity: "1.0000", unitCode: "HUR", netAmount: "100.00", unitPrice: "100.00", vatCategory: "S", vatRate: null }],
+  }), /lines\[0\] is category S and needs a VAT rate/u)
+  rejects(exemptInvoice({
+    taxSubtotals: [{ taxableAmount: "100.00", taxAmount: "0.00", category: "E", percent: null, exemptionReason: ARTICLE_310, exemptionReasonCode: null }],
+  }), /taxSubtotals\[0\] is category E and needs a VAT rate/u)
+})
+
+void test("requires a due date when there is money to pay, and checks the VAT arithmetic", () => {
+  rejects(invoice({ dueDate: null }), /BR-CO-25/u)
+  rejects(invoice({
+    taxSubtotals: [{ taxableAmount: "100.00", taxAmount: "21.01", category: "S", percent: "21.00", exemptionReason: null, exemptionReasonCode: null }],
+    taxAmount: "21.01", taxInclusiveAmount: "121.01", payableAmount: "121.01",
+  }), /BR-CO-17/u)
+  rejects(exemptInvoice({
+    lines: [{ id: "1", name: "x", quantity: "1.0000", unitCode: "HUR", netAmount: "100.00", unitPrice: "100.00", vatCategory: "E", vatRate: "0.00" }],
+    taxSubtotals: [{ taxableAmount: "100.00", taxAmount: "5.00", category: "E", percent: "0.00", exemptionReason: ARTICLE_310, exemptionReasonCode: null }],
+    taxAmount: "5.00", taxInclusiveAmount: "105.00", payableAmount: "105.00",
+  }), /BR-E-09/u)
+  // 99.00 at 21% is 20.79 exactly; the half-up rounding must not drift a cent.
+  validateEFacturaDocument(invoice({
+    lines: [{ id: "1", name: "x", quantity: "1.0000", unitCode: "HUR", netAmount: "99.00", unitPrice: "99.00", vatCategory: "S", vatRate: "21.00" }],
+    taxSubtotals: [{ taxableAmount: "99.00", taxAmount: "20.79", category: "S", percent: "21.00", exemptionReason: null, exemptionReasonCode: null }],
+    lineExtensionAmount: "99.00", taxExclusiveAmount: "99.00", taxAmount: "20.79",
+    taxInclusiveAmount: "119.79", payableAmount: "119.79",
+  }))
+})
+
+void test("holds each VAT breakdown to the lines that belong to it", () => {
+  rejects(invoice({
+    lines: [
+      { id: "1", name: "a", quantity: "1.0000", unitCode: "H87", netAmount: "40.00", unitPrice: "40.00", vatCategory: "S", vatRate: "21.00" },
+      { id: "2", name: "b", quantity: "1.0000", unitCode: "H87", netAmount: "60.00", unitPrice: "60.00", vatCategory: "S", vatRate: "11.00" },
+    ],
+    taxSubtotals: [
+      { taxableAmount: "50.00", taxAmount: "10.50", category: "S", percent: "21.00", exemptionReason: null, exemptionReasonCode: null },
+      { taxableAmount: "50.00", taxAmount: "5.50", category: "S", percent: "11.00", exemptionReason: null, exemptionReasonCode: null },
+    ],
+    taxAmount: "16.00", taxInclusiveAmount: "116.00", payableAmount: "116.00",
+  }), /BR-S-08/u)
+  rejects(invoice({
+    taxSubtotals: [
+      { taxableAmount: "100.00", taxAmount: "21.00", category: "S", percent: "21.00", exemptionReason: null, exemptionReasonCode: null },
+      { taxableAmount: "0.00", taxAmount: "0.00", category: "S", percent: "11.00", exemptionReason: null, exemptionReasonCode: null },
+    ],
+  }), /describes a VAT group no line belongs to/u)
+})

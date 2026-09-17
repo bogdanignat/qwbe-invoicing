@@ -5,15 +5,6 @@ import { invoicingPermissions } from "./contracts/permissions.ts"
 const identity = "invoicing"
 const permissions = invoicingPermissions(identity)
 const group = HttpApiGroup.make(identity)
-const declaredPermissions = [
-  permissions.read,
-  permissions.manageCustomers,
-  permissions.draftInvoices,
-  permissions.issueInvoices,
-  permissions.issueProformas,
-  permissions.voidInvoices,
-  permissions.manageSettings,
-]
 
 export const cube = {
   manifest: {
@@ -22,7 +13,10 @@ export const cube = {
       issued_invoices issued_lines issued_tax_breakdown proformas proforma_lines proforma_tax_breakdown proforma_conversions
        proforma_invoice_conversions correction_documents correction_lines correction_tax_breakdown idempotency_records audit_events`.split(/\s+/),
     requiresAuth: true,
-    permissions: declaredPermissions.map((name) => ({ name, roles: ["admin"] })),
+    // Every permission the cube defines is a permission it declares, so the
+    // manifest reads them from the one place they exist instead of repeating
+    // the list, where a new permission could be added and silently undeclared.
+    permissions: Object.values(permissions).map((name) => ({ name, roles: ["admin"] })),
   },
   create: () => ({
     group,
@@ -34,6 +28,7 @@ export * from "./contracts/index.ts"
 export { calculateTotals, validateFiscalDocument } from "./domain/calculation.ts"
 export { validateVatTreatment } from "./domain/validation.ts"
 export { unitOfMeasures } from "./domain/unit-of-measures.ts"
+export { isValidRomanianCnp } from "./registry/domain/party-validation.ts"
 export { ROMANIAN_COUNTIES, isRomanianCountyCode, romanianCountyName } from "./registry/domain/romanian-counties.ts"
 export type { RomanianCounty } from "./registry/domain/romanian-counties.ts"
 export { createInvoicingService } from "./application/invoicing.ts"
