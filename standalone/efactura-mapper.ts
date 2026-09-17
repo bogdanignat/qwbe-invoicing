@@ -24,8 +24,16 @@ export const documentNumber = (document: { readonly series: string; readonly num
 const vatIdentifier = (fiscalIdentifier: string): string =>
   `RO${fiscalIdentifier.trim().replace(/^RO/iu, "")}`
 
-/** For Bucharest the sector is the administrative city-level unit, so it
- * occupies BT-37/BT-52; elsewhere the stored city name is used as-is. */
+/**
+ * For Bucharest the sector is the administrative city-level unit, so it
+ * occupies BT-37/BT-52; elsewhere the stored city name is used as-is.
+ *
+ * A RO-B address without a sector is already refused when the party is saved,
+ * and if one ever reached here the city name would go out as "București",
+ * which BR-RO-100 forbids. It is not rewritten to a sector chosen by this code:
+ * the gate refuses it by name instead, because guessing which of six sectors a
+ * company sits in is inventing a fiscal fact.
+ */
 const address = (source: Address) => ({
   countryCode: source.countryCode,
   cityName: source.county === "RO-B" && source.sector !== undefined ? `SECTOR${String(source.sector)}` : source.city,

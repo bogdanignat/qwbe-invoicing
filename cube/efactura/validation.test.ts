@@ -212,6 +212,22 @@ void test("requires an address the Romanian rules can accept", () => {
   rejects(invoice({ buyer: { ...buyer, address: { ...buyer.address, cityName: "" } } }), /buyer\.address\.cityName is required/u)
 })
 
+void test("accepts only the counties the ISO 3166-2:RO list actually contains", () => {
+  // Shaped like a county code and absent from the list: the previous check
+  // matched the shape, which is exactly what the official list is for.
+  rejects(invoice({ seller: { ...seller, address: { ...seller.address, countrySubentity: "RO-XX" } } }), /BR-RO-110/u)
+  rejects(invoice({ buyer: { ...buyer, address: { ...buyer.address, countrySubentity: "ro-cj" } } }), /BR-RO-110/u)
+  // A foreign address keeps its own subdivision; the rule is conditioned on RO.
+  validateEFacturaDocument(invoice({ buyer: { ...buyer, address: { ...buyer.address, countryCode: "DE", countrySubentity: "DE-BY" } } }))
+})
+
+void test("requires a Bucharest address to name a sector, not the city", () => {
+  const bucharest = { ...seller.address, countrySubentity: "RO-B" }
+  rejects(invoice({ seller: { ...seller, address: { ...bucharest, cityName: "București" } } }), /BR-RO-100/u)
+  rejects(invoice({ buyer: { ...buyer, address: { ...bucharest, cityName: "Sector 3" } } }), /BR-RO-100/u)
+  validateEFacturaDocument(invoice({ seller: { ...seller, address: { ...bucharest, cityName: "SECTOR3" } } }))
+})
+
 void test("requires the seller to be identifiable when it is not VAT registered", () => {
   rejects(invoice({ seller: { ...seller, vatIdentifier: null, taxRegistrationIdentifier: null } }), /BR-RO-065/u)
   validateEFacturaDocument(exemptInvoice())

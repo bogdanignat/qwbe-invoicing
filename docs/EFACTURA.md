@@ -59,8 +59,14 @@ offending field at once.
   collapse **or trim** (a no-break space is a character, at the ends as much as
   in the middle, which is why `String.trim` is not used), and the 100-character
   limit counts characters, not UTF-16 code units.
-- Parties: ISO 3166-1 alpha-2 country, ISO 3166-2 subentity for RO, and the
-  seller identifiable by BT-31 **or** BT-32.
+- Parties: ISO 3166-1 alpha-2 country and the seller identifiable by BT-31
+  **or** BT-32. For a Romanian address the county is checked against the ISO
+  3166-2:RO list copied from the Schematron rather than by shape (BR-RO-110):
+  `RO-XX` looks like a county and is not one. BR-RO-100 then requires BT-37/
+  BT-52 to be `SECTOR1`..`SECTOR6` whenever the county is `RO-B` — in Bucharest
+  the sector is the city-level unit, and "București" is a rejection. The mapper
+  never invents a sector for an address that lacks one: it is already required
+  when the party is saved, and choosing one here would invent a fiscal fact.
 - The CIUS-RO length and occurrence limits for everything we emit, in
   `cius-limits.ts`: BT-22 at most 300 characters each and at most twenty of them
   (BR-RO-L300, BR-RO-A020), item name 100, party name 200, street 150, city 50,

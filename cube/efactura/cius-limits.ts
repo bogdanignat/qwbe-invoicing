@@ -19,6 +19,37 @@ import { characterCount, normalizeSpace } from "./decimals.ts"
 /** BR-RO-A020 — BT-22 repeats, but not without end. */
 const MAXIMUM_NOTES = 20
 
+/** BR-RO-110 — the ISO 3166-2:RO code list, copied from the Schematron rather
+ * than matched by shape: `RO-XX` looks like a county and is not one. */
+const ROMANIAN_COUNTIES = new Set(["RO-AB", "RO-AG", "RO-AR", "RO-B", "RO-BC", "RO-BH", "RO-BN",
+  "RO-BR", "RO-BT", "RO-BV", "RO-BZ", "RO-CJ", "RO-CL", "RO-CS", "RO-CT", "RO-CV", "RO-DB", "RO-DJ",
+  "RO-GJ", "RO-GL", "RO-GR", "RO-HD", "RO-HR", "RO-IF", "RO-IL", "RO-IS", "RO-MH", "RO-MM", "RO-MS",
+  "RO-NT", "RO-OT", "RO-PH", "RO-SB", "RO-SJ", "RO-SM", "RO-SV", "RO-TL", "RO-TM", "RO-TR", "RO-VL",
+  "RO-VN", "RO-VS"])
+
+/** BR-RO-100 — in Bucharest the sector *is* the city-level unit, so BT-37/BT-52
+ * carries a sector code and never the city name. */
+const BUCHAREST_SECTORS = new Set(["SECTOR1", "SECTOR2", "SECTOR3", "SECTOR4", "SECTOR5", "SECTOR6"])
+
+/**
+ * The two national address rules, which only apply to a Romanian address.
+ *
+ * A foreign address keeps whatever its own country uses; these rules are
+ * conditioned on BT-40/BT-55 being `RO` in the Schematron too.
+ */
+const checkRomanianAddress = (role: string, party: EFacturaParty, issues: Array<string>): void => {
+  const { countryCode, countrySubentity, cityName } = party.address
+  if (countryCode !== "RO") return
+  if (!ROMANIAN_COUNTIES.has(normalizeSpace(countrySubentity))) {
+    issues.push(`${role}.address.countrySubentity must be an ISO 3166-2:RO code such as RO-CJ, `
+      + `got "${countrySubentity}" (BR-RO-110)`)
+    return
+  }
+  if (normalizeSpace(countrySubentity) === "RO-B" && !BUCHAREST_SECTORS.has(normalizeSpace(cityName))) {
+    issues.push(`${role}.address.cityName must be SECTOR1..SECTOR6 for RO-B, got "${cityName}" (BR-RO-100)`)
+  }
+}
+
 const limit = (value: string | null, maximum: number, where: string, rule: string,
   issues: Array<string>): void => {
   if (value === null) return
@@ -33,6 +64,7 @@ const checkParty = (role: string, party: EFacturaParty, issues: Array<string>): 
   limit(party.address.streetName, 150, `${role}.address.streetName`, "BR-RO-L150", issues)
   limit(party.address.cityName, 50, `${role}.address.cityName`, "BR-RO-L050", issues)
   limit(party.address.postalZone, 20, `${role}.address.postalZone`, "BR-RO-L020", issues)
+  checkRomanianAddress(role, party, issues)
 }
 
 export const checkCiusLimits = (document: EFacturaDocument, issues: Array<string>): void => {

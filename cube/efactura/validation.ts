@@ -68,8 +68,8 @@ const checkParties = (document: EFacturaDocument, issues: Array<string>): void =
     if (address.countryCode.length !== 2) issues.push(`${role}.address.countryCode must be ISO 3166-1 alpha-2`)
     if (address.streetName.trim().length === 0) issues.push(`${role}.address.streetName is required`)
     if (address.cityName.trim().length === 0) issues.push(`${role}.address.cityName is required`)
-    if (address.countryCode === "RO" && !/^RO-[A-Z]{1,2}$/.test(address.countrySubentity)) {
-      issues.push(`${role}.address.countrySubentity must be an ISO 3166-2 code such as RO-CJ`)
+    if (address.countrySubentity.trim().length === 0) {
+      issues.push(`${role}.address.countrySubentity is required`)
     }
     for (const field of ["vatIdentifier", "taxRegistrationIdentifier", "legalRegistrationIdentifier"] as const) {
       const value = party[field]
