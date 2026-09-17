@@ -41,15 +41,22 @@ offending field at once.
   one. Issuance already requires the trade registry number (BT-30), so the
   product cannot reach this; the contract can.
 - Code lists, in `codelists.ts`: the country code (BR-CL-14, the EN 16931 list
-  — `1A` and `XI` are in it, `UK` is not) and the VAT exemption reason code
-  (BR-CL-22). A code list is not a shape: `XX` is two capital letters and no
-  country, and an invented VATEX code names a legal ground that does not exist.
-  Each comparison follows its own rule: BR-CL-22 is the one that tests
-  `upper-case()`, so `vatex-eu-o` is the same code, while BR-CL-14 and the
-  national lists are case-sensitive. BR-CL-23 is **not** checked here: the
-  invoicing host picks the unit from a closed catalogue of eight, each verified
-  against the official list, but that is a guarantee of the host — a caller that
-  builds an `EFacturaDocument` itself can still name a unit that does not exist.
+  — `1A` and `XI` are in it, `UK` is not), the VAT exemption reason code
+  (BR-CL-22) and the country prefix of a VAT identifier (BR-CO-09, the same list
+  plus `EL`, because Greece registers under a prefix that is not its country
+  code). A code list is not a shape: `XX` is two capital letters and no country,
+  and an invented VATEX code names a legal ground that does not exist. Each
+  comparison follows its own rule: BR-CL-22 is the one that tests
+  `upper-case()`, so `vatex-eu-o` is the same code, while BR-CL-14, BR-CO-09 and
+  the national lists are case-sensitive — `ro19999919` is not a Romanian VAT
+  number to ANAF. BR-CL-23 is checked by half: the rule refuses any unit code
+  that still holds a space after `normalize-space`, and that half is here,
+  because it is one comparison and it catches two codes written into one field.
+  Membership in UN/ECE Recommendation 20 is not: 2162 codes do not fit the
+  cube's size budget. The invoicing host picks the unit from a closed catalogue
+  of eight, each verified against the official list, but that is a guarantee of
+  the host — a caller that builds an `EFacturaDocument` itself can still name a
+  unit that does not exist.
 - BR-O-02: a document that is not subject to VAT states no VAT registration at
   all — neither BT-31 nor BT-48. Also returned verbatim by the validator.
 - BR-CO-25: an invoice with a positive amount due needs a due date. This mirrors
@@ -221,7 +228,12 @@ sale. The two absences do not rest on the same ground: BR-O-05 forbids BT-152 on
 a line outright, while nothing forbids BT-119 on the breakdown — BR-48 merely
 stops requiring it there and stays satisfied even if a rate is present. Omitting
 it is ANAF's recommended shape and this product's rule, and the refusal says so
-instead of citing BR-48 for a violation BR-48 does not define.
+instead of citing BR-48 for a violation BR-48 does not define. BT-121 is the
+mirror image: BR-O-10 is satisfied by either the exemption reason code **or**
+the reason in prose, so demanding exactly `VATEX-EU-O` asks for more than the
+rule does. That demand is this product's too — one ground, named by the code
+ANAF's recommendation names, not left to be read out of a sentence — and its
+refusal is labelled the same way.
 
 BR-O-02 propagates: an Article 310 invoice does not carry the buyer's VAT
 identifier, even for a VAT-registered buyer, who is named by BT-47 instead.

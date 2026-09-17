@@ -50,6 +50,16 @@ test("strips a doc comment without counting the code it documents twice", () => 
   assert.equal(stripCommentsAndBlankLines(source), "export const x = 1 ")
 })
 
+test("counts a shebang as the code it is, slashes included", () => {
+  // `#!` is not a comment, and the two slashes in the interpreter path are not
+  // one either — but they sit in the first token's trivia span, where every
+  // other `//` does start a comment.
+  const source = "#!/usr/bin/env node\nconst x = 1\n"
+  assert.equal(stripCommentsAndBlankLines(source), source.trim())
+  assert.equal(stripCommentsAndBlankLines("#!/usr/bin/env node // note\nconst x = 1\n"),
+    "#!/usr/bin/env node // note\nconst x = 1")
+})
+
 test("rejects file, unit, and file-count cap violations", () => {
   const measurement = {
     files: [{ path: "cube/invoicing/index.ts", code: 11, raw: 11 }],

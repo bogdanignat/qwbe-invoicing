@@ -106,13 +106,17 @@ export const checkVatSubtotal = (subtotal: EFacturaTaxSubtotal, index: number, i
     return
   }
 
-  // BR-O-10, as published by ANAF: the exemption reason code is used only
-  // together with category O — and for this category it is what identifies the
-  // case, so we require it rather than accepting free text alone. The case
-  // folds the way BR-CL-22 folds it, so one code written two ways stays one
-  // code here too instead of being refused for a second, unrelated reason.
+  // BR-O-10 asks only that a breakdown not subject to VAT carry a reason —
+  // `exists(TaxExemptionReason) or exists(TaxExemptionReasonCode)` — so free
+  // text alone satisfies it and this refusal is not that rule. It is the
+  // product's: there is exactly one ground on which we issue category O, ANAF's
+  // recommendation names it by code, and a sentence a human wrote instead would
+  // leave that ground to be guessed from prose. The case folds the way BR-CL-22
+  // folds it, so one code written two ways stays one code here too instead of
+  // being refused a second time for an unrelated reason.
   if (code === null || normalizeSpace(code).toUpperCase() !== VATEX_NOT_SUBJECT) {
-    issues.push(`${where} is category O and needs exemption reason code ${VATEX_NOT_SUBJECT} (BR-O-10)`)
+    issues.push(`${where} is category O and needs exemption reason code ${VATEX_NOT_SUBJECT} `
+      + `(product rule, not BR-O-10: the ground is named by its code, not in prose)`)
   }
 }
 
@@ -122,7 +126,18 @@ export const checkLine = (line: EFacturaLine, index: number, issues: Array<strin
   const where = `lines[${String(index)}]`
   if (line.id.trim().length === 0) issues.push(`${where}.id is required (BT-126)`)
   if (line.name.trim().length === 0) issues.push(`${where}.name is required (BT-153)`)
-  if (line.unitCode.trim().length === 0) issues.push(`${where}.unitCode is required (BT-130)`)
+  // BR-CL-23 has two halves. Membership in UN/ECE Recommendation 20 is not
+  // copied here — 2162 codes do not fit the cube, and docs/EFACTURA.md records
+  // that as the host's guarantee. The other half costs one comparison: the rule
+  // reads the code through `normalize-space` and refuses whatever still holds a
+  // space, which is the shape two codes take when they arrive in one field.
+  // A blank code normalises to nothing, so it fails only the check above.
+  const unit = normalizeSpace(line.unitCode)
+  if (unit.length === 0) issues.push(`${where}.unitCode is required (BT-130)`)
+  if (unit.includes(" ")) {
+    issues.push(`${where}.unitCode must be a single UN/ECE Recommendation 20 code, `
+      + `got "${line.unitCode}" (BR-CL-23)`)
+  }
   const quantity = scaled(line.quantity, 4, `${where}.quantity`, issues)
   if (quantity === 0n) issues.push(`${where}.quantity must be greater than zero`)
   scaled(line.unitPrice, 2, `${where}.unitPrice`, issues)

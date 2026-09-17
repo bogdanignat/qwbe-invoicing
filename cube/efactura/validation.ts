@@ -2,7 +2,7 @@ import type { EFacturaDocument } from "./contracts/document.ts"
 import { EFacturaContractViolation } from "./contracts/failures.ts"
 import { checkCiusLimits } from "./cius-limits.ts"
 import { checkCodelists } from "./codelists.ts"
-import { amountOrSkip, isCalendarDate } from "./decimals.ts"
+import { amountOrSkip, isCalendarDate, normalizeSpace } from "./decimals.ts"
 import { checkTotals } from "./totals.ts"
 import { checkVatGroups } from "./vat-groups.ts"
 import { checkLine, checkVatSubtotal } from "./vat-rules.ts"
@@ -19,7 +19,10 @@ import { checkLine, checkVatSubtotal } from "./vat-rules.ts"
 const checkIdentity = (document: EFacturaDocument, issues: Array<string>): void => {
   if (document.id.trim().length === 0) issues.push("id is required (BT-1)")
   if (!isCalendarDate(document.issueDate)) issues.push("issueDate must be a valid YYYY-MM-DD date (BT-2)")
-  if (document.currencyCode !== "RON") {
+  // BR-CL-04 and BR-RO-030 read BT-5 through `normalize-space`, so a padded
+  // "RON" is RON to them; read it the same way here instead of refusing a
+  // currency ANAF accepts.
+  if (normalizeSpace(document.currencyCode) !== "RON") {
     issues.push(`only RON is supported, got "${document.currencyCode}" (BT-5)`)
   }
   if (document.lines.length === 0) issues.push("a document must carry at least one line")

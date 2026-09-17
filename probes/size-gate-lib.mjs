@@ -39,8 +39,26 @@ const isJsDoc = (node) =>
  * and scanning those spans finds each comment exactly once, because the spans
  * of distinct tokens cannot overlap.
  */
+
+/**
+ * Where the code starts, which is not always position zero.
+ *
+ * A shebang is not a comment and the parser does not report it as one — it
+ * skips it before reading the first token — but it still sits inside that
+ * token's full span, which is what gets scanned below. `#!/usr/bin/env node`
+ * would lose `/usr/bin/env node` to the expression above and stop being
+ * counted. It was counted as code before and stays code, so the scan starts
+ * after it.
+ */
+const afterShebang = (source) => {
+  if (!source.startsWith("#!")) return 0
+  const end = source.search(/[\n\r\u2028\u2029]/u)
+  return end === -1 ? source.length : end
+}
+
 const commentRanges = (source, fileName) => {
   const file = ts.createSourceFile(fileName, source, ts.ScriptTarget.Latest, true)
+  const start = afterShebang(source)
   const ranges = []
   const visit = (node) => {
     // A JSDoc node lives inside a comment, so its own tokens would report spans
@@ -51,8 +69,9 @@ const commentRanges = (source, fileName) => {
       for (const child of children) visit(child)
       return
     }
-    const from = node.getFullStart()
-    for (const match of source.slice(from, node.getStart(file)).matchAll(COMMENT)) {
+    const from = Math.max(node.getFullStart(), start)
+    const until = Math.max(node.getStart(file), from)
+    for (const match of source.slice(from, until).matchAll(COMMENT)) {
       ranges.push({ pos: from + match.index, end: from + match.index + match[0].length })
     }
   }

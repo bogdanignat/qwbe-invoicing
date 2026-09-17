@@ -204,6 +204,9 @@ void test("refuses dates that look right but are not real days", () => {
 
 void test("refuses a currency other than RON, because nothing converts it yet", () => {
   rejects(invoice({ currencyCode: "EUR" }), /only RON is supported/u)
+  // BR-CL-04 and BR-RO-030 read BT-5 through `normalize-space`, so padding is
+  // not a different currency to the validator and must not be one here.
+  validateEFacturaDocument(invoice({ currencyCode: " RON " }))
 })
 
 void test("requires an address the Romanian rules can accept", () => {
@@ -256,6 +259,24 @@ void test("accepts a VATEX code in the case BR-CL-22 folds away", () => {
   // refuse a document the official validator accepts.
   validateEFacturaDocument(exemptInvoice({ taxSubtotals: [{ taxableAmount: "100.00", taxAmount: "0.00", category: "E", percent: "0.00", exemptionReason: null, exemptionReasonCode: "vatex-eu-132-1a" }] }))
   validateEFacturaDocument(notSubjectInvoice({ taxSubtotals: [{ taxableAmount: "100.00", taxAmount: "0.00", category: "O", percent: null, exemptionReason: null, exemptionReasonCode: "vatex-eu-o" }] }))
+})
+
+void test("requires a VAT identifier to open with the prefix of its issuing country", () => {
+  // BR-CO-09 reads the first two characters as written, without folding case:
+  // `ro` is not a country to ANAF, and `12345678` never was one.
+  rejects(invoice({ seller: { ...seller, vatIdentifier: "ro12345678" } }), /BR-CO-09/u)
+  rejects(invoice({ buyer: { ...buyer, vatIdentifier: "12345678" } }), /BR-CO-09/u)
+  // `EL` is in the rule's list and not in the ISO one: Greece is the exception
+  // the rule was written for.
+  validateEFacturaDocument(invoice({ buyer: { ...buyer, vatIdentifier: "EL123456789",
+    address: { ...buyer.address, countryCode: "GR", cityName: "Athina", countrySubentity: "" } } }))
+})
+
+void test("refuses two unit codes written into one field", () => {
+  rejects(invoice({ lines: [{ ...standardLine, unitCode: "10 11" }] }), /BR-CL-23/u)
+  // The rule normalises before it looks for a space, so padding alone is not
+  // two codes; the list membership itself is the invoicing host's guarantee.
+  validateEFacturaDocument(invoice({ lines: [{ ...standardLine, unitCode: " HUR " }] }))
 })
 
 void test("refuses a seller that only a tax registration identifier names", () => {
@@ -331,13 +352,16 @@ void test("refuses category O that carries a VAT rate, zero included", () => {
   }), /BR-O-05/u)
 })
 
-void test("requires VATEX-EU-O on an out-of-scope breakdown", () => {
+void test("requires VATEX-EU-O on an out-of-scope breakdown, beyond what BR-O-10 asks", () => {
+  // BR-O-10 is satisfied by either the reason or the code, so both of these
+  // pass at ANAF. Neither passes here: category O is issued on one ground and
+  // the code is what names it, rather than prose a reader has to interpret.
   rejects(notSubjectInvoice({
     taxSubtotals: [{ taxableAmount: "100.00", taxAmount: "0.00", category: "O", percent: null, exemptionReason: ARTICLE_310, exemptionReasonCode: null }],
-  }), /BR-O-10/u)
+  }), /product rule, not BR-O-10/u)
   rejects(notSubjectInvoice({
     taxSubtotals: [{ taxableAmount: "100.00", taxAmount: "0.00", category: "O", percent: null, exemptionReason: null, exemptionReasonCode: "VATEX-EU-309" }],
-  }), /BR-O-10/u)
+  }), /product rule, not BR-O-10/u)
 })
 
 void test("refuses a document that is out of scope and taxed at the same time", () => {

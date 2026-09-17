@@ -60,11 +60,31 @@ const VATEX_CODES = new Set([
   "VATEX-EU-J"
 ])
 
+/**
+ * BR-CO-09 — a VAT identifier opens with the prefix of the country that issued
+ * it, which is the ISO list plus `EL`: Greece registers for VAT under a prefix
+ * that is not its own country code.
+ *
+ * The rule reads the first two characters of the element as written, with
+ * neither `normalize-space` nor `upper-case`, so `ro19999919` names no country
+ * to ANAF even though `RO19999919` does. Our test is the stricter one: the rule
+ * asks whether those two characters appear anywhere in the list, which a single
+ * letter also satisfies, while a prefix has to be a whole entry here.
+ */
+const VAT_PREFIXES = new Set([...COUNTRY_CODES, "EL"])
+
 export const checkCodelists = (document: EFacturaDocument, issues: Array<string>): void => {
   for (const [role, party] of [["seller", document.seller], ["buyer", document.buyer]] as const) {
     if (!COUNTRY_CODES.has(normalizeSpace(party.address.countryCode))) {
       issues.push(`${role}.address.countryCode must be an ISO 3166-1 alpha-2 code from the EN 16931 `
         + `list, got "${party.address.countryCode}" (BR-CL-14)`)
+    }
+    // BT-31/BT-48 only: BT-32 is rendered under a different tax scheme, and the
+    // rule's context is the `VAT` scheme alone.
+    const vat = party.vatIdentifier
+    if (vat !== null && vat.trim().length > 0 && !VAT_PREFIXES.has(vat.slice(0, 2))) {
+      issues.push(`${role}.vatIdentifier must begin with the country prefix that issued it `
+        + `(uppercase, "EL" for Greece), got "${vat}" (BR-CO-09)`)
     }
   }
   for (const [index, subtotal] of document.taxSubtotals.entries()) {
