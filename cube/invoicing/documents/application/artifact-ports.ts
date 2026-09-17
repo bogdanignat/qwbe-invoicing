@@ -47,7 +47,7 @@ export interface RenderableLine {
   readonly unitPrice: string
   readonly unitOfMeasure: { readonly code: string; readonly name: string }
   readonly vatRate: string
-  readonly vatCategoryCode: "S" | "E"
+  readonly vatCategoryCode: "S" | "O"
   readonly vatExemptionReason: string | null
   readonly totalExcludingVat: string
   readonly vatAmount: string
@@ -69,7 +69,7 @@ interface RenderableNumberedDocument {
   readonly lines: ReadonlyArray<RenderableLine>
   readonly vatBreakdown: ReadonlyArray<{
     readonly rate: string
-    readonly vatCategoryCode: "S" | "E"
+    readonly vatCategoryCode: "S" | "O"
     readonly vatExemptionReason: string | null
     readonly vatBaseAmount: string
     readonly vatAmount: string

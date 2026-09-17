@@ -187,7 +187,7 @@ const buyerPayload = (form: InvoiceAuthoringForm): { readonly customerId: string
         },
       }
 
-export const documentNotesMaxLength = 500
+export const documentNotesMaxLength = 300
 
 /** Mirrors the server-side remark rules so the textarea can explain an invisible paste before submitting. */
 export const documentNotesIssue = (notes: string): string | null => {

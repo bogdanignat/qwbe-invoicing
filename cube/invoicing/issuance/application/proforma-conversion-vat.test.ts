@@ -120,7 +120,7 @@ void test("copies an old valid proforma to a draft but gates issuance until its 
   await Effect.runPromise(service.updateDraftLine({ draftId: draft.id, lineId: line.id, description: line.description,
     quantity: line.quantity, unitPrice: line.unitPrice, unitOfMeasure: line.unitOfMeasure, vatRateCode: "RO_NON_VAT" }))
   const invoice = await Effect.runPromise(service.issueInvoice(idempotent({ draftId: draft.id })))
-  assert.equal(invoice.lines[0]?.vatCategoryCode, "E")
+  assert.equal(invoice.lines[0]?.vatCategoryCode, "O")
 })
 
 void test("rejects a source with only its breakdown corrupted on both conversion paths", async () => {

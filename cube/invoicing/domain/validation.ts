@@ -10,7 +10,7 @@ export const validateVatTreatment = (code: string, rate: string, category: strin
   const amount = /^(?:0|[1-9]\d?|100)(?:\.\d{1,2})?$/.test(rate) ? Number(rate) : NaN
   const knownTaxable = ["RO_STANDARD", "RO_REDUCED", "RO_REDUCED_5"].includes(code)
   const valid = code === "RO_NON_VAT"
-    ? amount === 0 && category === "E" && reason === article310VatExemptionReason
+    ? amount === 0 && category === "O" && reason === article310VatExemptionReason
     : knownTaxable && amount > 0 && amount <= 100 && category === "S" && reason === null
   if (!valid) throw new ValidationFailure({ issues: ["Invalid VAT tuple"] })
 }
@@ -57,6 +57,6 @@ export const validateDocumentSource = (source: DocumentSource): void => {
 export const validateDocumentNotes = (notes: string | null | undefined): void => {
   if (notes === null || notes === undefined) return
   const issues: Array<string> = []
-  freeText("notes", notes, 500, issues, true)
+  freeText("notes", notes, 300, issues, true)
   if (issues.length > 0) throw new ValidationFailure({ issues })
 }

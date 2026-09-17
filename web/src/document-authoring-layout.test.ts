@@ -20,11 +20,11 @@ void test("new documents and saved drafts use the same centered header without a
       defaultCurrency: "RON", defaultPaymentTermDays: 15, currentVat: { registered: false, nonVatBasis: "article_310", effectiveFrom: "2025-08-01" },
       vatConfigurations: [
         { code: "RO_STANDARD", rate: "21.00", vatCategoryCode: "S", vatExemptionReason: null, effectiveFrom: "2025-08-01", effectiveTo: "2025-12-31" },
-        { code: "RO_NON_VAT", rate: "0.00", vatCategoryCode: "E", vatExemptionReason: "Regim special de scutire conform art. 310 din Codul fiscal", effectiveFrom: "2026-01-01" },
+        { code: "RO_NON_VAT", rate: "0.00", vatCategoryCode: "O", vatExemptionReason: "Regim special de scutire conform art. 310 din Codul fiscal", effectiveFrom: "2026-01-01" },
       ] },
     vatCatalogue: { rates: [
       { code: "RO_STANDARD", rate: "21.00", vatCategoryCode: "S", vatExemptionReason: null, effectiveFrom: "2025-08-01", effectiveTo: "2025-12-31", kind: "standard", label: "TVA standard 21%" },
-      { code: "RO_NON_VAT", rate: "0.00", vatCategoryCode: "E", vatExemptionReason: "Regim special de scutire conform art. 310 din Codul fiscal", effectiveFrom: "2026-01-01", kind: "non_vat", label: "Scutit TVA — art. 310" },
+      { code: "RO_NON_VAT", rate: "0.00", vatCategoryCode: "O", vatExemptionReason: "Regim special de scutire conform art. 310 din Codul fiscal", effectiveFrom: "2026-01-01", kind: "non_vat", label: "Scutit TVA — art. 310" },
     ] },
     customers: [], invoiceSeries: ["INV"], unitOfMeasures: [{ code: "C62", name: "unitate" }],
     backgroundErrors: [], notify: () => undefined,

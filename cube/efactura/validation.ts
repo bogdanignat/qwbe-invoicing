@@ -1,0 +1,131 @@
+import type { EFacturaDocument } from "./contracts/document.ts"
+import { EFacturaContractViolation } from "./contracts/failures.ts"
+import { checkCiusLimits } from "./cius-limits.ts"
+import { checkCodelists } from "./codelists.ts"
+import { amountOrSkip, isCalendarDate } from "./decimals.ts"
+import { checkTotals } from "./totals.ts"
+import { checkVatGroups } from "./vat-groups.ts"
+import { checkLine, checkVatSubtotal } from "./vat-rules.ts"
+
+/**
+ * Structural gate in front of the renderer.
+ *
+ * Passing here does **not** mean the document is valid — only the official
+ * validator decides that. Failing here means we would knowingly emit a broken
+ * document, so we refuse instead, naming every offending field at once rather
+ * than stopping at the first.
+ */
+
+const checkIdentity = (document: EFacturaDocument, issues: Array<string>): void => {
+  if (document.id.trim().length === 0) issues.push("id is required (BT-1)")
+  if (!isCalendarDate(document.issueDate)) issues.push("issueDate must be a valid YYYY-MM-DD date (BT-2)")
+  // Exactly "RON", not "RON" after normalising. BR-CL-04 and BR-RO-030 do read
+  // BT-5 through `normalize-space`, and the renderer escapes whitespace inside
+  // an attribute as a character reference, so a padded code would survive both
+  // those rules and BR-CO-15's comparison of BT-5 against every `currencyID`.
+  // It is refused anyway, and the refusal says why: one currency is supported,
+  // spelled one way. BT-5 is written into the document in a dozen places and
+  // there is no reading of it here that a second reader could disagree with.
+  if (document.currencyCode !== "RON") {
+    issues.push(`only RON is supported, got "${document.currencyCode}" (BT-5)`)
+  }
+  if (document.lines.length === 0) issues.push("a document must carry at least one line")
+  if (document.taxSubtotals.length === 0) issues.push("a document must carry at least one VAT breakdown (BR-CO-18)")
+
+  if (document.kind === "credit_note") {
+    if (document.precedingInvoice === null) {
+      issues.push("a credit note must reference the invoice it corrects (BG-3)")
+    }
+    // UBL's CreditNote has no DueDate element at all, and the official
+    // validator accepted a credit note with neither a due date nor payment
+    // terms, so BR-CO-25 does not reach here.
+    if (document.dueDate !== null) issues.push("a credit note carries no payment due date (BT-9)")
+  } else if (document.dueDate === null) {
+    // BR-CO-25: something has to say when a positive amount is due.
+    const payable = amountOrSkip(document.payableAmount)
+    if (payable !== null && payable !== 0n) {
+      issues.push("an invoice with an amount due for payment needs a payment due date (BR-CO-25)")
+    }
+  } else if (!isCalendarDate(document.dueDate)) {
+    issues.push("dueDate must be a valid YYYY-MM-DD date (BT-9)")
+  }
+  const preceding = document.precedingInvoice
+  if (preceding !== null) {
+    if (preceding.id.trim().length === 0) issues.push("precedingInvoice.id is required (BT-25)")
+    if (!isCalendarDate(preceding.issueDate)) {
+      issues.push("precedingInvoice.issueDate must be a valid YYYY-MM-DD date (BT-26)")
+    }
+  }
+}
+
+/**
+ * An identifier made of whitespace identifies nobody.
+ *
+ * The rules below ask whether an identifier exists, so blank has to count as
+ * absent for them. The renderer does not settle that on its own and the two
+ * halves disagree: BT-30 goes through `optional` and disappears when blank,
+ * while BT-31 and BT-32 go through `text` and would leave as an empty
+ * `cbc:CompanyID` — existing for BR-CO-26, naming nobody for a reader. Blank is
+ * therefore refused outright below, so neither shape can be emitted at all.
+ */
+const stated = (value: string | null): boolean => value !== null && value.trim().length > 0
+
+const checkParties = (document: EFacturaDocument, issues: Array<string>): void => {
+  for (const [role, party] of [["seller", document.seller], ["buyer", document.buyer]] as const) {
+    if (party.registrationName.trim().length === 0) issues.push(`${role}.registrationName is required`)
+    const address = party.address
+    if (address.streetName.trim().length === 0) issues.push(`${role}.address.streetName is required`)
+    if (address.cityName.trim().length === 0) issues.push(`${role}.address.cityName is required`)
+    // BT-39/BT-54 is demanded only of a Romanian address, by BR-RO-110/111,
+    // which reject everything outside the ISO 3166-2:RO list — the empty string
+    // included, so `checkRomanianAddress` already covers it. No rule asks a
+    // foreign party for a subdivision: BR-RO-211 reads like one but its context
+    // is the delivery address, which we do not emit. A German buyer without a
+    // Bundesland is therefore a document ANAF accepts, and the renderer leaves
+    // the element out instead of sending it empty.
+
+    for (const field of ["vatIdentifier", "taxRegistrationIdentifier", "legalRegistrationIdentifier"] as const) {
+      const value = party[field]
+      if (value !== null && value.trim().length === 0) {
+        issues.push(`${role}.${field} is stated but empty; omit it instead of sending nothing`)
+      }
+    }
+  }
+  if (!stated(document.seller.vatIdentifier) && !stated(document.seller.taxRegistrationIdentifier)) {
+    issues.push("the seller needs either a VAT identifier or a tax registration identifier (BR-RO-065)")
+  }
+  // BR-CO-26 counts a narrower set than BR-RO-065: BT-31 under the `VAT` tax
+  // scheme, BT-30, or BT-29 — and not BT-32, which we render under a scheme of
+  // its own precisely because it is not a VAT registration. A seller with only
+  // BT-32 therefore satisfies the national rule and fails the European one. The
+  // trade registry number is required before issuance, so the product cannot
+  // reach this today; the contract can, and ANAF would be the one to say so.
+  if (!stated(document.seller.vatIdentifier) && !stated(document.seller.legalRegistrationIdentifier)) {
+    issues.push("the seller needs a VAT identifier or a legal registration identifier; a tax "
+      + "registration identifier alone does not identify it (BR-CO-26)")
+  }
+  // BR-RO-120, as returned verbatim by the official validator: the buyer is
+  // identified by BT-47 and/or BT-48. Unlike the seller, a buyer's BT-32 does
+  // not exist, so a buyer company that is not VAT registered has to be named
+  // through its legal registration identifier.
+  if (!stated(document.buyer.vatIdentifier) && !stated(document.buyer.legalRegistrationIdentifier)) {
+    issues.push("the buyer needs a legal registration identifier or a VAT identifier (BR-RO-120)")
+  }
+}
+
+export const validateEFacturaDocument = (document: EFacturaDocument): void => {
+  const issues: Array<string> = []
+  checkIdentity(document, issues)
+  checkParties(document, issues)
+  checkCiusLimits(document, issues)
+  checkCodelists(document, issues)
+  let lineSum: bigint | null = 0n
+  for (const [index, line] of document.lines.entries()) {
+    const net = checkLine(line, index, issues)
+    lineSum = net === null || lineSum === null ? null : lineSum + net
+  }
+  for (const [index, subtotal] of document.taxSubtotals.entries()) checkVatSubtotal(subtotal, index, issues)
+  checkVatGroups(document, issues)
+  checkTotals(document, lineSum, issues)
+  if (issues.length > 0) throw new EFacturaContractViolation({ issues })
+}

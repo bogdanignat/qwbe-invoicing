@@ -108,7 +108,7 @@ void test("storno preserves article 310 facts and canonicalizes signed zero", as
   const tax = correction.vatBreakdown[0]
   assert.ok(line)
   assert.ok(tax)
-  assert.equal(line.vatCategoryCode, "E")
+  assert.equal(line.vatCategoryCode, "O")
   assert.equal(line.vatExemptionReason, article310VatExemptionReason)
   assert.deepEqual([line.totalExcludingVat, line.vatAmount, tax.vatBaseAmount, correction.vatTotal, correction.totalIncludingVat],
   ["0.00", "0.00", "0.00", "0.00", "0.00"])

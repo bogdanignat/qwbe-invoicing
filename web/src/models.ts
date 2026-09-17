@@ -83,7 +83,7 @@ export interface VatConfiguration {
   readonly effectiveTo?: string
 }
 
-export type VatCategoryCode = "S" | "E"
+export type VatCategoryCode = "S" | "O"
 export type NonVatBasis = "article_310"
 
 interface VatRegistrationPeriod {
@@ -455,15 +455,20 @@ export const isTaxableVatCode = (code: string): boolean => ["RO_STANDARD", "RO_R
 
 const decodeVatCategoryCode = (input: unknown): VatCategoryCode => {
   const value = text(input, "vatCategoryCode")
-  if (value !== "S" && value !== "E") throw new Error("invalid vatCategoryCode")
+  if (value !== "S" && value !== "O") throw new Error("invalid vatCategoryCode")
   return value
 }
 
+// The two treatments the backend can issue, stated as one exhaustive rule
+// rather than two independent ones: a per-category `if` accepts anything the
+// server later rejects, simply by belonging to no branch.
 const canonicalVatTreatment = (code: string, rate: string, vatCategoryCode: VatCategoryCode, vatExemptionReason: string | null): void => {
   const numericRate = Number(rate)
   if (!/^(?:0|[1-9]\d?|100)(?:\.\d{1,2})?$/.test(rate) || numericRate > 100) throw new Error("invalid rate")
-  if (vatCategoryCode === "S" && (numericRate <= 0 || vatExemptionReason !== null || !isTaxableVatCode(code))) throw new Error("invalid S VAT treatment")
-  if (vatCategoryCode === "E" && (code !== "RO_NON_VAT" || numericRate !== 0 || vatExemptionReason !== ARTICLE_310_EXEMPTION_REASON)) throw new Error("invalid E VAT treatment")
+  const valid = vatCategoryCode === "S"
+    ? numericRate > 0 && vatExemptionReason === null && isTaxableVatCode(code)
+    : code === "RO_NON_VAT" && numericRate === 0 && vatExemptionReason === ARTICLE_310_EXEMPTION_REASON
+  if (!valid) throw new Error("invalid VAT treatment")
 }
 
 const decodeVatConfiguration: Decoder<VatConfiguration> = (input) => {
@@ -497,7 +502,7 @@ const decodeVatRate: Decoder<VatRate> = (input) => {
   const kind = text(value.kind, "kind")
   if (kind !== "standard" && kind !== "reduced" && kind !== "non_vat") throw new Error("invalid VAT kind")
   const configuration = decodeVatConfiguration(value)
-  if ((kind === "non_vat") !== (configuration.vatCategoryCode === "E")) throw new Error("invalid VAT kind treatment")
+  if ((kind === "non_vat") !== (configuration.vatCategoryCode === "O")) throw new Error("invalid VAT kind treatment")
   if ((kind === "standard") !== (configuration.code === "RO_STANDARD") || (kind === "reduced") !== ["RO_REDUCED", "RO_REDUCED_5"].includes(configuration.code)) throw new Error("invalid VAT kind code")
   return { ...configuration, kind, label: text(value.label, "label") }
 }
@@ -527,7 +532,7 @@ export const decodeIssuer: Decoder<Issuer> = (input) => {
       && (effectiveTo === undefined || currentVat.effectiveFrom <= effectiveTo))
     const validProjection = active.length > 0 && (currentVat.registered
       ? active.every(({ vatCategoryCode }) => vatCategoryCode === "S")
-      : active.every(({ vatCategoryCode }) => vatCategoryCode === "E"))
+      : active.every(({ vatCategoryCode }) => vatCategoryCode === "O"))
     if (!validProjection) throw new Error("invalid currentVat projection")
   }
   return {

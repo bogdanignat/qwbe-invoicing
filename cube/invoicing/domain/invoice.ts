@@ -157,7 +157,19 @@ export interface DraftInvoice extends DocumentContent {
   readonly status: "draft" | "issued" | "proforma_issued"
 }
 
-export type VatCategoryCode = "S" | "E"
+/**
+ * UNCL5305 category, narrowed to the two treatments the product implements.
+ *
+ * `S` is standard or reduced rated. `O` — not subject to VAT — is what ANAF's
+ * technical recommendation assigns to a supply by an Article 310 issuer, with
+ * BT-121 = `VATEX-EU-O` and the legal reference in BT-22. `E` (exempt) is
+ * absent on purpose: the standard keeps it for cases we do not issue, such as
+ * the travel agents' margin scheme, and a category nothing can produce would
+ * only leave branches no document reaches. docs/VAT_TREATMENT.md has the
+ * reasoning; `cube/efactura` still knows all three, because it renders the
+ * standard rather than this product's subset.
+ */
+export type VatCategoryCode = "S" | "O"
 export interface VatTreatment {
   vatCategoryCode: VatCategoryCode
   vatExemptionReason: string | null

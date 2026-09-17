@@ -8,7 +8,7 @@ import { normalizeBrandingText, validateCustomer, validateIssuer as validateIssu
 
 const validateIssuer = (issuer: Parameters<typeof validateIssuerOn>[0]): void => { validateIssuerOn(issuer) }
 const s = { vatCategoryCode: "S" as const, vatExemptionReason: null }
-const e = { vatCategoryCode: "E" as const, vatExemptionReason: article310VatExemptionReason }
+const nonVat = { vatCategoryCode: "O" as const, vatExemptionReason: article310VatExemptionReason }
 
 void test("normalizes branding text and rejects all Unicode Other categories", () => {
   assert.equal(normalizeBrandingText(null), null)
@@ -54,7 +54,7 @@ void test("validates Romanian CUI, country, and issuer currency", () => {
     defaultCurrency: "RON",
     defaultPaymentTermDays: 15,
     branding: null,
-    vatConfigurations: [{ code: "RO_NON_VAT", rate: "0", ...e, effectiveFrom: "2026-01-01" }],
+    vatConfigurations: [{ code: "RO_NON_VAT", rate: "0", ...nonVat, effectiveFrom: "2026-01-01" }],
   }
   assert.throws(() => { validateIssuer({ ...issuer, fiscalIdentifier: "" }) }, hasIssue("fiscalIdentifier must be a valid Romanian CUI"))
   assert.throws(() => { validateIssuer({ ...issuer, defaultCurrency: "EUR" }) }, hasIssue("defaultCurrency must be RON"))
@@ -65,14 +65,14 @@ void test("validates Romanian CUI, country, and issuer currency", () => {
   assert.throws(() => { validateIssuer({
     ...issuer,
     fiscalIdentifier: "45561046",
-    vatConfigurations: [{ code: "RO_NON_VAT", rate: "21", ...e, effectiveFrom: "2026-01-01" }],
+    vatConfigurations: [{ code: "RO_NON_VAT", rate: "21", ...nonVat, effectiveFrom: "2026-01-01" }],
   }) }, (error: unknown) => error instanceof ValidationFailure && error.issues.includes("Invalid VAT tuple"))
   assert.doesNotThrow(() => { validateIssuer({
     ...issuer,
     fiscalIdentifier: "45561046",
     vatConfigurations: [
       { code: "RO_STANDARD", rate: "21", ...s, effectiveFrom: "2026-01-01", effectiveTo: "2026-12-31" },
-      { code: "RO_NON_VAT", rate: "0", ...e, effectiveFrom: "2027-01-01" },
+      { code: "RO_NON_VAT", rate: "0", ...nonVat, effectiveFrom: "2027-01-01" },
     ],
   }) })
   assert.doesNotThrow(() => { validateIssuer({
@@ -125,7 +125,7 @@ void test("rejects overlapping effective ranges for the same tax code", () => {
     ...base,
     vatConfigurations: [
       { code: "RO_STANDARD", rate: "21", ...s, effectiveFrom: "2025-08-01" },
-      { code: "RO_NON_VAT", rate: "0", ...e, effectiveFrom: "2026-01-01" },
+      { code: "RO_NON_VAT", rate: "0", ...nonVat, effectiveFrom: "2026-01-01" },
     ],
   }) }, (error: unknown) => error instanceof ValidationFailure)
   assert.doesNotThrow(() => { validateIssuer({

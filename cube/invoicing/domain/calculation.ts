@@ -72,7 +72,8 @@ export const calculateTotals = (lines: ReadonlyArray<DraftLine>) => {
     if (lineValue(line) !== lineValue(checked)) mismatch("line totals are inconsistent")
     const base = moneyToMinor(line.totalExcludingVat)
     totalExcludingVat += base
-    const key = line.vatCategoryCode === "E" ? "E" : `${line.vatCategoryCode}:${formatScaled(parseScaled(line.vatRate, 2, "vatRate"), 2)}`
+    // The zero beside O is a placeholder, so all O lines share one group.
+    const key = line.vatCategoryCode === "O" ? "O" : `${line.vatCategoryCode}:${formatScaled(parseScaled(line.vatRate, 2, "vatRate"), 2)}`
     const current = groups.get(key)
     if (current !== undefined && (current.line.vatRateCode !== line.vatRateCode
       || current.line.vatExemptionReason !== line.vatExemptionReason)) {

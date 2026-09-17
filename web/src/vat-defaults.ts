@@ -18,7 +18,7 @@ const sameRate = (left: string, right: string): boolean => scaledRate(left) !== 
 const configurationRegistration = (configurations: ReadonlyArray<VatConfiguration>): boolean | undefined => {
   if (configurations.length === 0) return undefined
   if (configurations.every(({ code, rate, vatCategoryCode, vatExemptionReason }) => code === "RO_NON_VAT" && sameRate(rate, "0")
-    && vatCategoryCode === "E" && vatExemptionReason === ARTICLE_310_EXEMPTION_REASON)) return false
+    && vatCategoryCode === "O" && vatExemptionReason === ARTICLE_310_EXEMPTION_REASON)) return false
   if (configurations.every(({ code, rate, vatCategoryCode, vatExemptionReason }) => isTaxableVatCode(code) && (scaledRate(rate) ?? 0n) > 0n
     && vatCategoryCode === "S" && vatExemptionReason === null)) return true
   return undefined
@@ -118,4 +118,4 @@ export const issuerForIssueDate = (issuer: Issuer, date: string): Issuer & { rea
 })
 
 export const vatTreatmentLabel = (treatment: { readonly vatCategoryCode: VatBreakdown["vatCategoryCode"]; readonly rate?: string; readonly vatRate?: string }): string =>
-  treatment.vatCategoryCode === "E" ? "Scutit TVA — art. 310" : `TVA ${treatment.rate ?? treatment.vatRate ?? ""}%`
+  treatment.vatCategoryCode === "O" ? "Scutit TVA — art. 310" : `TVA ${treatment.rate ?? treatment.vatRate ?? ""}%`

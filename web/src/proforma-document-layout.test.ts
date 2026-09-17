@@ -61,9 +61,9 @@ void test("requires and renders real invoice and proforma identities in the shar
     ...invoice,
     issuer: { ...invoice.issuer, vatRegistered: false },
     lines: [{ id: "line-e", description: "Serviciu scutit", quantity: "1.0000", unitPrice: "100.00", unitOfMeasure: { code: "C62", name: "unitate" },
-      vatRateCode: "RO_NON_VAT", vatRate: "0.00", vatCategoryCode: "E", vatExemptionReason: ARTICLE_310_EXEMPTION_REASON,
+      vatRateCode: "RO_NON_VAT", vatRate: "0.00", vatCategoryCode: "O", vatExemptionReason: ARTICLE_310_EXEMPTION_REASON,
       totalExcludingVat: "100.00", vatAmount: "0.00", totalIncludingVat: "100.00" }],
-    vatBreakdown: [{ code: "RO_NON_VAT", rate: "0.00", vatCategoryCode: "E", vatExemptionReason: ARTICLE_310_EXEMPTION_REASON,
+    vatBreakdown: [{ code: "RO_NON_VAT", rate: "0.00", vatCategoryCode: "O", vatExemptionReason: ARTICLE_310_EXEMPTION_REASON,
       vatBaseAmount: "100.00", vatAmount: "0.00" }],
     totalExcludingVat: "100.00", vatTotal: "0.00", totalIncludingVat: "100.00",
   }

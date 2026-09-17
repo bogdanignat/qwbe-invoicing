@@ -22,12 +22,12 @@ const DocumentNotes = Schema.NullOr(Schema.String).pipe(
     const issues: Array<Schema.FilterIssue> = []
     if (value.trim().length === 0) issues.push({ path: [], message: "notes is required" })
     if (value !== value.trim()) issues.push({ path: [], message: "notes must not have surrounding whitespace" })
-    if (value.length > 500) issues.push({ path: [], message: "notes must be at most 500 characters" })
+    if (value.length > 300) issues.push({ path: [], message: "notes must be at most 300 characters" })
     if (/(?!\n)[\p{Cc}\p{Zl}\p{Zp}]/u.test(value)) issues.push({ path: [], message: "notes must not contain control characters" })
     return issues
   }, {
-    description: "1-500 characters, no surrounding whitespace or control characters except LF newlines.",
-    jsonSchema: { anyOf: [{ type: "string", minLength: 1, maxLength: 500 }, { type: "null" }] },
+    description: "1-300 characters, no surrounding whitespace or control characters except LF newlines.",
+    jsonSchema: { anyOf: [{ type: "string", minLength: 1, maxLength: 300 }, { type: "null" }] },
   }),
 )
 const optionalNullableNotes = optional(DocumentNotes)
@@ -89,7 +89,7 @@ export const CustomerInput = Schema.Struct({
 }).annotations(bodyObject)
 
 const VatTreatmentFields = {
-  vatCategoryCode: Schema.Literal("S", "E"),
+  vatCategoryCode: Schema.Literal("S", "O"),
   vatExemptionReason: nullableString,
 }
 export const VatConfiguration = Schema.Struct({
@@ -435,6 +435,7 @@ export const ProformaArtifact = Schema.Struct({
   generatedAt: Schema.String,
 })
 export const Pdf = HttpApiSchema.Uint8Array({ contentType: "application/pdf" })
+export const EFacturaXml = HttpApiSchema.Uint8Array({ contentType: "application/xml" })
 export const Deleted = Schema.Struct({ deleted: Schema.Literal(true) })
 export const LoginInput = Schema.Struct({ token: Schema.String })
 export const AuthenticatedSession = Schema.Struct({ authenticated: Schema.Literal(true), csrfToken: Schema.String })

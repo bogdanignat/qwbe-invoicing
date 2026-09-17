@@ -5,6 +5,8 @@ import {
 } from "@effect/platform"
 import { Cause, Chunk, Effect, Layer, Option, Redacted, Schema } from "effect"
 
+import type { EFacturaDocument } from "../cube/efactura/index.ts"
+import { EFacturaContractViolation, renderEFacturaXml } from "../cube/efactura/index.ts"
 import {
   ValidationFailure, createInvoicingService, type DocumentSource, type InvoicingFailure, type RequestContext,
 } from "../cube/invoicing/index.ts"
@@ -13,6 +15,7 @@ import { createPaymentsService, type PaymentsFailure } from "../cube/payments/in
 import { createStandaloneArtifactService } from "./artifact-runtime.ts"
 import type { RequestAuthenticator } from "./auth.ts"
 import { brandingNormalizer } from "./branding-normalizer.ts"
+import { mapCorrection, mapIssuedInvoice } from "./efactura-mapper.ts"
 import type { BrowserSession } from "./browser-session.ts"
 import { ApiAuthentication, CurrentRequest, CurrentSession, SessionAuthentication, applicationHttpApi } from "./http-api.ts"
 import * as S from "./http-schemas.ts"
@@ -101,6 +104,37 @@ const pdfResponse = (kind: "invoice" | "proforma", id: string, bytes: Uint8Array
   } })
 }
 
+/**
+ * Renders a frozen fiscal document as e-Factura XML, on the spot.
+ *
+ * Nothing is stored: the bytes are a function of a snapshot that can no longer
+ * change, so a cached copy could only ever go stale against a bug. The ETag is
+ * computed over what is actually sent, for the same reason the PDF route sends
+ * one — a second request for an unchanged document is answerable without it.
+ *
+ * Mapping and rendering signal refusal by throwing `EFacturaContractViolation`,
+ * because the cube will not emit a document it cannot render faithfully. Such a
+ * refusal is not a malformed request — it is a stored invoice that e-Factura
+ * cannot represent — but the list of reasons is exactly what the caller needs,
+ * so it travels as a validation failure rather than as an opaque 500. Anything
+ * else thrown is a defect and is left to surface as one.
+ */
+const efacturaXml = (build: () => EFacturaDocument): Effect.Effect<HttpServerResponse.HttpServerResponse, ValidationFailure> =>
+  Effect.suspend(() => {
+    try {
+      const document = build()
+      const bytes = new TextEncoder().encode(renderEFacturaXml(document))
+      const filename = document.id.replace(/[^A-Za-z0-9_-]/gu, "_").slice(0, 100) || "efactura"
+      return Effect.succeed(HttpServerResponse.uint8Array(bytes, { contentType: "application/xml", headers: {
+        "content-disposition": `attachment; filename="${filename}.xml"`, "x-content-type-options": "nosniff",
+        etag: `"sha256-${createHash("sha256").update(bytes).digest("hex")}"`,
+      } }))
+    } catch (error) {
+      if (error instanceof EFacturaContractViolation) return Effect.fail(new ValidationFailure({ issues: error.issues }))
+      throw error
+    }
+  })
+
 const services = (runtime: ApiRuntime, context: RequestContext) => {
   const clock = { now: Effect.sync(runtime.now ?? (() => new Date())) }
   const ids = { next: Effect.sync(randomUUID) }
@@ -183,9 +217,17 @@ const invoicingGroup = (runtime: ApiRuntime) => {
     .handle("createCorrection", ({ path, payload, headers }) => idempotent(headers["idempotency-key"], "create_correction", { originalInvoiceId: path.invoiceId, ...payload }).pipe(Effect.flatMap((input) => use((s) => s.invoicing.createCorrection(input))), Effect.mapError(errors("ValidationFailure", "ResourceNotFound", "DomainConflict"))))
     .handle("listCorrections", ({ path, urlParams }) => sourceFilter(urlParams).pipe(Effect.flatMap((source) => use((s) => s.invoicing.listCorrections(path.invoiceId, source))), Effect.mapError(errors("ValidationFailure"))))
     .handle("getCorrection", ({ path }) => use((s) => s.invoicing.getCorrection(path.id)).pipe(Effect.mapError(errors("ResourceNotFound"))))
+    .handleRaw("downloadCorrectionEFactura", ({ path }) => use((s) => Effect.flatMap(s.invoicing.getCorrection(path.id),
+      (correction) => Effect.map(s.invoicing.getIssuedInvoice(correction.originalInvoiceId),
+        (original) => ({ correction, original })))).pipe(
+      Effect.flatMap(({ correction, original }) => efacturaXml(() => mapCorrection(correction, original))),
+      Effect.mapError(errors("ResourceNotFound", "ValidationFailure"))))
     .handle("listIssuedInvoices", ({ urlParams }) => sourceFilter(urlParams).pipe(Effect.flatMap((source) => use((s) => s.invoicing.listIssuedInvoices(source, urlParams))), Effect.mapError(errors("ValidationFailure"))))
     .handle("issueInvoice", ({ payload, headers }) => idempotent(headers["idempotency-key"], "issue_invoice_direct", payload).pipe(Effect.flatMap((input) => use((s) => s.invoicing.issueInvoice(input))), Effect.mapError(errors("ValidationFailure", "ResourceNotFound", "DomainConflict"))))
     .handle("getIssuedInvoice", ({ path }) => use((s) => s.invoicing.getIssuedInvoice(path.id)).pipe(Effect.mapError(errors("ResourceNotFound"))))
+    .handleRaw("downloadInvoiceEFactura", ({ path }) => use((s) => s.invoicing.getIssuedInvoice(path.id)).pipe(
+      Effect.flatMap((invoice) => efacturaXml(() => mapIssuedInvoice(invoice))),
+      Effect.mapError(errors("ResourceNotFound", "ValidationFailure"))))
     .handle("issueDraftProforma", ({ path, payload, headers }) => idempotent(headers["idempotency-key"], "issue_proforma_from_draft", { draftId: path.draftId, ...payload }).pipe(Effect.flatMap((input) => use((s) => s.invoicing.issueProforma(input))), Effect.mapError(errors("ValidationFailure", "ResourceNotFound", "DomainConflict"))))
     .handle("listProformas", ({ urlParams }) => sourceFilter(urlParams).pipe(Effect.flatMap((source) => use((s) => s.invoicing.listProformas(source, urlParams))), Effect.mapError(errors("ValidationFailure"))))
     .handle("issueProforma", ({ payload, headers }) => idempotent(headers["idempotency-key"], "issue_proforma_direct", payload).pipe(Effect.flatMap((input) => use((s) => s.invoicing.issueProforma(input))), Effect.mapError(errors("ValidationFailure", "ResourceNotFound", "DomainConflict"))))

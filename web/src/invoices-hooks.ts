@@ -72,5 +72,15 @@ export const useInvoiceDetail = (id: string) => {
       if (bundle.data !== undefined) downloadBlob(blob, `factura-${bundle.data.invoice.series}-${String(bundle.data.invoice.number)}.pdf`)
     },
   })
-  return { bundle, download: { pending: download.isPending, error: download.error, start: download.mutate } }
+  const efactura = useMutation({
+    mutationFn: () => runUiEffect(invoicingClient.downloadInvoiceEFactura(id)),
+    onSuccess: (blob) => {
+      if (bundle.data !== undefined) downloadBlob(blob, `efactura-${bundle.data.invoice.series}-${String(bundle.data.invoice.number)}.xml`)
+    },
+  })
+  return {
+    bundle,
+    download: { pending: download.isPending, error: download.error, start: download.mutate },
+    efactura: { pending: efactura.isPending, error: efactura.error, start: efactura.mutate },
+  }
 }

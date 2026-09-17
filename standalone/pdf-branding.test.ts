@@ -8,7 +8,7 @@ import sharp from "sharp"
 import type { RenderableInvoice, RenderableProforma } from "../cube/invoicing/documents/index.ts"
 import { createPdfRenderer } from "./pdf-renderer.ts"
 
-type VatTreatment = { readonly vatCategoryCode: "S" | "E"; readonly vatExemptionReason: string | null }
+type VatTreatment = { readonly vatCategoryCode: "S" | "O"; readonly vatExemptionReason: string | null }
 type RenderableInvoiceFixture = Omit<RenderableInvoice, "lines" | "vatBreakdown"> & {
   readonly lines: ReadonlyArray<RenderableInvoice["lines"][number] & VatTreatment>
   readonly vatBreakdown: ReadonlyArray<RenderableInvoice["vatBreakdown"][number] & VatTreatment>
