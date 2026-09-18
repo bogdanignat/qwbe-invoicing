@@ -284,9 +284,9 @@ This list is a domain starting point, not a committed schema.
 
 References to global accounts, organizations, contacts, products, or documents should use stable ids and legal integration paths. Issued legal documents must preserve the relevant snapshot instead of changing when a foreign record changes later.
 
-### Schema history worth knowing
+### Schema baselines during development
 
-Migration `004-invoice-delete-last` dropped the immutability triggers on issued invoices, their lines and their VAT breakdown for a "delete the last issued invoice" feature that was later removed from the code. Migrations `007`, `008` and `009` recreated the triggers with the current shapes. Migration files are history and are never edited; a test in `standalone/standalone.test.ts` asserts that every immutability trigger exists after all migrations run, so a database that passed through that window still ends up protected.
+While the project is in development (the "STADIU" section of `CLAUDE.md`), every cube owns exactly one migration, `<cube>-001-baseline`, holding the current definition of the tables its manifest declares, with their indexes and triggers; `standalone/schema-baseline.test.ts` asserts that each baseline creates exactly the declared tables. A schema change edits the owning baseline instead of adding a migration. A database created from an earlier baseline is drift: `migrate` refuses it before writing and `doctor` reports it, and the answer is to recreate the database, which drops its data. The migrator never deletes a database itself. The runner applies the foundation and then each cube's migrations in cube order, a cube whose tables others reference first, never sorted by name. Numbered incremental migrations (`<cube>-002-...`) return only when the development stage ends. The immutability triggers are part of the baselines, and `standalone/standalone.test.ts` still asserts that every one of them exists after migration.
 
 ## 8. Events are not workflows
 

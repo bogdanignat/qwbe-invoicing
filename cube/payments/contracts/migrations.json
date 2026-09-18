@@ -1,17 +1,10 @@
 [
   {
-    "name": "002-invoice-payments",
+    "name": "payments-001-baseline",
     "statements": [
-      "CREATE TABLE invoice_payments(id TEXT PRIMARY KEY,invoice_id TEXT NOT NULL,organization_id TEXT NOT NULL,amount TEXT NOT NULL,currency TEXT NOT NULL,payment_date TEXT NOT NULL,method TEXT NOT NULL,external_reference TEXT,note TEXT,actor_id TEXT NOT NULL,created_at TEXT NOT NULL,UNIQUE(organization_id,id),FOREIGN KEY(invoice_id)REFERENCES issued_invoices(id))STRICT",
+      "CREATE TABLE invoice_payments(id TEXT PRIMARY KEY,invoice_id TEXT NOT NULL,organization_id TEXT NOT NULL,amount TEXT NOT NULL,currency TEXT NOT NULL,payment_date TEXT NOT NULL,method TEXT NOT NULL,external_reference TEXT,note TEXT,actor_id TEXT NOT NULL,created_at TEXT NOT NULL, kind TEXT NOT NULL DEFAULT 'payment' CHECK(kind IN ('payment','reversal')), reverses_payment_id TEXT REFERENCES invoice_payments(id),UNIQUE(organization_id,id),FOREIGN KEY(invoice_id)REFERENCES issued_invoices(id))STRICT",
       "CREATE INDEX invoice_payments_invoice ON invoice_payments(invoice_id)",
-      "CREATE INDEX invoice_payments_organization ON invoice_payments(organization_id)"
-    ]
-  },
-  {
-    "name": "012-payment-idempotency",
-    "statements": [
-      "ALTER TABLE invoice_payments ADD COLUMN kind TEXT NOT NULL DEFAULT 'payment' CHECK(kind IN ('payment','reversal'))",
-      "ALTER TABLE invoice_payments ADD COLUMN reverses_payment_id TEXT REFERENCES invoice_payments(id)",
+      "CREATE INDEX invoice_payments_organization ON invoice_payments(organization_id)",
       "CREATE UNIQUE INDEX invoice_payments_reversal ON invoice_payments(reverses_payment_id) WHERE reverses_payment_id IS NOT NULL",
       "CREATE TRIGGER invoice_payments_reversal_shape BEFORE INSERT ON invoice_payments WHEN (NEW.kind='reversal') != (NEW.reverses_payment_id IS NOT NULL) BEGIN SELECT RAISE(ABORT,'a reversal references exactly one payment');END",
       "CREATE TRIGGER invoice_payments_no_update BEFORE UPDATE ON invoice_payments BEGIN SELECT RAISE(ABORT,'payments are immutable');END",

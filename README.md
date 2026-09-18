@@ -64,9 +64,8 @@ a rewrite.
   These values are frozen into documents and retained in summaries, conversions and
   corrections; PDF and UI omit empty optional lines. Existing cached PDFs are not
   regenerated merely because a template version changes.
-  Migration `015-issuer-details` uses the existing migration runner on a fresh
-  development database. Populated old-schema databases are not backfilled: use a
-  new isolated data directory or explicitly recreate the disposable development database.
+  Databases created from an older schema are not backfilled; they are recreated
+  (see "Schema during development" below).
 - **Customers** (optional register): companies with a valid CUI/CIF, or natural persons with
   an optional CNP. A document can also be issued to a one-time buyer typed directly in the
   editor, so the register and draft persistence are conveniences, not prerequisites. A saved
@@ -321,13 +320,6 @@ not supported. This bounded product rule is not an external fiscal-status lookup
 See [the fiscal treatment contract and evidence](docs/VAT_TREATMENT.md).
 Readiness is **not complete**: no UBL/XML export, complete CIUS-RO validation or
 ANAF transport is included in this lot.
-Migration `019` requires an empty invoice database and rejects populated schemas
-atomically; it does not backfill or delete local data. Use the existing migration
-and doctor commands against a fresh development data directory.
-Migration `020` is also fresh-only for affected VAT tables: no backfill or automatic
-deletion. It persists S/E and reason fields and rejects incompatible populated data
-before changing its schema. Atomicity is per migration, not the whole pending batch;
-earlier migrations may already have committed when a later migration is refused.
 
 Numbered invoices, proformas and corrections expose a trusted `actorId`. Their
 issuance, issuer/series configuration, payments and reversals append fiscal events
@@ -337,12 +329,17 @@ Payments remains a separate cube with `payments:*` permissions; recording a paym
 is optional and is not required to issue an invoice. Document/PDF and session
 databases remain separate, and `eFacturaStatus` is retained.
 
-**Development migration:** `016-fiscal-audit` adds required actor columns without
-fabricating actors for old rows. Use a fresh development database; a populated
-pre-audit database may reject the migration and must be explicitly recreated.
-The migration never deletes existing databases automatically. Use the existing
-`migrate --json` dry-run, `migrate --apply --json`, repeated dry-run and `doctor --json`
-workflow on the new data directory; no backfill or legacy-snapshot fallback is provided.
+**Schema during development:** each cube owns one baseline migration holding the
+current definition of its tables (`invoicing-001-baseline`, `payments-001-baseline`,
+`documents/documents-001-baseline`). A schema change edits the owning baseline, so a
+database created before it no longer matches: `migrate` refuses it before writing
+anything and `doctor` reports it, both naming the drifted objects and asking to
+recreate the database. Recreating is not an upgrade: it drops the local data, and the
+migrator never deletes a database on its own. Prefer a new `DATA_DIR`; otherwise stop
+the app and remove `invoicing.sqlite`, `documents.sqlite` and `sessions.sqlite` with
+their `-wal`/`-shm` files explicitly, keeping the token file. Then run `migrate --json`,
+`migrate --apply --json`, a repeated dry-run and `doctor --json`. There is no backfill
+and no legacy-snapshot fallback.
 
 Registries (`GET /api/customers`, `/api/product-presets`, `/api/drafts`, `/api/invoices`, `/api/proformas`)
 are paged: the response is `{ "items": [...], "nextCursor": "..." | null }`, `?limit=` takes 1 to 200

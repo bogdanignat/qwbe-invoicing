@@ -30,32 +30,13 @@ void test("migration apply is idempotent", () => {
   try {
     assert.deepEqual(planMigrations(directory).pending, [
       "000-foundation",
-      "001-invoice-core",
-      "002-invoice-payments",
-      "003-invoice-corrections",
-      "004-invoice-delete-last",
-      "005-allow-e-factura-status-update",
-      "006-customer-soft-delete",
-      "007-complete-invoice-authoring",
-      "008-proforma-workflow",
-      "009-proforma-direct-invoice",
-      "010-product-presets-payment-terms",
-      "011-external-api-snapshots",
-      "012-payment-idempotency",
-      "013-document-notes",
-      "014-issuer-branding",
-      "015-issuer-details",
-      "016-fiscal-audit",
-      "017-issuer-vat-status",
-      "018-proforma-workflow",
-      "019-efactura-party-snapshots",
-      "020-vat-treatment-snapshots",
+      "invoicing-001-baseline",
+      "payments-001-baseline",
       "documents/000-foundation",
-      "documents/001-artifacts",
-      "documents/002-proforma-artifacts",
+      "documents/documents-001-baseline",
       "sessions/000-browser-sessions",
     ])
-    assert.equal(applyMigrations(directory).changed, 25)
+    assert.equal(applyMigrations(directory).changed, 6)
     assertSourceIndexes(directory)
     assert.equal(applyMigrations(directory).changed, 0)
     assertSourceIndexes(directory)
@@ -74,11 +55,11 @@ void test("migrate CLI reapplies the complete schema with zero changes", () => {
     assert.equal(first.status, 0, first.stderr)
     const firstReport: unknown = JSON.parse(first.stdout)
     assert.ok(typeof firstReport === "object" && firstReport !== null && "changed" in firstReport)
-    assert.equal(firstReport.changed, 25)
+    assert.equal(firstReport.changed, 6)
     const second = spawnSync(process.execPath, [executable, "migrate", "--apply", "--json"], { encoding: "utf8", env })
     assert.equal(second.status, 0, second.stderr)
     const secondReport: unknown = JSON.parse(second.stdout)
-    assert.deepEqual(secondReport, { scanned: 25, changed: 0, skipped: 25, failed: 0, pending: [], schemaDrift: [] })
+    assert.deepEqual(secondReport, { scanned: 6, changed: 0, skipped: 6, failed: 0, pending: [], schemaDrift: [] })
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }

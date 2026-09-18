@@ -60,10 +60,13 @@ docker compose -f compose.prod.yaml exec app node bin/qwbe-invoicing.ts artifact
 docker compose -f compose.prod.yaml logs --tail=100 migrate app
 ```
 
-For T-1069, startup applies `008-proforma-workflow` and the non-destructive
-`009-proforma-direct-invoice` upgrade to `invoicing.sqlite`, plus
-`documents/002-proforma-artifacts` to `documents.sqlite`. `doctor --json` remains the
-readiness gate and reports `pendingMigrations` and `migrationsReady`. `artifacts` is a dry-run by
+While the project is in development there is no upgrade path between schema
+versions: each cube owns one baseline migration, and a changed baseline needs a new
+database (README, "Schema during development"). `migrate` refuses a database whose
+schema its history does not explain before writing anything, so `app` does not start
+on it. This upgrade procedure applies once incremental migrations return after the
+development stage. `doctor --json` is the readiness gate and reports
+`pendingMigrations`, `migrationsReady` and `schemaDrift`. `artifacts` is a dry-run by
 default and now reports both invoices and proformas missing PDFs; use `--apply`
 (plus `--confirm-production` outside development) only to reconcile at most
 `--limit` documents, one successful PDF at a time.

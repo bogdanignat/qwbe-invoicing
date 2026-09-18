@@ -100,17 +100,14 @@ These are inspected rules, not an executed full XSLT/UBL validation or a general
 compliance certificate. XML generation, complete schema/business-rule validation
 and ANAF transport remain separate work.
 
-## Development migration
+## Storage
 
-020 replaces placeholder `standard` persistence with constrained S/O tuples and
-reason fields across issuer configurations and draft/issued/proforma/correction
-lines and tax breakdowns. It is fresh-only, with no legacy decoder, backfill or
-automatic data deletion. The populated-data guard runs before 020's DDL. The
-migration runner is atomic **per migration**, not across all pending migrations.
-
-Use existing `migrate --json`, `migrate --apply --json`, repeat and `doctor --json`
-against a fresh temporary development directory. A real/local data reset is a
-separate operational action; running these tests does not reset the existing app.
+The invoicing baseline constrains the S/O tuples and reason fields with CHECKs on
+issuer configurations and on draft/issued/proforma/correction lines and tax
+breakdowns. There is no legacy decoder, backfill or automatic data deletion; a
+database from an older schema is recreated (README, "Schema during development").
+A real/local data reset is a separate operational action; running the tests does
+not reset the existing app.
 
 ## Remaining work
 
@@ -124,5 +121,5 @@ separate operational action; running these tests does not reset the existing app
   its identity and current terms still need verification.
 - **T-1374 — local activation:** integrate and run the new version locally.
   The existing local app/database was not updated by this implementation.
-  Migration 020 is fresh-only; any database recreation requires a separately
+  The schema is a development baseline; any database recreation requires a separately
   confirmed operational action, never an implicit reset during deployment.
