@@ -3,22 +3,25 @@ import { Effect } from "effect"
 import { checked, missing, namePageQuery, pageOf, type Authorize, type OperationDependencies, type Page, type PageRequest } from "../../application/support.ts"
 import type { InvoicingFailure } from "../../contracts/failures.ts"
 import type { InvoicingPermissions } from "../../contracts/permissions.ts"
-import type { ProductPreset } from "../../domain/invoice.ts"
-import type { ProductPresetInput, UpdateProductPresetInput } from "../../domain/inputs.ts"
-import { normalizeProductPreset } from "../domain/validation.ts"
+import { unitOfMeasures, type UnitOfMeasure } from "../../domain/unit-of-measures.ts"
+import { normalizeProductPreset, type ProductPreset, type ProductPresetInput, type UpdateProductPresetInput } from "../domain/product-preset.ts"
+import type { CatalogTransaction } from "./ports.ts"
 
-export interface ProductPresetOperations {
+export interface CatalogOperations {
   readonly createProductPreset: (input: ProductPresetInput) => Effect.Effect<ProductPreset, InvoicingFailure>
   readonly listProductPresets: (page?: PageRequest) => Effect.Effect<Page<ProductPreset>, InvoicingFailure>
   readonly updateProductPreset: (input: UpdateProductPresetInput) => Effect.Effect<ProductPreset, InvoicingFailure>
   readonly deleteProductPreset: (id: string) => Effect.Effect<void, InvoicingFailure>
+  // The list is the kernel's, because every document line is checked against it; the
+  // catalog is where it is offered to choose from.
+  readonly listUnitOfMeasures: () => Effect.Effect<ReadonlyArray<UnitOfMeasure>, InvoicingFailure>
 }
 
-export const createProductPresetOperations = (
-  dependencies: OperationDependencies,
+export const createCatalogOperations = (
+  dependencies: OperationDependencies<CatalogTransaction>,
   permissions: InvoicingPermissions,
   authorize: Authorize,
-): ProductPresetOperations => {
+): CatalogOperations => {
   const createProductPreset = (input: ProductPresetInput) => Effect.gen(function*() {
     const context = yield* authorize(permissions.manageSettings)
     const normalized = yield* checked(() => normalizeProductPreset(input))
@@ -53,5 +56,9 @@ export const createProductPresetOperations = (
       yield* transaction.deleteProductPreset(context.organization.id, id)
     }))
   })
-  return { createProductPreset, listProductPresets, updateProductPreset, deleteProductPreset }
+  const listUnitOfMeasures = () => Effect.gen(function*() {
+    yield* authorize(permissions.read)
+    return unitOfMeasures.map((unit) => ({ ...unit }))
+  })
+  return { createProductPreset, listProductPresets, updateProductPreset, deleteProductPreset, listUnitOfMeasures }
 }

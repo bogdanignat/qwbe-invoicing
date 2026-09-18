@@ -1,8 +1,5 @@
 import { ValidationFailure } from "../../contracts/failures.ts"
-import { normalizeMoney } from "../../domain/calculation.ts"
 import type { IssuerProfile, VatConfiguration } from "../../domain/invoice.ts"
-import type { ProductPresetInput } from "../../domain/inputs.ts"
-import { normalizeUnitOfMeasure } from "../../domain/unit-of-measures.ts"
 import { maximumPaymentTermDays, validateDate, validateVatTreatment } from "../../domain/validation.ts"
 import { normalizeIssuerDetails } from "./issuer-details.ts"
 import { isValidRomanianCui, validateParty } from "../../parties/index.ts"
@@ -20,12 +17,6 @@ export const resolveVatConfiguration = (
     throw new ValidationFailure({ issues: [`vatRateCode ${code} must resolve to exactly one configuration on ${issueDate}`] })
   }
   return matches[0] as VatConfiguration
-}
-
-export const normalizeProductPreset = (input: ProductPresetInput): ProductPresetInput => {
-  const description = input.description.trim()
-  if (description.length === 0) throw new ValidationFailure({ issues: ["description is required"] })
-  return { description, unitPrice: normalizeMoney(input.unitPrice, "unitPrice"), unitOfMeasure: normalizeUnitOfMeasure(input.unitOfMeasure) }
 }
 
 export const normalizeBrandingText = (value: string | null): string | null => {

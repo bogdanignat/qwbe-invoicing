@@ -21,9 +21,9 @@ export const ProductPresetsView = ({ notify }: { readonly notify: (message: stri
   const units = state.unitOfMeasures.data
   if (presets === undefined || units === undefined) return state.presets.error === null && state.unitOfMeasures.error === null
     ? <Loading />
-    : <Page title="Produse și servicii" eyebrow="Preseturi facturare"><ErrorAlert error={state.presets.error ?? state.unitOfMeasures.error ?? new Error("Catalogul U.M. nu a putut fi încărcat.")} /></Page>
+    : <Page title="Catalog" eyebrow="Produse și servicii"><ErrorAlert error={state.presets.error ?? state.unitOfMeasures.error ?? new Error("Catalogul U.M. nu a putut fi încărcat.")} /></Page>
   const items = presets
-  return <Page title="Produse și servicii" eyebrow="Preseturi facturare" actions={<ButtonLink href="/invoices/new">Factură nouă</ButtonLink>}>
+  return <Page title="Catalog" eyebrow="Produse și servicii" actions={<ButtonLink href="/invoices/new">Factură nouă</ButtonLink>}>
     <div className="split-layout">
       <section className="card overview-section">
         <div className="section-heading"><div><h2>Produse predefinite</h2><p>Lista precompletează descrierea și prețul unei linii; factura păstrează propria copie.</p></div><span className="count">{items.length}</span></div>

@@ -70,8 +70,8 @@ a rewrite.
   an optional CNP. A document can also be issued to a one-time buyer typed directly in the
   editor, so the register and draft persistence are conveniences, not prerequisites. A saved
   customer may define a default payment term which prepopulates, but never locks, the due date.
-- **Products and services** (optional presets): a short reusable list of descriptions and unit
-  prices. Selecting one copies those values into an editable invoice line; there is no stock,
+- **Products and services** (optional presets, the "Catalog" screen): a short reusable list of
+  descriptions, units of measure and unit prices. Selecting one copies those values into an editable invoice line; there is no stock,
   SKU, price-list logic, or live relation to the saved preset.
 - **Document series**: separate series for invoices and proformas. Numbers are allocated
   atomically at issue time, are unique within their scope and are never reused. Uniqueness
@@ -128,7 +128,9 @@ API client ──> /api (Bearer) ───┘        │                        
 - **The component cubes** under `cube/invoicing/` each own one piece of the logic and share
   the parent's domain: `parties` (the Romanian fiscal rules for every party: CUI, CNP,
   counties and sectors), `customers` (saved customers, with their own table and baseline),
-  `registry` (issuer, VAT configurations, document series, product presets), `drafts`
+  `catalog` (saved products and services and the unit-of-measure list they are chosen from,
+  with their own table and baseline), `registry` (issuer, VAT configurations, document
+  series), `drafts`
   (authoring a document, draft and line editing), `issuance` (numbered invoices and
   proformas, conversion, idempotent replay), `corrections` (storno) and `documents`
   (rendered PDF artifacts, their hashes and recovery). A child enters another child only
@@ -333,10 +335,10 @@ is optional and is not required to issue an invoice. Document/PDF and session
 databases remain separate, and `eFacturaStatus` is retained.
 
 **Schema during development:** each cube owns one baseline migration holding the
-current definition of its tables (`customers-001-baseline`, `invoicing-001-baseline`,
-`payments-001-baseline`, `documents/documents-001-baseline`). In `invoicing.sqlite` they
-run after `000-foundation` in cube order, customers before invoicing because drafts
-reference them, for seven entries across the three databases. A schema change edits the owning baseline, so a
+current definition of its tables (`customers-001-baseline`, `catalog-001-baseline`,
+`invoicing-001-baseline`, `payments-001-baseline`, `documents/documents-001-baseline`).
+In `invoicing.sqlite` they run after `000-foundation` in cube order, customers before
+invoicing because drafts reference them, for eight entries across the three databases. A schema change edits the owning baseline, so a
 database created before it no longer matches: `migrate` refuses it before writing
 anything and `doctor` reports it, both naming the drifted objects and asking to
 recreate the database. Recreating is not an upgrade: it drops the local data, and the
@@ -410,7 +412,8 @@ fails, so it can gate a deployment.
 cube/invoicing/            core: domain model, VAT arithmetic, ports, contracts, migrations, service composition
 cube/invoicing/parties/    component: CUI, CNP, counties and sectors shared by issuer and buyers
 cube/invoicing/customers/  component: saved customers, their table and baseline migration
-cube/invoicing/registry/   component: issuer, VAT configurations, document series, product presets
+cube/invoicing/catalog/    component: saved products and services, their table and baseline migration
+cube/invoicing/registry/   component: issuer, VAT configurations, document series
 cube/invoicing/drafts/     component: document authoring, draft and line editing
 cube/invoicing/issuance/   component: numbered invoices and proformas, conversion, idempotent replay
 cube/invoicing/corrections/ component: correction documents (storno)

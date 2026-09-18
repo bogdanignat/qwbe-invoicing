@@ -11,6 +11,7 @@ import {
   type RequestContextProvider,
   type BrandingNormalizer,
 } from "../contracts/index.ts"
+import type { CatalogTransaction, ProductPreset } from "../catalog/index.ts"
 import type { Customer, CustomersTransaction } from "../customers/index.ts"
 import type { AuditEvent, IdempotencyRecord } from "../domain/invoice.ts"
 import type { ProformaConversion } from "../issuance/domain/proforma.ts"
@@ -44,7 +45,7 @@ export interface MemoryState {
   issuers: Map<string, Parameters<InvoicingTransaction["saveIssuer"]>[0]>
   documentSeries: Map<string, Parameters<InvoicingTransaction["addDocumentSeries"]>[0]>
   customers: Map<string, Customer>
-  productPresets: Map<string, Parameters<InvoicingTransaction["saveProductPreset"]>[0]>
+  productPresets: Map<string, ProductPreset>
   drafts: Map<string, DraftInvoice>
   issued: Map<string, IssuedInvoice>
   proformas: Map<string, Proforma>
@@ -70,7 +71,7 @@ export const memoryStore = (state: MemoryState): InvoicingDependencies["store"] 
       convertedInvoiceId: working.invoiceConversions.get(proforma.id)?.resultingInvoiceId
         ?? [...working.issued.values()].find((invoice) => invoice.organizationId === proforma.organizationId
           && invoice.sourceProformaId === proforma.id)?.id ?? null })
-    const transaction: InvoicingTransaction & CustomersTransaction = {
+    const transaction: InvoicingTransaction & CustomersTransaction & CatalogTransaction = {
       saveIssuer: (issuer) => Effect.sync(() => { working.issuers.set(issuer.organizationId, issuer) }),
       findIssuer: (organizationId) => Effect.succeed(working.issuers.get(organizationId)),
       addDocumentSeries: (documentSeries) => Effect.suspend(() => {

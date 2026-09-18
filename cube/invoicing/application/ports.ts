@@ -1,7 +1,7 @@
 import type { Effect } from "effect"
 
 import type { DomainConflict, PersistenceFailure } from "../contracts/failures.ts"
-import type { AuditEvent, DocumentSeries, DocumentSource, DocumentType, DraftInvoice, IdempotencyRecord, IssuedInvoice, IssuedInvoiceSummary, IssuerProfile, NumberedDocumentType, ProductPreset } from "../domain/invoice.ts"
+import type { AuditEvent, DocumentSeries, DocumentSource, DocumentType, DraftInvoice, IdempotencyRecord, IssuedInvoice, IssuedInvoiceSummary, IssuerProfile, NumberedDocumentType } from "../domain/invoice.ts"
 import type { CorrectionDocument } from "../corrections/domain/corrections.ts"
 import type { Proforma, ProformaConversion, ProformaInvoiceConversion, ProformaSummary } from "../issuance/domain/proforma.ts"
 
@@ -34,10 +34,6 @@ export interface InvoicingTransaction {
     series: string,
   ) => Read<DocumentSeries | undefined>
   readonly listDocumentSeries: List<DocumentSeries>
-  readonly saveProductPreset: Save<ProductPreset>
-  readonly findProductPreset: Find<ProductPreset>
-  readonly listProductPresets: (organizationId: string, page: PageQuery<NameCursor>) => Read<ReadonlyArray<ProductPreset>>
-  readonly deleteProductPreset: Remove
   readonly saveDraft: Save<DraftInvoice>
   readonly findDraft: Find<DraftInvoice>
   readonly listDrafts: PagedList<DraftInvoice, DraftCursor>

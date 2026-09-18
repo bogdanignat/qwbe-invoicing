@@ -492,7 +492,8 @@ qwbe-invoicing/
 │       ├── contracts/          schemas and host-facing seams
 │       ├── parties/            component cube: CUI/CNP, counties and sectors for every party
 │       ├── customers/          component cube: saved customers, their table and baseline
-│       ├── registry/           component cube: issuer, VAT, series, presets
+│       ├── catalog/            component cube: saved products and services, their table and baseline
+│       ├── registry/           component cube: issuer, VAT, series
 │       ├── drafts/             component cube: authoring and draft editing
 │       ├── issuance/           component cube: numbered invoices and proformas
 │       ├── corrections/        component cube: storno documents

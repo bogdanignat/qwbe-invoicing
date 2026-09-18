@@ -1,4 +1,4 @@
-import type { BuyerSnapshot, DocumentSeries, DocumentSource, IssuerProfile, ProductPreset } from "./invoice.ts"
+import type { BuyerSnapshot, DocumentSeries, DocumentSource, IssuerProfile } from "./invoice.ts"
 import type { UnitOfMeasure } from "./unit-of-measures.ts"
 
 export type ConfigureDocumentSeriesInput = Pick<DocumentSeries, "documentType" | "series">
@@ -9,9 +9,6 @@ export type VatChange =
   | { readonly registered: true; effectiveFrom: string; readonly nonVatBasis?: never }
   | { readonly registered: false; effectiveFrom: string; readonly nonVatBasis: "article_310" }
 export type ConfigureIssuerInput = Omit<IssuerProfile,"organizationId"|"branding"|"vatConfigurations"> & { readonly branding:RawIssuerBranding|null; readonly vatChange:VatChange }
-
-export type ProductPresetInput = Pick<ProductPreset, "description" | "unitPrice" | "unitOfMeasure">
-export type UpdateProductPresetInput = ProductPresetInput & { readonly id: string }
 
 export type BuyerSource = { readonly customerId: string; readonly customer?: never } | { readonly customer: BuyerSnapshot; readonly customerId?: never }
 

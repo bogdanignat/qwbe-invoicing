@@ -7,6 +7,7 @@ import { DatabaseSync } from "node:sqlite"
 import test from "node:test"
 
 import { invoicingMigrations } from "../cube/invoicing/index.ts"
+import { catalogMigrations } from "../cube/invoicing/catalog/index.ts"
 import { customersMigrations } from "../cube/invoicing/customers/index.ts"
 import { paymentsMigrations } from "../cube/payments/index.ts"
 import { handleApiRequest } from "./api.test-support.ts"
@@ -45,7 +46,7 @@ const seedThrough = (dataDirectory: string, through: string): ReadonlyArray<stri
   const order = planMigrations(dataDirectory).pending.filter((name) => !name.includes("/"))
   assert.ok(order.includes(through), `${through} is not in the migration order`)
   const prefix = order.slice(0, order.indexOf(through) + 1)
-  const statements = new Map([...customersMigrations, ...invoicingMigrations, ...paymentsMigrations].map((migration) => [migration.name, migration.statements]))
+  const statements = new Map([...customersMigrations, ...catalogMigrations, ...invoicingMigrations, ...paymentsMigrations].map((migration) => [migration.name, migration.statements]))
   const database = new DatabaseSync(databasePath(dataDirectory))
   try {
     database.exec("CREATE TABLE schema_migrations (name TEXT PRIMARY KEY, applied_at TEXT NOT NULL) STRICT")
@@ -144,7 +145,7 @@ void test("a database part-way through the contract is pending, not drifted", ()
   const directory = mkdtempSync(join(tmpdir(), "qwbe-drift-"))
   try {
     assert.deepEqual(seedThrough(directory, "invoicing-001-baseline"),
-      ["000-foundation", "customers-001-baseline", "invoicing-001-baseline"])
+      ["000-foundation", "customers-001-baseline", "catalog-001-baseline", "invoicing-001-baseline"])
     assert.deepEqual(schemaDrift(directory), [])
     assert.ok(planMigrations(directory).pending.includes("payments-001-baseline"))
     const plan = cli(directory, ["migrate", "--json"])

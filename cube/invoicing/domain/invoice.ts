@@ -106,14 +106,6 @@ export interface DocumentSeries {
   readonly series: string
 }
 
-export interface ProductPreset {
-  readonly id: string
-  readonly organizationId: string
-  readonly description: string
-  readonly unitPrice: string
-  readonly unitOfMeasure: UnitOfMeasure
-}
-
 export interface DraftLine extends VatTreatment {
   readonly id: string
   readonly description: string

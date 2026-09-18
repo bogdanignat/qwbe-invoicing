@@ -6,6 +6,7 @@ import { DatabaseSync } from "node:sqlite"
 import test from "node:test"
 
 import { ROMANIAN_COUNTIES, cube as invoicingCube, invoicingMigrations } from "../cube/invoicing/index.ts"
+import { cube as catalogCube, catalogMigrations } from "../cube/invoicing/catalog/index.ts"
 import { cube as customersCube, customersMigrations } from "../cube/invoicing/customers/index.ts"
 import { cube as documentsCube, documentsMigrations } from "../cube/invoicing/documents/index.ts"
 import { cube as paymentsCube, paymentsMigrations } from "../cube/payments/index.ts"
@@ -30,6 +31,7 @@ void test("each cube baseline creates exactly the tables its manifest declares",
   for (const [cube, migrations] of [
     [invoicingCube, invoicingMigrations],
     [customersCube, customersMigrations],
+    [catalogCube, catalogMigrations],
     [paymentsCube, paymentsMigrations],
     [documentsCube, documentsMigrations],
   ] as const) {

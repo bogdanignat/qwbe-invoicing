@@ -20,7 +20,6 @@ import {
   type IssuerBranding,
   type IssuerCompanySnapshot,
   type PageQuery,
-  type ProductPreset,
   type Proforma,
   type ProformaConversion,
   type ProformaSummary,
@@ -28,6 +27,7 @@ import {
   type VatConfiguration,
   type TransactionalStore,
 } from "../cube/invoicing/index.ts"
+import type { CatalogTransaction } from "../cube/invoicing/catalog/index.ts"
 import type { CustomersTransaction } from "../cube/invoicing/customers/index.ts"
 import { normalizeIssuerDetails, validateIssuerForIssuance } from "../cube/invoicing/registry/index.ts"
 import {
@@ -38,9 +38,10 @@ import {
   type TransactionalStore as PaymentsStore,
 } from "../cube/payments/index.ts"
 import { databasePath } from "./migrations.ts"
+import { catalogTransactionAdapter } from "./sqlite-catalog.ts"
 import { customersTransactionAdapter } from "./sqlite-customers.ts"
 import {
-  addressValues, booleanInteger, buyerFrom, integer, nameKeyset, nullableText, optionalText, partyFrom,
+  addressValues, booleanInteger, buyerFrom, integer, nullableText, optionalText, partyFrom,
   persistence, read, row, rowsWanted, text, write, type Row, type WriteFailure,
 } from "./sqlite-rows.ts"
 
@@ -147,13 +148,6 @@ const documentKeyset = (page: PageQuery<DocumentCursor>, prefix = "") => page.af
 const draftKeyset = (page: PageQuery<DraftCursor>) => page.after === undefined
   ? { sql: "", values: [] as ReadonlyArray<string> }
   : { sql: " AND (issue_date < ? OR (issue_date = ? AND id > ?))", values: [page.after.issueDate, page.after.issueDate, page.after.id] }
-const productPresetFrom = (value: Row): ProductPreset => ({
-  id: text(value, "id"),
-  organizationId: text(value, "organization_id"),
-  description: text(value, "description"),
-  unitPrice: text(value, "unit_price"),
-  unitOfMeasure: { code: text(value, "unit_code"), name: text(value, "unit_name") },
-})
 
 const documentSeriesFrom = (value: Row): DocumentSeries => ({
   organizationId: text(value, "organization_id"),
@@ -394,27 +388,6 @@ const transactionAdapter = (database: DatabaseSync): ProformaWorkflowTransaction
   listDocumentSeries: (organizationId) => read("list document series", () =>
     database.prepare(`SELECT * FROM document_series WHERE organization_id = ?
       ORDER BY document_type, series`).all(organizationId).map((value) => documentSeriesFrom(value as Row))),
-  saveProductPreset: (preset) => write("save product preset", () => {
-    const result = database.prepare(`INSERT INTO product_presets(id,organization_id,description,unit_price,unit_code,unit_name) VALUES(?,?,?,?,?,?)
-      ON CONFLICT(id) DO UPDATE SET description=excluded.description,unit_price=excluded.unit_price,
-       unit_code=excluded.unit_code,unit_name=excluded.unit_name
-      WHERE product_presets.organization_id=excluded.organization_id`)
-      .run(preset.id, preset.organizationId, preset.description, preset.unitPrice,
-        preset.unitOfMeasure.code, preset.unitOfMeasure.name)
-    if (result.changes === 0) throw new DomainConflict({ code: "product_preset_id_taken", message: "Product preset id belongs to another organization" })
-  }),
-  findProductPreset: (organizationId, id) => read("find product preset", () => {
-    const value = row(database.prepare("SELECT * FROM product_presets WHERE organization_id=? AND id=?").get(organizationId, id))
-    return value === undefined ? undefined : productPresetFrom(value)
-  }),
-  listProductPresets: (organizationId, page) => read("list product presets", () => {
-    const keyset = nameKeyset(page, "description")
-    return database.prepare(`SELECT * FROM product_presets WHERE organization_id=?${keyset.sql}
-      ORDER BY description COLLATE NOCASE,id LIMIT ?`).all(organizationId, ...keyset.values, rowsWanted(page)).map((value) => productPresetFrom(value as Row))
-  }),
-  deleteProductPreset: (organizationId, id) => write("delete product preset", () => {
-    database.prepare("DELETE FROM product_presets WHERE organization_id=? AND id=?").run(organizationId, id)
-  }),
   saveDraft: (draft) => write("save draft", () => {
     const result = database.prepare(`INSERT INTO invoice_drafts
       (id, organization_id, source_app, source_kind, source_id, customer_id, customer_party_type, customer_legal_name, customer_tax_identifier,
@@ -764,13 +737,13 @@ const releaseTransaction = (handle: TransactionHandle): void => {
 
 // One connection and one BEGIN IMMEDIATE per transaction; the kernel adapter and every
 // child-cube adapter are built on that same connection, so they commit or roll back together.
-export const createSqliteStore = (dataDirectory: string): TransactionalStore<InvoicingTransaction & CustomersTransaction> => ({
+export const createSqliteStore = (dataDirectory: string): TransactionalStore<InvoicingTransaction & CustomersTransaction & CatalogTransaction> => ({
   transaction: (use) => Effect.acquireUseRelease(
     Effect.try({
       try: () => openTransaction(dataDirectory),
       catch: () => persistence("begin transaction"),
     }),
-    (handle) => Effect.tap(use({ ...transactionAdapter(handle.database), ...customersTransactionAdapter(handle.database) }), () => Effect.try({
+    (handle) => Effect.tap(use({ ...transactionAdapter(handle.database), ...customersTransactionAdapter(handle.database), ...catalogTransactionAdapter(handle.database) }), () => Effect.try({
       try: () => { commitAndClose(handle) },
       catch: () => persistence("commit transaction"),
     })),
