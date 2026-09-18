@@ -78,7 +78,7 @@ void test("migrate CLI reapplies the complete schema with zero changes", () => {
     const second = spawnSync(process.execPath, [executable, "migrate", "--apply", "--json"], { encoding: "utf8", env })
     assert.equal(second.status, 0, second.stderr)
     const secondReport: unknown = JSON.parse(second.stdout)
-    assert.deepEqual(secondReport, { scanned: 25, changed: 0, skipped: 25, failed: 0, pending: [] })
+    assert.deepEqual(secondReport, { scanned: 25, changed: 0, skipped: 25, failed: 0, pending: [], schemaDrift: [] })
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }

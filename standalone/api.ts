@@ -16,6 +16,7 @@ import { createStandaloneArtifactService } from "./artifact-runtime.ts"
 import type { RequestAuthenticator } from "./auth.ts"
 import { brandingNormalizer } from "./branding-normalizer.ts"
 import { mapCorrection, mapIssuedInvoice } from "./efactura-mapper.ts"
+import { logInternalFailure } from "./failure-log.ts"
 import type { BrowserSession } from "./browser-session.ts"
 import { ApiAuthentication, CurrentRequest, CurrentSession, SessionAuthentication, applicationHttpApi } from "./http-api.ts"
 import * as S from "./http-schemas.ts"
@@ -55,9 +56,29 @@ const toWire = (failure: ApiFailure): Wire => {
     case "DocumentRenderingFailure": return { error: failure._tag }
   }
 }
+// A failure the endpoint never declared cannot be sent as itself, so it leaves as
+// internal_failure. That is a bug in the contract or in the store, never in the
+// request, so the discarded failure is logged before the opaque answer goes out.
+const unmappedReason = (failure: ApiFailure): string => [
+  failure._tag,
+  ..."code" in failure ? [failure.code] : [],
+  ..."operation" in failure ? [failure.operation] : [],
+  ..."message" in failure && typeof failure.message === "string" && failure.message !== "" ? [failure.message] : [],
+].join(" ")
+// A declared server failure does keep its own tag on the wire, but the tag alone
+// names no operation, so it is just as blind as an internal_failure: the reason
+// is logged here too.
+const serverFailures: ReadonlyArray<string> = ["PersistenceFailure", "DocumentPersistenceFailure", "DocumentRenderingFailure"]
 const only = <T extends WireTag>(allowed: ReadonlyArray<T>) => (failure: ApiFailure): Allowed<T> => {
   const wire = toWire(failure)
-  return (allowed as ReadonlyArray<string>).includes(wire.error) ? wire as Allowed<T> : { error: "internal_failure" }
+  if (!(allowed as ReadonlyArray<string>).includes(wire.error)) {
+    logInternalFailure({ kind: "unmapped_failure", reason: unmappedReason(failure) })
+    return { error: "internal_failure" }
+  }
+  if (serverFailures.includes(wire.error)) {
+    logInternalFailure({ kind: "server_failure", reason: unmappedReason(failure) })
+  }
+  return wire as Allowed<T>
 }
 type InvoicingBase = "AuthenticationRequired" | "OrganizationContextMissing" | "PermissionDenied" | "PersistenceFailure"
 type DocumentsBase = "AuthenticationRequired" | "OrganizationContextMissing" | "DocumentsPermissionDenied"
@@ -350,6 +371,7 @@ export const createApiHandler = (runtime: ApiRuntime): ApiHandler => {
         && "reason" in defectValue && defectValue.reason === "Decode")) {
       return Effect.succeed(HttpServerResponse.unsafeJson({ error: "invalid_json" }, { status: 400 }))
     }
+    logInternalFailure({ kind: "defect", reason: Cause.pretty(cause) })
     return Effect.succeed(HttpServerResponse.unsafeJson({ error: "internal_failure" }, { status: 500 }))
   })
   const web = HttpApiBuilder.toWebHandler(layer, { middleware: finalMiddleware })

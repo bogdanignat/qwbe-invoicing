@@ -7,6 +7,7 @@ import { createApiHandler } from "./api.ts"
 import { createRequestAuthenticator, hasBearerCredential } from "./auth.ts"
 import { createBrowserSession } from "./browser-session.ts"
 import type { RuntimeConfig } from "./config.ts"
+import { failureReason, logInternalFailure } from "./failure-log.ts"
 import { createLoginThrottle, loginPeerKey, type SecurityLogger } from "./login-throttle.ts"
 import { databaseReady } from "./migrations.ts"
 import { cachedReadiness, readinessIntervalMs } from "./readiness.ts"
@@ -117,7 +118,10 @@ export const startServer = async (
           send(response, 401, { error: "AuthenticationRequired" }, { "set-cookie": browserSession.clearCookie }); return
         }
         try { const docs = await renderApiDocs(); send(response, docs.status, docs.body, docs.headers) }
-        catch { send(response, 500, { error: "internal_failure" }) }
+        catch (error) {
+          logInternalFailure({ kind: "api_docs", reason: failureReason(error) })
+          send(response, 500, { error: "internal_failure" })
+        }
         return
       }
       if (path?.startsWith("/api/") === true) {
@@ -157,7 +161,10 @@ export const startServer = async (
           response.end(body)
         } catch (error) {
           if (error instanceof Error && error.message === "request_body_too_large") send(response, 413, { error: "request_body_too_large" })
-          else send(response, 500, { error: "internal_failure" })
+          else {
+            logInternalFailure({ kind: "request", reason: failureReason(error) })
+            send(response, 500, { error: "internal_failure" })
+          }
         }
         return
       }
