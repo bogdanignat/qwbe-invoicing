@@ -10,7 +10,7 @@ import { executeBackup, executeRestore, planRestore } from "../standalone/backup
 import { CliInputError, helpText, parseCommand, type Command } from "../standalone/cli.ts"
 import { runtimeConfig } from "../standalone/config.ts"
 import { startServer } from "../standalone/http.ts"
-import { applyMigrations, databaseReady, planMigrations } from "../standalone/migrations.ts"
+import { applyMigrations, databaseReady, planMigrations, schemaDrift } from "../standalone/migrations.ts"
 import { cachedReadiness, readinessIntervalMs } from "../standalone/readiness.ts"
 
 const print = (value: unknown, json: boolean) => {
@@ -56,6 +56,7 @@ if (command !== undefined) {
         writable = false
       }
       const pending = planMigrations(config.dataDirectory).pending
+      const drift = schemaDrift(config.dataDirectory)
       const authTokenReadable = (() => {
         if (config.authTokenFile === undefined) return false
         try {
@@ -71,13 +72,16 @@ if (command !== undefined) {
         databaseReady: databaseReady(config.dataDirectory),
         pendingMigrations: pending,
         migrationsReady: pending.length === 0,
+        // Drift means an applied migration was edited: the database has to be
+        // recreated, because no further migration will reconcile it.
+        schemaDrift: drift,
         organizationId: config.organizationId ?? null,
         authTokenFile: config.authTokenFile ?? null,
         authTokenReadable,
         nodeVersion: process.versions.node,
       }
       print(report, command.json)
-      if (!writable || !report.databaseReady || !report.migrationsReady) process.exitCode = 1
+      if (!writable || !report.databaseReady || !report.migrationsReady || drift.length > 0) process.exitCode = 1
     }
     if (command.name === "migrate") {
       if (command.apply && config.nodeEnvironment !== "development" && !command.confirmProduction) {
@@ -85,7 +89,15 @@ if (command !== undefined) {
         process.exitCode = 2
       } else {
         const report = command.apply ? applyMigrations(config.dataDirectory) : planMigrations(config.dataDirectory)
-        print(report, command.json)
+        // An applied migration that was later edited leaves a schema no further
+        // migration can reconcile, so migrate refuses here rather than letting
+        // the first write that touches the drift answer an opaque 500.
+        const drifted = schemaDrift(config.dataDirectory)
+        print({ ...report, schemaDrift: drifted }, command.json)
+        if (drifted.length > 0) {
+          console.error(`schema does not match the migration contract (${drifted.join(", ")}); recreate the database`)
+          process.exitCode = 1
+        }
       }
     }
     if (command.name === "artifacts") {

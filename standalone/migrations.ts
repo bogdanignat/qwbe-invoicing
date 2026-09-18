@@ -41,6 +41,23 @@ export const sessionsDatabasePath = (dataDirectory: string) => join(dataDirector
 
 const pathFor = (dataDirectory: string, plan: typeof plans[number]) => join(dataDirectory, plan.file)
 
+const rebuildsTables = (migration: InvoicingMigration): boolean => migration.foreignKeys === "off"
+
+const applyStatements = (database: DatabaseSync, migration: InvoicingMigration): void => {
+  for (const statement of migration.statements) database.exec(statement)
+}
+
+// A migration is recorded by name, so editing one that is already applied leaves
+// a database whose schema silently disagrees with the contract: the code writes
+// what the new statement allows and SQLite refuses it against the old CHECK,
+// which surfaces as an opaque 500 on the first write that touches the drift.
+// Comparing the live objects with the objects the contract produces turns that
+// into a refusal at migrate time, where the answer is to recreate the database.
+const schemaObjects = (database: DatabaseSync): ReadonlyArray<string> => database.prepare(
+  `SELECT type, name, COALESCE(sql, '') AS sql FROM sqlite_master
+     WHERE name NOT LIKE 'sqlite_%' AND name <> 'schema_migrations' ORDER BY type, name`,
+).all().map((row) => `${String(row.type)} ${String(row.name)} ${String(row.sql)}`)
+
 const appliedMigrations = (database: DatabaseSync): ReadonlySet<string> => {
   const table = database.prepare(
     "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'schema_migrations'",
@@ -49,6 +66,72 @@ const appliedMigrations = (database: DatabaseSync): ReadonlySet<string> => {
   const rows = database.prepare("SELECT name FROM schema_migrations").all()
   return new Set(rows.flatMap((row) => typeof row.name === "string" ? [row.name] : []))
 }
+
+// Recorded history the contract cannot replay is a divergence of its own: those
+// names no longer describe the database in front of us, so the migration that
+// stops the replay is what the operator has to look at.
+type ContractSchema = { readonly objects: ReadonlyArray<string> } | { readonly unreplayable: string }
+
+const replayContract = (applied: ReadonlyArray<InvoicingMigration>): ContractSchema => {
+  const database = new DatabaseSync(":memory:")
+  try {
+    for (const migration of applied) {
+      // Outside a transaction, so the switch is honoured: SQLite ignores this
+      // pragma inside one, which is why applyPlan flips it before BEGIN.
+      if (rebuildsTables(migration)) database.exec("PRAGMA foreign_keys = OFF")
+      try {
+        applyStatements(database, migration)
+      } catch {
+        return { unreplayable: migration.name }
+      }
+      if (rebuildsTables(migration)) database.exec("PRAGMA foreign_keys = ON")
+    }
+    return { objects: schemaObjects(database) }
+  } finally {
+    database.close()
+  }
+}
+
+// Only the migrations this database records as applied are replayed: measuring
+// against the whole contract would call every database with pending migrations
+// drifted and demand a recreation that a plain migrate would have handled.
+const contractSchemas = new Map<string, ContractSchema>()
+const contractSchema = (plan: typeof plans[number], applied: ReadonlyArray<InvoicingMigration>): ContractSchema => {
+  const key = `${plan.file}|${applied.map(({ name }) => name).join(",")}`
+  const cached = contractSchemas.get(key)
+  if (cached !== undefined) return cached
+  const schema = replayContract(applied)
+  contractSchemas.set(key, schema)
+  return schema
+}
+
+// An object counts as drifted when its exact definition is missing on the other
+// side, in either direction, so a dropped table and a rewritten CHECK both name
+// the object the operator has to look at.
+const driftedNames = (expected: ReadonlyArray<string>, live: ReadonlyArray<string>): ReadonlyArray<string> => {
+  const names = (objects: ReadonlyArray<string>, other: ReadonlyArray<string>) => objects
+    .filter((object) => !other.includes(object))
+    .map((object) => object.split(" ")[1] as string)
+  return [...new Set([...names(expected, live), ...names(live, expected)])].sort()
+}
+
+const planDrift = (dataDirectory: string, plan: typeof plans[number]): ReadonlyArray<string> => {
+  const path = pathFor(dataDirectory, plan)
+  if (!existsSync(path)) return []
+  const database = new DatabaseSync(path, { readOnly: true })
+  const live = (() => {
+    try {
+      return { objects: schemaObjects(database), applied: appliedMigrations(database) }
+    } finally {
+      database.close()
+    }
+  })()
+  const schema = contractSchema(plan, plan.migrations.filter(({ name }) => live.applied.has(name)))
+  return "unreplayable" in schema ? [schema.unreplayable] : driftedNames(schema.objects, live.objects)
+}
+
+export const schemaDrift = (dataDirectory: string): ReadonlyArray<string> =>
+  plans.flatMap((plan) => planDrift(dataDirectory, plan).map((name) => `${plan.label}${name}`))
 
 const pendingFor = (database: DatabaseSync, plan: typeof plans[number]) => {
   const applied = appliedMigrations(database)
@@ -95,12 +178,12 @@ const applyPlan = (dataDirectory: string, plan: typeof plans[number]): number =>
     transactionOpen = false
     const pending = pendingFor(database, plan)
     for (const migration of pending) {
-      const foreignKeysOff = "foreignKeys" in migration && migration.foreignKeys === "off"
+      const foreignKeysOff = rebuildsTables(migration)
       if (foreignKeysOff) database.exec("PRAGMA foreign_keys = OFF")
       try {
         database.exec("BEGIN IMMEDIATE")
         transactionOpen = true
-        for (const statement of migration.statements) database.exec(statement)
+        applyStatements(database, migration)
         if (foreignKeysOff && database.prepare("PRAGMA foreign_key_check").all().length > 0) {
           throw new Error(`foreign key check failed after ${migration.name}`)
         }
@@ -154,4 +237,4 @@ const planReady = (dataDirectory: string, plan: typeof plans[number]): boolean =
 }
 
 export const databaseReady = (dataDirectory: string): boolean =>
-  plans.every((plan) => planReady(dataDirectory, plan))
+  plans.every((plan) => planReady(dataDirectory, plan)) && schemaDrift(dataDirectory).length === 0
