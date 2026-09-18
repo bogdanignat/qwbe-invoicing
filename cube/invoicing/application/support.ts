@@ -9,10 +9,12 @@ export type { DocumentCursor, DraftCursor, NameCursor, PageQuery } from "./ports
 
 export type Authorize = (permission: string) => Effect.Effect<RequestContext, InvoicingFailure>
 
-export interface OperationDependencies {
+// A component names the narrowest transaction port it uses; the composition root
+// hands every component the same store, whose transaction carries all the ports.
+export interface OperationDependencies<Transaction = InvoicingTransaction> {
   readonly clock: Clock
   readonly ids: IdGenerator
-  readonly store: TransactionalStore<InvoicingTransaction>
+  readonly store: TransactionalStore<Transaction>
   readonly branding: BrandingNormalizer
 }
 

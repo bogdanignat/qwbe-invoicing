@@ -3,6 +3,7 @@ import { join } from "node:path"
 import { DatabaseSync } from "node:sqlite"
 
 import { invoicingMigrations, type InvoicingMigration } from "../cube/invoicing/index.ts"
+import { customersMigrations } from "../cube/invoicing/customers/index.ts"
 import { documentsMigrations } from "../cube/invoicing/documents/index.ts"
 import { paymentsMigrations } from "../cube/payments/index.ts"
 
@@ -22,7 +23,10 @@ const browserSessionsMigration: InvoicingMigration = {
 }
 // Each cube owns one baseline of its tables; the list runs in cube order, the
 // cube a foreign key points at before the cube that holds it, never by name.
-const applicationMigrations: ReadonlyArray<InvoicingMigration> = [...invoicingMigrations, ...paymentsMigrations]
+// Customers come first because drafts reference them.
+const applicationMigrations: ReadonlyArray<InvoicingMigration> = [
+  ...customersMigrations, ...invoicingMigrations, ...paymentsMigrations,
+]
 const invoicingPlan = { label: "", file: "invoicing.sqlite", migrations: [foundationMigration, ...applicationMigrations] }
 const documentsPlan = { label: "documents/", file: "documents.sqlite", migrations: [foundationMigration, ...documentsMigrations] }
 const sessionsPlan = { label: "sessions/", file: "sessions.sqlite", migrations: [browserSessionsMigration] }

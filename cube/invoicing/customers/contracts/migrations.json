@@ -1,0 +1,10 @@
+[
+  {
+    "name": "customers-001-baseline",
+    "statements": [
+      "CREATE TABLE customers(id TEXT PRIMARY KEY,organization_id TEXT NOT NULL,legal_name TEXT NOT NULL,tax_identifier TEXT NOT NULL,country_code TEXT NOT NULL,city TEXT NOT NULL,street TEXT NOT NULL,county TEXT NOT NULL CHECK(county IN('RO-AB','RO-AR','RO-AG','RO-BC','RO-BH','RO-BN','RO-BR','RO-BT','RO-BV','RO-B','RO-BZ','RO-CS','RO-CL','RO-CJ','RO-CT','RO-CV','RO-DB','RO-DJ','RO-GL','RO-GR','RO-GJ','RO-HR','RO-HD','RO-IL','RO-IS','RO-IF','RO-MM','RO-MH','RO-MS','RO-NT','RO-OT','RO-PH','RO-SM','RO-SJ','RO-SB','RO-SV','RO-TR','RO-TM','RO-TL','RO-VS','RO-VL','RO-VN')),sector INTEGER,postal_code TEXT,deleted_at TEXT,party_type TEXT NOT NULL CHECK(party_type IN('company','individual')),vat_registered INTEGER NOT NULL CHECK(vat_registered IN(0,1)AND(party_type!='individual' OR vat_registered=0)),default_payment_term_days INTEGER CHECK(default_payment_term_days>=0),UNIQUE(organization_id,id),CHECK((county='RO-B' AND sector IS NOT NULL AND sector BETWEEN 1 AND 6)OR(county!='RO-B' AND sector IS NULL)))STRICT",
+      "CREATE INDEX customers_organization ON customers(organization_id)",
+      "CREATE INDEX customers_active_organization ON customers(organization_id,deleted_at,legal_name)"
+    ]
+  }
+]

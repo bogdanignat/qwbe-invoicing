@@ -1,5 +1,6 @@
 import type { Authorize, OperationDependencies } from "../application/support.ts"
 import type { InvoicingPermissions } from "../contracts/permissions.ts"
+import type { AuthoringTransaction } from "../drafts/index.ts"
 import { createInvoiceOperations, type InvoiceOperations } from "./application/invoices.ts"
 import { createProformaConversionOperations, type ProformaConversionOperations } from "./application/proforma-conversion.ts"
 import { createProformaOperations, type ProformaOperations } from "./application/proformas.ts"
@@ -20,7 +21,7 @@ export const cube = {
 export type IssuanceOperations = InvoiceOperations & ProformaOperations & ProformaConversionOperations
 
 export const createIssuanceOperations = (
-  dependencies: OperationDependencies,
+  dependencies: OperationDependencies<AuthoringTransaction>,
   permissions: InvoicingPermissions,
   authorize: Authorize,
 ): IssuanceOperations => ({

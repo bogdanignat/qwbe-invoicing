@@ -7,8 +7,13 @@ import type { IdGenerator } from "../../contracts/host.ts"
 import { calculateLine, calculateTotals } from "../../domain/calculation.ts"
 import type { BuyerSnapshot, DocumentSource, DocumentType, DraftInvoice } from "../../domain/invoice.ts"
 import type { AuthoringDocumentInput, CreateDraftInput, UpdateDraftInput } from "../../domain/inputs.ts"
-import { validateBuyer, validateDate, validateDocumentNotes, validateDocumentSeries, validateDocumentSource } from "../../domain/validation.ts"
+import type { CustomersTransaction } from "../../customers/index.ts"
+import { validateDate, validateDocumentNotes, validateDocumentSeries, validateDocumentSource } from "../../domain/validation.ts"
+import { validateBuyer } from "../../parties/index.ts"
 import { resolveVatConfiguration } from "../../registry/index.ts"
+
+// Authoring resolves a saved customer by id, so it reads the customers port next to the kernel one.
+export type AuthoringTransaction = InvoicingTransaction & Pick<CustomersTransaction, "findCustomer">
 
 export const withTotals = (draft: Omit<DraftInvoice, "vatBreakdown" | "totalExcludingVat" | "vatTotal" | "totalIncludingVat">): DraftInvoice => ({
   ...draft,
@@ -31,7 +36,7 @@ export const findEditable = (transaction: InvoicingTransaction, organizationId: 
 export const buyerFrom = (
   input: CreateDraftInput | UpdateDraftInput | AuthoringDocumentInput,
   organizationId: string,
-  transaction: InvoicingTransaction,
+  transaction: AuthoringTransaction,
 ): Effect.Effect<{ readonly customer: BuyerSnapshot; readonly customerId?: string }, InvoicingFailure> => Effect.gen(function*() {
   const customerId = "customerId" in input && typeof input.customerId === "string" ? input.customerId : undefined
   const inline = "customer" in input ? input.customer : undefined
@@ -70,7 +75,7 @@ export const documentSource = (source: DocumentSource | undefined) => checked(()
 export const authorDocument = (
   input: AuthoringDocumentInput | CreateDraftInput,
   organizationId: string,
-  transaction: InvoicingTransaction,
+  transaction: AuthoringTransaction,
   ids: IdGenerator,
   documentType: DocumentType = "invoice",
 ) => Effect.gen(function*() {

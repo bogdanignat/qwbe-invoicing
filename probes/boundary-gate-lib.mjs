@@ -5,7 +5,7 @@ import { spawnSync } from "node:child_process"
 import { fileURLToPath } from "node:url"
 
 import configuration from "../dependency-cruiser.config.cjs"
-import { cubeIsolationRules } from "./boundary-rules.mjs"
+import { cubeIsolationRules, cubeTreeRules } from "./boundary-rules.mjs"
 import { discoverCubeUnits } from "./source-tree.mjs"
 
 const repositoryRoot = join(dirname(fileURLToPath(import.meta.url)), "..")
@@ -16,7 +16,7 @@ export const runBoundaryGate = (root, cubeRoots) => {
   const units = discoverCubeUnits(root, cubeRoots)
   const generated = {
     ...configuration,
-    forbidden: [...configuration.forbidden, ...cubeIsolationRules(units)],
+    forbidden: [...configuration.forbidden, ...cubeIsolationRules(units), ...cubeTreeRules(units)],
   }
   const temporary = mkdtempSync(join(tmpdir(), "qwbe-boundary-config-"))
   const configPath = join(temporary, "dependency-cruiser.config.cjs")

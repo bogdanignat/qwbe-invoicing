@@ -2,13 +2,14 @@ import { Effect } from "effect"
 
 import { findIdempotencyReplay, idempotencyRecord, missingIdempotencyResult } from "../../application/idempotency.ts"
 import { checked, documentPageQuery, missing, pageOf, recordAuditEvent, type Authorize, type OperationDependencies, type Page, type PageRequest } from "../../application/support.ts"
-import { ValidationFailure, type InvoicingFailure, type PersistenceFailure } from "../../contracts/failures.ts"
+import { ValidationFailure, type InvoicingFailure } from "../../contracts/failures.ts"
 import type { InvoicingPermissions } from "../../contracts/permissions.ts"
-import type { DocumentSource, Idempotent, IssuedInvoice, IssuedInvoiceSummary, NumberedDocumentType } from "../../domain/invoice.ts"
-import type { InvoicingTransaction } from "../../application/ports.ts"
+import type { DocumentSource, Idempotent, IssuedInvoice, IssuedInvoiceSummary } from "../../domain/invoice.ts"
 import type { AuthoringDocumentInput } from "../../domain/inputs.ts"
 import { calendarDate, validateDocumentSource } from "../../domain/validation.ts"
+import type { AuthoringTransaction } from "../../drafts/index.ts"
 import { validateIssuerForIssuance } from "../../registry/index.ts"
+import { ensureChronology } from "./chronology.ts"
 import { fiscalYear, issuanceSource, numberedSnapshot } from "./snapshot.ts"
 
 export type IssueInvoiceInput = Idempotent<AuthoringDocumentInput | { readonly draftId: string }>
@@ -19,15 +20,6 @@ export interface InvoiceOperations {
   readonly listIssuedInvoices: (source?: DocumentSource, page?: PageRequest) => Effect.Effect<Page<IssuedInvoiceSummary>, InvoicingFailure>
 }
 
-export const ensureChronology = (tx: InvoicingTransaction, org: string, kind: NumberedDocumentType, series: string,
-  issueDate: string, today: string): Effect.Effect<void, ValidationFailure | PersistenceFailure> => Effect.gen(function*() {
-  if (issueDate > today) return yield* Effect.fail(new ValidationFailure({ issues: ["issueDate cannot be in the future"] }))
-  const latest = yield* tx.findLatestIssueDate(org, Number(issueDate.slice(0, 4)), kind, series)
-  if (latest !== undefined && issueDate < latest) return yield* Effect.fail(new ValidationFailure({
-    issues: [`issueDate cannot be before ${latest}, the last ${kind} issued in series ${series}`],
-  }))
-})
-
 export const validateInvoiceDueDate = (document: { readonly dueDate: string | null; readonly totalIncludingVat: string }): void => {
   if (document.totalIncludingVat !== "0.00" && document.dueDate === null) {
     throw new ValidationFailure({ issues: ["dueDate is required for an invoice with a positive amount due"] })
@@ -35,7 +27,7 @@ export const validateInvoiceDueDate = (document: { readonly dueDate: string | nu
 }
 
 export const createInvoiceOperations = (
-  dependencies: OperationDependencies,
+  dependencies: OperationDependencies<AuthoringTransaction>,
   permissions: InvoicingPermissions,
   authorize: Authorize,
 ): InvoiceOperations => {

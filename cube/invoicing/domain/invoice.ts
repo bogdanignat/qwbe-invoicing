@@ -106,13 +106,6 @@ export interface DocumentSeries {
   readonly series: string
 }
 
-export interface Customer extends BuyerSnapshot {
-  readonly id: string
-  readonly organizationId: string
-  readonly defaultPaymentTermDays?: number
-  readonly deletedAt?: string
-}
-
 export interface ProductPreset {
   readonly id: string
   readonly organizationId: string

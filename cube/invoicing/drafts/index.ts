@@ -1,5 +1,6 @@
 import type { Authorize, OperationDependencies } from "../application/support.ts"
 import type { InvoicingPermissions } from "../contracts/permissions.ts"
+import type { AuthoringTransaction } from "./application/authoring.ts"
 import { createDraftLineOperations, type DraftLineOperations } from "./application/draft-lines.ts"
 import { createDraftDocumentOperations, type DraftDocumentOperations } from "./application/draft-operations.ts"
 
@@ -19,7 +20,7 @@ export const cube = {
 export type DraftOperations = DraftDocumentOperations & DraftLineOperations
 
 export const createDraftOperations = (
-  dependencies: OperationDependencies,
+  dependencies: OperationDependencies<AuthoringTransaction>,
   permissions: InvoicingPermissions,
   authorize: Authorize,
 ): DraftOperations => ({
@@ -28,4 +29,4 @@ export const createDraftOperations = (
 })
 
 export { authorDocument } from "./application/authoring.ts"
-export type { DraftDocumentOperations, DraftLineOperations }
+export type { AuthoringTransaction, DraftDocumentOperations, DraftLineOperations }

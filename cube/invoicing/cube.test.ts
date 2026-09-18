@@ -14,7 +14,6 @@ void test("exports a minimal authenticated QWBE cube definition", () => {
     "issuers",
     "issuer_tax_configurations",
     "document_series",
-    "customers",
     "product_presets",
     "invoice_drafts",
     "draft_lines",

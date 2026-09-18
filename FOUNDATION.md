@@ -247,7 +247,9 @@ Static boundaries must reject:
 
 This is lint isolation, not a security sandbox. Process-level isolation remains a separate future decision.
 
-The isolation unit is a top-level cube together with its child cubes. The mother's `no-cube-to-cube` rule captures only the first path segment under `cubes/`, and its example plugin has `booktags/bookmarks` importing a helper from the parent `booktags`. `probes/boundary-rules.mjs` mirrors that: `cube/invoicing` and its components (`registry`, `drafts`, `issuance`, `corrections`, `documents`) may import each other, `cube/invoicing` and `cube/payments` may not. Components import the parent's domain, ports and contracts directly; the parent imports only a component's `index.ts`, so the graph stays acyclic.
+The isolation unit is a top-level cube together with its child cubes. The mother's `no-cube-to-cube` rule captures only the first path segment under `cubes/`, and its example plugin has `booktags/bookmarks` importing a helper from the parent `booktags`. `probes/boundary-rules.mjs` mirrors that: `cube/invoicing` and `cube/payments` may not import each other at all.
+
+Inside one tree the gate is stricter than the mother. A child cube may import the kernel of any ancestor (the parent's domain, ports and contracts); every other unit, whether a child seen from its parent, a sibling or a nested child, is entered only through its exact `index.ts`, type-only imports and re-exports included. Each child's interior stays private to it, and the parent never reaches past a child's index, so the graph stays acyclic. Three edges from before the split still reach into a child's interior and are allowed by exact source and target only: `application/ports.ts` to `corrections/domain/corrections.ts` and to `issuance/domain/proforma.ts`, and `application/memory-store.test-support.ts` to `issuance/domain/proforma.ts`. T-1362 Pas 4 removes them; no other exception is added to make the gate pass.
 
 Source: QWBE `core/.dependency-cruiser.cjs`.
 
@@ -485,10 +487,12 @@ qwbe-invoicing/
 │   └── invoicing/              exact cube/package root
 │       ├── qwbe-package.json
 │       ├── index.ts            named `cube` export
-│       ├── domain/             shared model, VAT arithmetic, party/date validation
+│       ├── domain/             shared model, VAT arithmetic, date validation
 │       ├── application/        ports, idempotency, service composition
 │       ├── contracts/          schemas and host-facing seams
-│       ├── registry/           component cube: issuer, series, customers, presets
+│       ├── parties/            component cube: CUI/CNP, counties and sectors for every party
+│       ├── customers/          component cube: saved customers, their table and baseline
+│       ├── registry/           component cube: issuer, VAT, series, presets
 │       ├── drafts/             component cube: authoring and draft editing
 │       ├── issuance/           component cube: numbered invoices and proformas
 │       ├── corrections/        component cube: storno documents

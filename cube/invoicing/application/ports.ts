@@ -1,7 +1,7 @@
 import type { Effect } from "effect"
 
 import type { DomainConflict, PersistenceFailure } from "../contracts/failures.ts"
-import type { AuditEvent, Customer, DocumentSeries, DocumentSource, DocumentType, DraftInvoice, IdempotencyRecord, IssuedInvoice, IssuedInvoiceSummary, IssuerProfile, NumberedDocumentType, ProductPreset } from "../domain/invoice.ts"
+import type { AuditEvent, DocumentSeries, DocumentSource, DocumentType, DraftInvoice, IdempotencyRecord, IssuedInvoice, IssuedInvoiceSummary, IssuerProfile, NumberedDocumentType, ProductPreset } from "../domain/invoice.ts"
 import type { CorrectionDocument } from "../corrections/domain/corrections.ts"
 import type { Proforma, ProformaConversion, ProformaInvoiceConversion, ProformaSummary } from "../issuance/domain/proforma.ts"
 
@@ -34,15 +34,6 @@ export interface InvoicingTransaction {
     series: string,
   ) => Read<DocumentSeries | undefined>
   readonly listDocumentSeries: List<DocumentSeries>
-  readonly saveCustomer: Save<Customer>
-  readonly findCustomer: Find<Customer>
-  readonly listCustomers: (organizationId: string, page: PageQuery<NameCursor>) => Read<ReadonlyArray<Customer>>
-  readonly softDeleteCustomer: (
-    organizationId: string,
-    id: string,
-    deletedAt: string,
-  ) => Write
-  readonly hasOpenDraftsForCustomer: (organizationId: string, customerId: string) => Read<boolean>
   readonly saveProductPreset: Save<ProductPreset>
   readonly findProductPreset: Find<ProductPreset>
   readonly listProductPresets: (organizationId: string, page: PageQuery<NameCursor>) => Read<ReadonlyArray<ProductPreset>>

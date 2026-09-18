@@ -9,12 +9,12 @@ import {
   type InvoicingFailure,
   type RequestContext,
   type RequestContextProvider,
-  type TransactionalStore,
   type BrandingNormalizer,
 } from "../contracts/index.ts"
+import type { Customer, CustomersTransaction } from "../customers/index.ts"
 import type { AuditEvent, IdempotencyRecord } from "../domain/invoice.ts"
 import type { ProformaConversion } from "../issuance/domain/proforma.ts"
-import type { DraftInvoice, InvoicingTransaction, IssuedInvoice, Proforma } from "./invoicing.ts"
+import type { DraftInvoice, InvoicingDependencies, InvoicingTransaction, IssuedInvoice, Proforma } from "./invoicing.ts"
 import type { DocumentCursor, DraftCursor, NameCursor, PageQuery } from "./ports.ts"
 
 const sameSource = (value: { readonly source?: { readonly app: string; readonly kind: string; readonly id: string } }, source: { readonly app: string; readonly kind: string; readonly id: string } | undefined): boolean =>
@@ -43,7 +43,7 @@ const withoutIssuerBranding = <Document extends IssuedInvoice | Proforma>(docume
 export interface MemoryState {
   issuers: Map<string, Parameters<InvoicingTransaction["saveIssuer"]>[0]>
   documentSeries: Map<string, Parameters<InvoicingTransaction["addDocumentSeries"]>[0]>
-  customers: Map<string, Parameters<InvoicingTransaction["saveCustomer"]>[0]>
+  customers: Map<string, Customer>
   productPresets: Map<string, Parameters<InvoicingTransaction["saveProductPreset"]>[0]>
   drafts: Map<string, DraftInvoice>
   issued: Map<string, IssuedInvoice>
@@ -58,7 +58,8 @@ export interface MemoryState {
 
 const cloneState = (state: MemoryState): MemoryState => structuredClone(state)
 
-export const memoryStore = (state: MemoryState): TransactionalStore<InvoicingTransaction> => ({
+// Typed as the store the composition root takes, so a child port it forgets is a type error here.
+export const memoryStore = (state: MemoryState): InvoicingDependencies["store"] => ({
   transaction: (use) => Effect.suspend(() => {
     const working = cloneState(state)
     const draftView = (draft: DraftInvoice): DraftInvoice => ({ ...draft,
@@ -69,7 +70,7 @@ export const memoryStore = (state: MemoryState): TransactionalStore<InvoicingTra
       convertedInvoiceId: working.invoiceConversions.get(proforma.id)?.resultingInvoiceId
         ?? [...working.issued.values()].find((invoice) => invoice.organizationId === proforma.organizationId
           && invoice.sourceProformaId === proforma.id)?.id ?? null })
-    const transaction: InvoicingTransaction = {
+    const transaction: InvoicingTransaction & CustomersTransaction = {
       saveIssuer: (issuer) => Effect.sync(() => { working.issuers.set(issuer.organizationId, issuer) }),
       findIssuer: (organizationId) => Effect.succeed(working.issuers.get(organizationId)),
       addDocumentSeries: (documentSeries) => Effect.suspend(() => {

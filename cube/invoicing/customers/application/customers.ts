@@ -3,9 +3,8 @@ import { Effect } from "effect"
 import { checked, copyBuyer, missing, namePageQuery, pageOf, type Authorize, type OperationDependencies, type Page, type PageRequest } from "../../application/support.ts"
 import { DomainConflict, type InvoicingFailure } from "../../contracts/failures.ts"
 import type { InvoicingPermissions } from "../../contracts/permissions.ts"
-import type { Customer } from "../../domain/invoice.ts"
-import type { CreateCustomerInput, UpdateCustomerInput } from "../../domain/inputs.ts"
-import { validateCustomer } from "../domain/validation.ts"
+import { validateCustomer, type CreateCustomerInput, type Customer, type UpdateCustomerInput } from "../domain/customer.ts"
+import type { CustomersTransaction } from "./ports.ts"
 
 export interface CustomerOperations {
   readonly createCustomer: (input: CreateCustomerInput) => Effect.Effect<Customer, InvoicingFailure>
@@ -16,7 +15,7 @@ export interface CustomerOperations {
 }
 
 export const createCustomerOperations = (
-  dependencies: OperationDependencies,
+  dependencies: OperationDependencies<CustomersTransaction>,
   permissions: InvoicingPermissions,
   authorize: Authorize,
 ): CustomerOperations => {

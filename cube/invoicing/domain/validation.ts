@@ -1,8 +1,6 @@
 import { ValidationFailure } from "../contracts/failures.ts"
 import type { DocumentSeries, DocumentSource } from "./invoice.ts"
 
-export { isValidRomanianCui, validateBuyer, validateParty } from "../registry/domain/party-validation.ts"
-
 export const maximumPaymentTermDays = 3650
 export const article310VatExemptionReason = "Regim special de scutire conform art. 310 din Codul fiscal"
 

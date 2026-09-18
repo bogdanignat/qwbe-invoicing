@@ -1,5 +1,5 @@
 {
   "name": "registry",
   "kind": "cube",
-  "summary": "Issuer profile with VAT configurations, document series, customers and product presets"
+  "summary": "Issuer profile with VAT configurations, document series and product presets"
 }

@@ -120,16 +120,19 @@ API client ──> /api (Bearer) ───┘        │                        
                                           └──> PDF renderer ──> /data/artifacts/<sha256>
 ```
 
-- **The core** (`cube/invoicing`) holds the domain model, VAT arithmetic, party and date
+- **The core** (`cube/invoicing`) holds the domain model, VAT arithmetic, date
   validation, the store ports and the idempotency rules, and composes the service from its
   components. It knows nothing about HTTP, SQLite or the browser. It depends only on a small
   set of host contracts (`cube/invoicing/contracts/host.ts`): who is calling and for which
   organization, a clock, an id generator, a transactional store and a renderer.
 - **The component cubes** under `cube/invoicing/` each own one piece of the logic and share
-  the parent's domain: `registry` (issuer, VAT configurations, document series, customers,
-  product presets), `drafts` (authoring a document, draft and line editing), `issuance`
-  (numbered invoices and proformas, conversion, idempotent replay), `corrections` (storno)
-  and `documents` (rendered PDF artifacts, their hashes and recovery).
+  the parent's domain: `parties` (the Romanian fiscal rules for every party: CUI, CNP,
+  counties and sectors), `customers` (saved customers, with their own table and baseline),
+  `registry` (issuer, VAT configurations, document series, product presets), `drafts`
+  (authoring a document, draft and line editing), `issuance` (numbered invoices and
+  proformas, conversion, idempotent replay), `corrections` (storno) and `documents`
+  (rendered PDF artifacts, their hashes and recovery). A child enters another child only
+  through its `index.ts`.
 - **The standalone host** (`standalone/`) is the composition root. It authenticates the
   request, provides the contracts above, exposes every use case as an HTTP endpoint, serves
   the UI, runs migrations and implements the CLI.
@@ -330,8 +333,10 @@ is optional and is not required to issue an invoice. Document/PDF and session
 databases remain separate, and `eFacturaStatus` is retained.
 
 **Schema during development:** each cube owns one baseline migration holding the
-current definition of its tables (`invoicing-001-baseline`, `payments-001-baseline`,
-`documents/documents-001-baseline`). A schema change edits the owning baseline, so a
+current definition of its tables (`customers-001-baseline`, `invoicing-001-baseline`,
+`payments-001-baseline`, `documents/documents-001-baseline`). In `invoicing.sqlite` they
+run after `000-foundation` in cube order, customers before invoicing because drafts
+reference them, for seven entries across the three databases. A schema change edits the owning baseline, so a
 database created before it no longer matches: `migrate` refuses it before writing
 anything and `doctor` reports it, both naming the drifted objects and asking to
 recreate the database. Recreating is not an upgrade: it drops the local data, and the
@@ -403,7 +408,9 @@ fails, so it can gate a deployment.
 
 ```text
 cube/invoicing/            core: domain model, VAT arithmetic, ports, contracts, migrations, service composition
-cube/invoicing/registry/   component: issuer, VAT configurations, document series, customers, product presets
+cube/invoicing/parties/    component: CUI, CNP, counties and sectors shared by issuer and buyers
+cube/invoicing/customers/  component: saved customers, their table and baseline migration
+cube/invoicing/registry/   component: issuer, VAT configurations, document series, product presets
 cube/invoicing/drafts/     component: document authoring, draft and line editing
 cube/invoicing/issuance/   component: numbered invoices and proformas, conversion, idempotent replay
 cube/invoicing/corrections/ component: correction documents (storno)

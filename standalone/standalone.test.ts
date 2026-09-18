@@ -30,13 +30,14 @@ void test("migration apply is idempotent", () => {
   try {
     assert.deepEqual(planMigrations(directory).pending, [
       "000-foundation",
+      "customers-001-baseline",
       "invoicing-001-baseline",
       "payments-001-baseline",
       "documents/000-foundation",
       "documents/documents-001-baseline",
       "sessions/000-browser-sessions",
     ])
-    assert.equal(applyMigrations(directory).changed, 6)
+    assert.equal(applyMigrations(directory).changed, 7)
     assertSourceIndexes(directory)
     assert.equal(applyMigrations(directory).changed, 0)
     assertSourceIndexes(directory)
@@ -55,11 +56,11 @@ void test("migrate CLI reapplies the complete schema with zero changes", () => {
     assert.equal(first.status, 0, first.stderr)
     const firstReport: unknown = JSON.parse(first.stdout)
     assert.ok(typeof firstReport === "object" && firstReport !== null && "changed" in firstReport)
-    assert.equal(firstReport.changed, 6)
+    assert.equal(firstReport.changed, 7)
     const second = spawnSync(process.execPath, [executable, "migrate", "--apply", "--json"], { encoding: "utf8", env })
     assert.equal(second.status, 0, second.stderr)
     const secondReport: unknown = JSON.parse(second.stdout)
-    assert.deepEqual(secondReport, { scanned: 6, changed: 0, skipped: 6, failed: 0, pending: [], schemaDrift: [] })
+    assert.deepEqual(secondReport, { scanned: 7, changed: 0, skipped: 7, failed: 0, pending: [], schemaDrift: [] })
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }

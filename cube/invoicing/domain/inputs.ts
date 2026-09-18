@@ -10,9 +10,6 @@ export type VatChange =
   | { readonly registered: false; effectiveFrom: string; readonly nonVatBasis: "article_310" }
 export type ConfigureIssuerInput = Omit<IssuerProfile,"organizationId"|"branding"|"vatConfigurations"> & { readonly branding:RawIssuerBranding|null; readonly vatChange:VatChange }
 
-export type CustomerInput = BuyerSnapshot & { readonly defaultPaymentTermDays?: number }
-export type CreateCustomerInput = CustomerInput
-export type UpdateCustomerInput = CustomerInput & { readonly id: string }
 export type ProductPresetInput = Pick<ProductPreset, "description" | "unitPrice" | "unitOfMeasure">
 export type UpdateProductPresetInput = ProductPresetInput & { readonly id: string }
 

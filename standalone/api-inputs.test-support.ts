@@ -7,7 +7,6 @@ import {
   type AuthoringProformaInput,
   type ConfigureDocumentSeriesInput,
   type ConfigureIssuerInput,
-  type CreateCustomerInput,
   type CreateDraftInput,
   type DocumentSource,
   type PageRequest,
@@ -15,6 +14,7 @@ import {
   type UpdateDraftInput,
   type UpdateDraftLineInput,
 } from "../cube/invoicing/index.ts"
+import type { CreateCustomerInput } from "../cube/invoicing/customers/index.ts"
 import * as S from "./http-schemas.ts"
 
 const decode = <A, I>(schema: Schema.Schema<A, I>, value: unknown): A => {

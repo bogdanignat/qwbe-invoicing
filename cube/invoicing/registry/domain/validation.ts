@@ -1,11 +1,11 @@
 import { ValidationFailure } from "../../contracts/failures.ts"
 import { normalizeMoney } from "../../domain/calculation.ts"
 import type { IssuerProfile, VatConfiguration } from "../../domain/invoice.ts"
-import type { CustomerInput, ProductPresetInput } from "../../domain/inputs.ts"
+import type { ProductPresetInput } from "../../domain/inputs.ts"
 import { normalizeUnitOfMeasure } from "../../domain/unit-of-measures.ts"
 import { maximumPaymentTermDays, validateDate, validateVatTreatment } from "../../domain/validation.ts"
 import { normalizeIssuerDetails } from "./issuer-details.ts"
-import { isValidRomanianCui, validateBuyer, validateParty } from "./party-validation.ts"
+import { isValidRomanianCui, validateParty } from "../../parties/index.ts"
 
 export const resolveVatConfiguration = (
   issuer: IssuerProfile,
@@ -20,15 +20,6 @@ export const resolveVatConfiguration = (
     throw new ValidationFailure({ issues: [`vatRateCode ${code} must resolve to exactly one configuration on ${issueDate}`] })
   }
   return matches[0] as VatConfiguration
-}
-
-export const validateCustomer = (customer: CustomerInput): void => {
-  validateBuyer(customer)
-  if (customer.defaultPaymentTermDays !== undefined
-    && (!Number.isInteger(customer.defaultPaymentTermDays) || customer.defaultPaymentTermDays < 0
-      || customer.defaultPaymentTermDays > maximumPaymentTermDays)) {
-    throw new ValidationFailure({ issues: [`defaultPaymentTermDays must be an integer between 0 and ${String(maximumPaymentTermDays)}`] })
-  }
 }
 
 export const normalizeProductPreset = (input: ProductPresetInput): ProductPresetInput => {
