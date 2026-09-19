@@ -43,3 +43,47 @@ void test("offers the kernel unit-of-measure list to readers only, as copies", a
   assert.notEqual(units[0], unitOfMeasures[0])
   assert.equal(await Effect.runPromise(Effect.flip(service([]).listUnitOfMeasures())) instanceof PermissionDenied, true)
 })
+
+const serviceAt = (clock: () => Date, state = emptyState()) => createInvoicingService({
+  context: contextProvider({ identity, organization: { id: "org-1" } }),
+  clock: { now: Effect.sync(clock) }, ids: sequentialIds(), store: memoryStore(state), branding: brandingNormalizer, cubeIdentity: "invoicing",
+})
+const book = { description: "Carte", unitPrice: "40", unitOfMeasure: each }
+
+void test("stores a preferred VAT rate code with the preset and drops it when an update omits it", async () => {
+  const service = serviceAt(() => new Date("2026-09-01T10:00:00.000Z"))
+  const preset = await Effect.runPromise(service.createProductPreset({ ...book, preferredVatRateCode: "RO_REDUCED" }))
+  assert.equal(preset.preferredVatRateCode, "RO_REDUCED")
+  assert.deepEqual((await Effect.runPromise(service.listProductPresets())).items, [preset])
+  const standard = await Effect.runPromise(service.updateProductPreset({ id: preset.id, ...book, preferredVatRateCode: "RO_STANDARD" }))
+  assert.equal(standard.preferredVatRateCode, "RO_STANDARD")
+  const cleared = await Effect.runPromise(service.updateProductPreset({ id: preset.id, ...book }))
+  assert.equal(Object.hasOwn(cleared, "preferredVatRateCode"), false)
+  assert.deepEqual((await Effect.runPromise(service.listProductPresets())).items, [cleared])
+  const refused = await Effect.runPromise(Effect.flip(service.createProductPreset({ ...book, preferredVatRateCode: "RO_NON_VAT" })))
+  assert.equal(refused instanceof ValidationFailure, true)
+})
+
+void test("lists a preference the law has retired but refuses to save it again until it is replaced or removed", async () => {
+  let now = new Date("2025-07-31T10:00:00.000Z")
+  const state = emptyState()
+  const service = serviceAt(() => now, state)
+  const preset = await Effect.runPromise(service.createProductPreset({ ...book, preferredVatRateCode: "RO_REDUCED_5" }))
+  now = new Date("2025-08-01T10:00:00.000Z")
+  assert.deepEqual((await Effect.runPromise(service.listProductPresets())).items, [preset])
+  const kept = await Effect.runPromise(Effect.flip(service.updateProductPreset({ id: preset.id, ...book, unitPrice: "45", preferredVatRateCode: "RO_REDUCED_5" })))
+  assert.equal(kept instanceof ValidationFailure, true)
+  assert.deepEqual((await Effect.runPromise(service.listProductPresets())).items, [preset])
+  const replaced = await Effect.runPromise(service.updateProductPreset({ id: preset.id, ...book, preferredVatRateCode: "RO_REDUCED" }))
+  assert.equal(replaced.preferredVatRateCode, "RO_REDUCED")
+  const removed = await Effect.runPromise(service.updateProductPreset({ id: preset.id, ...book }))
+  assert.equal(Object.hasOwn(removed, "preferredVatRateCode"), false)
+})
+
+void test("checks a preference on the calendar date in Bucharest, not in UTC", async () => {
+  const lastSecond = serviceAt(() => new Date("2025-07-31T20:59:59.000Z"))
+  assert.equal((await Effect.runPromise(lastSecond.createProductPreset({ ...book, preferredVatRateCode: "RO_REDUCED_5" }))).preferredVatRateCode, "RO_REDUCED_5")
+  const nextDay = serviceAt(() => new Date("2025-07-31T21:00:00.000Z"))
+  const refused = await Effect.runPromise(Effect.flip(nextDay.createProductPreset({ ...book, preferredVatRateCode: "RO_REDUCED_5" })))
+  assert.equal(refused instanceof ValidationFailure, true)
+})

@@ -72,7 +72,11 @@ a rewrite.
   customer may define a default payment term which prepopulates, but never locks, the due date.
 - **Products and services** (optional presets, the "Catalog" screen): a short reusable list of
   descriptions, units of measure and unit prices. Selecting one copies those values into an editable invoice line; there is no stock,
-  SKU, price-list logic, or live relation to the saved preset.
+  SKU, price-list logic, or live relation to the saved preset. A product may also prefer a VAT
+  rate, stored as a code (`RO_STANDARD`, `RO_REDUCED`) rather than a percentage, so a legal rate
+  change needs no product edit. The line gets that code only when the issuer can charge it on
+  the document date; otherwise, and always for an Article 310 issuer, it gets the issuer's default
+  (see `docs/VAT_TREATMENT.md`, "Preferred VAT rate on a product").
 - **Document series**: separate series for invoices and proformas. Numbers are allocated
   atomically at issue time, are unique within their scope and are never reused. Uniqueness
   is enforced by the database, not only by the UI.

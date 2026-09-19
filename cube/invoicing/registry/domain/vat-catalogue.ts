@@ -31,3 +31,8 @@ export const romanianVatRates: ReadonlyArray<VatRate> = [
 ]
 
 export const vatRatesOn = (date: string): ReadonlyArray<VatRate> => romanianVatRates.filter((rate) => activeOn(rate, date))
+
+// Whether a code names a taxable rate in force on the date. Article 310 is a status of the
+// issuer, not a rate a product can carry, so `RO_NON_VAT` is never taxable here.
+export const isTaxableVatRateOn = (code: string, date: string): boolean =>
+  vatRatesOn(date).some((rate) => rate.code === code && rate.kind !== "non_vat")

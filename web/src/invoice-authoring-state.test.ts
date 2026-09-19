@@ -118,11 +118,11 @@ void test("does not recalculate a draft due date when its saved customer changes
 void test("copies a product preset into an editable line without retaining a live relation", () => {
   const line = { key: "local-1", lineId: "line-1", description: "Vechi", quantity: "3", unitPrice: "2.00", unitOfMeasure: each, vatRateCode: "RO_STANDARD" }
   const preset: ProductPreset = { id: "preset-1", organizationId: "org-1", description: "Consultanță", unitPrice: "100.00", unitOfMeasure: { code: "HUR", name: "oră" } }
-  assert.deepEqual(applyProductPreset(line, preset), {
-    key: "local-1", lineId: "line-1", description: "Consultanță", quantity: "1", unitPrice: "100.00", unitOfMeasure: preset.unitOfMeasure, vatRateCode: "RO_STANDARD",
+  assert.deepEqual(applyProductPreset(line, preset, "RO_REDUCED"), {
+    key: "local-1", lineId: "line-1", description: "Consultanță", quantity: "1", unitPrice: "100.00", unitOfMeasure: preset.unitOfMeasure, vatRateCode: "RO_REDUCED",
   })
-  assert.deepEqual(draftLinePayload(applyProductPreset(line, preset)), {
-    description: "Consultanță", quantity: "1", unitPrice: "100.00", unitOfMeasure: preset.unitOfMeasure, vatRateCode: "RO_STANDARD",
+  assert.deepEqual(draftLinePayload(applyProductPreset(line, preset, "RO_REDUCED")), {
+    description: "Consultanță", quantity: "1", unitPrice: "100.00", unitOfMeasure: preset.unitOfMeasure, vatRateCode: "RO_REDUCED",
   })
 })
 

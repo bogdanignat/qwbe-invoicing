@@ -67,6 +67,32 @@ zero to `0.00`; it does not reinterpret the source using the current issuer prof
 PDF templates invoice-v9/proforma-v8 display the legal reason from the snapshot.
 No exemption is inferred during rendering.
 
+## Preferred VAT rate on a product (T-1399)
+
+A saved product may carry `preferredVatRateCode`: the code of a taxable rate, never a
+percentage, so the percentage is resolved on the document date and a legal rate change
+needs no product edit. Absent means the issuer's default.
+
+- **Saving the product.** The code must name a taxable rate in force on the organization's
+  calendar date (Europe/Bucharest) — `RO_STANDARD` or `RO_REDUCED` today. `RO_NON_VAT` is
+  refused: Article 310 is a status of the issuer, not of a product. The check runs on every
+  save, so a preference the law has since retired (`RO_REDUCED_5` after 2025-07-31) keeps the
+  product listable and usable on lines, but any edit must replace or remove it explicitly.
+  The editor shows it as "<code> (expirată)" and blocks saving until then; there is never a
+  silent conversion. A PUT replaces the whole product, so omitting the code removes it.
+- **Choosing the product on a line** (`presetVatCode`, invoice and proforma forms). The line
+  gets the preferred code when the issuer is VAT registered on the document date and the code
+  is among the rates it can charge on that date; otherwise it gets the issuer's default on
+  that date (standard rate, `RO_NON_VAT` under Article 310, or nothing when the status cannot
+  be determined). **Article 310 always wins over the preference.** The code is resolved at the
+  moment of the choice: a later change of the document date does not rewrite filled lines,
+  and choosing the product again resolves it on the new date.
+- **The server knows nothing of the preference.** It validates each line's own code against
+  the issuer on the document date, through the same chains as any line, and refuses an
+  incompatible code — `RO_REDUCED` from an Article 310 issuer, on draft save or on issuance —
+  rather than correcting it. A preference therefore cannot produce an invoice with the wrong
+  VAT treatment; at worst it proposes a code the line must change.
+
 ## Inspected evidence
 
 Existing extracted official package: **ro16931-ubl-1.0.9**, under

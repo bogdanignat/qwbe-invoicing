@@ -14,7 +14,7 @@ import { invoicingClient, type AuthoringProformaInput } from "./invoicing-client
 import type { Customer, Issuer, UnitOfMeasure, VatCatalogue, VatRate } from "./models.ts"
 import { navigate } from "./navigation.ts"
 import { useOperationIdempotency } from "./operation-idempotency.ts"
-import { defaultVatCode, issuerForIssueDate, vatRatesForIssuer } from "./vat-defaults.ts"
+import { defaultVatCode, issuerForIssueDate, presetVatCode, vatRatesForIssuer } from "./vat-defaults.ts"
 import { authoringSeriesOptions } from "./invoice-authoring-state.ts"
 import { useVatCatalogue } from "./vat-hooks.ts"
 import { countyRequiresSector } from "./romanian-counties.ts"
@@ -119,7 +119,9 @@ export const useProformaAuthoringSession = (input: ProformaAuthoringSessionInput
     crypto.randomUUID(), defaultVatCode(input.vatCatalogue, input.issuer, initialDate), preferredUnitOfMeasure(input.unitOfMeasures),
   )])
   const customers = useInvoiceAuthoringCustomers({ customers: input.customers, issuer: input.issuer, deriveDueDate: true, setForm })
-  const presets = useInvoiceAuthoringPresets({ setLines })
+  const presets = useInvoiceAuthoringPresets({
+    setLines, vatCodeFor: (preferred) => presetVatCode(preferred, input.vatCatalogue, input.issuer, form.issueDate),
+  })
   const readiness = authoringReadiness(form, lines, undefined, false)
   const mutation = useMutation({
     mutationFn: (request: { readonly payload: AuthoringProformaInput; readonly fingerprint: string }) => runUiEffect(invoicingClient.issueProforma(request.payload, idempotency.current("create-proforma", request.fingerprint))),

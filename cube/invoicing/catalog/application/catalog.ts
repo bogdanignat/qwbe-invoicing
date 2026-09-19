@@ -4,6 +4,7 @@ import { checked, missing, namePageQuery, pageOf, type Authorize, type Operation
 import type { InvoicingFailure } from "../../contracts/failures.ts"
 import type { InvoicingPermissions } from "../../contracts/permissions.ts"
 import { unitOfMeasures, type UnitOfMeasure } from "../../domain/unit-of-measures.ts"
+import { calendarDate } from "../../domain/validation.ts"
 import { normalizeProductPreset, type ProductPreset, type ProductPresetInput, type UpdateProductPresetInput } from "../domain/product-preset.ts"
 import type { CatalogTransaction } from "./ports.ts"
 
@@ -22,9 +23,12 @@ export const createCatalogOperations = (
   permissions: InvoicingPermissions,
   authorize: Authorize,
 ): CatalogOperations => {
+  // A preferred VAT rate is checked against the organization's calendar date on every save.
+  const today = Effect.map(dependencies.clock.now, (now) => calendarDate(now))
   const createProductPreset = (input: ProductPresetInput) => Effect.gen(function*() {
     const context = yield* authorize(permissions.manageSettings)
-    const normalized = yield* checked(() => normalizeProductPreset(input))
+    const date = yield* today
+    const normalized = yield* checked(() => normalizeProductPreset(input, date))
     const preset: ProductPreset = { id: yield* dependencies.ids.next, organizationId: context.organization.id, ...normalized }
     yield* dependencies.store.transaction((transaction) => transaction.saveProductPreset(preset))
     return structuredClone(preset)
@@ -37,11 +41,12 @@ export const createCatalogOperations = (
   })
   const updateProductPreset = (input: UpdateProductPresetInput) => Effect.gen(function*() {
     const context = yield* authorize(permissions.manageSettings)
+    const date = yield* today
     return yield* dependencies.store.transaction((transaction) => Effect.gen(function*() {
       if ((yield* transaction.findProductPreset(context.organization.id, input.id)) === undefined) {
         return yield* Effect.fail(missing("product_preset", input.id))
       }
-      const normalized = yield* checked(() => normalizeProductPreset(input))
+      const normalized = yield* checked(() => normalizeProductPreset(input, date))
       const preset: ProductPreset = { id: input.id, organizationId: context.organization.id, ...normalized }
       yield* transaction.saveProductPreset(preset)
       return structuredClone(preset)
