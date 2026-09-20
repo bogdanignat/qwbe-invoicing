@@ -8,7 +8,7 @@ import type { DocumentSource, Idempotent, IssuedInvoice, IssuedInvoiceSummary } 
 import type { AuthoringDocumentInput } from "../../domain/inputs.ts"
 import { calendarDate, validateDocumentSource } from "../../domain/validation.ts"
 import type { AuthoringTransaction } from "../../drafts/index.ts"
-import { validateIssuerForIssuance } from "../../registry/index.ts"
+import { validateIssuerForIssuance } from "../../issuer/index.ts"
 import { ensureChronology } from "./chronology.ts"
 import { fiscalYear, issuanceSource, numberedSnapshot } from "./snapshot.ts"
 

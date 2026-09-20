@@ -1,10 +1,10 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 import { Effect } from "effect"
-import { ValidationFailure, type InvoicingFailure } from "../contracts/failures.ts"
-import type { ConfigureIssuerInput } from "../domain/inputs.ts"
-import { createInvoicingService } from "./invoicing.ts"
-import { brandingNormalizer, contextProvider, each, emptyState, fixedClock, identity, idempotent, memoryStore, sequentialIds } from "./memory-store.test-support.ts"
+import { ValidationFailure, type InvoicingFailure } from "../../contracts/failures.ts"
+import type { ConfigureIssuerInput } from "../domain/issuer.ts"
+import { createInvoicingService } from "../../application/invoicing.ts"
+import { brandingNormalizer, contextProvider, each, emptyState, fixedClock, identity, idempotent, memoryStore, sequentialIds } from "../../application/memory-store.test-support.ts"
 
 const input: ConfigureIssuerInput = {
   name: "Emitent SRL", fiscalIdentifier: "12345674", address: { countryCode: "RO", city: "Iași", street: "Strada 1", county: "RO-IS" },

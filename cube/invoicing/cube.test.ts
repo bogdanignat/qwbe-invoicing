@@ -11,8 +11,6 @@ void test("exports a minimal authenticated QWBE cube definition", () => {
   assert.equal(cube.manifest.requiresAuth, true)
   assert.equal(cube.manifest.permissions.length, 7)
   assert.deepEqual(cube.manifest.tables, [
-    "issuers",
-    "issuer_tax_configurations",
     "document_series",
     "invoice_drafts",
     "draft_lines",

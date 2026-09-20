@@ -6,8 +6,8 @@ import { Effect } from "effect"
 import { createInvoicingService } from "../../application/invoicing.ts"
 import { brandingNormalizer, contextProvider, emptyState, fixedClock, identity, memoryStore, sequentialIds } from "../../application/memory-store.test-support.ts"
 import { DomainConflict, ValidationFailure } from "../../contracts/index.ts"
-import { PermissionDenied } from "../../contracts/failures.ts"
-import type { ConfigureIssuerInput, VatChange } from "../../domain/inputs.ts"
+import { PermissionDenied, ResourceNotFound } from "../../contracts/failures.ts"
+import type { ConfigureIssuerInput, VatChange } from "../domain/issuer.ts"
 
 const vatChange = (registered: boolean, effectiveFrom: string): VatChange => registered
   ? { registered: true, effectiveFrom }
@@ -18,6 +18,30 @@ const issuerInput = (branding: Parameters<ReturnType<typeof createInvoicingServi
   legalForm: "srl" as const, tradeRegistryNumber: "J40/123/2020", socialCapital: "200.00", iban: "", bankName: "",
   defaultCurrency: "RON", defaultPaymentTermDays: 15,
   vatChange: vatChange(true, "2025-08-01"), branding,
+})
+
+void test("issuer reads, writes and audit stay scoped to the authorized organization", async () => {
+  const state = emptyState()
+  const ids = sequentialIds()
+  const serviceFor = (id: string, permissions = identity.permissions) => createInvoicingService({
+    context: contextProvider({ identity: { ...identity, permissions }, organization: { id } }),
+    clock: fixedClock, ids, store: memoryStore(state), branding: brandingNormalizer, cubeIdentity: "invoicing",
+  })
+  const first = serviceFor("org-1")
+  const second = serviceFor("org-2")
+  await Effect.runPromise(first.configureIssuer(issuerInput(null)))
+  assert.ok(await Effect.runPromise(Effect.flip(second.getIssuer())) instanceof ResourceNotFound)
+  await Effect.runPromise(second.configureIssuer({ ...issuerInput(null), name: "Alt emitent SRL" }))
+  assert.equal((await Effect.runPromise(first.getIssuer())).name, "Exemplu SRL")
+  assert.equal((await Effect.runPromise(second.getIssuer())).name, "Alt emitent SRL")
+  assert.deepEqual(state.auditEvents.map(({ organizationId }) => organizationId), ["org-1", "org-2"])
+
+  const before = structuredClone(state)
+  const denied = serviceFor("org-1", [])
+  assert.ok(await Effect.runPromise(Effect.flip(denied.getIssuer())) instanceof PermissionDenied)
+  assert.ok(await Effect.runPromise(Effect.flip(denied.getVatCatalogue())) instanceof PermissionDenied)
+  assert.ok(await Effect.runPromise(Effect.flip(denied.configureIssuer(issuerInput(null)))) instanceof PermissionDenied)
+  assert.deepEqual(state, before)
 })
 
 void test("configures normalized issuer branding, removes it, and authorizes before normalization", async () => {
@@ -54,10 +78,8 @@ void test("configures normalized issuer branding, removes it, and authorizes bef
   }
   assert.equal(normalizations, 2)
 
-  await Effect.runPromise(service.addDocumentSeries({ documentType: "invoice", series: "QWBE" }))
   assert.deepEqual(state.auditEvents.map(({ action, actorId, targetKind, targetId }) => ({ action, actorId, targetKind, targetId })), [
     ...Array.from({ length: 4 }, () => ({ action: "issuer.configured", actorId: identity.id, targetKind: "issuer", targetId: "org-1" })),
-    { action: "series.added", actorId: identity.id, targetKind: "document_series", targetId: "invoice:QWBE" },
   ])
   assert.equal(await Effect.runPromise(Effect.flip(service.configureIssuer({ ...issuerInput({
     text: null, image: { dataBase64: "iVBORw0KGgo=" },
@@ -72,7 +94,7 @@ void test("configures normalized issuer branding, removes it, and authorizes bef
     text: null, image: { dataBase64: "iVBORw0KGgo=" },
   })))) instanceof PermissionDenied, true)
   assert.equal(normalizations, 2)
-  assert.equal(state.auditEvents.length, 5)
+  assert.equal(state.auditEvents.length, 4)
 })
 
 void test("rolls issuer configuration back when its audit append fails", async () => {

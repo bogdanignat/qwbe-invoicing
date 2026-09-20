@@ -6,7 +6,7 @@ import type { DocumentSource, Idempotent } from "../../domain/invoice.ts"
 import { calendarDate, validateDocumentSource } from "../../domain/validation.ts"
 import { findIdempotencyReplay, idempotencyRecord, missingIdempotencyResult } from "../../application/idempotency.ts"
 import { checked, copyBuyer, copyIssuerCompanySnapshot, copySource, missing, recordAuditEvent, type Authorize, type OperationDependencies } from "../../application/support.ts"
-import { validateIssuerForIssuance } from "../../registry/index.ts"
+import { validateIssuerForIssuance } from "../../issuer/index.ts"
 import { validateFiscalDocument } from "../../domain/calculation.ts"
 import { ensureChronology } from "./chronology.ts"
 const fy = (d: string): number => Number(d.slice(0, 4))

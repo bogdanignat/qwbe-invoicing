@@ -288,7 +288,7 @@ References to global accounts, organizations, contacts, products, or documents s
 
 ### Schema baselines during development
 
-While the project is in development (the "STADIU" section of `CLAUDE.md`), every cube owns exactly one migration, `<cube>-001-baseline`, holding the current definition of the tables its manifest declares, with their indexes and triggers; `standalone/schema-baseline.test.ts` asserts that each baseline creates exactly the declared tables. A schema change edits the owning baseline instead of adding a migration. A database created from an earlier baseline is drift: `migrate` refuses it before writing and `doctor` reports it, and the answer is to recreate the database, which drops its data. The migrator never deletes a database itself. The runner applies the foundation and then each cube's migrations in cube order, a cube whose tables others reference first, never sorted by name. Numbered incremental migrations (`<cube>-002-...`) return only when the development stage ends. The immutability triggers are part of the baselines, and `standalone/standalone.test.ts` still asserts that every one of them exists after migration.
+While the project is in development (the "STADIU" section of `CLAUDE.md`), every cube owns exactly one migration, `<cube>-001-baseline`, holding the current definition of the tables its manifest declares, with their indexes and triggers; `standalone/schema-baseline.test.ts` asserts that each baseline creates exactly the declared tables. A schema change edits the owning baseline instead of adding a migration. A database created from an earlier baseline is drift: `migrate` refuses it before writing and `doctor` reports it, and the answer is to recreate the database, which drops its data. The migrator never deletes a database itself. The runner applies the foundation and then each cube's migrations in cube order—customers, catalog, issuer, invoicing, payments in `invoicing.sqlite`—with a cube whose tables others reference first, never sorted by name. Numbered incremental migrations (`<cube>-002-...`) return only when the development stage ends. The immutability triggers are part of the baselines, and `standalone/standalone.test.ts` still asserts that every one of them exists after migration.
 
 ## 8. Events are not workflows
 
@@ -493,9 +493,9 @@ qwbe-invoicing/
 │       ├── parties/            component cube: CUI/CNP, counties and sectors for every party
 │       ├── customers/          component cube: saved customers, their table and baseline
 │       ├── catalog/            component cube: saved products and services, their table and baseline
-│       ├── registry/           component cube: issuer, VAT, series
+│       ├── issuer/             component cube: issuer profile, branding, VAT and baseline
 │       ├── drafts/             component cube: authoring and draft editing
-│       ├── issuance/           component cube: numbered invoices and proformas
+│       ├── issuance/           component cube: document series, numbered invoices and proformas
 │       ├── corrections/        component cube: storno documents
 │       ├── documents/          component cube: rendered artifacts
 │       └── adapters/qwbe/      thin QWBE adapter

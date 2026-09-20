@@ -1,12 +1,13 @@
 import { Effect } from "effect"
 
 import { checked, missing, type Authorize, type OperationDependencies } from "../../application/support.ts"
+import type { InvoicingTransaction } from "../../application/ports.ts"
 import type { InvoicingFailure } from "../../contracts/failures.ts"
 import type { InvoicingPermissions } from "../../contracts/permissions.ts"
 import { calculateLine } from "../../domain/calculation.ts"
 import type { DraftInvoice } from "../../domain/invoice.ts"
 import type { AddDraftLineInput, UpdateDraftLineInput } from "../../domain/inputs.ts"
-import { resolveVatConfiguration } from "../../registry/index.ts"
+import { resolveVatConfiguration, type IssuerTransaction } from "../../issuer/index.ts"
 import { findEditable, withTotals } from "./authoring.ts"
 
 export interface DraftLineOperations {
@@ -16,7 +17,7 @@ export interface DraftLineOperations {
 }
 
 export const createDraftLineOperations = (
-  dependencies: OperationDependencies,
+  dependencies: OperationDependencies<InvoicingTransaction & Pick<IssuerTransaction, "findIssuer">>,
   permissions: InvoicingPermissions,
   authorize: Authorize,
 ): DraftLineOperations => {

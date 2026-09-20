@@ -6,6 +6,7 @@ import { invoicingMigrations, type InvoicingMigration } from "../cube/invoicing/
 import { catalogMigrations } from "../cube/invoicing/catalog/index.ts"
 import { customersMigrations } from "../cube/invoicing/customers/index.ts"
 import { documentsMigrations } from "../cube/invoicing/documents/index.ts"
+import { issuerMigrations } from "../cube/invoicing/issuer/index.ts"
 import { paymentsMigrations } from "../cube/payments/index.ts"
 
 const foundationMigration: InvoicingMigration = { name: "000-foundation", statements: [] }
@@ -24,10 +25,10 @@ const browserSessionsMigration: InvoicingMigration = {
 }
 // Each cube owns one baseline of its tables; the list runs in cube order, the
 // cube a foreign key points at before the cube that holds it, never by name.
-// Customers come first because drafts reference them; the catalog has no
-// foreign keys either way and sits with the other children.
+// Customers and issuer come first because invoicing references them; the
+// catalog has no foreign keys either way and sits with the other children.
 const applicationMigrations: ReadonlyArray<InvoicingMigration> = [
-  ...customersMigrations, ...catalogMigrations, ...invoicingMigrations, ...paymentsMigrations,
+  ...customersMigrations, ...catalogMigrations, ...issuerMigrations, ...invoicingMigrations, ...paymentsMigrations,
 ]
 const invoicingPlan = { label: "", file: "invoicing.sqlite", migrations: [foundationMigration, ...applicationMigrations] }
 const documentsPlan = { label: "documents/", file: "documents.sqlite", migrations: [foundationMigration, ...documentsMigrations] }

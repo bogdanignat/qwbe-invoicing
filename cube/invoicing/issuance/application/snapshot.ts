@@ -3,11 +3,11 @@ import { Effect } from "effect"
 import { checked, copyBuyer, copyIssuerSnapshot, copySource, missing } from "../../application/support.ts"
 import { DomainConflict, ValidationFailure } from "../../contracts/failures.ts"
 import type { IdGenerator } from "../../contracts/host.ts"
-import type { DraftInvoice, IssuerProfile, IssuerSnapshot } from "../../domain/invoice.ts"
+import type { DraftInvoice, IssuerSnapshot } from "../../domain/invoice.ts"
 import { validateFiscalDocument } from "../../domain/calculation.ts"
 import type { AuthoringDocumentInput } from "../../domain/inputs.ts"
 import { authorDocument, type AuthoringTransaction } from "../../drafts/index.ts"
-import { currentVatRegistration, validateVatForIssuance } from "../../registry/index.ts"
+import { currentVatRegistration, validateVatForIssuance, type IssuerProfile } from "../../issuer/index.ts"
 import type { AuthoringProformaInput } from "../domain/proforma.ts"
 
 type SnapshotContent = Omit<DraftInvoice, "id" | "status" | "customerId" | "sourceProformaId">

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import test from "node:test"
-import { normalizeIssuerDetails, validateIssuerForIssuance } from "../cube/invoicing/registry/index.ts"
+import { normalizeIssuerDetails, validateIssuerForIssuance } from "../cube/invoicing/issuer/index.ts"
 import { issuerIssuanceWarning, normalizeIssuerLegalDetails } from "../web/src/issuer-details.ts"
 
 const base = { legalForm: "srl" as const, tradeRegistryNumber: "J40/123/2020", socialCapital: "200.00", iban: "", bankName: "" }

@@ -128,7 +128,7 @@ and ANAF transport remain separate work.
 
 ## Storage
 
-The invoicing baseline constrains the S/O tuples and reason fields with CHECKs on
+The issuer and invoicing baselines constrain the S/O tuples and reason fields with CHECKs on
 issuer configurations and on draft/issued/proforma/correction lines and tax
 breakdowns. There is no legacy decoder, backfill or automatic data deletion; a
 database from an older schema is recreated (README, "Schema during development").

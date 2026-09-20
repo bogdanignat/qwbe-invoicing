@@ -90,13 +90,6 @@ export interface VatConfiguration extends VatTreatment {
   readonly effectiveTo?: string
 }
 
-export interface IssuerProfile extends Omit<IssuerSnapshot, "vatRegistered"> {
-  readonly organizationId: string
-  readonly defaultCurrency: string
-  readonly defaultPaymentTermDays: number
-  readonly vatConfigurations: ReadonlyArray<VatConfiguration>
-}
-
 export type DocumentType = "invoice" | "proforma"
 export type NumberedDocumentType = DocumentType | "correction"
 

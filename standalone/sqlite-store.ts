@@ -29,7 +29,7 @@ import {
 } from "../cube/invoicing/index.ts"
 import type { CatalogTransaction } from "../cube/invoicing/catalog/index.ts"
 import type { CustomersTransaction } from "../cube/invoicing/customers/index.ts"
-import { normalizeIssuerDetails, validateIssuerForIssuance } from "../cube/invoicing/registry/index.ts"
+import { normalizeIssuerDetails, validateIssuerForIssuance, type IssuerTransaction } from "../cube/invoicing/issuer/index.ts"
 import {
   DomainConflict as PaymentsDomainConflict,
   PersistenceFailure as PaymentsPersistenceFailure,
@@ -45,7 +45,7 @@ import {
   persistence, read, row, rowsWanted, text, write, type Row, type WriteFailure,
 } from "./sqlite-rows.ts"
 
-type ProformaWorkflowTransaction = InvoicingTransaction & {
+type ProformaWorkflowTransaction = InvoicingTransaction & IssuerTransaction & {
   readonly saveProformaConversion: (conversion: ProformaConversion) => Effect.Effect<void, WriteFailure>
 }
 interface TransactionHandle {
@@ -737,7 +737,7 @@ const releaseTransaction = (handle: TransactionHandle): void => {
 
 // One connection and one BEGIN IMMEDIATE per transaction; the kernel adapter and every
 // child-cube adapter are built on that same connection, so they commit or roll back together.
-export const createSqliteStore = (dataDirectory: string): TransactionalStore<InvoicingTransaction & CustomersTransaction & CatalogTransaction> => ({
+export const createSqliteStore = (dataDirectory: string): TransactionalStore<InvoicingTransaction & CustomersTransaction & CatalogTransaction & IssuerTransaction> => ({
   transaction: (use) => Effect.acquireUseRelease(
     Effect.try({
       try: () => openTransaction(dataDirectory),

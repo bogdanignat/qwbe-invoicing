@@ -231,7 +231,7 @@ source for `E`. Fixture 04 is therefore a shape the product no longer issues —
 not a shape ANAF rejected.
 
 The product now issues `O` end to end (T-1383). `VatCategoryCode` is `"S" | "O"`
-in the invoicing model, the eight CHECK constraints in the invoicing baseline accept the
+in the invoicing model, the eight CHECK constraints across the issuer and invoicing baselines accept the
 Article 310 tuple only under `O`, and `E` is refused everywhere — by the domain
 validator, by the database and by the web decoder — even when the rest of the
 tuple is exactly right. The stored rate stays `0.00`, because the model requires

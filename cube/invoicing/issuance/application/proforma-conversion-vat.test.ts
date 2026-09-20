@@ -5,7 +5,7 @@ import { Effect } from "effect"
 import { createInvoicingService } from "../../application/invoicing.ts"
 import { brandingNormalizer, contextProvider, each, emptyState, identity, idempotent, memoryStore, sequentialIds } from "../../application/memory-store.test-support.ts"
 import { ResourceNotFound, ValidationFailure } from "../../contracts/failures.ts"
-import type { ConfigureIssuerInput, VatChange } from "../../domain/inputs.ts"
+import type { ConfigureIssuerInput, VatChange } from "../../issuer/index.ts"
 
 const vatChange = (registered: boolean, effectiveFrom: string): VatChange => registered
   ? { registered: true, effectiveFrom }

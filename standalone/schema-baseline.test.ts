@@ -9,6 +9,7 @@ import { ROMANIAN_COUNTIES, cube as invoicingCube, invoicingMigrations } from ".
 import { cube as catalogCube, catalogMigrations } from "../cube/invoicing/catalog/index.ts"
 import { cube as customersCube, customersMigrations } from "../cube/invoicing/customers/index.ts"
 import { cube as documentsCube, documentsMigrations } from "../cube/invoicing/documents/index.ts"
+import { cube as issuerCube, issuerMigrations } from "../cube/invoicing/issuer/index.ts"
 import { cube as paymentsCube, paymentsMigrations } from "../cube/payments/index.ts"
 import { applyMigrations, databasePath } from "./migrations.ts"
 
@@ -25,6 +26,27 @@ const createdTables = (migrations: ReadonlyArray<{ readonly statements: Readonly
   }
 }
 
+// foreign_key_check alone does not detect an absent parent when the child has
+// no rows. Check the references themselves as well as the stored data.
+const missingForeignKeyParents = (database: DatabaseSync) => database.prepare(`
+  SELECT m.name AS child, f."table" AS parent
+  FROM sqlite_master m, pragma_foreign_key_list(m.name) f
+  WHERE m.type = 'table' AND f."table" NOT IN (SELECT name FROM sqlite_master WHERE type = 'table')
+  ORDER BY child, parent
+`).all().map((row) => ({ ...row }))
+
+void test("the baseline parent check detects missing referenced tables without data", () => {
+  const database = new DatabaseSync(":memory:")
+  try {
+    database.exec("PRAGMA foreign_keys = ON")
+    database.exec("CREATE TABLE child (parent_id TEXT REFERENCES absent_parent(id))")
+    assert.deepEqual(database.prepare("PRAGMA foreign_key_check").all(), [])
+    assert.deepEqual(missingForeignKeyParents(database), [{ child: "child", parent: "absent_parent" }])
+  } finally {
+    database.close()
+  }
+})
+
 // A cube owns exactly the tables its manifest declares, and its own baseline is
 // what creates them: no table goes unowned or gets created by another cube.
 void test("each cube baseline creates exactly the tables its manifest declares", () => {
@@ -32,10 +54,27 @@ void test("each cube baseline creates exactly the tables its manifest declares",
     [invoicingCube, invoicingMigrations],
     [customersCube, customersMigrations],
     [catalogCube, catalogMigrations],
+    [issuerCube, issuerMigrations],
     [paymentsCube, paymentsMigrations],
     [documentsCube, documentsMigrations],
   ] as const) {
     assert.deepEqual(createdTables(migrations), [...cube.manifest.tables].sort(), cube.manifest.name)
+  }
+})
+
+void test("the composed baselines satisfy every foreign key", () => {
+  const directory = mkdtempSync(join(tmpdir(), "qwbe-baseline-fk-"))
+  try {
+    applyMigrations(directory)
+    const database = new DatabaseSync(databasePath(directory), { readOnly: true })
+    try {
+      assert.deepEqual(missingForeignKeyParents(database), [])
+      assert.deepEqual(database.prepare("PRAGMA foreign_key_check").all(), [])
+    } finally {
+      database.close()
+    }
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
   }
 })
 
