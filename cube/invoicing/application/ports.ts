@@ -2,8 +2,6 @@ import type { Effect } from "effect"
 
 import type { DomainConflict, PersistenceFailure } from "../contracts/failures.ts"
 import type { AuditEvent, DocumentSeries, DocumentSource, DocumentType, DraftInvoice, IdempotencyRecord, IssuedInvoice, IssuedInvoiceSummary, NumberedDocumentType } from "../domain/invoice.ts"
-import type { CorrectionDocument } from "../corrections/domain/corrections.ts"
-import type { Proforma, ProformaConversion, ProformaInvoiceConversion, ProformaSummary } from "../issuance/domain/proforma.ts"
 
 export interface PageQuery<Key> {
   readonly limit: number
@@ -21,7 +19,6 @@ type Find<Value> = (organizationId: string, id: string) => Read<Value | undefine
 type List<Value> = (organizationId: string, source?: DocumentSource) => Read<ReadonlyArray<Value>>
 // Paged reads return at most limit + 1 rows in the registry order; `after` is the key of the last item of the previous page.
 type PagedList<Value, Key> = (organizationId: string, page: PageQuery<Key>, source?: DocumentSource) => Read<ReadonlyArray<Value>>
-type RelatedList<Value> = (organizationId: string, parentId: string, source?: DocumentSource) => Read<ReadonlyArray<Value>>
 type Remove = (organizationId: string, id: string) => Write
 
 export interface InvoicingTransaction {
@@ -53,16 +50,6 @@ export interface InvoicingTransaction {
   readonly saveIssuedInvoice: Save<IssuedInvoice>
   readonly findIssuedInvoice: Find<IssuedInvoice>
   readonly listIssuedInvoices: PagedList<IssuedInvoiceSummary, DocumentCursor>
-  readonly saveProforma: Save<Proforma>
-  readonly findProforma: Find<Proforma>
-  readonly listProformas: PagedList<ProformaSummary, DocumentCursor>
-  readonly findProformaConversion: Find<ProformaConversion>
-  readonly saveProformaConversion: Save<ProformaConversion>
-  readonly findProformaInvoiceConversion: Find<ProformaInvoiceConversion>
-  readonly saveProformaInvoiceConversion: Save<ProformaInvoiceConversion>
-  readonly saveCorrection: Save<CorrectionDocument>
-  readonly findCorrection: Find<CorrectionDocument>
-  readonly listCorrections: RelatedList<CorrectionDocument>
   readonly findIdempotencyRecord: Find<IdempotencyRecord>
   readonly saveIdempotencyRecord: Save<IdempotencyRecord>
   readonly appendAuditEvent: Save<AuditEvent>

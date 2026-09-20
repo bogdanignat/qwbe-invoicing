@@ -7,6 +7,7 @@ import type { InvoicingPermissions } from "../../contracts/permissions.ts"
 import type { DocumentSource, Idempotent } from "../../domain/invoice.ts"
 import { calendarDate, validateDocumentSource } from "../../domain/validation.ts"
 import type { AuthoringTransaction } from "../../drafts/index.ts"
+import type { ProformaTransaction } from "./ports.ts"
 import { validateIssuerForIssuance } from "../../issuer/index.ts"
 import type { AuthoringProformaInput, IssueProformaInput, Proforma, ProformaSummary } from "../domain/proforma.ts"
 import { ensureChronology } from "./chronology.ts"
@@ -19,7 +20,7 @@ export interface ProformaOperations {
 }
 
 export const createProformaOperations = (
-  dependencies: OperationDependencies<AuthoringTransaction>,
+  dependencies: OperationDependencies<AuthoringTransaction & ProformaTransaction>,
   permissions: InvoicingPermissions,
   authorize: Authorize,
 ): ProformaOperations => {

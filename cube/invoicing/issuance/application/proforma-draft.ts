@@ -5,9 +5,11 @@ import type { InvoicingPermissions } from "../../contracts/permissions.ts"
 import { calculateTotals, validateFiscalDocument } from "../../domain/calculation.ts"
 import type { DraftInvoice, Idempotent } from "../../domain/invoice.ts"
 import type { ConvertProformaInput } from "../domain/proforma.ts"
+import type { InvoicingTransaction } from "../../application/ports.ts"
 import { conversionDates, conversionSource } from "./proforma-conversion-context.ts"
+import type { ProformaTransaction } from "./ports.ts"
 
-export const createProformaDraftOperation = (dependencies: OperationDependencies, permissions: InvoicingPermissions, authorize: Authorize) =>
+export const createProformaDraftOperation = (dependencies: OperationDependencies<InvoicingTransaction & ProformaTransaction>, permissions: InvoicingPermissions, authorize: Authorize) =>
   ({ request: input, idempotency }: Idempotent<ConvertProformaInput>) => Effect.gen(function*() {
     const context = yield* authorize(permissions.draftInvoices)
     const org = context.organization.id

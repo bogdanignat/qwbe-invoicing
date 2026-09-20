@@ -14,13 +14,14 @@ import { ensureChronology } from "./chronology.ts"
 import { validateInvoiceDueDate } from "./invoices.ts"
 import { conversionDates, conversionSource } from "./proforma-conversion-context.ts"
 import { createProformaDraftOperation } from "./proforma-draft.ts"
+import type { ProformaTransaction } from "./ports.ts"
 
 export interface ProformaConversionOperations {
   readonly issueInvoiceFromProforma: (input: Idempotent<ConvertProformaInput>) => Effect.Effect<IssuedInvoice, InvoicingFailure>
   readonly createDraftInvoiceFromProforma: (input: Idempotent<ConvertProformaInput>) => Effect.Effect<DraftInvoice, InvoicingFailure>
 }
 
-type ConversionTransaction = InvoicingTransaction & Pick<IssuerTransaction, "findIssuer">
+type ConversionTransaction = InvoicingTransaction & ProformaTransaction & Pick<IssuerTransaction, "findIssuer">
 
 export const createProformaConversionOperations = (
   dependencies: OperationDependencies<ConversionTransaction>,

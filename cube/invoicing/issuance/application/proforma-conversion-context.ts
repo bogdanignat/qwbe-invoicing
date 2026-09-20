@@ -1,11 +1,12 @@
 import { Effect } from "effect"
 import type { InvoicingTransaction } from "../../application/ports.ts"
+import type { ProformaTransaction } from "./ports.ts"
 import { checked, missing } from "../../application/support.ts"
 import { DomainConflict } from "../../contracts/failures.ts"
 import { calendarDate, validateDocumentSeries } from "../../domain/validation.ts"
 import type { ConvertProformaInput, Proforma } from "../domain/proforma.ts"
 
-export const conversionSource = (tx: InvoicingTransaction, org: string, input: ConvertProformaInput) => Effect.gen(function*() {
+export const conversionSource = (tx: InvoicingTransaction & ProformaTransaction, org: string, input: ConvertProformaInput) => Effect.gen(function*() {
   const proforma = yield* tx.findProforma(org, input.proformaId)
   if (proforma === undefined) return yield* Effect.fail(missing("proforma", input.proformaId))
   if ((yield* tx.findProformaConversion(org, proforma.id)) || (yield* tx.findProformaInvoiceConversion(org, proforma.id))) {

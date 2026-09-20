@@ -36,54 +36,24 @@ export const cubeIsolationRules = (units) => units.flatMap((source) =>
 // Inside one tree a child may use the kernel of any ancestor, but every other
 // unit — a child seen from its parent, a sibling, a cousin — is entered only
 // through its exact `index.ts`. That keeps each child's interior private to it
-// while the kernel it grew out of stays shared.
-//
-// Three edges predate the split and still reach into a child's interior. They
-// are allowed by exact source and exact target, nothing wider, and T-1362 Pas 4
-// removes them when drafts, issuance and corrections get types of their own.
-export const temporaryInteriorImports = [
-  { from: "cube/invoicing/application/ports.ts", to: "cube/invoicing/corrections/domain/corrections.ts" },
-  { from: "cube/invoicing/application/ports.ts", to: "cube/invoicing/issuance/domain/proforma.ts" },
-  { from: "cube/invoicing/application/memory-store.test-support.ts", to: "cube/invoicing/issuance/domain/proforma.ts" },
-]
-
+// while the kernel it grew out of stays shared. No edge is exempt: a parent that
+// needs a child's type takes it from the child's index, and the child owns its port.
 const exactPath = (path) => `^${escapePattern(path)}$`
 const isAncestor = (candidate, unit) => unit.id.startsWith(`${candidate.id}/`)
-const ownerOf = (path, units) => units
-  .filter((unit) => path.startsWith(`${unit.id}/`))
-  .sort((left, right) => right.id.length - left.id.length)[0]
 
-const throughIndex = (target, units, allowed) => {
+const throughIndex = (target, units) => {
   const owner = ownerSelector(target, units)
-  return {
-    path: owner.path,
-    pathNot: [...(owner.pathNot ?? []), exactPath(`${target.id}/index.ts`), ...allowed.map(exactPath)],
-  }
+  return { path: owner.path, pathNot: [...(owner.pathNot ?? []), exactPath(`${target.id}/index.ts`)] }
 }
 
-export const cubeTreeRules = (units, exceptions = temporaryInteriorImports) => units.flatMap((source) =>
+export const cubeTreeRules = (units) => units.flatMap((source) =>
   units
     .filter((target) => target.id !== source.id && !isAncestor(target, source)
       && treeRoot(target, units).id === treeRoot(source, units).id)
-    .flatMap((target) => {
-      const excepted = exceptions.filter((edge) =>
-        ownerOf(edge.from, units)?.id === source.id && ownerOf(edge.to, units)?.id === target.id)
-      const sources = [...new Set(excepted.map(({ from }) => from))]
-      const owner = ownerSelector(source, units)
-      const name = `cube-tree-${ruleName(source.id)}-to-${ruleName(target.id)}-only-through-index`
-      return [
-        {
-          name,
-          severity: "error",
-          from: { path: owner.path, pathNot: [...(owner.pathNot ?? []), ...sources.map(exactPath)] },
-          to: throughIndex(target, units, []),
-        },
-        ...sources.map((from) => ({
-          name: `${name}-temporary-${ruleName(from)}`,
-          severity: "error",
-          from: { path: exactPath(from) },
-          to: throughIndex(target, units, excepted.filter((edge) => edge.from === from).map((edge) => edge.to)),
-        })),
-      ]
-    }),
+    .map((target) => ({
+      name: `cube-tree-${ruleName(source.id)}-to-${ruleName(target.id)}-only-through-index`,
+      severity: "error",
+      from: ownerSelector(source, units),
+      to: throughIndex(target, units),
+    })),
 )

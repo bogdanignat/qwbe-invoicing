@@ -4,10 +4,10 @@ import { createCatalogOperations, type CatalogOperations, type CatalogTransactio
 import { PermissionDenied, type InvoicingFailure } from "../contracts/failures.ts"
 import type { Clock, IdGenerator, RequestContext, RequestContextProvider, TransactionalStore } from "../contracts/host.ts"
 import { invoicingPermissions } from "../contracts/permissions.ts"
-import { createCorrectionOperations, type CorrectionOperations } from "../corrections/index.ts"
+import { createCorrectionOperations, type CorrectionOperations, type CorrectionsTransaction } from "../corrections/index.ts"
 import { createCustomerOperations, type CustomerOperations, type CustomersTransaction } from "../customers/index.ts"
 import { createDraftOperations, type DraftOperations } from "../drafts/index.ts"
-import { createIssuanceOperations, type IssuanceOperations } from "../issuance/index.ts"
+import { createIssuanceOperations, type IssuanceOperations, type ProformaTransaction } from "../issuance/index.ts"
 import { createIssuerOperations, type BrandingNormalizer, type IssuerOperations, type IssuerTransaction } from "../issuer/index.ts"
 import type { InvoicingTransaction } from "./ports.ts"
 
@@ -17,7 +17,7 @@ export interface InvoicingDependencies {
   readonly ids: IdGenerator
   // One store whose transaction carries the kernel port and every child port, so an
   // operation that spans customers and drafts stays in one database transaction.
-  readonly store: TransactionalStore<InvoicingTransaction & CustomersTransaction & CatalogTransaction & IssuerTransaction>
+  readonly store: TransactionalStore<InvoicingTransaction & CustomersTransaction & CatalogTransaction & IssuerTransaction & ProformaTransaction & CorrectionsTransaction>
   readonly branding: BrandingNormalizer
   readonly cubeIdentity: string
 }

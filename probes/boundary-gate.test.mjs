@@ -149,46 +149,38 @@ test("lets nested children use every ancestor kernel but no one else's interior"
   assert.match(output(parentIntoChildInterior), /cube-tree-cube-invoicing-issuance-to-cube-invoicing-issuance-numbering-only-through-index/)
 })
 
-// The three temporary edges T-1362 Pas 4 removes, fixed at exact source and target.
-const exceptionFixture = (root, extra = () => {}) => {
+// The kernel port once reached into corrections and issuance for their document types;
+// each child now owns its port, so those edges are refused like any other interior import.
+const kernelPortFixture = (root, ports, support) => {
   makeUnit(root, "cube/invoicing")
-  write(root, "cube/invoicing/application/ports.ts", [
-    'import type { Correction } from "../corrections/domain/corrections.ts"',
-    'import type { Proforma } from "../issuance/domain/proforma.ts"',
-    "export type Ports = Correction | Proforma",
-    "",
-  ].join("\n"))
-  write(root, "cube/invoicing/application/memory-store.test-support.ts",
-    'import type { Proforma } from "../issuance/domain/proforma.ts"\nexport type Stored = Proforma\n')
+  write(root, "cube/invoicing/application/ports.ts", ports)
+  write(root, "cube/invoicing/application/memory-store.test-support.ts", support)
   makeUnit(root, "cube/invoicing/corrections", 'export type { Correction } from "./domain/corrections.ts"\n')
   write(root, "cube/invoicing/corrections/domain/corrections.ts", "export interface Correction { readonly id: string }\n")
   makeUnit(root, "cube/invoicing/issuance", 'export type { Proforma } from "./domain/proforma.ts"\n')
   write(root, "cube/invoicing/issuance/domain/proforma.ts", "export interface Proforma { readonly id: string }\n")
-  write(root, "cube/invoicing/issuance/domain/invoice.ts", "export interface Invoice { readonly id: string }\n")
-  extra(root)
 }
 
-test("allows each temporary interior edge only from its exact source to its exact target", () => {
-  const allowed = withFixture((root) => exceptionFixture(root))
-  assert.equal(allowed.status, 0, output(allowed))
-  const otherTarget = withFixture((root) => exceptionFixture(root, () => {
-    write(root, "cube/invoicing/application/ports.ts",
-      'import type { Invoice } from "../issuance/domain/invoice.ts"\nexport type Ports = Invoice\n')
-  }))
-  assert.notEqual(otherTarget.status, 0)
-  assert.match(output(otherTarget), /cube-tree-cube-invoicing-to-cube-invoicing-issuance-only-through-index-temporary-cube-invoicing-application-ports-ts/)
-  const otherSource = withFixture((root) => exceptionFixture(root, () => {
-    write(root, "cube/invoicing/application/support.ts",
-      'import type { Proforma } from "../issuance/domain/proforma.ts"\nexport type Support = Proforma\n')
-  }))
-  assert.notEqual(otherSource.status, 0)
-  assert.match(output(otherSource), /cube-tree-cube-invoicing-to-cube-invoicing-issuance-only-through-index:/)
-  const crossedPair = withFixture((root) => exceptionFixture(root, () => {
-    write(root, "cube/invoicing/application/memory-store.test-support.ts",
-      'import type { Correction } from "../corrections/domain/corrections.ts"\nexport type Stored = Correction\n')
-  }))
-  assert.notEqual(crossedPair.status, 0)
-  assert.match(output(crossedPair), /cube-tree-cube-invoicing-to-cube-invoicing-corrections-only-through-index:/)
+test("refuses the kernel port and its test store reaching into a child's interior", () => {
+  const throughIndex = withFixture((root) => kernelPortFixture(root,
+    "export type Ports = string\n",
+    'import type { Correction } from "../corrections/index.ts"\nimport type { Proforma } from "../issuance/index.ts"\nexport type Stored = Correction | Proforma\n'))
+  assert.equal(throughIndex.status, 0, output(throughIndex))
+  const portIntoCorrections = withFixture((root) => kernelPortFixture(root,
+    'import type { Correction } from "../corrections/domain/corrections.ts"\nexport type Ports = Correction\n',
+    "export type Stored = string\n"))
+  assert.notEqual(portIntoCorrections.status, 0)
+  assert.match(output(portIntoCorrections), /cube-tree-cube-invoicing-to-cube-invoicing-corrections-only-through-index:/)
+  const portIntoIssuance = withFixture((root) => kernelPortFixture(root,
+    'import type { Proforma } from "../issuance/domain/proforma.ts"\nexport type Ports = Proforma\n',
+    "export type Stored = string\n"))
+  assert.notEqual(portIntoIssuance.status, 0)
+  assert.match(output(portIntoIssuance), /cube-tree-cube-invoicing-to-cube-invoicing-issuance-only-through-index:/)
+  const storeIntoIssuance = withFixture((root) => kernelPortFixture(root,
+    "export type Ports = string\n",
+    'import type { Proforma } from "../issuance/domain/proforma.ts"\nexport type Stored = Proforma\n'))
+  assert.notEqual(storeIntoIssuance.status, 0)
+  assert.match(output(storeIntoIssuance), /cube-tree-cube-invoicing-to-cube-invoicing-issuance-only-through-index:/)
 })
 
 test("still refuses import cycles inside one cube tree", () => {

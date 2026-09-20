@@ -9,8 +9,9 @@ import { checked, copyBuyer, copyIssuerCompanySnapshot, copySource, missing, rec
 import { validateIssuerForIssuance } from "../../issuer/index.ts"
 import { validateFiscalDocument } from "../../domain/calculation.ts"
 import { ensureChronology } from "./chronology.ts"
+import type { CorrectionWork } from "./ports.ts"
 const fy = (d: string): number => Number(d.slice(0, 4))
-export const createCorrectionOperations = (d: OperationDependencies, perms: InvoicingPermissions, auth: Authorize) => {
+export const createCorrectionOperations = (d: OperationDependencies<CorrectionWork>, perms: InvoicingPermissions, auth: Authorize) => {
   const createCorrection = ({ request: input, idempotency }: Idempotent<CreateCorrectionInput>): Effect.Effect<CorrectionDocument, InvoicingFailure> => Effect.gen(function*() {
     yield* checked(() => {
       validateCreateCorrectionInput(input)
