@@ -2,7 +2,7 @@ import { Effect } from "effect"
 import sharp from "sharp"
 
 import { ValidationFailure } from "../cube/invoicing/contracts/failures.ts"
-import type { BrandingNormalizer } from "../cube/invoicing/contracts/host.ts"
+import type { BrandingNormalizer } from "../cube/invoicing/issuer/index.ts"
 
 const maxBytes = 256 * 1024
 const maxPixels = 4_000_000

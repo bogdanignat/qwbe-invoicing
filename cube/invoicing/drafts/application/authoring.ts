@@ -10,10 +10,10 @@ import type { AuthoringDocumentInput, CreateDraftInput, UpdateDraftInput } from 
 import type { CustomersTransaction } from "../../customers/index.ts"
 import { validateDate, validateDocumentNotes, validateDocumentSeries, validateDocumentSource } from "../../domain/validation.ts"
 import { validateBuyer } from "../../parties/index.ts"
-import { resolveVatConfiguration } from "../../registry/index.ts"
+import { resolveVatConfiguration, type IssuerTransaction } from "../../issuer/index.ts"
 
-// Authoring resolves a saved customer by id, so it reads the customers port next to the kernel one.
-export type AuthoringTransaction = InvoicingTransaction & Pick<CustomersTransaction, "findCustomer">
+// Authoring resolves the saved customer and the live issuer in the same transaction as the draft.
+export type AuthoringTransaction = InvoicingTransaction & Pick<CustomersTransaction, "findCustomer"> & Pick<IssuerTransaction, "findIssuer">
 
 export const withTotals = (draft: Omit<DraftInvoice, "vatBreakdown" | "totalExcludingVat" | "vatTotal" | "totalIncludingVat">): DraftInvoice => ({
   ...draft,

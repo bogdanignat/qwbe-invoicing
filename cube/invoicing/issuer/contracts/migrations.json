@@ -1,0 +1,9 @@
+[
+  {
+    "name": "issuer-001-baseline",
+    "statements": [
+      "CREATE TABLE issuers(organization_id TEXT PRIMARY KEY,legal_name TEXT NOT NULL,tax_identifier TEXT NOT NULL,country_code TEXT NOT NULL,city TEXT NOT NULL,street TEXT NOT NULL,county TEXT NOT NULL CHECK(county IN('RO-AB','RO-AR','RO-AG','RO-BC','RO-BH','RO-BN','RO-BR','RO-BT','RO-BV','RO-B','RO-BZ','RO-CS','RO-CL','RO-CJ','RO-CT','RO-CV','RO-DB','RO-DJ','RO-GL','RO-GR','RO-GJ','RO-HR','RO-HD','RO-IL','RO-IS','RO-IF','RO-MM','RO-MH','RO-MS','RO-NT','RO-OT','RO-PH','RO-SM','RO-SJ','RO-SB','RO-SV','RO-TR','RO-TM','RO-TL','RO-VS','RO-VL','RO-VN')),sector INTEGER,postal_code TEXT,default_currency TEXT NOT NULL,default_payment_term_days INTEGER NOT NULL,branding TEXT CHECK(branding IS NULL OR json_valid(branding)),legal_form TEXT NOT NULL CHECK(legal_form IN('srl','pfa')),trade_registry_number TEXT NOT NULL,iban TEXT NOT NULL,bank_name TEXT NOT NULL,social_capital TEXT NOT NULL,CHECK((county='RO-B' AND sector IS NOT NULL AND sector BETWEEN 1 AND 6)OR(county!='RO-B' AND sector IS NULL)))STRICT",
+      "CREATE TABLE issuer_tax_configurations(organization_id TEXT NOT NULL,code TEXT NOT NULL,category TEXT NOT NULL,rate TEXT NOT NULL,vat_exemption_reason TEXT,effective_from TEXT NOT NULL,effective_to TEXT,PRIMARY KEY(organization_id,code,effective_from),FOREIGN KEY(organization_id)REFERENCES issuers(organization_id)ON DELETE CASCADE,CHECK((code='RO_STANDARD' AND rate IN('19.00','21.00') AND category='S' AND vat_exemption_reason IS NULL)OR(code='RO_REDUCED' AND rate IN('9.00','11.00') AND category='S' AND vat_exemption_reason IS NULL)OR(code='RO_REDUCED_5' AND rate='5.00' AND category='S' AND vat_exemption_reason IS NULL)OR(code='RO_NON_VAT' AND rate='0.00' AND category='O' AND vat_exemption_reason IS NOT NULL AND vat_exemption_reason='Regim special de scutire conform art. 310 din Codul fiscal')))STRICT"
+    ]
+  }
+]

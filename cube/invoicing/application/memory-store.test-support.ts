@@ -9,8 +9,8 @@ import {
   type InvoicingFailure,
   type RequestContext,
   type RequestContextProvider,
-  type BrandingNormalizer,
 } from "../contracts/index.ts"
+import type { BrandingNormalizer, IssuerTransaction } from "../issuer/index.ts"
 import type { CatalogTransaction, ProductPreset } from "../catalog/index.ts"
 import type { Customer, CustomersTransaction } from "../customers/index.ts"
 import type { AuditEvent, IdempotencyRecord } from "../domain/invoice.ts"
@@ -42,7 +42,7 @@ const withoutIssuerBranding = <Document extends IssuedInvoice | Proforma>(docume
 
 // In-memory transactional store and fixtures shared by the component tests.
 export interface MemoryState {
-  issuers: Map<string, Parameters<InvoicingTransaction["saveIssuer"]>[0]>
+  issuers: Map<string, Parameters<IssuerTransaction["saveIssuer"]>[0]>
   documentSeries: Map<string, Parameters<InvoicingTransaction["addDocumentSeries"]>[0]>
   customers: Map<string, Customer>
   productPresets: Map<string, ProductPreset>
@@ -71,7 +71,7 @@ export const memoryStore = (state: MemoryState): InvoicingDependencies["store"] 
       convertedInvoiceId: working.invoiceConversions.get(proforma.id)?.resultingInvoiceId
         ?? [...working.issued.values()].find((invoice) => invoice.organizationId === proforma.organizationId
           && invoice.sourceProformaId === proforma.id)?.id ?? null })
-    const transaction: InvoicingTransaction & CustomersTransaction & CatalogTransaction = {
+    const transaction: InvoicingTransaction & CustomersTransaction & CatalogTransaction & IssuerTransaction = {
       saveIssuer: (issuer) => Effect.sync(() => { working.issuers.set(issuer.organizationId, issuer) }),
       findIssuer: (organizationId) => Effect.succeed(working.issuers.get(organizationId)),
       addDocumentSeries: (documentSeries) => Effect.suspend(() => {

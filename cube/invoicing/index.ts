@@ -9,7 +9,7 @@ const group = HttpApiGroup.make(identity)
 export const cube = {
   manifest: {
     name: identity,
-    tables: `issuers issuer_tax_configurations document_series invoice_drafts draft_lines invoice_sequences
+    tables: `document_series invoice_drafts draft_lines invoice_sequences
       issued_invoices issued_lines issued_tax_breakdown proformas proforma_lines proforma_tax_breakdown proforma_conversions
        proforma_invoice_conversions correction_documents correction_lines correction_tax_breakdown idempotency_records audit_events`.split(/\s+/),
     requiresAuth: true,
@@ -37,6 +37,7 @@ export type { DocumentCursor, DraftCursor, NameCursor, PageQuery } from "./appli
 export type { InvoicingDependencies, InvoicingService, InvoicingTransaction } from "./application/invoicing.ts"
 export type * from "./domain/invoice.ts"
 export type * from "./domain/inputs.ts"
+export type { BrandingNormalizer, IssuerProfile, ConfigureIssuerInput, RawIssuerBrandingImage, RawIssuerBranding, VatChange } from "./issuer/index.ts"
 export type { Proforma, ProformaSummary, ProformaConversion, ProformaInvoiceConversion,
   IssueProformaInput, ConvertProformaInput, AuthoringProformaInput } from "./issuance/index.ts"
 export type { CorrectionDocument, CreateCorrectionInput } from "./corrections/index.ts"

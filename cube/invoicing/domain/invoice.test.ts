@@ -3,7 +3,7 @@ import test from "node:test"
 
 import { ValidationFailure } from "../contracts/failures.ts"
 import { validateDate, validateDocumentSeries } from "./validation.ts"
-import { resolveVatConfiguration, validateIssuer } from "../registry/index.ts"
+import { resolveVatConfiguration, validateIssuer } from "../issuer/index.ts"
 
 void test("validates supported document types and fiscal series format", () => {
   assert.doesNotThrow(() => { validateDocumentSeries({ organizationId: "org-1", documentType: "invoice", series: "QWBE_01" }) })

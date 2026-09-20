@@ -1,7 +1,7 @@
 import type { Effect } from "effect"
 
 import type { DomainConflict, PersistenceFailure } from "../contracts/failures.ts"
-import type { AuditEvent, DocumentSeries, DocumentSource, DocumentType, DraftInvoice, IdempotencyRecord, IssuedInvoice, IssuedInvoiceSummary, IssuerProfile, NumberedDocumentType } from "../domain/invoice.ts"
+import type { AuditEvent, DocumentSeries, DocumentSource, DocumentType, DraftInvoice, IdempotencyRecord, IssuedInvoice, IssuedInvoiceSummary, NumberedDocumentType } from "../domain/invoice.ts"
 import type { CorrectionDocument } from "../corrections/domain/corrections.ts"
 import type { Proforma, ProformaConversion, ProformaInvoiceConversion, ProformaSummary } from "../issuance/domain/proforma.ts"
 
@@ -25,8 +25,6 @@ type RelatedList<Value> = (organizationId: string, parentId: string, source?: Do
 type Remove = (organizationId: string, id: string) => Write
 
 export interface InvoicingTransaction {
-  readonly saveIssuer: Save<IssuerProfile>
-  readonly findIssuer: (organizationId: string) => Read<IssuerProfile | undefined>
   readonly addDocumentSeries: Save<DocumentSeries>
   readonly findDocumentSeries: (
     organizationId: string,

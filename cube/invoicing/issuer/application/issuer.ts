@@ -1,11 +1,12 @@
 import { Effect } from "effect"
 
 import { checked, copyParty, missing, recordAuditEvent, type Authorize, type OperationDependencies } from "../../application/support.ts"
+import type { InvoicingTransaction } from "../../application/ports.ts"
 import { ValidationFailure, type InvoicingFailure } from "../../contracts/failures.ts"
 import type { InvoicingPermissions } from "../../contracts/permissions.ts"
-import type { DocumentSeries, IssuerProfile } from "../../domain/invoice.ts"
-import type { ConfigureDocumentSeriesInput, ConfigureIssuerInput } from "../../domain/inputs.ts"
-import { validateDate, validateDocumentSeries } from "../../domain/validation.ts"
+import type { ConfigureIssuerInput, IssuerProfile } from "../domain/issuer.ts"
+import type { BrandingNormalizer, IssuerTransaction } from "./ports.ts"
+import { validateDate } from "../../domain/validation.ts"
 import { normalizeBrandingText, validateIssuer, validateIssuerProfile } from "../domain/validation.ts"
 import { normalizeIssuerDetails } from "../domain/issuer-details.ts"
 import { decodeStrictBase64, validateCanonicalImage } from "../domain/branding.ts"
@@ -18,12 +19,14 @@ export interface IssuerOperations {
   readonly configureIssuer: (input: ConfigureIssuerInput) => Effect.Effect<IssuerView, InvoicingFailure>
   readonly getIssuer: () => Effect.Effect<IssuerView, InvoicingFailure>
   readonly getVatCatalogue: () => Effect.Effect<VatCatalogue, InvoicingFailure>
-  readonly addDocumentSeries: (input: ConfigureDocumentSeriesInput) => Effect.Effect<DocumentSeries, InvoicingFailure>
-  readonly listDocumentSeries: () => Effect.Effect<ReadonlyArray<DocumentSeries>, InvoicingFailure>
+}
+
+interface IssuerDependencies extends OperationDependencies<InvoicingTransaction & IssuerTransaction> {
+  readonly branding: BrandingNormalizer
 }
 
 export const createIssuerOperations = (
-  dependencies: OperationDependencies,
+  dependencies: IssuerDependencies,
   permissions: InvoicingPermissions,
   authorize: Authorize,
 ): IssuerOperations => {
@@ -68,22 +71,5 @@ export const createIssuerOperations = (
     yield* authorize(permissions.read)
     return { rates: romanianVatRates.map((rate) => ({ ...rate })) }
   })
-  const addDocumentSeries = (input: ConfigureDocumentSeriesInput) => Effect.gen(function*() {
-    const context = yield* authorize(permissions.manageSettings)
-    const now = yield* dependencies.clock.now
-    const series: DocumentSeries = { organizationId: context.organization.id, ...input }
-    yield* checked(() => { validateDocumentSeries(series) })
-    yield* dependencies.store.transaction((transaction) => Effect.gen(function*() {
-      yield* transaction.addDocumentSeries(series)
-      yield* recordAuditEvent(transaction, context, dependencies.ids, now, {
-        action: "series.added", targetKind: "document_series", targetId: `${series.documentType}:${series.series}`,
-      })
-    }))
-    return structuredClone(series)
-  })
-  const listDocumentSeries = () => Effect.gen(function*() {
-    const context = yield* authorize(permissions.read)
-    return structuredClone(yield* dependencies.store.transaction((transaction) => transaction.listDocumentSeries(context.organization.id)))
-  })
-  return { configureIssuer, getIssuer, getVatCatalogue, addDocumentSeries, listDocumentSeries }
+  return { configureIssuer, getIssuer, getVatCatalogue }
 }

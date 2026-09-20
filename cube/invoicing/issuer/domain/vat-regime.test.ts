@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import { ValidationFailure } from "../../contracts/failures.ts"
-import type { IssuerProfile } from "../../domain/invoice.ts"
+import type { IssuerProfile } from "./issuer.ts"
 import { article310VatExemptionReason } from "../../domain/validation.ts"
 import { romanianVatRates, vatRatesOn } from "./vat-catalogue.ts"
 import { currentVatRegistration, scheduleVatRegistration, validateVatForIssuance } from "./vat-regime.ts"

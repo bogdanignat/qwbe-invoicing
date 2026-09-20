@@ -133,10 +133,10 @@ API client ──> /api (Bearer) ───┘        │                        
   the parent's domain: `parties` (the Romanian fiscal rules for every party: CUI, CNP,
   counties and sectors), `customers` (saved customers, with their own table and baseline),
   `catalog` (saved products and services and the unit-of-measure list they are chosen from,
-  with their own table and baseline), `registry` (issuer, VAT configurations, document
-  series), `drafts`
+  with their own table and baseline), `issuer` (issuer profile, branding and VAT
+  configurations and their own tables and baseline), `drafts`
   (authoring a document, draft and line editing), `issuance` (numbered invoices and
-  proformas, conversion, idempotent replay), `corrections` (storno) and `documents`
+  proformas, document series, conversion, idempotent replay), `corrections` (storno) and `documents`
   (rendered PDF artifacts, their hashes and recovery). A child enters another child only
   through its `index.ts`.
 - **The standalone host** (`standalone/`) is the composition root. It authenticates the
@@ -340,9 +340,10 @@ databases remain separate, and `eFacturaStatus` is retained.
 
 **Schema during development:** each cube owns one baseline migration holding the
 current definition of its tables (`customers-001-baseline`, `catalog-001-baseline`,
-`invoicing-001-baseline`, `payments-001-baseline`, `documents/documents-001-baseline`).
-In `invoicing.sqlite` they run after `000-foundation` in cube order, customers before
-invoicing because drafts reference them, for eight entries across the three databases. A schema change edits the owning baseline, so a
+`issuer-001-baseline`, `invoicing-001-baseline`, `payments-001-baseline`,
+`documents/documents-001-baseline`). In `invoicing.sqlite` they run after
+`000-foundation` in cube order, customers and issuer before invoicing because it
+references them, for nine entries across the three databases. A schema change edits the owning baseline, so a
 database created before it no longer matches: `migrate` refuses it before writing
 anything and `doctor` reports it, both naming the drifted objects and asking to
 recreate the database. Recreating is not an upgrade: it drops the local data, and the
@@ -417,9 +418,9 @@ cube/invoicing/            core: domain model, VAT arithmetic, ports, contracts,
 cube/invoicing/parties/    component: CUI, CNP, counties and sectors shared by issuer and buyers
 cube/invoicing/customers/  component: saved customers, their table and baseline migration
 cube/invoicing/catalog/    component: saved products and services, their table and baseline migration
-cube/invoicing/registry/   component: issuer, VAT configurations, document series
+cube/invoicing/issuer/     component: issuer profile, branding, VAT configurations and baseline
 cube/invoicing/drafts/     component: document authoring, draft and line editing
-cube/invoicing/issuance/   component: numbered invoices and proformas, conversion, idempotent replay
+cube/invoicing/issuance/   component: document series, numbered invoices and proformas, conversion, idempotent replay
 cube/invoicing/corrections/ component: correction documents (storno)
 cube/invoicing/documents/  component: rendered PDFs and artifact recovery
 cube/payments/             payment records and derived invoice payment status

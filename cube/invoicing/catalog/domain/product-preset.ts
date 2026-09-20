@@ -1,7 +1,7 @@
 import { ValidationFailure } from "../../contracts/failures.ts"
 import { normalizeMoney } from "../../domain/calculation.ts"
 import { normalizeUnitOfMeasure, type UnitOfMeasure } from "../../domain/unit-of-measures.ts"
-import { isTaxableVatRateOn } from "../../registry/index.ts"
+import { isTaxableVatRateOn } from "../../issuer/index.ts"
 
 // A saved product or service. A document line copies its values when it is chosen,
 // so editing or deleting the preset never changes a draft or an issued document.

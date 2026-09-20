@@ -1,5 +1,6 @@
 import { ValidationFailure } from "../../contracts/failures.ts"
-import type { IssuerProfile, VatConfiguration } from "../../domain/invoice.ts"
+import type { VatConfiguration } from "../../domain/invoice.ts"
+import type { IssuerProfile } from "./issuer.ts"
 import { maximumPaymentTermDays, validateDate, validateVatTreatment } from "../../domain/validation.ts"
 import { normalizeIssuerDetails } from "./issuer-details.ts"
 import { isValidRomanianCui, validateParty } from "../../parties/index.ts"

@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 
 import { ResourceNotFound, ValidationFailure, type InvoicingFailure } from "../contracts/failures.ts"
-import type { BrandingNormalizer, Clock, IdGenerator, RequestContext, TransactionalStore } from "../contracts/host.ts"
+import type { Clock, IdGenerator, RequestContext, TransactionalStore } from "../contracts/host.ts"
 import type { AuditEvent, BuyerSnapshot, DocumentSource, IssuerCompanySnapshot, IssuerSnapshot, PartySnapshot } from "../domain/invoice.ts"
 import type { DocumentCursor, DraftCursor, InvoicingTransaction, NameCursor, PageQuery, TransactionFailure } from "./ports.ts"
 
@@ -15,7 +15,6 @@ export interface OperationDependencies<Transaction = InvoicingTransaction> {
   readonly clock: Clock
   readonly ids: IdGenerator
   readonly store: TransactionalStore<Transaction>
-  readonly branding: BrandingNormalizer
 }
 
 export const checked = <Value>(operation: () => Value): Effect.Effect<Value, ValidationFailure> => Effect.try({

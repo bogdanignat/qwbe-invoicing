@@ -7,7 +7,7 @@ import { calculateLine } from "../../domain/calculation.ts"
 import type { DocumentSource, DraftInvoice } from "../../domain/invoice.ts"
 import type { CreateDraftInput, UpdateDraftInput } from "../../domain/inputs.ts"
 import { validateDocumentNotes, validateDocumentSource } from "../../domain/validation.ts"
-import { resolveVatConfiguration } from "../../registry/index.ts"
+import { resolveVatConfiguration } from "../../issuer/index.ts"
 import { authorDocument, buyerFrom, dates, documentSource, findEditable, withTotals, type AuthoringTransaction } from "./authoring.ts"
 
 export interface DraftDocumentOperations {

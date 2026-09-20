@@ -1,6 +1,6 @@
 import { ValidationFailure } from "../../contracts/failures.ts"
-import type { DraftLine, IssuerProfile, VatConfiguration } from "../../domain/invoice.ts"
-import type { VatChange } from "../../domain/inputs.ts"
+import type { DraftLine, VatConfiguration } from "../../domain/invoice.ts"
+import type { IssuerProfile, VatChange } from "./issuer.ts"
 import { validateVatTreatment } from "../../domain/validation.ts"
 import { activeOn, romanianVatRates, vatRatesOn } from "./vat-catalogue.ts"
 

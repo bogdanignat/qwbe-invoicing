@@ -5,9 +5,7 @@ import type {
   OrganizationContextMissing,
   PersistenceFailure,
   RenderingFailure,
-  ValidationFailure,
 } from "./failures.ts"
-import type { IssuerBrandingImage } from "../domain/invoice.ts"
 
 export interface CurrentIdentity {
   readonly id: string
@@ -38,10 +36,6 @@ export interface Clock {
 
 export interface IdGenerator {
   readonly next: Effect.Effect<string>
-}
-
-export interface BrandingNormalizer {
-  readonly normalize: (input: Uint8Array) => Effect.Effect<IssuerBrandingImage, ValidationFailure>
 }
 
 export interface TransactionalStore<Transaction> {

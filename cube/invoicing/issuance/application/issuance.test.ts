@@ -39,6 +39,12 @@ void test("issues deterministic immutable invoice snapshots through the public s
     service.addDocumentSeries({ documentType: "invoice", series: "QWBE" }),
   ))
   assert.equal(duplicateSeries instanceof DomainConflict && duplicateSeries.code === "document_series_exists", true)
+  assert.deepEqual(state.auditEvents.filter(({ action }) => action === "series.added")
+    .map(({ actorId, targetKind, targetId }) => ({ actorId, targetKind, targetId })), [
+    { actorId: identity.id, targetKind: "document_series", targetId: "invoice:QWBE" },
+    { actorId: identity.id, targetKind: "document_series", targetId: "invoice:ALT" },
+    { actorId: identity.id, targetKind: "document_series", targetId: "proforma:PRO" },
+  ])
   const customer = await Effect.runPromise(service.createCustomer({
     partyType: "company",
     name: "Client SRL",

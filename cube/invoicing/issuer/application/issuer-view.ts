@@ -1,4 +1,4 @@
-import type { IssuerProfile } from "../../domain/invoice.ts"
+import type { IssuerProfile } from "../domain/issuer.ts"
 import type { VatRate } from "../domain/vat-catalogue.ts"
 import { currentVatRegistration, type VatRegistration } from "../domain/vat-regime.ts"
 

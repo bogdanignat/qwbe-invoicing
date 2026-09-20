@@ -9,6 +9,7 @@ import test from "node:test"
 import { invoicingMigrations } from "../cube/invoicing/index.ts"
 import { catalogMigrations } from "../cube/invoicing/catalog/index.ts"
 import { customersMigrations } from "../cube/invoicing/customers/index.ts"
+import { issuerMigrations } from "../cube/invoicing/issuer/index.ts"
 import { paymentsMigrations } from "../cube/payments/index.ts"
 import { handleApiRequest } from "./api.test-support.ts"
 import { createRequestAuthenticator } from "./auth.ts"
@@ -46,7 +47,7 @@ const seedThrough = (dataDirectory: string, through: string): ReadonlyArray<stri
   const order = planMigrations(dataDirectory).pending.filter((name) => !name.includes("/"))
   assert.ok(order.includes(through), `${through} is not in the migration order`)
   const prefix = order.slice(0, order.indexOf(through) + 1)
-  const statements = new Map([...customersMigrations, ...catalogMigrations, ...invoicingMigrations, ...paymentsMigrations].map((migration) => [migration.name, migration.statements]))
+  const statements = new Map([...customersMigrations, ...catalogMigrations, ...issuerMigrations, ...invoicingMigrations, ...paymentsMigrations].map((migration) => [migration.name, migration.statements]))
   const database = new DatabaseSync(databasePath(dataDirectory))
   try {
     database.exec("CREATE TABLE schema_migrations (name TEXT PRIMARY KEY, applied_at TEXT NOT NULL) STRICT")
@@ -61,13 +62,16 @@ const seedThrough = (dataDirectory: string, through: string): ReadonlyArray<stri
   return prefix
 }
 
-// Everything migrate could change: the schema objects and the recorded history.
+// Everything migrate could change here: schema objects, recorded history and
+// representative issuer data that must survive a refused migration untouched.
 const storedState = (dataDirectory: string): ReadonlyArray<string> => {
   const database = new DatabaseSync(databasePath(dataDirectory), { readOnly: true })
   try {
     return [
       ...database.prepare("SELECT type, name, sql FROM sqlite_master ORDER BY type, name").all(),
       ...database.prepare("SELECT name, applied_at FROM schema_migrations ORDER BY name").all(),
+      ...database.prepare("SELECT * FROM issuers ORDER BY organization_id").all(),
+      ...database.prepare("SELECT * FROM issuer_tax_configurations ORDER BY organization_id, code, effective_from").all(),
     ].map((row) => JSON.stringify(row))
   } finally {
     database.close()
@@ -145,7 +149,7 @@ void test("a database part-way through the contract is pending, not drifted", ()
   const directory = mkdtempSync(join(tmpdir(), "qwbe-drift-"))
   try {
     assert.deepEqual(seedThrough(directory, "invoicing-001-baseline"),
-      ["000-foundation", "customers-001-baseline", "catalog-001-baseline", "invoicing-001-baseline"])
+      ["000-foundation", "customers-001-baseline", "catalog-001-baseline", "issuer-001-baseline", "invoicing-001-baseline"])
     assert.deepEqual(schemaDrift(directory), [])
     assert.ok(planMigrations(directory).pending.includes("payments-001-baseline"))
     const plan = cli(directory, ["migrate", "--json"])
@@ -156,6 +160,49 @@ void test("a database part-way through the contract is pending, not drifted", ()
     assert.deepEqual(reportOf(apply.stdout).schemaDrift, [])
     assert.deepEqual(planMigrations(directory).pending, [])
     assert.equal(databaseReady(directory), true)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+// The pre-extraction database has the complete physical schema but records only
+// the old baseline names. The new owner must be reported as drift, never applied
+// over those existing tables, and both CLI modes must leave all state untouched.
+void test("the pre-extraction issuer schema is refused without changing state", () => {
+  const directory = mkdtempSync(join(tmpdir(), "qwbe-drift-issuer-owner-"))
+  try {
+    const database = new DatabaseSync(databasePath(directory))
+    try {
+      database.exec("CREATE TABLE schema_migrations (name TEXT PRIMARY KEY, applied_at TEXT NOT NULL) STRICT")
+      const record = database.prepare("INSERT INTO schema_migrations (name, applied_at) VALUES (?, '2026-01-01')")
+      record.run("000-foundation")
+      for (const migration of [...customersMigrations, ...catalogMigrations, ...issuerMigrations, ...invoicingMigrations, ...paymentsMigrations]) {
+        for (const statement of migration.statements) database.exec(statement)
+        if (migration.name !== "issuer-001-baseline") record.run(migration.name)
+      }
+      database.exec(`
+        INSERT INTO issuers(organization_id,legal_name,tax_identifier,country_code,city,street,county,default_currency,
+          default_payment_term_days,legal_form,trade_registry_number,iban,bank_name,social_capital)
+          VALUES('org-legacy','Exemplu SRL','12345674','RO','Botoșani','Strada Mare 1','RO-BT','RON',15,
+            'srl','J07/1/2020','RO49AAAA1B31007593840000','Banca Română','1000.00');
+        INSERT INTO issuer_tax_configurations(organization_id,code,category,rate,effective_from)
+          VALUES('org-legacy','RO_STANDARD','S','21.00','2026-01-01');
+      `)
+    } finally {
+      database.close()
+    }
+    assert.deepEqual(schemaDrift(directory), ["issuer_tax_configurations", "issuers"])
+    assert.equal(databaseReady(directory), false)
+    const before = storedState(directory)
+    for (const command of [["migrate", "--json"], ["migrate", "--apply", "--json"]]) {
+      const migrate = cli(directory, command)
+      assert.equal(migrate.status, 1, migrate.stderr)
+      assert.match(migrate.stderr, /issuer_tax_configurations.*issuers.*recreate the database/s)
+      const report = JSON.parse(migrate.stdout) as { readonly changed: number; readonly schemaDrift: ReadonlyArray<string> }
+      assert.equal(report.changed, 0)
+      assert.deepEqual(report.schemaDrift, ["issuer_tax_configurations", "issuers"])
+      assert.deepEqual(storedState(directory), before)
+    }
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }
