@@ -1,15 +1,15 @@
 import { useEffect, useRef } from "react"
 
-import { EmptyState, ErrorAlert, Loading } from "../components/AsyncState.tsx"
-import { LoadMore } from "../components/LoadMore.tsx"
-import { Page } from "../components/Page.tsx"
+import { EmptyState, ErrorAlert, Loading } from "../components/layout/AsyncState.tsx"
+import { LoadMore } from "../components/ui/LoadMore.tsx"
+import { Page } from "../components/layout/Page.tsx"
 import { Button } from "../components/ui/Button.tsx"
 import { ButtonLink } from "../components/ui/ButtonLink.tsx"
-import { useCustomerRegistry } from "../customer-registry-hooks.ts"
-import { focusAndReveal } from "../focus.ts"
-import { identifierLabel } from "../invoice-authoring-state.ts"
-import { ROMANIAN_COUNTIES } from "../romanian-counties.ts"
-import { romanianCuiPattern } from "../vat-defaults.ts"
+import { useCustomerRegistry } from "../hooks/customer-registry-hooks.ts"
+import { focusAndReveal } from "../lib/focus.ts"
+import { identifierLabel } from "../lib/invoice-authoring-state.ts"
+import { ROMANIAN_COUNTIES } from "../lib/romanian-counties.ts"
+import { romanianCuiPattern } from "../lib/vat-defaults.ts"
 
 export const CustomersView = ({ notify }: { readonly notify: (message: string) => void }) => {
   const state = useCustomerRegistry(notify)

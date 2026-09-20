@@ -1,6 +1,6 @@
 import type { ComponentPropsWithRef } from "react"
 
-import { cn } from "../../classnames.ts"
+import { cn } from "../../lib/classnames.ts"
 import { buttonVariants, type ButtonVariantProps } from "./button-variants.ts"
 
 export type ButtonLinkProps = Omit<ComponentPropsWithRef<"a">, "href"> & ButtonVariantProps & {

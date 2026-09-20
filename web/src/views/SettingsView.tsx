@@ -1,12 +1,12 @@
-import { ErrorAlert, Loading } from "../components/AsyncState.tsx"
-import { IssuerBrand } from "../components/IssuerBrand.tsx"
-import { DocumentSeriesCard } from "../components/DocumentSeriesCard.tsx"
-import { Page } from "../components/Page.tsx"
-import { SettingsHelpDialog } from "../components/SettingsHelpDialog.tsx"
+import { ErrorAlert, Loading } from "../components/layout/AsyncState.tsx"
+import { IssuerBrand } from "../components/document/IssuerBrand.tsx"
+import { DocumentSeriesCard } from "../components/settings/DocumentSeriesCard.tsx"
+import { Page } from "../components/layout/Page.tsx"
+import { SettingsHelpDialog } from "../components/settings/SettingsHelpDialog.tsx"
 import { Button } from "../components/ui/Button.tsx"
-import { useIssuerSettings } from "../issuer-settings-hooks.ts"
-import { romanianCuiPattern } from "../vat-defaults.ts"
-import { ROMANIAN_COUNTIES } from "../romanian-counties.ts"
+import { useIssuerSettings } from "../hooks/issuer-settings-hooks.ts"
+import { romanianCuiPattern } from "../lib/vat-defaults.ts"
+import { ROMANIAN_COUNTIES } from "../lib/romanian-counties.ts"
 
 export const SettingsView = ({ notify }: { readonly notify: (message: string) => void }) => {
   const state = useIssuerSettings(notify)

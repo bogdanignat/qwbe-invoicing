@@ -1,8 +1,8 @@
-import { EmptyState, ErrorAlert, Loading } from "../components/AsyncState.tsx"
-import { Page } from "../components/Page.tsx"
-import { ProformaAuthoringSession } from "../components/ProformaAuthoringSession.tsx"
+import { EmptyState, ErrorAlert, Loading } from "../components/layout/AsyncState.tsx"
+import { Page } from "../components/layout/Page.tsx"
+import { ProformaAuthoringSession } from "../components/authoring/ProformaAuthoringSession.tsx"
 import { ButtonLink } from "../components/ui/ButtonLink.tsx"
-import { useProformaAuthoringPage } from "../proforma-authoring-hooks.ts"
+import { useProformaAuthoringPage } from "../hooks/proforma-authoring-hooks.ts"
 
 export const ProformaAuthoringView = () => {
   const state = useProformaAuthoringPage()

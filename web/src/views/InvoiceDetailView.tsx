@@ -1,10 +1,10 @@
-import { ErrorAlert, Loading } from "../components/AsyncState.tsx"
-import { CorrectionPanel } from "../components/CorrectionPanel.tsx"
-import { InvoiceDocument } from "../components/InvoiceDocument.tsx"
-import { Page } from "../components/Page.tsx"
-import { PaymentPanel } from "../components/PaymentPanel.tsx"
+import { ErrorAlert, Loading } from "../components/layout/AsyncState.tsx"
+import { CorrectionPanel } from "../components/invoice/CorrectionPanel.tsx"
+import { InvoiceDocument } from "../components/document/InvoiceDocument.tsx"
+import { Page } from "../components/layout/Page.tsx"
+import { PaymentPanel } from "../components/invoice/PaymentPanel.tsx"
 import { Button } from "../components/ui/Button.tsx"
-import { useInvoiceDetail } from "../invoices-hooks.ts"
+import { useInvoiceDetail } from "../hooks/invoices-hooks.ts"
 
 export const InvoiceDetailView = ({ id, notify }: { readonly id: string; readonly notify: (message: string) => void }) => {
   const state = useInvoiceDetail(id)
