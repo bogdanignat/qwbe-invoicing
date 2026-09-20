@@ -24,9 +24,9 @@ child documents cube database `/data/documents.sqlite`. SQLite is a standalone-h
 choice: the QWBE mother has run one Postgres database with one schema per cube since
 QWB-44, so nothing here describes mounted operation (see `FOUNDATION.md` section 18). Repeated `docker compose up -d`
 is safe: both migration plans are idempotent and do not consume invoice numbers
-or proforma numbers or create business records. T-1069 adds invoicing migration
-`008-proforma-workflow`, `009-proforma-direct-invoice`, and documents migration `documents/002-proforma-artifacts`;
-existing databases receive them through the same startup migration step. The API reads its standalone bearer
+or proforma numbers or create business records. While the project is in development each
+cube owns one baseline migration; a database created from an older baseline is refused
+as drift and has to be recreated (README, "Schema during development"). The API reads its standalone bearer
 credential from the Compose secret; the secret is never stored in the image or
 printed by the application. `ORGANIZATION_ID` selects the trusted organization for
 this initial single-organization host adapter.

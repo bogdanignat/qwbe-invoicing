@@ -14,8 +14,6 @@ void test("exports a minimal authenticated QWBE cube definition", () => {
     "issuers",
     "issuer_tax_configurations",
     "document_series",
-    "customers",
-    "product_presets",
     "invoice_drafts",
     "draft_lines",
     "invoice_sequences",
@@ -37,9 +35,5 @@ void test("exports a minimal authenticated QWBE cube definition", () => {
   const parts = cube.create()
   assert.equal(HttpApiGroup.isHttpApiGroup(parts.group), true)
   assert.deepEqual(parts.handlers, {})
-  assert.equal(invoicingMigrations.at(-1)?.name, "020-vat-treatment-snapshots")
-  assert.equal(invoicingMigrations.filter(({ name }) => name === "008-proforma-workflow").length, 1)
-  assert.equal(invoicingMigrations.filter(({ name }) => name === "009-proforma-direct-invoice").length, 1)
-  assert.equal(invoicingMigrations.filter(({ name }) => name === "010-product-presets-payment-terms").length, 1)
-  assert.equal(invoicingMigrations.filter(({ name }) => name === "011-external-api-snapshots").length, 1)
+  assert.deepEqual(invoicingMigrations.map(({ name }) => name), ["invoicing-001-baseline"])
 })

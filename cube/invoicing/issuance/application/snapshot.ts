@@ -1,13 +1,12 @@
 import { Effect } from "effect"
 
-import type { InvoicingTransaction } from "../../application/ports.ts"
 import { checked, copyBuyer, copyIssuerSnapshot, copySource, missing } from "../../application/support.ts"
 import { DomainConflict, ValidationFailure } from "../../contracts/failures.ts"
 import type { IdGenerator } from "../../contracts/host.ts"
 import type { DraftInvoice, IssuerProfile, IssuerSnapshot } from "../../domain/invoice.ts"
 import { validateFiscalDocument } from "../../domain/calculation.ts"
 import type { AuthoringDocumentInput } from "../../domain/inputs.ts"
-import { authorDocument } from "../../drafts/index.ts"
+import { authorDocument, type AuthoringTransaction } from "../../drafts/index.ts"
 import { currentVatRegistration, validateVatForIssuance } from "../../registry/index.ts"
 import type { AuthoringProformaInput } from "../domain/proforma.ts"
 
@@ -42,7 +41,7 @@ export const numberedSnapshot = (draft: SnapshotContent, issuer: IssuerSnapshot,
 
 export const issuanceSource = (
   input: AuthoringDocumentInput | AuthoringProformaInput | { readonly draftId: string }, organizationId: string,
-  transaction: InvoicingTransaction, ids: IdGenerator, kind: "invoice" | "proforma",
+  transaction: AuthoringTransaction, ids: IdGenerator, kind: "invoice" | "proforma",
 ) => Effect.gen(function*() {
   if (!("draftId" in input)) {
     const payload = "proformaSeries" in input ? { ...input, series: input.proformaSeries } : input

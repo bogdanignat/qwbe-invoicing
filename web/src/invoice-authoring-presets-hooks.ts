@@ -3,10 +3,12 @@ import type { Dispatch, SetStateAction } from "react"
 
 import { runUiEffect } from "./api.ts"
 import { invoicingClient } from "./invoicing-client.ts"
-import { applyProductPreset, type EditableInvoiceLine } from "./invoice-authoring-state.ts"
+import { choosePresetForLine, type EditableInvoiceLine } from "./invoice-authoring-state.ts"
 
 interface AuthoringPresetInput {
   readonly setLines: Dispatch<SetStateAction<ReadonlyArray<EditableInvoiceLine>>>
+  // Resolves a product's preferred VAT code on the form's current document date.
+  readonly vatCodeFor: (preferred: string | undefined) => string
 }
 
 export const useInvoiceAuthoringPresets = (input: AuthoringPresetInput) => {
@@ -14,7 +16,8 @@ export const useInvoiceAuthoringPresets = (input: AuthoringPresetInput) => {
   const choosePreset = (lineKey: string, presetId: string): void => {
     const preset = presets.data?.items.find((item) => item.id === presetId)
     if (preset === undefined) return
-    input.setLines((lines) => lines.map((line) => line.key === lineKey ? applyProductPreset(line, preset) : line))
+    const vatRateCode = input.vatCodeFor(preset.preferredVatRateCode)
+    input.setLines((lines) => choosePresetForLine(lines, lineKey, preset, vatRateCode))
   }
   return { presets: presets.data?.items ?? [], error: presets.error, choosePreset }
 }

@@ -64,16 +64,19 @@ a rewrite.
   These values are frozen into documents and retained in summaries, conversions and
   corrections; PDF and UI omit empty optional lines. Existing cached PDFs are not
   regenerated merely because a template version changes.
-  Migration `015-issuer-details` uses the existing migration runner on a fresh
-  development database. Populated old-schema databases are not backfilled: use a
-  new isolated data directory or explicitly recreate the disposable development database.
+  Databases created from an older schema are not backfilled; they are recreated
+  (see "Schema during development" below).
 - **Customers** (optional register): companies with a valid CUI/CIF, or natural persons with
   an optional CNP. A document can also be issued to a one-time buyer typed directly in the
   editor, so the register and draft persistence are conveniences, not prerequisites. A saved
   customer may define a default payment term which prepopulates, but never locks, the due date.
-- **Products and services** (optional presets): a short reusable list of descriptions and unit
-  prices. Selecting one copies those values into an editable invoice line; there is no stock,
-  SKU, price-list logic, or live relation to the saved preset.
+- **Products and services** (optional presets, the "Catalog" screen): a short reusable list of
+  descriptions, units of measure and unit prices. Selecting one copies those values into an editable invoice line; there is no stock,
+  SKU, price-list logic, or live relation to the saved preset. A product may also prefer a VAT
+  rate, stored as a code (`RO_STANDARD`, `RO_REDUCED`) rather than a percentage, so a legal rate
+  change needs no product edit. The line gets that code only when the issuer can charge it on
+  the document date; otherwise, and always for an Article 310 issuer, it gets the issuer's default
+  (see `docs/VAT_TREATMENT.md`, "Preferred VAT rate on a product").
 - **Document series**: separate series for invoices and proformas. Numbers are allocated
   atomically at issue time, are unique within their scope and are never reused. Uniqueness
   is enforced by the database, not only by the UI.
@@ -121,16 +124,21 @@ API client ──> /api (Bearer) ───┘        │                        
                                           └──> PDF renderer ──> /data/artifacts/<sha256>
 ```
 
-- **The core** (`cube/invoicing`) holds the domain model, VAT arithmetic, party and date
+- **The core** (`cube/invoicing`) holds the domain model, VAT arithmetic, date
   validation, the store ports and the idempotency rules, and composes the service from its
   components. It knows nothing about HTTP, SQLite or the browser. It depends only on a small
   set of host contracts (`cube/invoicing/contracts/host.ts`): who is calling and for which
   organization, a clock, an id generator, a transactional store and a renderer.
 - **The component cubes** under `cube/invoicing/` each own one piece of the logic and share
-  the parent's domain: `registry` (issuer, VAT configurations, document series, customers,
-  product presets), `drafts` (authoring a document, draft and line editing), `issuance`
-  (numbered invoices and proformas, conversion, idempotent replay), `corrections` (storno)
-  and `documents` (rendered PDF artifacts, their hashes and recovery).
+  the parent's domain: `parties` (the Romanian fiscal rules for every party: CUI, CNP,
+  counties and sectors), `customers` (saved customers, with their own table and baseline),
+  `catalog` (saved products and services and the unit-of-measure list they are chosen from,
+  with their own table and baseline), `registry` (issuer, VAT configurations, document
+  series), `drafts`
+  (authoring a document, draft and line editing), `issuance` (numbered invoices and
+  proformas, conversion, idempotent replay), `corrections` (storno) and `documents`
+  (rendered PDF artifacts, their hashes and recovery). A child enters another child only
+  through its `index.ts`.
 - **The standalone host** (`standalone/`) is the composition root. It authenticates the
   request, provides the contracts above, exposes every use case as an HTTP endpoint, serves
   the UI, runs migrations and implements the CLI.
@@ -321,13 +329,6 @@ not supported. This bounded product rule is not an external fiscal-status lookup
 See [the fiscal treatment contract and evidence](docs/VAT_TREATMENT.md).
 Readiness is **not complete**: no UBL/XML export, complete CIUS-RO validation or
 ANAF transport is included in this lot.
-Migration `019` requires an empty invoice database and rejects populated schemas
-atomically; it does not backfill or delete local data. Use the existing migration
-and doctor commands against a fresh development data directory.
-Migration `020` is also fresh-only for affected VAT tables: no backfill or automatic
-deletion. It persists S/E and reason fields and rejects incompatible populated data
-before changing its schema. Atomicity is per migration, not the whole pending batch;
-earlier migrations may already have committed when a later migration is refused.
 
 Numbered invoices, proformas and corrections expose a trusted `actorId`. Their
 issuance, issuer/series configuration, payments and reversals append fiscal events
@@ -337,12 +338,19 @@ Payments remains a separate cube with `payments:*` permissions; recording a paym
 is optional and is not required to issue an invoice. Document/PDF and session
 databases remain separate, and `eFacturaStatus` is retained.
 
-**Development migration:** `016-fiscal-audit` adds required actor columns without
-fabricating actors for old rows. Use a fresh development database; a populated
-pre-audit database may reject the migration and must be explicitly recreated.
-The migration never deletes existing databases automatically. Use the existing
-`migrate --json` dry-run, `migrate --apply --json`, repeated dry-run and `doctor --json`
-workflow on the new data directory; no backfill or legacy-snapshot fallback is provided.
+**Schema during development:** each cube owns one baseline migration holding the
+current definition of its tables (`customers-001-baseline`, `catalog-001-baseline`,
+`invoicing-001-baseline`, `payments-001-baseline`, `documents/documents-001-baseline`).
+In `invoicing.sqlite` they run after `000-foundation` in cube order, customers before
+invoicing because drafts reference them, for eight entries across the three databases. A schema change edits the owning baseline, so a
+database created before it no longer matches: `migrate` refuses it before writing
+anything and `doctor` reports it, both naming the drifted objects and asking to
+recreate the database. Recreating is not an upgrade: it drops the local data, and the
+migrator never deletes a database on its own. Prefer a new `DATA_DIR`; otherwise stop
+the app and remove `invoicing.sqlite`, `documents.sqlite` and `sessions.sqlite` with
+their `-wal`/`-shm` files explicitly, keeping the token file. Then run `migrate --json`,
+`migrate --apply --json`, a repeated dry-run and `doctor --json`. There is no backfill
+and no legacy-snapshot fallback.
 
 Registries (`GET /api/customers`, `/api/product-presets`, `/api/drafts`, `/api/invoices`, `/api/proformas`)
 are paged: the response is `{ "items": [...], "nextCursor": "..." | null }`, `?limit=` takes 1 to 200
@@ -406,7 +414,10 @@ fails, so it can gate a deployment.
 
 ```text
 cube/invoicing/            core: domain model, VAT arithmetic, ports, contracts, migrations, service composition
-cube/invoicing/registry/   component: issuer, VAT configurations, document series, customers, product presets
+cube/invoicing/parties/    component: CUI, CNP, counties and sectors shared by issuer and buyers
+cube/invoicing/customers/  component: saved customers, their table and baseline migration
+cube/invoicing/catalog/    component: saved products and services, their table and baseline migration
+cube/invoicing/registry/   component: issuer, VAT configurations, document series
 cube/invoicing/drafts/     component: document authoring, draft and line editing
 cube/invoicing/issuance/   component: numbered invoices and proformas, conversion, idempotent replay
 cube/invoicing/corrections/ component: correction documents (storno)

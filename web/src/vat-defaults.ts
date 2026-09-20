@@ -6,7 +6,7 @@ interface SavedDraftTaxLine extends DraftTaxLine { readonly id: string }
 export const romanianCuiPattern = "[1-9][0-9]{1,9}"
 export const normalizeRomanianCui = (value: string): string => value.trim().toUpperCase().replace(/^RO/, "")
 
-const activeOn = (value: { readonly effectiveFrom: string; readonly effectiveTo?: string }, date: string): boolean =>
+export const activeOn = (value: { readonly effectiveFrom: string; readonly effectiveTo?: string }, date: string): boolean =>
   value.effectiveFrom <= date && (value.effectiveTo === undefined || date <= value.effectiveTo)
 
 const scaledRate = (rate: string): bigint | undefined => {
@@ -66,6 +66,14 @@ export const defaultVatCode = (catalogue: VatCatalogue, issuer: Issuer, date: st
   vatRatesForIssuer(catalogue, issuer, date).find(({ kind }) => kind === "standard")?.code
   ?? vatRatesForIssuer(catalogue, issuer, date)[0]?.code
   ?? ""
+
+// The code a line gets when a product is chosen: the product's preferred rate when the issuer can
+// charge it on the document date, otherwise the issuer's default on that date. An Article 310
+// issuer offers no taxable rate, so the exemption always wins over the product's preference.
+export const presetVatCode = (preferred: string | undefined, catalogue: VatCatalogue, issuer: Issuer, date: string): string =>
+  preferred !== undefined && vatRatesForIssuer(catalogue, issuer, date).some(({ code, kind }) => code === preferred && kind !== "non_vat")
+    ? preferred
+    : defaultVatCode(catalogue, issuer, date)
 
 export const hasStaleDraftTax = (
   issueDate: string, lines: ReadonlyArray<DraftTaxLine>, catalogue: VatCatalogue, issuer: Issuer,

@@ -30,7 +30,7 @@ export type CreateDocumentSeriesInput = {
 }
 
 export type CustomerInput = BuyerSnapshot & { readonly defaultPaymentTermDays?: number }
-export type ProductPresetInput = Pick<ProductPreset, "description" | "unitPrice" | "unitOfMeasure">
+export type ProductPresetInput = Pick<ProductPreset, "description" | "unitPrice" | "unitOfMeasure" | "preferredVatRateCode">
 
 export interface IssuerInput {
   readonly name: string

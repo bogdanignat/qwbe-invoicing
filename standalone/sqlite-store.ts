@@ -6,11 +6,7 @@ import {
   DomainConflict,
   calculateTotals,
   validateVatTreatment,
-  PersistenceFailure,
-  type Address,
   type AuditEvent,
-  type BuyerSnapshot,
-  type Customer,
   type DocumentCursor,
   type DraftCursor,
   type DraftInvoice,
@@ -23,10 +19,7 @@ import {
   type IssuedInvoiceSummary,
   type IssuerBranding,
   type IssuerCompanySnapshot,
-  type NameCursor,
   type PageQuery,
-  type PartySnapshot,
-  type ProductPreset,
   type Proforma,
   type ProformaConversion,
   type ProformaSummary,
@@ -34,6 +27,8 @@ import {
   type VatConfiguration,
   type TransactionalStore,
 } from "../cube/invoicing/index.ts"
+import type { CatalogTransaction } from "../cube/invoicing/catalog/index.ts"
+import type { CustomersTransaction } from "../cube/invoicing/customers/index.ts"
 import { normalizeIssuerDetails, validateIssuerForIssuance } from "../cube/invoicing/registry/index.ts"
 import {
   DomainConflict as PaymentsDomainConflict,
@@ -43,38 +38,21 @@ import {
   type TransactionalStore as PaymentsStore,
 } from "../cube/payments/index.ts"
 import { databasePath } from "./migrations.ts"
+import { catalogTransactionAdapter } from "./sqlite-catalog.ts"
+import { customersTransactionAdapter } from "./sqlite-customers.ts"
+import {
+  addressValues, booleanInteger, buyerFrom, integer, nullableText, optionalText, partyFrom,
+  persistence, read, row, rowsWanted, text, write, type Row, type WriteFailure,
+} from "./sqlite-rows.ts"
 
-type WriteFailure = DomainConflict | PersistenceFailure
 type ProformaWorkflowTransaction = InvoicingTransaction & {
   readonly saveProformaConversion: (conversion: ProformaConversion) => Effect.Effect<void, WriteFailure>
 }
-type Row = Readonly<Record<string, unknown>>
-
 interface TransactionHandle {
   readonly database: DatabaseSync
   open: boolean
   closed: boolean
 }
-
-const persistence = (operation: string) => new PersistenceFailure({ operation })
-
-const writeFailure = (error: unknown, operation: string): WriteFailure => {
-  if (error instanceof DomainConflict) return error
-  if (typeof error === "object" && error !== null
-    && (("code" in error && typeof error.code === "string" && error.code.includes("SQLITE_CONSTRAINT"))
-      || ("errcode" in error && typeof error.errcode === "number" && (error.errcode & 0xff) === 19))) {
-    return operation === "save proforma conversion" || operation === "save proforma invoice conversion"
-      ? new DomainConflict({ code: "proforma_already_converted", message: "Proforma was already converted" })
-      : new DomainConflict({ code: "persistence_conflict", message: `Conflict while performing ${operation}` })
-  }
-  return persistence(operation)
-}
-
-const write = <Value>(operation: string, run: () => Value): Effect.Effect<Value, WriteFailure> =>
-  Effect.try({ try: run, catch: (error) => writeFailure(error, operation) })
-
-const read = <Value>(operation: string, run: () => Value): Effect.Effect<Value, PersistenceFailure> =>
-  Effect.try({ try: run, catch: () => persistence(operation) })
 
 const paymentsPersistence = (operation: string) => new PaymentsPersistenceFailure({ operation })
 const paymentWrite = <Value>(operation: string, run: () => Value): Effect.Effect<
@@ -89,68 +67,6 @@ const paymentWrite = <Value>(operation: string, run: () => Value): Effect.Effect
 })
 const paymentRead = <Value>(operation: string, run: () => Value): Effect.Effect<Value, PaymentsPersistenceFailure> =>
   Effect.try({ try: run, catch: () => paymentsPersistence(operation) })
-
-const row = (value: unknown): Row | undefined =>
-  typeof value === "object" && value !== null ? value as Row : undefined
-
-const text = (value: Row, field: string): string => {
-  const result = value[field]
-  if (typeof result !== "string") throw new Error(`invalid ${field}`)
-  return result
-}
-
-const optionalText = (value: Row, field: string): string | undefined => {
-  const result = value[field]
-  if (result === null || result === undefined) return undefined
-  if (typeof result !== "string") throw new Error(`invalid ${field}`)
-  return result
-}
-
-const nullableText = (value: Row, field: string): string | null => optionalText(value, field) ?? null
-
-const integer = (value: Row, field: string): number => {
-  const result = value[field]
-  if (typeof result !== "number" || !Number.isInteger(result)) throw new Error(`invalid ${field}`)
-  return result
-}
-
-const booleanInteger = (value: Row, field: string): boolean => {
-  const result = integer(value, field)
-  if (result !== 0 && result !== 1) throw new Error(`invalid ${field}`)
-  return result === 1
-}
-
-const optionalInteger = (value: Row, field: string): number | undefined => {
-  const result = value[field]
-  if (result === null || result === undefined) return undefined
-  if (typeof result !== "number" || !Number.isInteger(result)) throw new Error(`invalid ${field}`)
-  return result
-}
-
-const addressFrom = (value: Row, prefix = ""): Address => {
-  const county = text(value, `${prefix}county`)
-  const sector = optionalInteger(value, `${prefix}sector`)
-  const postalCode = optionalText(value, `${prefix}postal_code`)
-  return {
-    countryCode: text(value, `${prefix}country_code`),
-    city: text(value, `${prefix}city`),
-    street: text(value, `${prefix}street`),
-    county,
-    ...(sector === undefined ? {} : { sector }),
-    ...(postalCode === undefined ? {} : { postalCode }),
-  }
-}
-
-// Column names keep the pre-rename vocabulary on purpose (phase 1 of the rename):
-//   name -> legal_name, fiscalIdentifier -> tax_identifier, vatConfigurations -> issuer_tax_configurations,
-//   vatRateCode -> tax_code, vatRate -> tax_rate, totalExcludingVat -> total_excluding_tax,
-//   vatAmount -> tax_amount, totalIncludingVat -> total_including_tax, vatTotal -> tax_total,
-//   vatBreakdown[].code -> tax_code, vatBreakdown[].vatBaseAmount -> taxable_amount.
-const partyFrom = (value: Row, prefix: string): PartySnapshot => ({
-  name: text(value, `${prefix}legal_name`),
-  fiscalIdentifier: text(value, `${prefix}tax_identifier`),
-  address: addressFrom(value, prefix),
-})
 
 const issuerCompanyDetailsFrom = (value: Row, prefix: string, issued = true): Omit<IssuerCompanySnapshot, "vatRegistered"> => {
   const legalForm = text(value, `${prefix}legal_form`)
@@ -170,12 +86,6 @@ const issuerCompanyDetailsFrom = (value: Row, prefix: string, issued = true): Om
 
 const issuerCompanyFrom = (value: Row, prefix: string): IssuerCompanySnapshot => ({
   ...issuerCompanyDetailsFrom(value, prefix),
-  vatRegistered: booleanInteger(value, `${prefix}vat_registered`),
-})
-
-const buyerFrom = (value: Row, prefix: string): BuyerSnapshot => ({
-  ...partyFrom(value, prefix),
-  partyType: text(value, `${prefix}party_type`) as BuyerSnapshot["partyType"],
   vatRegistered: booleanInteger(value, `${prefix}vat_registered`),
 })
 
@@ -238,45 +148,12 @@ const documentKeyset = (page: PageQuery<DocumentCursor>, prefix = "") => page.af
 const draftKeyset = (page: PageQuery<DraftCursor>) => page.after === undefined
   ? { sql: "", values: [] as ReadonlyArray<string> }
   : { sql: " AND (issue_date < ? OR (issue_date = ? AND id > ?))", values: [page.after.issueDate, page.after.issueDate, page.after.id] }
-const nameKeyset = (page: PageQuery<NameCursor>, column: string) => page.after === undefined
-  ? { sql: "", values: [] as ReadonlyArray<string> }
-  : { sql: ` AND (${column} COLLATE NOCASE > ? OR (${column} COLLATE NOCASE = ? AND id > ?))`, values: [page.after.name, page.after.name, page.after.id] }
-const rowsWanted = (page: PageQuery<unknown>): number => page.limit + 1
-
-const customerFrom = (value: Row): Customer => {
-  const deletedAt = optionalText(value, "deleted_at")
-  const defaultPaymentTermDays = optionalInteger(value, "default_payment_term_days")
-  return {
-    ...buyerFrom(value, ""),
-    id: text(value, "id"),
-    organizationId: text(value, "organization_id"),
-    ...(defaultPaymentTermDays === undefined ? {} : { defaultPaymentTermDays }),
-    ...(deletedAt === undefined ? {} : { deletedAt }),
-  }
-}
-
-const productPresetFrom = (value: Row): ProductPreset => ({
-  id: text(value, "id"),
-  organizationId: text(value, "organization_id"),
-  description: text(value, "description"),
-  unitPrice: text(value, "unit_price"),
-  unitOfMeasure: { code: text(value, "unit_code"), name: text(value, "unit_name") },
-})
 
 const documentSeriesFrom = (value: Row): DocumentSeries => ({
   organizationId: text(value, "organization_id"),
   documentType: text(value, "document_type") as DocumentSeries["documentType"],
   series: text(value, "series"),
 })
-
-const addressValues = (address: Address): ReadonlyArray<string | number | null> => [
-  address.countryCode,
-  address.city,
-  address.street,
-  address.county,
-  address.sector ?? null,
-  address.postalCode ?? null,
-]
 
 const paymentFrom = (value: Row): Payment => {
   const externalReference = optionalText(value, "external_reference")
@@ -511,61 +388,6 @@ const transactionAdapter = (database: DatabaseSync): ProformaWorkflowTransaction
   listDocumentSeries: (organizationId) => read("list document series", () =>
     database.prepare(`SELECT * FROM document_series WHERE organization_id = ?
       ORDER BY document_type, series`).all(organizationId).map((value) => documentSeriesFrom(value as Row))),
-  saveCustomer: (customer) => write("save customer", () => {
-    const result = database.prepare(`INSERT INTO customers
-       (id, organization_id, party_type, legal_name, tax_identifier, country_code, city, street, county, sector, postal_code, vat_registered, default_payment_term_days)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT (id) DO UPDATE SET party_type=excluded.party_type, legal_name=excluded.legal_name, tax_identifier=excluded.tax_identifier,
-      country_code=excluded.country_code, city=excluded.city, street=excluded.street,
-        county=excluded.county, sector=excluded.sector, postal_code=excluded.postal_code,
-        vat_registered=excluded.vat_registered, default_payment_term_days=excluded.default_payment_term_days
-      WHERE customers.organization_id=excluded.organization_id`)
-      .run(customer.id, customer.organizationId, customer.partyType, customer.name, customer.fiscalIdentifier,
-        ...addressValues(customer.address), Number(customer.vatRegistered), customer.defaultPaymentTermDays ?? null)
-    if (result.changes === 0) throw new DomainConflict({ code: "customer_id_taken", message: "Customer id belongs to another organization" })
-  }),
-  findCustomer: (organizationId, id) => read("find customer", () => {
-    const value = row(database.prepare("SELECT * FROM customers WHERE organization_id = ? AND id = ?").get(organizationId, id))
-    return value === undefined ? undefined : customerFrom(value)
-  }),
-  listCustomers: (organizationId, page) => read("list customers", () => {
-    const keyset = nameKeyset(page, "legal_name")
-    return database.prepare(`SELECT * FROM customers
-      WHERE organization_id = ? AND deleted_at IS NULL${keyset.sql}
-      ORDER BY legal_name COLLATE NOCASE, id LIMIT ?`).all(organizationId, ...keyset.values, rowsWanted(page)).map((value) => customerFrom(value as Row))
-  }),
-  softDeleteCustomer: (organizationId, id, deletedAt) => write("soft delete customer", () => {
-    const result = database.prepare(`UPDATE customers SET deleted_at = ?
-      WHERE organization_id = ? AND id = ? AND deleted_at IS NULL`).run(deletedAt, organizationId, id)
-    if (result.changes === 0) {
-      const exists = database.prepare("SELECT 1 FROM customers WHERE organization_id = ? AND id = ?").get(organizationId, id)
-      if (exists === undefined) throw new DomainConflict({ code: "customer_not_found", message: "Customer not found" })
-    }
-  }),
-  hasOpenDraftsForCustomer: (organizationId, customerId) => read("check customer drafts", () =>
-    database.prepare(`SELECT 1 FROM invoice_drafts
-      WHERE organization_id = ? AND customer_id = ? AND status = 'draft' LIMIT 1`).get(organizationId, customerId) !== undefined),
-  saveProductPreset: (preset) => write("save product preset", () => {
-    const result = database.prepare(`INSERT INTO product_presets(id,organization_id,description,unit_price,unit_code,unit_name) VALUES(?,?,?,?,?,?)
-      ON CONFLICT(id) DO UPDATE SET description=excluded.description,unit_price=excluded.unit_price,
-       unit_code=excluded.unit_code,unit_name=excluded.unit_name
-      WHERE product_presets.organization_id=excluded.organization_id`)
-      .run(preset.id, preset.organizationId, preset.description, preset.unitPrice,
-        preset.unitOfMeasure.code, preset.unitOfMeasure.name)
-    if (result.changes === 0) throw new DomainConflict({ code: "product_preset_id_taken", message: "Product preset id belongs to another organization" })
-  }),
-  findProductPreset: (organizationId, id) => read("find product preset", () => {
-    const value = row(database.prepare("SELECT * FROM product_presets WHERE organization_id=? AND id=?").get(organizationId, id))
-    return value === undefined ? undefined : productPresetFrom(value)
-  }),
-  listProductPresets: (organizationId, page) => read("list product presets", () => {
-    const keyset = nameKeyset(page, "description")
-    return database.prepare(`SELECT * FROM product_presets WHERE organization_id=?${keyset.sql}
-      ORDER BY description COLLATE NOCASE,id LIMIT ?`).all(organizationId, ...keyset.values, rowsWanted(page)).map((value) => productPresetFrom(value as Row))
-  }),
-  deleteProductPreset: (organizationId, id) => write("delete product preset", () => {
-    database.prepare("DELETE FROM product_presets WHERE organization_id=? AND id=?").run(organizationId, id)
-  }),
   saveDraft: (draft) => write("save draft", () => {
     const result = database.prepare(`INSERT INTO invoice_drafts
       (id, organization_id, source_app, source_kind, source_id, customer_id, customer_party_type, customer_legal_name, customer_tax_identifier,
@@ -913,13 +735,15 @@ const releaseTransaction = (handle: TransactionHandle): void => {
   }
 }
 
-export const createSqliteStore = (dataDirectory: string): TransactionalStore<InvoicingTransaction> => ({
+// One connection and one BEGIN IMMEDIATE per transaction; the kernel adapter and every
+// child-cube adapter are built on that same connection, so they commit or roll back together.
+export const createSqliteStore = (dataDirectory: string): TransactionalStore<InvoicingTransaction & CustomersTransaction & CatalogTransaction> => ({
   transaction: (use) => Effect.acquireUseRelease(
     Effect.try({
       try: () => openTransaction(dataDirectory),
       catch: () => persistence("begin transaction"),
     }),
-    (handle) => Effect.tap(use(transactionAdapter(handle.database)), () => Effect.try({
+    (handle) => Effect.tap(use({ ...transactionAdapter(handle.database), ...customersTransactionAdapter(handle.database), ...catalogTransactionAdapter(handle.database) }), () => Effect.try({
       try: () => { commitAndClose(handle) },
       catch: () => persistence("commit transaction"),
     })),

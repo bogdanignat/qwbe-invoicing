@@ -61,6 +61,8 @@ export interface ProductPreset {
   readonly description: string
   readonly unitPrice: string
   readonly unitOfMeasure: UnitOfMeasure
+  // Code of the taxable rate the product prefers; absent means the issuer's default.
+  readonly preferredVatRateCode?: string
 }
 
 export interface UnitOfMeasure {
@@ -443,10 +445,12 @@ export const decodeCustomer: Decoder<Customer> = (input) => {
 
 export const decodeProductPreset: Decoder<ProductPreset> = (input) => {
   const value = object(input)
+  const preferredVatRateCode = optionalText(value.preferredVatRateCode, "preferredVatRateCode")
   return {
     id: text(value.id, "id"), organizationId: text(value.organizationId, "organizationId"),
     description: text(value.description, "description"), unitPrice: text(value.unitPrice, "unitPrice"),
     unitOfMeasure: decodeUnitOfMeasure(value.unitOfMeasure),
+    ...(preferredVatRateCode === undefined ? {} : { preferredVatRateCode }),
   }
 }
 

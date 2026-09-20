@@ -88,11 +88,15 @@ if (command !== undefined) {
         console.error("migrate --apply outside development requires --confirm-production")
         process.exitCode = 2
       } else {
-        const report = command.apply ? applyMigrations(config.dataDirectory) : planMigrations(config.dataDirectory)
-        // An applied migration that was later edited leaves a schema no further
-        // migration can reconcile, so migrate refuses here rather than letting
-        // the first write that touches the drift answer an opaque 500.
-        const drifted = schemaDrift(config.dataDirectory)
+        // A schema the recorded history does not explain (an edited baseline, or
+        // history from before a baseline reset) cannot be migrated forward, so
+        // migrate refuses before writing: applying would only fail half-way on
+        // objects that already exist. The check repeats after apply so a
+        // migration that leaves drift behind is refused too.
+        const before = schemaDrift(config.dataDirectory)
+        const applying = command.apply && before.length === 0
+        const report = applying ? applyMigrations(config.dataDirectory) : planMigrations(config.dataDirectory)
+        const drifted = applying ? schemaDrift(config.dataDirectory) : before
         print({ ...report, schemaDrift: drifted }, command.json)
         if (drifted.length > 0) {
           console.error(`schema does not match the migration contract (${drifted.join(", ")}); recreate the database`)

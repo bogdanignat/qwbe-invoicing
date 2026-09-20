@@ -13,8 +13,7 @@ import {
   PersistenceFailure,
   ValidationFailure,
   createInvoicingService,
-  type InvoicingTransaction,
-  type TransactionalStore,
+  type InvoicingDependencies,
 } from "../cube/invoicing/index.ts"
 import { applyMigrations, databasePath } from "./migrations.ts"
 import { createSqliteStore } from "./sqlite-store.ts"
@@ -76,7 +75,7 @@ const fixture = (label: string, initialDate = "2026-09-05T10:00:00.000Z") => {
   } as const
   return {
     directory,
-    service: (store: TransactionalStore<InvoicingTransaction> = createSqliteStore(directory)) =>
+    service: (store: InvoicingDependencies["store"] = createSqliteStore(directory)) =>
       createInvoicingService({ ...dependencies, store }),
     setDate: (value: string) => { now = new Date(value) },
     close: () => { rmSync(directory, { recursive: true, force: true }) },
@@ -187,9 +186,9 @@ void test("two SQLite stores atomically choose one conversion branch and preserv
 })
 
 const failingStore = (
-  store: TransactionalStore<InvoicingTransaction>,
+  store: InvoicingDependencies["store"],
   method: "saveIdempotencyRecord" | "appendAuditEvent",
-): TransactionalStore<InvoicingTransaction> => ({
+): InvoicingDependencies["store"] => ({
   transaction: (use) => store.transaction((transaction) => use({
     ...transaction,
     [method]: () => Effect.fail(new PersistenceFailure({ operation: `injected ${method}` })),

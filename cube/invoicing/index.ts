@@ -9,7 +9,7 @@ const group = HttpApiGroup.make(identity)
 export const cube = {
   manifest: {
     name: identity,
-    tables: `issuers issuer_tax_configurations document_series customers product_presets invoice_drafts draft_lines invoice_sequences
+    tables: `issuers issuer_tax_configurations document_series invoice_drafts draft_lines invoice_sequences
       issued_invoices issued_lines issued_tax_breakdown proformas proforma_lines proforma_tax_breakdown proforma_conversions
        proforma_invoice_conversions correction_documents correction_lines correction_tax_breakdown idempotency_records audit_events`.split(/\s+/),
     requiresAuth: true,
@@ -28,9 +28,8 @@ export * from "./contracts/index.ts"
 export { calculateTotals, validateFiscalDocument } from "./domain/calculation.ts"
 export { validateVatTreatment } from "./domain/validation.ts"
 export { unitOfMeasures } from "./domain/unit-of-measures.ts"
-export { isValidRomanianCnp } from "./registry/domain/party-validation.ts"
-export { ROMANIAN_COUNTIES, isRomanianCountyCode, romanianCountyName } from "./registry/domain/romanian-counties.ts"
-export type { RomanianCounty } from "./registry/domain/romanian-counties.ts"
+export { ROMANIAN_COUNTIES, isRomanianCountyCode, isValidRomanianCnp, romanianCountyName } from "./parties/index.ts"
+export type { RomanianCounty } from "./parties/index.ts"
 export { createInvoicingService } from "./application/invoicing.ts"
 export { defaultPageSize, maximumPageSize } from "./application/support.ts"
 export type { Page, PageRequest } from "./application/support.ts"
@@ -40,5 +39,5 @@ export type * from "./domain/invoice.ts"
 export type * from "./domain/inputs.ts"
 export type { Proforma, ProformaSummary, ProformaConversion, ProformaInvoiceConversion,
   IssueProformaInput, ConvertProformaInput, AuthoringProformaInput } from "./issuance/index.ts"
-export type * from "./corrections/domain/corrections.ts"
+export type { CorrectionDocument, CreateCorrectionInput } from "./corrections/index.ts"
 export type * from "./domain/unit-of-measures.ts"

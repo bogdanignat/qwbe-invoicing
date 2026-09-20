@@ -247,7 +247,9 @@ Static boundaries must reject:
 
 This is lint isolation, not a security sandbox. Process-level isolation remains a separate future decision.
 
-The isolation unit is a top-level cube together with its child cubes. The mother's `no-cube-to-cube` rule captures only the first path segment under `cubes/`, and its example plugin has `booktags/bookmarks` importing a helper from the parent `booktags`. `probes/boundary-rules.mjs` mirrors that: `cube/invoicing` and its components (`registry`, `drafts`, `issuance`, `corrections`, `documents`) may import each other, `cube/invoicing` and `cube/payments` may not. Components import the parent's domain, ports and contracts directly; the parent imports only a component's `index.ts`, so the graph stays acyclic.
+The isolation unit is a top-level cube together with its child cubes. The mother's `no-cube-to-cube` rule captures only the first path segment under `cubes/`, and its example plugin has `booktags/bookmarks` importing a helper from the parent `booktags`. `probes/boundary-rules.mjs` mirrors that: `cube/invoicing` and `cube/payments` may not import each other at all.
+
+Inside one tree the gate is stricter than the mother. A child cube may import the kernel of any ancestor (the parent's domain, ports and contracts); every other unit, whether a child seen from its parent, a sibling or a nested child, is entered only through its exact `index.ts`, type-only imports and re-exports included. Each child's interior stays private to it, and the parent never reaches past a child's index, so the graph stays acyclic. Three edges from before the split still reach into a child's interior and are allowed by exact source and target only: `application/ports.ts` to `corrections/domain/corrections.ts` and to `issuance/domain/proforma.ts`, and `application/memory-store.test-support.ts` to `issuance/domain/proforma.ts`. T-1362 Pas 4 removes them; no other exception is added to make the gate pass.
 
 Source: QWBE `core/.dependency-cruiser.cjs`.
 
@@ -284,9 +286,9 @@ This list is a domain starting point, not a committed schema.
 
 References to global accounts, organizations, contacts, products, or documents should use stable ids and legal integration paths. Issued legal documents must preserve the relevant snapshot instead of changing when a foreign record changes later.
 
-### Schema history worth knowing
+### Schema baselines during development
 
-Migration `004-invoice-delete-last` dropped the immutability triggers on issued invoices, their lines and their VAT breakdown for a "delete the last issued invoice" feature that was later removed from the code. Migrations `007`, `008` and `009` recreated the triggers with the current shapes. Migration files are history and are never edited; a test in `standalone/standalone.test.ts` asserts that every immutability trigger exists after all migrations run, so a database that passed through that window still ends up protected.
+While the project is in development (the "STADIU" section of `CLAUDE.md`), every cube owns exactly one migration, `<cube>-001-baseline`, holding the current definition of the tables its manifest declares, with their indexes and triggers; `standalone/schema-baseline.test.ts` asserts that each baseline creates exactly the declared tables. A schema change edits the owning baseline instead of adding a migration. A database created from an earlier baseline is drift: `migrate` refuses it before writing and `doctor` reports it, and the answer is to recreate the database, which drops its data. The migrator never deletes a database itself. The runner applies the foundation and then each cube's migrations in cube order, a cube whose tables others reference first, never sorted by name. Numbered incremental migrations (`<cube>-002-...`) return only when the development stage ends. The immutability triggers are part of the baselines, and `standalone/standalone.test.ts` still asserts that every one of them exists after migration.
 
 ## 8. Events are not workflows
 
@@ -485,10 +487,13 @@ qwbe-invoicing/
 │   └── invoicing/              exact cube/package root
 │       ├── qwbe-package.json
 │       ├── index.ts            named `cube` export
-│       ├── domain/             shared model, VAT arithmetic, party/date validation
+│       ├── domain/             shared model, VAT arithmetic, date validation
 │       ├── application/        ports, idempotency, service composition
 │       ├── contracts/          schemas and host-facing seams
-│       ├── registry/           component cube: issuer, series, customers, presets
+│       ├── parties/            component cube: CUI/CNP, counties and sectors for every party
+│       ├── customers/          component cube: saved customers, their table and baseline
+│       ├── catalog/            component cube: saved products and services, their table and baseline
+│       ├── registry/           component cube: issuer, VAT, series
 │       ├── drafts/             component cube: authoring and draft editing
 │       ├── issuance/           component cube: numbered invoices and proformas
 │       ├── corrections/        component cube: storno documents

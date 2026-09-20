@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import { ARTICLE_310_EXEMPTION_REASON, type Issuer, type VatCatalogue, type VatConfiguration } from "./models.ts"
-import { defaultVatCode, fallbackVatRegistration, hasStaleDraftTax, issuerForIssueDate, issuerVatRegistrationOn, normalizeRomanianCui, staleDraftLineIds, vatRatesForIssuer, vatRegistrationHistory } from "./vat-defaults.ts"
+import { defaultVatCode, fallbackVatRegistration, presetVatCode, hasStaleDraftTax, issuerForIssueDate, issuerVatRegistrationOn, normalizeRomanianCui, staleDraftLineIds, vatRatesForIssuer, vatRegistrationHistory } from "./vat-defaults.ts"
 
 const standard = { vatCategoryCode: "S", vatExemptionReason: null } as const
 const notSubject = { vatCategoryCode: "O", vatExemptionReason: ARTICLE_310_EXEMPTION_REASON } as const
@@ -72,4 +72,15 @@ void test("projects dated seller identity only from complete VAT treatment facts
   assert.equal(issuerForIssueDate(scheduled, "2026-01-01").vatRegistered, false)
   const incomplete = issuer([{ ...standard, code: "RO_NON_VAT", rate: "0.00", effectiveFrom: "2026-01-01" }])
   assert.equal(issuerVatRegistrationOn(incomplete, "2026-01-01"), undefined)
+})
+
+void test("applies a product's preferred rate only when the issuer can charge it on the document date", () => {
+  const registered = issuer([configuration({ code: "RO_STANDARD", rate: "21", effectiveFrom: "2025-08-01" }), configuration({ code: "RO_REDUCED", rate: "11", effectiveFrom: "2025-08-01" })])
+  const nonVat = issuer([{ ...notSubject, code: "RO_NON_VAT", rate: "0", effectiveFrom: "2025-08-01" }])
+  assert.equal(presetVatCode("RO_REDUCED", catalogue, registered, "2026-01-01"), "RO_REDUCED")
+  assert.equal(presetVatCode("RO_REDUCED", catalogue, nonVat, "2026-01-01"), "RO_NON_VAT")
+  assert.equal(presetVatCode(undefined, catalogue, registered, "2026-01-01"), "RO_STANDARD")
+  assert.equal(presetVatCode("RO_REDUCED_5", catalogue, registered, "2026-01-01"), "RO_STANDARD")
+  assert.equal(presetVatCode("RO_NON_VAT", catalogue, registered, "2026-01-01"), "RO_STANDARD")
+  assert.equal(presetVatCode("RO_REDUCED", catalogue, issuer([]), "2026-01-01"), "")
 })

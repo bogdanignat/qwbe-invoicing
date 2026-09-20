@@ -1,8 +1,6 @@
 import type { Authorize, OperationDependencies } from "../application/support.ts"
 import type { InvoicingPermissions } from "../contracts/permissions.ts"
-import { createCustomerOperations, type CustomerOperations } from "./application/customers.ts"
 import { createIssuerOperations, type IssuerOperations } from "./application/issuer.ts"
-import { createProductPresetOperations, type ProductPresetOperations } from "./application/product-presets.ts"
 
 const identity = "registry"
 
@@ -17,7 +15,7 @@ export const cube = {
   create: () => ({ handlers: {} }),
 }
 
-export type RegistryOperations = IssuerOperations & CustomerOperations & ProductPresetOperations
+export type RegistryOperations = IssuerOperations
 
 export const createRegistryOperations = (
   dependencies: OperationDependencies,
@@ -25,14 +23,13 @@ export const createRegistryOperations = (
   authorize: Authorize,
 ): RegistryOperations => ({
   ...createIssuerOperations(dependencies, permissions, authorize),
-  ...createCustomerOperations(dependencies, permissions, authorize),
-  ...createProductPresetOperations(dependencies, permissions, authorize),
 })
 
-export { normalizeProductPreset, resolveVatConfiguration, validateCustomer, validateIssuer } from "./domain/validation.ts"
+export { resolveVatConfiguration, validateIssuer } from "./domain/validation.ts"
 export { normalizeIssuerDetails, validateIssuerForIssuance } from "./domain/issuer-details.ts"
 export { currentVatRegistration, validateVatForIssuance } from "./domain/vat-regime.ts"
 export type { VatRegistration } from "./domain/vat-regime.ts"
+export { isTaxableVatRateOn } from "./domain/vat-catalogue.ts"
 export type { VatRate } from "./domain/vat-catalogue.ts"
 export type { IssuerView, VatCatalogue } from "./application/issuer.ts"
-export type { CustomerOperations, IssuerOperations, ProductPresetOperations }
+export type { IssuerOperations }

@@ -3,10 +3,12 @@ import { useEffect, useRef } from "react"
 import { EmptyState, ErrorAlert, Loading } from "../components/AsyncState.tsx"
 import { LoadMore } from "../components/LoadMore.tsx"
 import { Page } from "../components/Page.tsx"
+import { PresetVatField } from "../components/PresetVatField.tsx"
 import { Button } from "../components/ui/Button.tsx"
 import { ButtonLink } from "../components/ui/ButtonLink.tsx"
 import { focusAndReveal } from "../focus.ts"
 import { money } from "../format.ts"
+import { presetVatLabel } from "../product-preset-vat.ts"
 import { useProductPresetsRegistry } from "../product-presets-hooks.ts"
 
 export const ProductPresetsView = ({ notify }: { readonly notify: (message: string) => void }) => {
@@ -19,19 +21,20 @@ export const ProductPresetsView = ({ notify }: { readonly notify: (message: stri
   }, [editing])
   const presets = state.presets.items
   const units = state.unitOfMeasures.data
-  if (presets === undefined || units === undefined) return state.presets.error === null && state.unitOfMeasures.error === null
+  const vatRates = state.vatRates
+  if (presets === undefined || units === undefined || vatRates === undefined) return state.presets.error === null && state.unitOfMeasures.error === null && state.vatCatalogue.error === null
     ? <Loading />
-    : <Page title="Produse și servicii" eyebrow="Preseturi facturare"><ErrorAlert error={state.presets.error ?? state.unitOfMeasures.error ?? new Error("Catalogul U.M. nu a putut fi încărcat.")} /></Page>
+    : <Page title="Catalog" eyebrow="Produse și servicii"><ErrorAlert error={state.presets.error ?? state.unitOfMeasures.error ?? state.vatCatalogue.error ?? new Error("Catalogul U.M. nu a putut fi încărcat.")} /></Page>
   const items = presets
-  return <Page title="Produse și servicii" eyebrow="Preseturi facturare" actions={<ButtonLink href="/invoices/new">Factură nouă</ButtonLink>}>
+  return <Page title="Catalog" eyebrow="Produse și servicii" actions={<ButtonLink href="/invoices/new">Factură nouă</ButtonLink>}>
     <div className="split-layout">
       <section className="card overview-section">
-        <div className="section-heading"><div><h2>Produse predefinite</h2><p>Lista precompletează descrierea și prețul unei linii; factura păstrează propria copie.</p></div><span className="count">{items.length}</span></div>
+        <div className="section-heading"><div><h2>Produse predefinite</h2><p>Lista precompletează descrierea, prețul și cota TVA a unei linii; factura păstrează propria copie.</p></div><span className="count">{items.length}</span></div>
         {state.removal.error === null ? null : <ErrorAlert error={state.removal.error} />}
-        {items.length === 0 ? <EmptyState>Nu există încă produse predefinite. Liniile facturii pot fi completate în continuare manual.</EmptyState> : <div className="table-wrap"><table><thead><tr><th>Descriere</th><th>U.M.</th><th>Preț unitar fără TVA</th><th><span className="sr-only">Acțiuni</span></th></tr></thead><tbody>{items.map((preset) => <tr key={preset.id}><td data-label="Descriere"><strong>{preset.description}</strong></td><td data-label="U.M.">{preset.unitOfMeasure.name} — {preset.unitOfMeasure.code}</td><td data-label="Preț">{money(preset.unitPrice, "RON")}</td><td data-label="Acțiuni" className="row-actions"><div className="table-actions"><Button variant="ghost" size="small" disabled={state.save.isPending || state.removal.isPending} onClick={() => { state.edit(preset) }}>Editează</Button><Button variant="danger" size="small" disabled={state.removal.isPending} onClick={() => { state.remove(preset) }}>Șterge</Button></div></td></tr>)}</tbody></table></div>}
+        {items.length === 0 ? <EmptyState>Nu există încă produse predefinite. Liniile facturii pot fi completate în continuare manual.</EmptyState> : <div className="table-wrap"><table><thead><tr><th>Descriere</th><th>U.M.</th><th>Preț unitar fără TVA</th><th><span className="sr-only">Acțiuni</span></th></tr></thead><tbody>{items.map((preset) => <tr key={preset.id}><td data-label="Descriere"><strong>{preset.description}</strong></td><td data-label="U.M.">{preset.unitOfMeasure.name} — {preset.unitOfMeasure.code}</td><td data-label="Preț">{money(preset.unitPrice, "RON")}<small>Cotă: {presetVatLabel(preset.preferredVatRateCode, vatRates)}</small></td><td data-label="Acțiuni" className="row-actions"><div className="table-actions"><Button variant="ghost" size="small" disabled={state.save.isPending || state.removal.isPending} onClick={() => { state.edit(preset) }}>Editează</Button><Button variant="danger" size="small" disabled={state.removal.isPending} onClick={() => { state.remove(preset) }}>Șterge</Button></div></td></tr>)}</tbody></table></div>}
         <LoadMore visible={state.presets.hasMore} pending={state.presets.loadingMore} onClick={state.presets.loadMore} />
       </section>
-      <section className="card sticky-card"><h2 ref={editHeading} tabIndex={-1} aria-live="polite">{editing === undefined ? "Produs nou" : "Editează produsul"}</h2><p>Descrierea, prețul și unitatea de măsură sunt salvate ca preset.</p>{state.save.error === null ? null : <ErrorAlert error={state.save.error} />}<form key={editing?.id ?? "new"} onSubmit={state.submit}><label>Descriere<input name="description" required defaultValue={editing?.description ?? ""} /></label><label>Unitate de măsură<select name="unitOfMeasure" required defaultValue={editing?.unitOfMeasure.code ?? "C62"}>{units.map((unit) => <option key={unit.code} value={unit.code}>{unit.name} — {unit.code}</option>)}</select></label><label>Preț unitar fără TVA<input name="unitPrice" required inputMode="decimal" pattern="\d+(?:[.,]\d{1,2})?" title="Număr nenegativ cu maximum două zecimale" defaultValue={editing?.unitPrice ?? ""} /></label><div className="form-actions">{editing === undefined ? null : <Button variant="ghost" disabled={state.save.isPending} onClick={state.cancelEdit}>Renunță</Button>}<Button type="submit" disabled={state.save.isPending}>{state.save.isPending ? "Se salvează…" : editing === undefined ? "Adaugă produs" : "Salvează modificările"}</Button></div></form></section>
+      <section className="card sticky-card"><h2 ref={editHeading} tabIndex={-1} aria-live="polite">{editing === undefined ? "Produs nou" : "Editează produsul"}</h2><p>Descrierea, prețul, unitatea de măsură și cota TVA preferată sunt salvate ca preset.</p>{state.save.error === null ? null : <ErrorAlert error={state.save.error} />}<form key={state.formKey} onSubmit={state.submit}><label>Descriere<input name="description" required defaultValue={editing?.description ?? ""} /></label><label>Unitate de măsură<select name="unitOfMeasure" required defaultValue={editing?.unitOfMeasure.code ?? "C62"}>{units.map((unit) => <option key={unit.code} value={unit.code}>{unit.name} — {unit.code}</option>)}</select></label><label>Preț unitar fără TVA<input name="unitPrice" required inputMode="decimal" pattern="\d+(?:[.,]\d{1,2})?" title="Număr nenegativ cu maximum două zecimale" defaultValue={editing?.unitPrice ?? ""} /></label><PresetVatField rates={vatRates} saved={editing?.preferredVatRateCode} /><div className="form-actions">{editing === undefined ? null : <Button variant="ghost" disabled={state.save.isPending} onClick={state.cancelEdit}>Renunță</Button>}<Button type="submit" disabled={state.save.isPending}>{state.save.isPending ? "Se salvează…" : editing === undefined ? "Adaugă produs" : "Salvează modificările"}</Button></div></form></section>
     </div>
   </Page>
 }

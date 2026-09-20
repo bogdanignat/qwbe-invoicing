@@ -14,7 +14,7 @@ import { useInvoiceAuthoringPresets } from "./invoice-authoring-presets-hooks.ts
 import { useInvoiceIssuance } from "./invoices-hooks.ts"
 import type { Customer, DraftInvoice, Issuer, UnitOfMeasure, VatCatalogue, VatRate } from "./models.ts"
 import { countyRequiresSector } from "./romanian-counties.ts"
-import { defaultVatCode, issuerForIssueDate, staleDraftLineIds, vatRatesForIssuer } from "./vat-defaults.ts"
+import { defaultVatCode, issuerForIssueDate, presetVatCode, staleDraftLineIds, vatRatesForIssuer } from "./vat-defaults.ts"
 
 export interface InvoiceAuthoringSessionInput {
   readonly initialDraft?: DraftInvoice
@@ -94,7 +94,9 @@ export const useInvoiceAuthoringSession = (input: InvoiceAuthoringSessionInput):
   const draftWorkflow = useInvoiceAuthoringDraft({ ...input, form, lines, setLines, forcedUpdateLineIds })
   const { draft } = draftWorkflow
   const authoringCustomers = useInvoiceAuthoringCustomers({ customers: input.customers, issuer: input.issuer, deriveDueDate: draft === undefined, setForm })
-  const authoringPresets = useInvoiceAuthoringPresets({ setLines })
+  const authoringPresets = useInvoiceAuthoringPresets({
+    setLines, vatCodeFor: (preferred) => presetVatCode(preferred, input.vatCatalogue, input.issuer, form.issueDate),
+  })
   const workflowPending = draftWorkflow.pending
   const readiness = authoringReadiness(form, lines, draft, workflowPending)
   const payload = authoringDocumentPayload(form, lines)

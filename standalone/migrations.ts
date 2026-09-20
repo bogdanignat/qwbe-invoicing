@@ -3,6 +3,8 @@ import { join } from "node:path"
 import { DatabaseSync } from "node:sqlite"
 
 import { invoicingMigrations, type InvoicingMigration } from "../cube/invoicing/index.ts"
+import { catalogMigrations } from "../cube/invoicing/catalog/index.ts"
+import { customersMigrations } from "../cube/invoicing/customers/index.ts"
 import { documentsMigrations } from "../cube/invoicing/documents/index.ts"
 import { paymentsMigrations } from "../cube/payments/index.ts"
 
@@ -20,8 +22,13 @@ const browserSessionsMigration: InvoicingMigration = {
     "CREATE INDEX browser_sessions_expiry ON browser_sessions (expires_at)",
   ],
 }
-const applicationMigrations: ReadonlyArray<InvoicingMigration> = [...invoicingMigrations, ...paymentsMigrations]
-  .sort((left, right) => left.name.localeCompare(right.name))
+// Each cube owns one baseline of its tables; the list runs in cube order, the
+// cube a foreign key points at before the cube that holds it, never by name.
+// Customers come first because drafts reference them; the catalog has no
+// foreign keys either way and sits with the other children.
+const applicationMigrations: ReadonlyArray<InvoicingMigration> = [
+  ...customersMigrations, ...catalogMigrations, ...invoicingMigrations, ...paymentsMigrations,
+]
 const invoicingPlan = { label: "", file: "invoicing.sqlite", migrations: [foundationMigration, ...applicationMigrations] }
 const documentsPlan = { label: "documents/", file: "documents.sqlite", migrations: [foundationMigration, ...documentsMigrations] }
 const sessionsPlan = { label: "sessions/", file: "sessions.sqlite", migrations: [browserSessionsMigration] }
@@ -40,8 +47,6 @@ export const documentsDatabasePath = (dataDirectory: string) => join(dataDirecto
 export const sessionsDatabasePath = (dataDirectory: string) => join(dataDirectory, sessionsPlan.file)
 
 const pathFor = (dataDirectory: string, plan: typeof plans[number]) => join(dataDirectory, plan.file)
-
-const rebuildsTables = (migration: InvoicingMigration): boolean => migration.foreignKeys === "off"
 
 const applyStatements = (database: DatabaseSync, migration: InvoicingMigration): void => {
   for (const statement of migration.statements) database.exec(statement)
@@ -76,15 +81,11 @@ const replayContract = (applied: ReadonlyArray<InvoicingMigration>): ContractSch
   const database = new DatabaseSync(":memory:")
   try {
     for (const migration of applied) {
-      // Outside a transaction, so the switch is honoured: SQLite ignores this
-      // pragma inside one, which is why applyPlan flips it before BEGIN.
-      if (rebuildsTables(migration)) database.exec("PRAGMA foreign_keys = OFF")
       try {
         applyStatements(database, migration)
       } catch {
         return { unreplayable: migration.name }
       }
-      if (rebuildsTables(migration)) database.exec("PRAGMA foreign_keys = ON")
     }
     return { objects: schemaObjects(database) }
   } finally {
@@ -178,22 +179,13 @@ const applyPlan = (dataDirectory: string, plan: typeof plans[number]): number =>
     transactionOpen = false
     const pending = pendingFor(database, plan)
     for (const migration of pending) {
-      const foreignKeysOff = rebuildsTables(migration)
-      if (foreignKeysOff) database.exec("PRAGMA foreign_keys = OFF")
-      try {
-        database.exec("BEGIN IMMEDIATE")
-        transactionOpen = true
-        applyStatements(database, migration)
-        if (foreignKeysOff && database.prepare("PRAGMA foreign_key_check").all().length > 0) {
-          throw new Error(`foreign key check failed after ${migration.name}`)
-        }
-        database.prepare("INSERT INTO schema_migrations (name, applied_at) VALUES (?, ?)")
-          .run(migration.name, new Date().toISOString())
-        database.exec("COMMIT")
-        transactionOpen = false
-      } finally {
-        if (foreignKeysOff && !transactionOpen) database.exec("PRAGMA foreign_keys = ON")
-      }
+      database.exec("BEGIN IMMEDIATE")
+      transactionOpen = true
+      applyStatements(database, migration)
+      database.prepare("INSERT INTO schema_migrations (name, applied_at) VALUES (?, ?)")
+        .run(migration.name, new Date().toISOString())
+      database.exec("COMMIT")
+      transactionOpen = false
     }
     return pending.length
   } catch (error) {
@@ -202,7 +194,7 @@ const applyPlan = (dataDirectory: string, plan: typeof plans[number]): number =>
     }
     throw error
   } finally {
-    try { database.exec("PRAGMA foreign_keys = ON") } finally { database.close() }
+    database.close()
   }
 }
 

@@ -3,9 +3,9 @@ import test from "node:test"
 
 import { Effect } from "effect"
 
-import { createInvoicingService, type InvoicingTransaction } from "../../application/invoicing.ts"
+import { createInvoicingService, type InvoicingDependencies } from "../../application/invoicing.ts"
 import { brandingNormalizer, contextProvider, each, emptyState, expectConflict, fixedClock, identity, idempotent, memoryStore, sequentialIds } from "../../application/memory-store.test-support.ts"
-import { DomainConflict, PermissionDenied, ResourceNotFound, ValidationFailure, type TransactionalStore } from "../../contracts/index.ts"
+import { DomainConflict, PermissionDenied, ResourceNotFound, ValidationFailure } from "../../contracts/index.ts"
 
 void test("issues deterministic immutable invoice snapshots through the public service", async () => {
   const state = emptyState()
@@ -145,7 +145,7 @@ void test("issues deterministic immutable invoice snapshots through the public s
 void test("failed invoice and proforma issuance rolls back both the document and its number", async () => {
   const state = emptyState()
   const baseStore = memoryStore(state)
-  const failingStore: TransactionalStore<InvoicingTransaction> = {
+  const failingStore: InvoicingDependencies["store"] = {
     transaction: (use) => baseStore.transaction((transaction) => use({
       ...transaction,
       saveIssuedInvoice: () => Effect.fail(new DomainConflict({ code: "forced_failure", message: "forced" })),

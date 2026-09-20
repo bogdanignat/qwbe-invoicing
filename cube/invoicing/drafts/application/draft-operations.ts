@@ -8,7 +8,7 @@ import type { DocumentSource, DraftInvoice } from "../../domain/invoice.ts"
 import type { CreateDraftInput, UpdateDraftInput } from "../../domain/inputs.ts"
 import { validateDocumentNotes, validateDocumentSource } from "../../domain/validation.ts"
 import { resolveVatConfiguration } from "../../registry/index.ts"
-import { authorDocument, buyerFrom, dates, documentSource, findEditable, withTotals } from "./authoring.ts"
+import { authorDocument, buyerFrom, dates, documentSource, findEditable, withTotals, type AuthoringTransaction } from "./authoring.ts"
 
 export interface DraftDocumentOperations {
   readonly createDraft: (input: CreateDraftInput) => Effect.Effect<DraftInvoice, InvoicingFailure>
@@ -19,7 +19,7 @@ export interface DraftDocumentOperations {
 }
 
 export const createDraftDocumentOperations = (
-  dependencies: OperationDependencies,
+  dependencies: OperationDependencies<AuthoringTransaction>,
   permissions: InvoicingPermissions,
   authorize: Authorize,
 ): DraftDocumentOperations => {

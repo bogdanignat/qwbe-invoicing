@@ -205,10 +205,12 @@ export const Customer = Schema.Struct({
 
 export const CustomerPage = pageOf(Customer)
 
+// A PUT replaces the whole preset, so omitting preferredVatRateCode removes the preference.
 export const ProductPresetInput = Schema.Struct({
   description: Schema.String,
   unitPrice: Schema.String,
   unitOfMeasure: UnitOfMeasure,
+  preferredVatRateCode: optionalString,
 }).annotations(bodyObject)
 
 export const ProductPreset = Schema.Struct({
@@ -217,6 +219,7 @@ export const ProductPreset = Schema.Struct({
   description: Schema.String,
   unitPrice: Schema.String,
   unitOfMeasure: UnitOfMeasure,
+  preferredVatRateCode: optionalString,
 })
 
 export const DraftLine = Schema.Struct({

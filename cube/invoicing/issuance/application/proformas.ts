@@ -6,10 +6,11 @@ import type { InvoicingFailure } from "../../contracts/failures.ts"
 import type { InvoicingPermissions } from "../../contracts/permissions.ts"
 import type { DocumentSource, Idempotent } from "../../domain/invoice.ts"
 import { calendarDate, validateDocumentSource } from "../../domain/validation.ts"
+import type { AuthoringTransaction } from "../../drafts/index.ts"
 import { validateIssuerForIssuance } from "../../registry/index.ts"
 import type { AuthoringProformaInput, IssueProformaInput, Proforma, ProformaSummary } from "../domain/proforma.ts"
+import { ensureChronology } from "./chronology.ts"
 import { fiscalYear, issuanceSource, numberedSnapshot } from "./snapshot.ts"
-import { ensureChronology } from "./invoices.ts"
 
 export interface ProformaOperations {
   readonly issueProforma: (input: Idempotent<AuthoringProformaInput | IssueProformaInput>) => Effect.Effect<Proforma, InvoicingFailure>
@@ -18,7 +19,7 @@ export interface ProformaOperations {
 }
 
 export const createProformaOperations = (
-  dependencies: OperationDependencies,
+  dependencies: OperationDependencies<AuthoringTransaction>,
   permissions: InvoicingPermissions,
   authorize: Authorize,
 ): ProformaOperations => {

@@ -3,8 +3,7 @@ import test from "node:test"
 
 import { ValidationFailure } from "../../contracts/failures.ts"
 import { article310VatExemptionReason } from "../../domain/validation.ts"
-import { validateParty } from "./party-validation.ts"
-import { normalizeBrandingText, validateCustomer, validateIssuer as validateIssuerOn } from "./validation.ts"
+import { normalizeBrandingText, validateIssuer as validateIssuerOn } from "./validation.ts"
 
 const validateIssuer = (issuer: Parameters<typeof validateIssuerOn>[0]): void => { validateIssuerOn(issuer) }
 const s = { vatCategoryCode: "S" as const, vatExemptionReason: null }
@@ -26,7 +25,7 @@ void test("normalizes branding text and rejects all Unicode Other categories", (
   }
 })
 
-void test("validates Romanian CUI, country, and issuer currency", () => {
+void test("requires a Romanian CUI, RON currency and valid VAT tuples for the issuer", () => {
   const party = {
     name: "Exemplu SRL",
     fiscalIdentifier: "45561046",
@@ -34,15 +33,6 @@ void test("validates Romanian CUI, country, and issuer currency", () => {
   }
   const hasIssue = (expected: string) => (error: unknown): boolean =>
     error instanceof ValidationFailure && error.issues.includes(expected)
-  assert.doesNotThrow(() => { validateParty(party) })
-  for (const fiscalIdentifier of ["19", "60", "12340", "12345674", "1234567897"]) {
-    assert.doesNotThrow(() => { validateParty({ ...party, fiscalIdentifier }) })
-  }
-  assert.doesNotThrow(() => { validateParty({ ...party, fiscalIdentifier: "" }) })
-  for (const fiscalIdentifier of ["12345678", "RO45561046", "ro45561046", "045561046", " 45561046 "]) {
-    assert.throws(() => { validateParty({ ...party, fiscalIdentifier }) }, hasIssue("fiscalIdentifier must be a valid Romanian CUI"))
-  }
-  assert.throws(() => { validateParty({ ...party, address: { ...party.address, countryCode: "DE" } }) }, hasIssue("address.countryCode must be RO"))
   const issuer = {
     ...party,
     organizationId: "org-1",
@@ -80,16 +70,6 @@ void test("validates Romanian CUI, country, and issuer currency", () => {
     fiscalIdentifier: "45561046",
     vatConfigurations: [{ code: "RO_REDUCED", rate: "11", ...s, effectiveFrom: "2026-01-01" }],
   }) })
-})
-
-void test("bounds customer payment terms to a practical calendar range", () => {
-  const customer = { partyType: "individual" as const, name: "Ana Pop", fiscalIdentifier: "", vatRegistered: false, address: {
-    countryCode: "RO", city: "Botoșani", street: "Strada 1", county: "RO-BT",
-  } }
-  assert.doesNotThrow(() => { validateCustomer({ ...customer, defaultPaymentTermDays: 3650 }) })
-  assert.throws(() => { validateCustomer({ ...customer, defaultPaymentTermDays: 3651 }) },
-    (error: unknown) => error instanceof ValidationFailure
-      && error.issues.includes("defaultPaymentTermDays must be an integer between 0 and 3650"))
 })
 
 void test("rejects overlapping effective ranges for the same tax code", () => {

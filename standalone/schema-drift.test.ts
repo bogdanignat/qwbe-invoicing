@@ -7,6 +7,8 @@ import { DatabaseSync } from "node:sqlite"
 import test from "node:test"
 
 import { invoicingMigrations } from "../cube/invoicing/index.ts"
+import { catalogMigrations } from "../cube/invoicing/catalog/index.ts"
+import { customersMigrations } from "../cube/invoicing/customers/index.ts"
 import { paymentsMigrations } from "../cube/payments/index.ts"
 import { handleApiRequest } from "./api.test-support.ts"
 import { createRequestAuthenticator } from "./auth.ts"
@@ -35,21 +37,38 @@ const tamper = (dataDirectory: string, statements: ReadonlyArray<string>): void 
   }
 }
 
-// A database stopped part-way through the contract: every migration it records
-// really ran, and the rest are pending. This is the ordinary upgrade a migrate
-// completes, so it must never be mistaken for an edited migration.
-const seedUpTo = (dataDirectory: string, through: string): void => {
+// A database stopped part-way through the contract: it holds a prefix of the
+// order the migrator itself runs, every migration it records really ran, and
+// the rest are pending. This is the ordinary upgrade a migrate completes, so it
+// must never be mistaken for an edited migration. The order is read from the
+// plan of an empty directory, so the fixture cannot drift from the runner.
+const seedThrough = (dataDirectory: string, through: string): ReadonlyArray<string> => {
+  const order = planMigrations(dataDirectory).pending.filter((name) => !name.includes("/"))
+  assert.ok(order.includes(through), `${through} is not in the migration order`)
+  const prefix = order.slice(0, order.indexOf(through) + 1)
+  const statements = new Map([...customersMigrations, ...catalogMigrations, ...invoicingMigrations, ...paymentsMigrations].map((migration) => [migration.name, migration.statements]))
   const database = new DatabaseSync(databasePath(dataDirectory))
   try {
-    database.exec("PRAGMA foreign_keys = OFF")
     database.exec("CREATE TABLE schema_migrations (name TEXT PRIMARY KEY, applied_at TEXT NOT NULL) STRICT")
     const record = database.prepare("INSERT INTO schema_migrations (name, applied_at) VALUES (?, ?)")
-    record.run("000-foundation", "2026-01-01")
-    const ordered = [...invoicingMigrations, ...paymentsMigrations].sort((left, right) => left.name.localeCompare(right.name))
-    for (const migration of ordered.filter(({ name }) => name <= through)) {
-      for (const statement of migration.statements) database.exec(statement)
-      record.run(migration.name, "2026-01-01")
+    for (const name of prefix) {
+      for (const statement of statements.get(name) ?? []) database.exec(statement)
+      record.run(name, "2026-01-01")
     }
+  } finally {
+    database.close()
+  }
+  return prefix
+}
+
+// Everything migrate could change: the schema objects and the recorded history.
+const storedState = (dataDirectory: string): ReadonlyArray<string> => {
+  const database = new DatabaseSync(databasePath(dataDirectory), { readOnly: true })
+  try {
+    return [
+      ...database.prepare("SELECT type, name, sql FROM sqlite_master ORDER BY type, name").all(),
+      ...database.prepare("SELECT name, applied_at FROM schema_migrations ORDER BY name").all(),
+    ].map((row) => JSON.stringify(row))
   } finally {
     database.close()
   }
@@ -125,14 +144,17 @@ void test("a freshly migrated database matches the migration contract", () => {
 void test("a database part-way through the contract is pending, not drifted", () => {
   const directory = mkdtempSync(join(tmpdir(), "qwbe-drift-"))
   try {
-    seedUpTo(directory, "010-product-presets-payment-terms")
+    assert.deepEqual(seedThrough(directory, "invoicing-001-baseline"),
+      ["000-foundation", "customers-001-baseline", "catalog-001-baseline", "invoicing-001-baseline"])
     assert.deepEqual(schemaDrift(directory), [])
-    assert.ok(planMigrations(directory).pending.length > 0)
+    assert.ok(planMigrations(directory).pending.includes("payments-001-baseline"))
     const plan = cli(directory, ["migrate", "--json"])
     assert.equal(plan.status, 0, plan.stderr)
     assert.deepEqual(reportOf(plan.stdout).schemaDrift, [])
-    applyMigrations(directory)
-    assert.deepEqual(schemaDrift(directory), [])
+    const apply = cli(directory, ["migrate", "--apply", "--json"])
+    assert.equal(apply.status, 0, apply.stderr)
+    assert.deepEqual(reportOf(apply.stdout).schemaDrift, [])
+    assert.deepEqual(planMigrations(directory).pending, [])
     assert.equal(databaseReady(directory), true)
   } finally {
     rmSync(directory, { recursive: true, force: true })
@@ -153,6 +175,30 @@ void test("an edited migration is reported as drift, refused by migrate and neve
     const doctor = cli(directory, ["doctor", "--json"])
     assert.equal(doctor.status, 1, doctor.stderr)
     assert.deepEqual(reportOf(doctor.stdout).schemaDrift, ["issuer_tax_configurations"])
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+// History the contract no longer names (a baseline reset, or a baseline renamed
+// after it ran) describes tables no pending migration can create again, so
+// migrate refuses before it writes anything, in dry-run and in apply alike.
+void test("history the contract does not recognise is refused before any migration runs", () => {
+  const directory = mkdtempSync(join(tmpdir(), "qwbe-drift-"))
+  try {
+    applyMigrations(directory)
+    tamper(directory, ["UPDATE schema_migrations SET name = '001-core' WHERE name = 'invoicing-001-baseline'"])
+    const before = storedState(directory)
+    assert.ok(schemaDrift(directory).length > 0)
+    for (const command of [["migrate", "--json"], ["migrate", "--apply", "--json"]]) {
+      const migrate = cli(directory, command)
+      assert.equal(migrate.status, 1, migrate.stderr)
+      assert.match(migrate.stderr, /recreate the database/)
+      const report = JSON.parse(migrate.stdout) as { readonly changed: number; readonly schemaDrift: ReadonlyArray<string> }
+      assert.equal(report.changed, 0)
+      assert.ok(report.schemaDrift.length > 0)
+      assert.deepEqual(storedState(directory), before)
+    }
   } finally {
     rmSync(directory, { recursive: true, force: true })
   }

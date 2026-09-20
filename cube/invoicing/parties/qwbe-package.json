@@ -1,0 +1,5 @@
+{
+  "name": "parties",
+  "kind": "cube",
+  "summary": "Romanian fiscal party rules shared by the issuer, saved customers and inline buyers: CUI, CNP, counties and sectors"
+}
