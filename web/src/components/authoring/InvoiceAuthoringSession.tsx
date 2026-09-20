@@ -1,13 +1,11 @@
-import { BuyerEditor } from "./BuyerEditor.tsx"
 import { ErrorAlert } from "../layout/AsyncState.tsx"
-import { DocumentHeader } from "../document/DocumentHeader.tsx"
 import { InvoiceLinesEditor } from "./InvoiceLinesEditor.tsx"
 import { InvoiceTotals } from "../document/InvoiceTotals.tsx"
 import { Page } from "../layout/Page.tsx"
-import { SellerSummary } from "../document/SellerSummary.tsx"
 import { Button } from "../ui/Button.tsx"
 import { ButtonLink } from "../ui/ButtonLink.tsx"
 import { useInvoiceAuthoringSession, type InvoiceAuthoringSessionInput } from "../../hooks/invoice-authoring-session-hooks.ts"
+import { InvoiceAuthoringHeader } from "./InvoiceAuthoringHeader.tsx"
 
 export const InvoiceAuthoringSession = (props: InvoiceAuthoringSessionInput) => {
   const state = useInvoiceAuthoringSession(props)
@@ -19,22 +17,7 @@ export const InvoiceAuthoringSession = (props: InvoiceAuthoringSessionInput) => 
     {feedback.issuerWarning === undefined ? null : <p className="status-note warning" role="status">{feedback.issuerWarning} Salvarea draftului rămâne disponibilă; API-ul verifică emiterea.</p>}
     {feedback.staleTaxWarning === null ? null : <p className="status-note warning" role="status" aria-live="polite">{feedback.staleTaxWarning}</p>}
     <form className="authoring-form" onSubmit={(event) => { event.preventDefault(); actions.save() }}>
-      <div className="card authoring-header">
-        <DocumentHeader
-          identity={<section className="document-identity">
-            <h2>{document.draft === undefined ? "DOCUMENT NOU" : "DRAFT"}</h2>
-            <p className="hint">Numărul se alocă la emitere.</p>
-            <div className="document-date-fields">
-              <label>Serie factură<select required disabled={status.pending || document.draft !== undefined} value={document.form.series} onChange={(event) => { actions.changeForm({ series: event.currentTarget.value }) }}>{document.invoiceSeries.map((series) => <option key={series} value={series}>{series}</option>)}</select></label>
-              <label>Data emiterii<input required disabled={status.pending} type="date" value={document.form.issueDate} onChange={(event) => { actions.chooseIssueDate(event.currentTarget.value) }} /></label>
-              <label>Data scadenței {status.dueDateRequired ? <span className="required">obligatorie la emitere</span> : <span className="optional">opțională în draft</span>}<input disabled={status.pending} type="date" min={document.form.issueDate} value={document.form.dueDate} aria-required={status.dueDateRequired} aria-describedby={feedback.dueDateIssue === null ? undefined : "invoice-due-date-issue"} onChange={(event) => { actions.chooseDueDate(event.currentTarget.value) }} /></label>
-              <div className="static-field"><span>Monedă</span><span className="fixed-value">RON</span></div>
-            </div>
-          </section>}
-          issuer={<SellerSummary issuer={document.issuer} />}
-          customer={<BuyerEditor form={document.form} customers={document.customers} disabled={status.pending} sectorRequired={document.buyerSectorRequired} onChange={actions.changeForm} onBuyerModeChange={actions.chooseBuyerMode} onSavedCustomerChange={actions.chooseCustomer} onPartyTypeChange={actions.choosePartyType} onCountyChange={actions.chooseCounty} onFiscalIdentifierChange={actions.changeFiscalIdentifier} onSectorChange={actions.chooseSector} />}
-        />
-      </div>
+      <InvoiceAuthoringHeader state={state} />
       <div className="authoring-main">
         {feedback.dueDateIssue === null ? null : <p className="status-note warning" id="invoice-due-date-issue">{feedback.dueDateIssue} Draftul poate fi salvat fără scadență.</p>}
         <div className="card authoring-section">

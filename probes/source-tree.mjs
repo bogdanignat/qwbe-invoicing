@@ -34,7 +34,7 @@ export const discoverCubeUnits = (root, cubeRoots) => {
   return units.sort((left, right) => left.id.localeCompare(right.id))
 }
 
-export const sourceFilesOwnedBy = (unit, allUnits) => {
+export const sourceFilesOwnedBy = (unit, allUnits, excludedDirectories = new Set()) => {
   const childRoots = new Set(
     allUnits
       .filter((candidate) => candidate.directory !== unit.directory && candidate.directory.startsWith(`${unit.directory}${sep}`))
@@ -43,7 +43,7 @@ export const sourceFilesOwnedBy = (unit, allUnits) => {
   const files = []
 
   const visit = (directory) => {
-    if (childRoots.has(directory)) return
+    if (childRoots.has(directory) || excludedDirectories.has(directory)) return
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
       if (entry.isSymbolicLink() || entry.name.startsWith(".")) continue
       const fullPath = join(directory, entry.name)

@@ -73,6 +73,10 @@ void test("requires integer issuer terms and decodes tax configuration", () => {
     { registered: false, effectiveFrom: "2026-01-01", nonVatBasis: "article_310" })
   assert.throws(() => decodeIssuer({ ...input, currentVat: { registered: false, effectiveFrom: "2026-01-01", nonVatBasis: "article_310" } }), /invalid currentVat projection/)
   assert.throws(() => decodeIssuer({ ...input, defaultPaymentTermDays: "15" }), /invalid defaultPaymentTermDays/)
+  assert.throws(
+    () => decodeIssuer({ ...input, legalForm: undefined, defaultPaymentTermDays: "15" }),
+    /invalid legalForm/,
+  )
 })
 
 void test("decodes document series and requires supported document types", () => {

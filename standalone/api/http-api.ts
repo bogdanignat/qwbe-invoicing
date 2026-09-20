@@ -1,18 +1,13 @@
-import {
-  HttpApi,
-  HttpApiEndpoint,
-  HttpApiGroup,
-  HttpApiMiddleware,
-  HttpApiSchema,
-  HttpApiSecurity,
-  OpenApi,
-} from "@effect/platform"
-import type { HttpMethod } from "@effect/platform/HttpMethod"
-import { Context, Schema } from "effect"
+import { HttpApi, HttpApiGroup, OpenApi } from "@effect/platform"
 
-import type { RequestContext } from "../../cube/invoicing/index.ts"
+import { draftEndpoints as d } from "./http-endpoints-drafts.ts"
+import { fiscalEndpoints as f } from "./http-endpoints-fiscal.ts"
+import { documentEndpoints as x, sessionEndpoints as s } from "./http-endpoints-host.ts"
+import { masterDataEndpoints as m } from "./http-endpoints-master-data.ts"
 
-import * as S from "./http-schemas.ts"
+export { CurrentRequest, CurrentSession } from "./api-context.ts"
+export type { BrowserPrincipal } from "./api-context.ts"
+export { ApiAuthentication, SessionAuthentication } from "./http-api-shared.ts"
 
 export const operationNames = [
   "getIssuer", "configureIssuer", "listDocumentSeries", "addDocumentSeries", "listUnitOfMeasures", "listVatRegimes",
@@ -24,201 +19,28 @@ export const operationNames = [
   "listIssuedInvoices", "getIssuedInvoice", "renderInvoicePdf", "downloadInvoicePdf",
   "downloadInvoiceEFactura", "downloadCorrectionEFactura",
   "issueDraftProforma", "issueProforma", "listProformas", "getProforma", "issueInvoiceFromProforma", "createDraftInvoiceFromProforma",
-  "renderProformaPdf", "downloadProformaPdf",
-  "getSession", "createSession", "deleteSession",
+  "renderProformaPdf", "downloadProformaPdf", "getSession", "createSession", "deleteSession",
 ] as const
 export type OperationName = typeof operationNames[number]
 
-const bearer = HttpApiSecurity.bearer.pipe(
-  HttpApiSecurity.annotate(OpenApi.Description, "Authorization: Bearer <standalone API token>"),
-)
-const sessionCookie = HttpApiSecurity.apiKey({ key: "qwbe_session", in: "cookie" }).pipe(
-  HttpApiSecurity.annotate(OpenApi.Description, "Opaque browser session cookie"),
-)
-export class CurrentRequest extends Context.Tag("qwbe-invoicing/CurrentRequest")<CurrentRequest, RequestContext>() {}
-export interface BrowserPrincipal {
-  readonly csrfToken: string
-  readonly cookie: string
-}
-export class CurrentSession extends Context.Tag("qwbe-invoicing/CurrentSession")<CurrentSession, BrowserPrincipal>() {}
-export class ApiAuthentication extends HttpApiMiddleware.Tag<ApiAuthentication>()("ApiAuthentication", {
-  security: { bearerAuth: bearer, sessionCookie },
-  failure: Schema.Union(S.AuthenticationRequiredError, S.CsrfError, S.BusinessUnavailableError),
-  provides: CurrentRequest,
-}) {}
-export class SessionAuthentication extends HttpApiMiddleware.Tag<SessionAuthentication>()("SessionAuthentication", {
-  security: { sessionCookie },
-  failure: S.AuthenticationRequiredError,
-  provides: CurrentSession,
-}) {}
-
-const id = HttpApiSchema.param("id", Schema.String)
-const draftId = HttpApiSchema.param("draftId", Schema.String)
-const lineId = HttpApiSchema.param("lineId", Schema.String)
-const invoiceId = HttpApiSchema.param("invoiceId", Schema.String)
-const proformaId = HttpApiSchema.param("proformaId", Schema.String)
-const paymentId = HttpApiSchema.param("paymentId", Schema.String)
-const csrfHeaders = Schema.Struct({
-  "x-csrf-token": Schema.optional(Schema.String.annotations({
-    description: "Required for unsafe requests authenticated with sessionCookie; ignored for bearerAuth.",
-  })),
-})
-const requiredCsrfHeaders = Schema.Struct({
-  "x-csrf-token": Schema.String.annotations({ description: "CSRF token returned by GET or POST /api/session." }),
-})
-const idempotentHeaders = Schema.Struct({
-  "x-csrf-token": Schema.optional(Schema.String.annotations({
-    description: "Required for unsafe requests authenticated with sessionCookie; ignored for bearerAuth.",
-  })),
-  "idempotency-key": Schema.String.annotations({
-    description: "Opaque caller-generated key, unique per organization and logical numbered-document operation.",
-  }),
-})
-
-type Endpoint<N extends string, M extends HttpMethod, P, U, B, H, S, E, R, RE> =
-  HttpApiEndpoint.HttpApiEndpoint<N, M, P, U, B, H, S, E, R, RE>
-const retryAfterHeader = {
-  description: "Cooldown remaining in whole seconds.",
-  required: true,
-  schema: { type: "integer", minimum: 1, maximum: 30 },
-} as const
-const addRetryAfterHeader = (operation: Record<string, unknown>): Record<string, unknown> => {
-  const responses = operation.responses as Readonly<Record<string, Readonly<Record<string, unknown>>>>
-  const throttled = responses["429"]
-  if (throttled === undefined) return operation
-  const headers = throttled.headers as Readonly<Record<string, unknown>> | undefined
-  return {
-    ...operation,
-    responses: {
-      ...responses,
-      "429": { ...throttled, headers: { ...headers, "Retry-After": retryAfterHeader } },
-    },
-  }
-}
-const invoicingBase = <N extends string, M extends HttpMethod, P, U, B, H, Success, E, R, RE>(
-  endpoint: Endpoint<N, M, P, U, B, H, Success, E, R, RE>,
-) => endpoint
-  .addError(S.PermissionDeniedError)
-  .addError(S.InvoicingInternalError)
-  .addError(S.BusinessUnavailableError)
-  .addError(S.TooManyAttemptsError)
-  .middleware(ApiAuthentication)
-  .annotate(OpenApi.Transform, addRetryAfterHeader)
-const documentsBase = <N extends string, M extends HttpMethod, P, U, B, H, Success, E, R, RE>(
-  endpoint: Endpoint<N, M, P, U, B, H, Success, E, R, RE>,
-) => endpoint
-  .addError(S.DocumentsPermissionDeniedError)
-  .addError(S.DocumentsInternalError)
-  .addError(S.BusinessUnavailableError)
-  .addError(S.TooManyAttemptsError)
-  .middleware(ApiAuthentication)
-  .annotate(OpenApi.Transform, addRetryAfterHeader)
-const body = <N extends string, M extends HttpMethod, P, U, B, H, Success, E, R, RE>(
-  endpoint: Endpoint<N, M, P, U, B, H, Success, E, R, RE>,
-) => endpoint.setHeaders(csrfHeaders)
-  .addError(S.InvalidJsonError)
-  .addError(S.PayloadTooLargeError)
-  .addError(S.CsrfError)
-const idempotentBody = <N extends string, M extends HttpMethod, P, U, B, H, Success, E, R, RE>(
-  endpoint: Endpoint<N, M, P, U, B, H, Success, E, R, RE>,
-) => endpoint.setHeaders(idempotentHeaders)
-  .addError(S.InvalidJsonError)
-  .addError(S.PayloadTooLargeError)
-  .addError(S.CsrfError)
-const validation = <N extends string, M extends HttpMethod, P, U, B, H, Success, E, R, RE>(
-  endpoint: Endpoint<N, M, P, U, B, H, Success, E, R, RE>,
-) => endpoint.addError(S.ValidationError)
-const notFound = <N extends string, M extends HttpMethod, P, U, B, H, Success, E, R, RE>(
-  endpoint: Endpoint<N, M, P, U, B, H, Success, E, R, RE>,
-) => endpoint.addError(S.ResourceNotFoundError)
-const conflict = <N extends string, M extends HttpMethod, P, U, B, H, Success, E, R, RE>(
-  endpoint: Endpoint<N, M, P, U, B, H, Success, E, R, RE>,
-) => endpoint.addError(S.DomainConflictError)
-
 const invoicing = HttpApiGroup.make("invoicing")
-  .add(invoicingBase(notFound(HttpApiEndpoint.get("getIssuer", "/issuer").addSuccess(S.Issuer))))
-  .add(invoicingBase(validation(body(HttpApiEndpoint.put("configureIssuer", "/issuer").setPayload(S.IssuerInput).addSuccess(S.Issuer)))))
-  .add(invoicingBase(HttpApiEndpoint.get("listDocumentSeries", "/document-series").addSuccess(Schema.Array(S.DocumentSeries))))
-  .add(invoicingBase(conflict(validation(body(HttpApiEndpoint.post("addDocumentSeries", "/document-series").setPayload(S.DocumentSeriesInput).addSuccess(S.DocumentSeries))))))
-  .add(invoicingBase(HttpApiEndpoint.get("listUnitOfMeasures", "/unit-of-measures").addSuccess(Schema.Array(S.UnitOfMeasure))))
-  .add(invoicingBase(validation(HttpApiEndpoint.get("listVatRegimes", "/vat-regimes").addSuccess(S.VatCatalogue))))
-  .add(invoicingBase(validation(HttpApiEndpoint.get("listCustomers", "/customers").setUrlParams(S.PageQuery).addSuccess(S.CustomerPage))))
-  .add(invoicingBase(notFound(HttpApiEndpoint.get("getCustomer")`/customers/${id}`.addSuccess(S.Customer))))
-  .add(invoicingBase(validation(body(HttpApiEndpoint.post("createCustomer", "/customers").setPayload(S.CustomerInput).addSuccess(S.Customer)))))
-  .add(invoicingBase(notFound(validation(body(HttpApiEndpoint.put("updateCustomer")`/customers/${id}`.setPayload(S.CustomerInput).addSuccess(S.Customer))))))
-  .add(invoicingBase(conflict(notFound(body(HttpApiEndpoint.del("deleteCustomer")`/customers/${id}`.addSuccess(S.Deleted))))))
-  .add(invoicingBase(validation(HttpApiEndpoint.get("listProductPresets", "/product-presets").setUrlParams(S.PageQuery).addSuccess(S.ProductPresetPage))))
-  .add(invoicingBase(validation(body(HttpApiEndpoint.post("createProductPreset", "/product-presets").setPayload(S.ProductPresetInput).addSuccess(S.ProductPreset)))))
-  .add(invoicingBase(notFound(validation(body(HttpApiEndpoint.put("updateProductPreset")`/product-presets/${id}`
-    .setPayload(S.ProductPresetInput).addSuccess(S.ProductPreset))))))
-  .add(invoicingBase(notFound(body(HttpApiEndpoint.del("deleteProductPreset")`/product-presets/${id}`.addSuccess(S.Deleted)))))
-  .add(invoicingBase(validation(HttpApiEndpoint.get("listDrafts", "/drafts").setUrlParams(S.ListQuery).addSuccess(S.DraftInvoicePage))))
-  .add(invoicingBase(notFound(HttpApiEndpoint.get("getDraft")`/drafts/${id}`.addSuccess(S.DraftInvoice))))
-  .add(invoicingBase(notFound(validation(body(HttpApiEndpoint.post("createDraft", "/drafts").setPayload(S.DraftInput).addSuccess(S.DraftInvoice))))))
-  .add(invoicingBase(conflict(notFound(validation(body(HttpApiEndpoint.put("updateDraft")`/drafts/${id}`.setPayload(S.UpdateDraftInput).addSuccess(S.DraftInvoice)))))))
-  .add(invoicingBase(conflict(notFound(body(HttpApiEndpoint.del("deleteDraft")`/drafts/${id}`.addSuccess(S.Deleted))))))
-  .add(invoicingBase(conflict(notFound(validation(body(HttpApiEndpoint.post("addDraftLine")`/drafts/${draftId}/lines`.setPayload(S.DraftLineInput).addSuccess(S.DraftInvoice)))))))
-  .add(invoicingBase(conflict(notFound(validation(body(HttpApiEndpoint.put("updateDraftLine")`/drafts/${draftId}/lines/${lineId}`.setPayload(S.DraftLineInput).addSuccess(S.DraftInvoice)))))))
-  .add(invoicingBase(conflict(notFound(body(HttpApiEndpoint.del("deleteDraftLine")`/drafts/${draftId}/lines/${lineId}`.addSuccess(S.DraftInvoice))))))
-  .add(invoicingBase(conflict(notFound(validation(idempotentBody(HttpApiEndpoint.post("issueDraftInvoice")`/drafts/${draftId}/issue`.addSuccess(S.IssuedInvoice)))))))
-  .add(invoicingBase(notFound(HttpApiEndpoint.get("listPayments")`/invoices/${invoiceId}/payments`.addSuccess(S.PaymentSummary))))
-  .add(invoicingBase(conflict(notFound(validation(idempotentBody(HttpApiEndpoint.post("recordPayment")`/invoices/${invoiceId}/payments`.setPayload(S.PaymentInput).addSuccess(S.RecordPaymentResult)))))))
-  .add(invoicingBase(conflict(notFound(validation(idempotentBody(HttpApiEndpoint.post("reversePayment")`/invoices/${invoiceId}/payments/${paymentId}/reversal`.setPayload(S.ReversalInput).addSuccess(S.RecordPaymentResult)))))))
-  .add(invoicingBase(conflict(notFound(validation(idempotentBody(HttpApiEndpoint.post("createCorrection")`/invoices/${invoiceId}/corrections`.setPayload(S.CorrectionInput).addSuccess(S.Correction)))))))
-  .add(invoicingBase(validation(HttpApiEndpoint.get("listCorrections")`/invoices/${invoiceId}/corrections`.setUrlParams(S.SourceFilter).addSuccess(Schema.Array(S.Correction)))))
-  .add(invoicingBase(notFound(HttpApiEndpoint.get("getCorrection")`/corrections/${id}`.addSuccess(S.Correction))))
-  // The e-Factura XML is a function of the frozen snapshot, so it is served by
-  // the group that owns that snapshot rather than by `documents`, which hands
-  // back stored artifacts. Nothing is persisted here: the same document always
-  // renders the same bytes, and the document can no longer change.
-  .add(invoicingBase(validation(notFound(HttpApiEndpoint.get("downloadCorrectionEFactura")`/corrections/${id}/efactura.xml`
-    .addSuccess(S.EFacturaXml)))))
-  .add(invoicingBase(validation(HttpApiEndpoint.get("listIssuedInvoices", "/invoices").setUrlParams(S.ListQuery).addSuccess(S.IssuedInvoicePage))))
-  .add(invoicingBase(conflict(notFound(validation(idempotentBody(HttpApiEndpoint.post("issueInvoice", "/invoices").setPayload(S.AuthoringDocumentInput).addSuccess(S.IssuedInvoice)))))))
-  .add(invoicingBase(notFound(HttpApiEndpoint.get("getIssuedInvoice")`/invoices/${id}`.addSuccess(S.IssuedInvoice))))
-  .add(invoicingBase(validation(notFound(HttpApiEndpoint.get("downloadInvoiceEFactura")`/invoices/${id}/efactura.xml`
-    .addSuccess(S.EFacturaXml)))))
-  .add(invoicingBase(conflict(notFound(validation(idempotentBody(HttpApiEndpoint.post("issueDraftProforma")`/drafts/${draftId}/proformas`
-    .setPayload(S.IssueProformaInput).addSuccess(S.Proforma)))))))
-  .add(invoicingBase(validation(HttpApiEndpoint.get("listProformas", "/proformas").setUrlParams(S.ListQuery).addSuccess(S.ProformaPage))))
-  .add(invoicingBase(conflict(notFound(validation(idempotentBody(HttpApiEndpoint.post("issueProforma", "/proformas")
-    .setPayload(S.AuthoringProformaInput).addSuccess(S.Proforma)))))))
-  .add(invoicingBase(notFound(HttpApiEndpoint.get("getProforma")`/proformas/${id}`.addSuccess(S.Proforma))))
-  .add(invoicingBase(conflict(notFound(validation(idempotentBody(HttpApiEndpoint.post("issueInvoiceFromProforma")`/proformas/${id}/invoice`
-    .setPayload(S.ConvertProformaInput).addSuccess(S.IssuedInvoice)))))))
-  .add(invoicingBase(conflict(notFound(validation(idempotentBody(HttpApiEndpoint.post("createDraftInvoiceFromProforma")`/proformas/${id}/draft-invoice`
-    .setPayload(S.ConvertProformaInput).addSuccess(S.DraftInvoice)))))))
-
+  .add(m.getIssuer).add(m.configureIssuer).add(m.listDocumentSeries).add(m.addDocumentSeries)
+  .add(m.listUnitOfMeasures).add(m.listVatRegimes)
+  .add(m.listCustomers).add(m.getCustomer).add(m.createCustomer).add(m.updateCustomer).add(m.deleteCustomer)
+  .add(m.listProductPresets).add(m.createProductPreset).add(m.updateProductPreset).add(m.deleteProductPreset)
+  .add(d.listDrafts).add(d.getDraft).add(d.createDraft).add(d.updateDraft).add(d.deleteDraft)
+  .add(d.addDraftLine).add(d.updateDraftLine).add(d.deleteDraftLine).add(d.issueDraftInvoice)
+  .add(f.listPayments).add(f.recordPayment).add(f.reversePayment).add(f.createCorrection)
+  .add(f.listCorrections).add(f.getCorrection).add(f.downloadCorrectionEFactura)
+  .add(f.listIssuedInvoices).add(f.issueInvoice).add(f.getIssuedInvoice).add(f.downloadInvoiceEFactura)
+  .add(f.issueDraftProforma).add(f.listProformas).add(f.issueProforma).add(f.getProforma)
+  .add(f.issueInvoiceFromProforma).add(f.createDraftInvoiceFromProforma)
 const documents = HttpApiGroup.make("documents")
-  .add(documentsBase(body(HttpApiEndpoint.post("renderInvoicePdf")`/invoices/${invoiceId}/pdf`.addSuccess(S.Artifact)
-    .addError(S.DocumentNotFoundError).addError(S.ArtifactConflictError))))
-  .add(documentsBase(HttpApiEndpoint.get("downloadInvoicePdf")`/invoices/${invoiceId}/pdf`.addSuccess(S.Pdf)
-    .addError(S.DocumentNotFoundError)))
-  .add(documentsBase(body(HttpApiEndpoint.post("renderProformaPdf")`/proformas/${proformaId}/pdf`.setPayload(S.EmptyInput)
-    .addSuccess(S.ProformaArtifact).addError(S.DocumentNotFoundError).addError(S.ArtifactConflictError))))
-  .add(documentsBase(HttpApiEndpoint.get("downloadProformaPdf")`/proformas/${proformaId}/pdf`.addSuccess(S.Pdf)
-    .addError(S.DocumentNotFoundError)))
-
-const sessions = HttpApiGroup.make("sessions")
-  .add(HttpApiEndpoint.get("getSession", "/session").addSuccess(S.AuthenticatedSession)
-    .addError(S.SessionInternalError).addError(S.ReadinessError)
-    .middleware(SessionAuthentication))
-  .add(HttpApiEndpoint.post("createSession", "/session").setPayload(S.LoginInput).addSuccess(S.AuthenticatedSession)
-    .addError(S.InvalidJsonError).addError(S.InvalidCredentialsRequestError).addError(S.InvalidCredentialsError)
-    .addError(S.TooManyAttemptsError)
-    .addError(S.OriginForbiddenError)
-    .addError(S.PayloadTooLargeError)
-    .addError(S.SessionInternalError).addError(S.ReadinessError)
-    .annotate(OpenApi.Transform, addRetryAfterHeader))
-  .add(HttpApiEndpoint.del("deleteSession", "/session").setHeaders(requiredCsrfHeaders).addSuccess(S.LoggedOutSession)
-    .addError(S.CsrfError).addError(S.SessionInternalError).addError(S.ReadinessError)
-    .middleware(SessionAuthentication))
+  .add(x.renderInvoicePdf).add(x.downloadInvoicePdf).add(x.renderProformaPdf).add(x.downloadProformaPdf)
+const sessions = HttpApiGroup.make("sessions").add(s.getSession).add(s.createSession).add(s.deleteSession)
 
 export const applicationHttpApi = HttpApi.make("application")
-  .add(invoicing)
-  .add(documents)
-  .add(sessions)
-  .prefix("/api")
+  .add(invoicing).add(documents).add(sessions).prefix("/api")
   .annotateContext(OpenApi.annotations({
     title: "QWBE Invoicing API",
     description: "Standalone invoice-core, PDF artifact, and browser-session HTTP contract.",

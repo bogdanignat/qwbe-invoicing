@@ -367,6 +367,24 @@ Rules:
 - do not delete useful comments because comments are not counted;
 - do not create tiny pass-through modules only to manipulate the metric.
 
+The same 6,000-character file cap also covers production TypeScript/JavaScript in
+`standalone/` and `web/`, via `sizeFileRoots`. These are file-only roots, not fake
+cube units: the 40,000-character / 15-file unit caps still apply to each cube's own
+sources. `sizeExcludedDirectories` excludes only the generated `standalone/ui-dist`
+tree; test/spec/test-support sources and ordinary build/dependency directories are
+not production measurements. Overlapping roots are deduplicated and invalid roots
+fail the gate. `bin/` and root tooling/config files are outside this extension.
+
+Host adapters follow the existing domain ports rather than arbitrary file slices.
+`sqlite-store.ts` owns transaction lifetime and composes same-connection adapters;
+payments has its own adapter and store. API handlers receive a request-scoped service
+access function, not database or renderer factories. Service construction remains
+per request. Browser transport/session state has one owner, workflow hooks compose
+pure state and domain clients, and views compose presentation components. Existing
+public entry points remain facades; internal modules import leaf dependencies, not
+their own facade. This applies the CRM pack's ownership/injected-dependency approach
+without copying its mother-bound store, runtime mounting or metadata-driven UI.
+
 ### Known limitation in the mother size scanner
 
 The current QWBE `unitDirs` discovers only top-level cube directories and recursively counts their descendants (plus the kernel, `pg`, and `metadata` subsystems as their own units since QWB-41/QWB-44; a top-level `frontend/` in a pack is skipped at depth 0 only). A nested child cube is therefore included in the parent's measured unit rather than measured as an independent recursive unit.

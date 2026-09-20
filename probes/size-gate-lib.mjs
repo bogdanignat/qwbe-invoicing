@@ -1,5 +1,5 @@
-import { readFileSync } from "node:fs"
-import { relative } from "node:path"
+import { existsSync, lstatSync, readFileSync } from "node:fs"
+import { isAbsolute, join, relative, resolve, sep } from "node:path"
 
 import ts from "typescript"
 
@@ -97,7 +97,31 @@ export const measureFile = (path) => {
   return { raw: raw.length, code: stripCommentsAndBlankLines(raw, path).length }
 }
 
-export const inspectSizes = (root, cubeRoots) => {
+const containedPath = (root, path) => {
+  if (typeof path !== "string" || path.length === 0 || isAbsolute(path)) {
+    throw new Error(`Invalid size source root or exclusion: ${String(path)}`)
+  }
+  const absolute = resolve(root, path)
+  const local = relative(resolve(root), absolute)
+  if (local === "" || local === ".." || local.startsWith(`..${sep}`)) {
+    throw new Error(`Size source root or exclusion must be inside the repository: ${path}`)
+  }
+  return absolute
+}
+
+const fileRoot = (root, path) => {
+  const directory = containedPath(root, path)
+  let current = resolve(root)
+  for (const segment of relative(current, directory).split(sep)) {
+    current = join(current, segment)
+    if (!existsSync(current) || !lstatSync(current).isDirectory() || lstatSync(current).isSymbolicLink()) {
+      throw new Error(`Invalid size source root (expected a real directory): ${path}`)
+    }
+  }
+  return { directory }
+}
+
+export const inspectSizes = (root, cubeRoots, { fileRoots = [], excludedDirectories = [] } = {}) => {
   const units = discoverCubeUnits(root, cubeRoots)
   const files = []
   const measuredUnits = units.map((unit) => {
@@ -111,6 +135,18 @@ export const inspectSizes = (root, cubeRoots) => {
       raw: measured.reduce((total, file) => total + file.raw, 0),
     }
   })
+  const excluded = new Set(excludedDirectories.map((path) => containedPath(root, path)))
+  const seen = new Set(files.map((file) => file.path))
+  for (const path of fileRoots) {
+    const unit = fileRoot(root, path)
+    if ([...excluded].some((directory) => unit.directory === directory || unit.directory.startsWith(`${directory}${sep}`))) continue
+    for (const source of sourceFilesOwnedBy(unit, [unit], excluded).filter((source) => !isTestFile(source))) {
+      const local = toPosix(relative(root, source))
+      if (seen.has(local)) continue
+      seen.add(local)
+      files.push({ path: local, ...measureFile(source) })
+    }
+  }
   return { files: files.sort((left, right) => left.path.localeCompare(right.path)), units: measuredUnits }
 }
 

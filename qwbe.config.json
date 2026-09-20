@@ -2,6 +2,13 @@
   "cubeRoots": [
     "cube"
   ],
+  "sizeFileRoots": [
+    "standalone",
+    "web"
+  ],
+  "sizeExcludedDirectories": [
+    "standalone/ui-dist"
+  ],
   "caps": {
     "maxCharsPerFile": 6000,
     "maxCharsPerUnit": 40000,

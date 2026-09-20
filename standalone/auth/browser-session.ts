@@ -1,14 +1,22 @@
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto"
+import { randomBytes } from "node:crypto"
 import { readFileSync } from "node:fs"
 import { DatabaseSync } from "node:sqlite"
 
 import type { RuntimeConfig } from "../config.ts"
 import { sessionsDatabasePath } from "../storage/migrations.ts"
+import {
+  cookieAttributes,
+  cookieName,
+  cookieValue,
+  sameOrigin,
+  sameValue,
+  secureOrigin,
+  sessionIdPattern,
+  sha256,
+} from "./browser-session-helpers.ts"
 
-const cookieName = "qwbe_session"
 const sessionLifetimeSeconds = 60 * 60 * 24 * 30
 const safeMethods = new Set(["GET", "HEAD", "OPTIONS"])
-const sessionIdPattern = /^[A-Za-z0-9_-]{43}$/
 
 interface AuthenticatedSession {
   readonly kind: "authenticated"
@@ -50,49 +58,9 @@ interface LoginRequest {
   readonly host?: string | undefined
 }
 
-const sameValue = (actual: string, expected: string): boolean => {
-  const actualBytes = Buffer.from(actual)
-  const expectedBytes = Buffer.from(expected)
-  return actualBytes.length === expectedBytes.length && timingSafeEqual(actualBytes, expectedBytes)
-}
-
-const sameOrigin = (origin: string | undefined, host: string | undefined): boolean => {
-  if (origin === undefined || host === undefined) return false
-  try {
-    const parsed = new URL(origin)
-    return (parsed.protocol === "http:" || parsed.protocol === "https:") && parsed.host === host
-  } catch {
-    return false
-  }
-}
-
-const secureOrigin = (origin: string | undefined): boolean => {
-  try {
-    return origin !== undefined && new URL(origin).protocol === "https:"
-  } catch {
-    return false
-  }
-}
-
-const cookieValue = (header: string | undefined): string | undefined => {
-  if (header === undefined) return undefined
-  let found: string | undefined
-  for (const part of header.split(";")) {
-    const [name, ...value] = part.trim().split("=")
-    if (name !== cookieName) continue
-    if (found !== undefined) return undefined
-    found = value.join("=") || undefined
-  }
-  return found
-}
-
 const configuredToken = (config: RuntimeConfig): string | undefined => config.authTokenFile === undefined
   ? undefined
   : readFileSync(config.authTokenFile, "utf8").trim()
-
-const sha256 = (value: string): string => createHash("sha256").update(value).digest("hex")
-const cookieAttributes = (secure: boolean): string =>
-  `Path=/api; HttpOnly; SameSite=Strict${secure ? "; Secure" : ""}`
 
 export interface BrowserSession {
   readonly login: (request: LoginRequest) => SessionLogin

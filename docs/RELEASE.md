@@ -11,6 +11,20 @@ docs/RELEASE.md   (this file)
 docs/LOCAL_DEVELOPMENT.md
 ```
 
+## Source verification before building a release
+
+Run `pnpm verify` before building the image. The size gate keeps the existing
+6,000-character file cap and the 40,000-character / 15-file cube caps; it also checks
+production source files under `standalone/` and `web/` without treating either tree
+as a cube. Generated `standalone/ui-dist` is excluded, not runtime adapters. `bin/`
+and root tooling/config files are outside that file-only extension.
+
+Host/UI refactors must also preserve the HTTP contract and runtime error/idempotency
+mapping, transaction behavior, session lifetime and PDF assets. Verify browser flows
+on an isolated fixture and smoke-test the built runtime, not a live data volume.
+The UI builder intentionally copies only `standalone/http/ui-routes.ts` from the
+host; browser imports must not expand that runtime dependency accidentally.
+
 ## Install (first time, production host)
 
 ```bash
