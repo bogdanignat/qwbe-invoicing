@@ -1,0 +1,36 @@
+@theme {
+  --font-invoice-sans: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-invoice-display: Georgia, "Times New Roman", serif;
+  --color-invoice-ink: #17211b;
+  --color-invoice-muted: #68726b;
+  --color-invoice-label: #39443d;
+  --color-invoice-border: #dfe5e0;
+  --color-invoice-surface: #ffffff;
+  --color-invoice-canvas: #f4f6f3;
+  --color-invoice-primary: #173f2b;
+  --color-invoice-primary-hover: #225a3d;
+  --color-invoice-primary-soft: #dff4e7;
+  --color-invoice-on-primary: #ffffff;
+  --color-invoice-danger: #a73333;
+  --color-invoice-danger-text: #6f2424;
+  --color-invoice-danger-soft: #fff0ed;
+  --color-invoice-focus: #79c894;
+  --color-invoice-control-border: #cfd7d1;
+  --color-invoice-control-border-hover: #98aa9e;
+  --color-invoice-sidebar-text: #eef7f1;
+  --color-invoice-sidebar-start: #153d29;
+  --color-invoice-sidebar-end: #0d2e1e;
+  --color-invoice-sidebar-brand-ink: #163c29;
+  --color-invoice-sidebar-brand-surface: #d9f7e4;
+  --color-invoice-sidebar-muted: #a9c2b2;
+  --color-invoice-sidebar-link: #cfe0d5;
+  --color-invoice-sidebar-active: #94e4ad;
+  --color-invoice-sidebar-foot: #9fb8a7;
+  --color-invoice-sidebar-hover: rgb(255 255 255 / 10%);
+  --color-invoice-connected: #5bd386;
+  --radius-invoice-control: .625rem;
+  --radius-invoice-container: .75rem;
+  --radius-invoice-panel: 1rem;
+  --shadow-invoice-panel: 0 18px 45px rgb(26 51 37 / 8%);
+  --shadow-invoice-connected: 0 0 0 4px rgb(91 211 134 / 12%);
+}

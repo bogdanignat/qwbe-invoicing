@@ -7,14 +7,16 @@ ARG PNPM_VERSION=11.22.0
 WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-RUN pnpm install --frozen-lockfile --prod
+COPY frontend/package.json ./frontend/package.json
+RUN pnpm --filter qwbe-invoicing install --frozen-lockfile --prod
 
 FROM node:${NODE_VERSION}-alpine@${NODE_IMAGE_DIGEST} AS ui-builder
 ARG PNPM_VERSION=11.22.0
 WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-RUN pnpm install --frozen-lockfile
+COPY frontend/package.json ./frontend/package.json
+RUN pnpm --filter qwbe-invoicing install --frozen-lockfile
 COPY vite.config.ts ./
 COPY web ./web
 COPY standalone/http/ui-routes.ts ./standalone/http/ui-routes.ts

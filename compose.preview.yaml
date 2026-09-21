@@ -1,0 +1,70 @@
+# Explicitly opt-in. This file never references the existing Warden/data volume.
+name: qwbe-invoicing-preview
+
+services:
+  migrate-fixture:
+    profiles: [preview]
+    image: qwbe-invoicing:t1400-preview
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: [node, bin/qwbe-invoicing.ts, migrate, --apply, --json]
+    environment:
+      NODE_ENV: development
+      DATA_DIR: /data
+    volumes:
+      - preview-data:/data
+    read_only: true
+    tmpfs: [/tmp]
+    restart: "no"
+
+  backend-fixture:
+    profiles: [preview]
+    image: qwbe-invoicing:t1400-preview
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      NODE_ENV: development
+      HOST: 0.0.0.0
+      PORT: 3000
+      DATA_DIR: /data
+      ORGANIZATION_ID: preview-fixture-only
+      AUTH_TOKEN_FILE: /run/secrets/preview_api_token
+    secrets: [preview_api_token]
+    volumes:
+      - preview-data:/data
+    depends_on:
+      migrate-fixture:
+        condition: service_completed_successfully
+    expose: ["3000"]
+    read_only: true
+    tmpfs: [/tmp]
+    init: true
+    restart: "no"
+
+  frontend:
+    profiles: [preview]
+    image: qwbe-invoicing-frontend:t1400-preview
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    environment:
+      FRONTEND_ORIGIN: ${PREVIEW_ORIGIN:-http://invoicing-next.localhost:3181}
+      INVOICING_API_URL: http://backend-fixture:3000
+    ports:
+      - "127.0.0.1:${PREVIEW_PORT:-3181}:3000"
+    # No depends_on backend: the UI must still boot and report unavailable upstream.
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /app/frontend/.next/cache:uid=1000,gid=1000
+    init: true
+    restart: "no"
+
+secrets:
+  preview_api_token:
+    file: ${PREVIEW_AUTH_TOKEN_PATH:?Set a separate synthetic preview token file}
+
+volumes:
+  preview-data: {}
