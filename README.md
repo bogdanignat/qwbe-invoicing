@@ -424,10 +424,26 @@ cube/invoicing/issuance/   component: document series, numbered invoices and pro
 cube/invoicing/corrections/ component: correction documents (storno)
 cube/invoicing/documents/  component: rendered PDFs and artifact recovery
 cube/payments/             payment records and derived invoice payment status
-standalone/                host: HTTP, SQLite store, sessions, PDF renderer, CLI, backup
+cube/efactura/             RO e-Factura: UBL builders, CIUS-RO limits, EN 16931 validation
+standalone/                host, never packaged; config.ts and failure-log.ts at its root
+standalone/http/           server, security headers, static UI, SPA route contract, readiness, API docs
+standalone/auth/           credentials, browser session, login throttle
+standalone/api/            authenticated endpoints: HttpApi contract, schemas, handlers, branding normalizer
+standalone/storage/        SQLite store, row mappers, migration runner
+standalone/documents/      PDF renderer and layout, artifact store and recovery, bundled fonts
+standalone/efactura/       host mapping from issued documents to the e-Factura cube
+standalone/ops/            CLI, backup and restore
+standalone/parity/         tests that hold host, UI and cube rules in agreement
+standalone/ui-dist/        built UI, ignored by git
 web/                       browser UI: React 19, TypeScript, Tailwind CSS 4, Vite
+web/src/lib/               API client, models, formatting, pure state and fiscal helpers
+web/src/hooks/             React hooks: queries, authoring sessions, idempotency
+web/src/components/ui/     shared primitives: buttons, load more
+web/src/components/        layout (shell, page, async states), document, authoring, invoice, settings, catalog
+web/src/views/             one component per route
 bin/qwbe-invoicing.ts      CLI entry point, also the container command
 probes/                    repository gates: runtime, package shape, tests, size, boundaries
+scripts/                   e-Factura fixtures and the local warden helper
 docs/                      local development and release procedures
 compose.yaml               local development stack
 compose.prod.yaml          production bundle
@@ -452,13 +468,13 @@ cube. A change that breaks a gate is not mergeable.
 
 ### UI theme and dependency policy
 
-Tailwind CSS 4 is configured CSS-first in `standalone/ui/app.css`; this setup does not use a
+Tailwind CSS 4 is configured CSS-first in `web/src/app.css`; this setup does not use a
 `tailwind.config` file. Invoice colors, typography, shadows and border radii live in its
 top-level `@theme` block as CSS variables. They generate semantic utilities such as
 `bg-invoice-primary`, `text-invoice-ink`, `border-invoice-border`,
 `rounded-invoice-control` and `rounded-invoice-panel` whenever those classes are used, while
 the existing component classes consume the same variables directly. The explicit
-`@source "../../web"` boundary includes the React tree in Tailwind's class detection;
+`@source ".."` boundary includes the React tree in Tailwind's class detection;
 moving UI source outside `web/` requires updating that boundary.
 
 Any third-party UI component, icon or font library added to this project must be free to use
@@ -468,7 +484,7 @@ non-MIT packages and packages with unclear licensing are not accepted.
 
 The shared button primitives use `tailwind-variants` 3.3.1 (MIT) for typed variants and its
 `cn()` helper for deterministic Tailwind class merging. The configured `tv()` and `cn()`
-exports in `web/src/classnames.ts` are the required class-composition boundary so custom invoice
+exports in `web/src/lib/classnames.ts` are the required class-composition boundary so custom invoice
 utilities merge consistently. `class-variance-authority` is not used because its Apache-2.0
 license does not satisfy this repository's UI dependency policy.
 

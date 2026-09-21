@@ -4,14 +4,14 @@ import { accessSync, constants } from "node:fs"
 import { Effect } from "effect"
 
 import { documentsPermissions } from "../cube/invoicing/documents/index.ts"
-import { reconcileArtifacts } from "../standalone/artifact-reconciliation.ts"
-import { createStandaloneArtifactService } from "../standalone/artifact-runtime.ts"
-import { executeBackup, executeRestore, planRestore } from "../standalone/backup.ts"
-import { CliInputError, helpText, parseCommand, type Command } from "../standalone/cli.ts"
+import { reconcileArtifacts } from "../standalone/documents/artifact-reconciliation.ts"
+import { createStandaloneArtifactService } from "../standalone/documents/artifact-runtime.ts"
+import { executeBackup, executeRestore, planRestore } from "../standalone/ops/backup.ts"
+import { CliInputError, helpText, parseCommand, type Command } from "../standalone/ops/cli.ts"
 import { runtimeConfig } from "../standalone/config.ts"
-import { startServer } from "../standalone/http.ts"
-import { applyMigrations, databaseReady, planMigrations, schemaDrift } from "../standalone/migrations.ts"
-import { cachedReadiness, readinessIntervalMs } from "../standalone/readiness.ts"
+import { startServer } from "../standalone/http/http.ts"
+import { applyMigrations, databaseReady, planMigrations, schemaDrift } from "../standalone/storage/migrations.ts"
+import { cachedReadiness, readinessIntervalMs } from "../standalone/http/readiness.ts"
 
 const print = (value: unknown, json: boolean) => {
   console.log(json ? JSON.stringify(value) : value)

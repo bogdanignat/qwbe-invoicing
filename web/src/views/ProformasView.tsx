@@ -1,10 +1,10 @@
-import { EmptyState, ErrorAlert, Loading } from "../components/AsyncState.tsx"
-import { LoadMore } from "../components/LoadMore.tsx"
-import { Page } from "../components/Page.tsx"
+import { EmptyState, ErrorAlert, Loading } from "../components/layout/AsyncState.tsx"
+import { LoadMore } from "../components/ui/LoadMore.tsx"
+import { Page } from "../components/layout/Page.tsx"
 import { ButtonLink } from "../components/ui/ButtonLink.tsx"
-import { money } from "../format.ts"
-import { useProformas } from "../proforma-hooks.ts"
-import { proformaStatusPresentation } from "../proforma-state.ts"
+import { money } from "../lib/format.ts"
+import { useProformas } from "../hooks/proforma-hooks.ts"
+import { proformaStatusPresentation } from "../lib/proforma-state.ts"
 
 export const ProformasView = () => {
   const proformas = useProformas()

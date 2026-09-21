@@ -128,7 +128,7 @@ and can be rerun safely after partial failure. In non-development environments,
 applying either operation also requires `--confirm-production`. PDFs are stored by
 SHA-256 below `/data/artifacts`; reads verify key, digest, and byte length. The bundled
 DejaVu Sans font supports Romanian glyphs and its distribution license is stored next
-to the font in `standalone/assets/fonts/`.
+to the font in `standalone/documents/assets/fonts/`.
 
 `doctor` now reports `pendingMigrations`, `migrationsReady`, `organizationId`, `authTokenFile`/`authTokenReadable` and `nodeVersion` in addition to `writable`/`databaseReady`; it exits non-zero while any check fails so it can gate deployments. Liveness remains `GET /health/live` (process up); readiness is `GET /health/ready` (storage writable + migrations current, evaluated lock-free and cached for 5 seconds) and drives the Dockerfile `HEALTHCHECK` and Compose readiness.
 

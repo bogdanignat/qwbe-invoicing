@@ -1,15 +1,15 @@
 import { useEffect, useRef } from "react"
 
-import { EmptyState, ErrorAlert, Loading } from "../components/AsyncState.tsx"
-import { LoadMore } from "../components/LoadMore.tsx"
-import { Page } from "../components/Page.tsx"
-import { PresetVatField } from "../components/PresetVatField.tsx"
+import { EmptyState, ErrorAlert, Loading } from "../components/layout/AsyncState.tsx"
+import { LoadMore } from "../components/ui/LoadMore.tsx"
+import { Page } from "../components/layout/Page.tsx"
+import { PresetVatField } from "../components/catalog/PresetVatField.tsx"
 import { Button } from "../components/ui/Button.tsx"
 import { ButtonLink } from "../components/ui/ButtonLink.tsx"
-import { focusAndReveal } from "../focus.ts"
-import { money } from "../format.ts"
-import { presetVatLabel } from "../product-preset-vat.ts"
-import { useProductPresetsRegistry } from "../product-presets-hooks.ts"
+import { focusAndReveal } from "../lib/focus.ts"
+import { money } from "../lib/format.ts"
+import { presetVatLabel } from "../lib/product-preset-vat.ts"
+import { useProductPresetsRegistry } from "../hooks/product-presets-hooks.ts"
 
 export const ProductPresetsView = ({ notify }: { readonly notify: (message: string) => void }) => {
   const state = useProductPresetsRegistry(notify)

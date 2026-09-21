@@ -1,4 +1,4 @@
-import { tv, type VariantProps } from "../../classnames.ts"
+import { tv, type VariantProps } from "../../lib/classnames.ts"
 
 export const buttonVariants = tv({
   base: [

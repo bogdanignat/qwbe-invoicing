@@ -1,10 +1,10 @@
-import { EmptyState, ErrorAlert, Loading } from "../components/AsyncState.tsx"
-import { LoadMore } from "../components/LoadMore.tsx"
-import { Page } from "../components/Page.tsx"
+import { EmptyState, ErrorAlert, Loading } from "../components/layout/AsyncState.tsx"
+import { LoadMore } from "../components/ui/LoadMore.tsx"
+import { Page } from "../components/layout/Page.tsx"
 import { Button } from "../components/ui/Button.tsx"
 import { ButtonLink } from "../components/ui/ButtonLink.tsx"
-import { money } from "../format.ts"
-import { useInvoicesRegistry } from "../invoices-hooks.ts"
+import { money } from "../lib/format.ts"
+import { useInvoicesRegistry } from "../hooks/invoices-hooks.ts"
 
 export const InvoicesView = () => {
   const state = useInvoicesRegistry()

@@ -4,6 +4,7 @@ import type { AuthoringTransaction } from "../drafts/index.ts"
 import { createInvoiceOperations, type InvoiceOperations } from "./application/invoices.ts"
 import { createProformaConversionOperations, type ProformaConversionOperations } from "./application/proforma-conversion.ts"
 import { createProformaOperations, type ProformaOperations } from "./application/proformas.ts"
+import type { ProformaTransaction } from "./application/ports.ts"
 import { createDocumentSeriesOperations, type DocumentSeriesOperations } from "./application/series.ts"
 
 const identity = "issuance"
@@ -22,7 +23,7 @@ export const cube = {
 export type IssuanceOperations = InvoiceOperations & ProformaOperations & ProformaConversionOperations & DocumentSeriesOperations
 
 export const createIssuanceOperations = (
-  dependencies: OperationDependencies<AuthoringTransaction>,
+  dependencies: OperationDependencies<AuthoringTransaction & ProformaTransaction>,
   permissions: InvoicingPermissions,
   authorize: Authorize,
 ): IssuanceOperations => ({
@@ -35,6 +36,7 @@ export const createIssuanceOperations = (
 export type { InvoiceOperations, IssueInvoiceInput } from "./application/invoices.ts"
 export type { ProformaConversionOperations } from "./application/proforma-conversion.ts"
 export type { ProformaOperations } from "./application/proformas.ts"
+export type { ProformaTransaction } from "./application/ports.ts"
 export type { DocumentSeriesOperations } from "./application/series.ts"
 export type { Proforma, ProformaSummary, ProformaConversion, ProformaInvoiceConversion,
   IssueProformaInput, ConvertProformaInput, AuthoringProformaInput } from "./domain/proforma.ts"

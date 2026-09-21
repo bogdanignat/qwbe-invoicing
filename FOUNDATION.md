@@ -249,7 +249,7 @@ This is lint isolation, not a security sandbox. Process-level isolation remains 
 
 The isolation unit is a top-level cube together with its child cubes. The mother's `no-cube-to-cube` rule captures only the first path segment under `cubes/`, and its example plugin has `booktags/bookmarks` importing a helper from the parent `booktags`. `probes/boundary-rules.mjs` mirrors that: `cube/invoicing` and `cube/payments` may not import each other at all.
 
-Inside one tree the gate is stricter than the mother. A child cube may import the kernel of any ancestor (the parent's domain, ports and contracts); every other unit, whether a child seen from its parent, a sibling or a nested child, is entered only through its exact `index.ts`, type-only imports and re-exports included. Each child's interior stays private to it, and the parent never reaches past a child's index, so the graph stays acyclic. Three edges from before the split still reach into a child's interior and are allowed by exact source and target only: `application/ports.ts` to `corrections/domain/corrections.ts` and to `issuance/domain/proforma.ts`, and `application/memory-store.test-support.ts` to `issuance/domain/proforma.ts`. T-1362 Pas 4 removes them; no other exception is added to make the gate pass.
+Inside one tree the gate is stricter than the mother. A child cube may import the kernel of any ancestor (the parent's domain, ports and contracts); every other unit, whether a child seen from its parent, a sibling or a nested child, is entered only through its exact `index.ts`, type-only imports and re-exports included. Each child's interior stays private to it, and the parent never reaches past a child's index, so the graph stays acyclic. No edge is exempt. A child that persists documents of its own declares its own transaction port (`ProformaTransaction` in `issuance/`, `CorrectionsTransaction` in `corrections/`, beside `CustomersTransaction`, `CatalogTransaction` and `IssuerTransaction`), and the composition root in `application/invoicing.ts` intersects them with the kernel port; the host implements the intersection over one connection.
 
 Source: QWBE `core/.dependency-cruiser.cjs`.
 
@@ -288,7 +288,7 @@ References to global accounts, organizations, contacts, products, or documents s
 
 ### Schema baselines during development
 
-While the project is in development (the "STADIU" section of `CLAUDE.md`), every cube owns exactly one migration, `<cube>-001-baseline`, holding the current definition of the tables its manifest declares, with their indexes and triggers; `standalone/schema-baseline.test.ts` asserts that each baseline creates exactly the declared tables. A schema change edits the owning baseline instead of adding a migration. A database created from an earlier baseline is drift: `migrate` refuses it before writing and `doctor` reports it, and the answer is to recreate the database, which drops its data. The migrator never deletes a database itself. The runner applies the foundation and then each cube's migrations in cube order—customers, catalog, issuer, invoicing, payments in `invoicing.sqlite`—with a cube whose tables others reference first, never sorted by name. Numbered incremental migrations (`<cube>-002-...`) return only when the development stage ends. The immutability triggers are part of the baselines, and `standalone/standalone.test.ts` still asserts that every one of them exists after migration.
+While the project is in development (the "STADIU" section of `CLAUDE.md`), every cube owns exactly one migration, `<cube>-001-baseline`, holding the current definition of the tables its manifest declares, with their indexes and triggers; `standalone/storage/schema-baseline.test.ts` asserts that each baseline creates exactly the declared tables. A schema change edits the owning baseline instead of adding a migration. A database created from an earlier baseline is drift: `migrate` refuses it before writing and `doctor` reports it, and the answer is to recreate the database, which drops its data. The migrator never deletes a database itself. The runner applies the foundation and then each cube's migrations in cube order—customers, catalog, issuer, invoicing, payments in `invoicing.sqlite`—with a cube whose tables others reference first, never sorted by name. Numbered incremental migrations (`<cube>-002-...`) return only when the development stage ends. The immutability triggers are part of the baselines, and `standalone/ops/standalone.test.ts` still asserts that every one of them exists after migration.
 
 ## 8. Events are not workflows
 
@@ -367,6 +367,24 @@ Rules:
 - do not delete useful comments because comments are not counted;
 - do not create tiny pass-through modules only to manipulate the metric.
 
+The same 6,000-character file cap also covers production TypeScript/JavaScript in
+`standalone/` and `web/`, via `sizeFileRoots`. These are file-only roots, not fake
+cube units: the 40,000-character / 15-file unit caps still apply to each cube's own
+sources. `sizeExcludedDirectories` excludes only the generated `standalone/ui-dist`
+tree; test/spec/test-support sources and ordinary build/dependency directories are
+not production measurements. Overlapping roots are deduplicated and invalid roots
+fail the gate. `bin/` and root tooling/config files are outside this extension.
+
+Host adapters follow the existing domain ports rather than arbitrary file slices.
+`sqlite-store.ts` owns transaction lifetime and composes same-connection adapters;
+payments has its own adapter and store. API handlers receive a request-scoped service
+access function, not database or renderer factories. Service construction remains
+per request. Browser transport/session state has one owner, workflow hooks compose
+pure state and domain clients, and views compose presentation components. Existing
+public entry points remain facades; internal modules import leaf dependencies, not
+their own facade. This applies the CRM pack's ownership/injected-dependency approach
+without copying its mother-bound store, runtime mounting or metadata-driven UI.
+
 ### Known limitation in the mother size scanner
 
 The current QWBE `unitDirs` discovers only top-level cube directories and recursively counts their descendants (plus the kernel, `pg`, and `metadata` subsystems as their own units since QWB-41/QWB-44; a top-level `frontend/` in a pack is skipped at depth 0 only). A nested child cube is therefore included in the parent's measured unit rather than measured as an independent recursive unit.
@@ -421,7 +439,7 @@ Initial compatibility target from the mother repository:
 - `@effect/platform-node` `^0.107.0` — Node adapter (required);
 - imports include `.ts` where Node executes source directly.
 
-Rule: do not introduce an alternative async/runtime abstraction. New code must use `Effect.gen`/`Effect.flatMap` and the injected `Clock`/`Store`/`Context` capabilities. Every cube use-case exposed via `InvoicingService` has a 1:1 authenticated HTTP endpoint in `standalone/api.ts`.
+Rule: do not introduce an alternative async/runtime abstraction. New code must use `Effect.gen`/`Effect.flatMap` and the injected `Clock`/`Store`/`Context` capabilities. Every cube use-case exposed via `InvoicingService` has a 1:1 authenticated HTTP endpoint in `standalone/api/api.ts`.
 
 Compiler policy:
 
@@ -473,9 +491,9 @@ The install artifact and authoring repository are different boundaries. A packag
 
 Sources: QWBE `core/src/install-contract.ts`, `core/src/package-source.ts`, `core/src/kernel/install.ts`, and `core/src/kernel/install-from.ts`.
 
-## 14. Initial repository shape
+## 14. Repository shape
 
-This is a target shape, not permission to create every file before it is needed:
+This is the shape the repository has; a new directory appears only when a file needs it:
 
 ```text
 qwbe-invoicing/
@@ -484,29 +502,48 @@ qwbe-invoicing/
 ├── pnpm-lock.yaml
 ├── tsconfig.json
 ├── cube/
-│   └── invoicing/              exact cube/package root
-│       ├── qwbe-package.json
-│       ├── index.ts            named `cube` export
-│       ├── domain/             shared model, VAT arithmetic, date validation
-│       ├── application/        ports, idempotency, service composition
-│       ├── contracts/          schemas and host-facing seams
-│       ├── parties/            component cube: CUI/CNP, counties and sectors for every party
-│       ├── customers/          component cube: saved customers, their table and baseline
-│       ├── catalog/            component cube: saved products and services, their table and baseline
-│       ├── issuer/             component cube: issuer profile, branding, VAT and baseline
-│       ├── drafts/             component cube: authoring and draft editing
-│       ├── issuance/           component cube: document series, numbered invoices and proformas
-│       ├── corrections/        component cube: storno documents
-│       ├── documents/          component cube: rendered artifacts
-│       └── adapters/qwbe/      thin QWBE adapter
+│   ├── invoicing/              exact cube/package root
+│   │   ├── qwbe-package.json
+│   │   ├── index.ts            named `cube` export
+│   │   ├── domain/             shared model, VAT arithmetic, date validation
+│   │   ├── application/        ports, idempotency, service composition
+│   │   ├── contracts/          schemas and host-facing seams
+│   │   ├── parties/            component cube: CUI/CNP, counties and sectors for every party
+│   │   ├── customers/          component cube: saved customers, their table and baseline
+│   │   ├── catalog/            component cube: saved products and services, their table and baseline
+│   │   ├── issuer/             component cube: issuer profile, branding, VAT and baseline
+│   │   ├── drafts/             component cube: authoring and draft editing
+│   │   ├── issuance/           component cube: document series, numbered invoices and proformas
+│   │   ├── corrections/        component cube: storno documents
+│   │   └── documents/          component cube: rendered artifacts
+│   ├── payments/               payment records and derived payment status
+│   └── efactura/               RO e-Factura UBL, CIUS-RO limits, EN 16931 validation
 ├── standalone/                 standalone host and adapters; never packaged
+│   ├── config.ts, failure-log.ts
+│   ├── http/                   server, static UI, SPA route contract, readiness, API docs
+│   ├── auth/                   credentials, browser session, login throttle
+│   ├── api/                    HttpApi contract, schemas, handlers
+│   ├── storage/                SQLite store, row mappers, migration runner
+│   ├── documents/              PDF renderer, artifact store and recovery, fonts
+│   ├── efactura/               host mapping into the e-Factura cube
+│   ├── ops/                    CLI, backup, restore
+│   ├── parity/                 host, UI and cube agreement tests
+│   └── ui-dist/                built UI, ignored
+├── web/                        browser UI; never packaged
+│   └── src/                    main.tsx, App.tsx, app.css
+│       ├── lib/                client, models, pure state and fiscal helpers
+│       ├── hooks/              React hooks
+│       ├── components/         ui, layout, document, authoring, invoice, settings, catalog
+│       └── views/              one component per route
+├── bin/                        CLI entry point and container command
 ├── probes/                     package, persistence, gate, and decoupling checks
-└── tests or colocated *.test.ts
+├── scripts/                    fixtures and local helpers
+└── docs/                       development, release, e-Factura, VAT treatment
 ```
 
 The directory `cube/invoicing/` is the source artifact passed to QWBE install-from; its basename and package manifest both say `invoicing`. Standalone code may depend on the cube's public application interfaces, but cube code must not import the standalone host.
 
-Prefer colocated tests. Do not create empty directories or placeholder abstractions.
+Tests are colocated with what they exercise. Do not create empty directories or placeholder abstractions.
 
 ## 15. Prototype shortcuts not inherited as product design
 
@@ -576,4 +613,4 @@ Reviewed on 2 September 2026 after the mother's `main` moved from `987e11b` to `
 | Installer strips a pack's top-level `frontend/`, `dist/`, `build/` | QWB-48 | No impact: the UI lives in `web/` and `standalone/ui-dist`, outside the package. Future external-app integration remains unimplemented. |
 | Size caps unchanged at 6,000 / 40,000 / 15 | - | Aligned on 5 September 2026: `qwbe.config.json` is back at 6,000 / 40,000 / 15 after the cube was split into component cubes (registry, drafts, issuance, corrections) and the three files still over 6,000 were cut. Section 10. |
 
-Pre-existing gaps that the pull did not create but that a mounted install would hit first: `create()` returns `handlers: {}`, so the cube serves no HTTP surface under the mother (every endpoint lives in `standalone/api.ts`); `CurrentOrganization` is still a standalone-only contract (section 4); `qwbe-core` is still `0.0.0` and private (open decision 10).
+Pre-existing gaps that the pull did not create but that a mounted install would hit first: `create()` returns `handlers: {}`, so the cube serves no HTTP surface under the mother (every endpoint lives in `standalone/api/api.ts`); `CurrentOrganization` is still a standalone-only contract (section 4); `qwbe-core` is still `0.0.0` and private (open decision 10).

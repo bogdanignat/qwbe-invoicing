@@ -14,7 +14,8 @@ import type { BrandingNormalizer, IssuerTransaction } from "../issuer/index.ts"
 import type { CatalogTransaction, ProductPreset } from "../catalog/index.ts"
 import type { Customer, CustomersTransaction } from "../customers/index.ts"
 import type { AuditEvent, IdempotencyRecord } from "../domain/invoice.ts"
-import type { ProformaConversion } from "../issuance/domain/proforma.ts"
+import type { CorrectionsTransaction } from "../corrections/index.ts"
+import type { ProformaConversion, ProformaTransaction } from "../issuance/index.ts"
 import type { DraftInvoice, InvoicingDependencies, InvoicingTransaction, IssuedInvoice, Proforma } from "./invoicing.ts"
 import type { DocumentCursor, DraftCursor, NameCursor, PageQuery } from "./ports.ts"
 
@@ -50,9 +51,9 @@ export interface MemoryState {
   issued: Map<string, IssuedInvoice>
   proformas: Map<string, Proforma>
   conversions: Map<string, ProformaConversion>
-  invoiceConversions: Map<string, Parameters<InvoicingTransaction["saveProformaInvoiceConversion"]>[0]>
+  invoiceConversions: Map<string, Parameters<ProformaTransaction["saveProformaInvoiceConversion"]>[0]>
   sequences: Map<string, number>
-  corrections: Map<string, Parameters<InvoicingTransaction["saveCorrection"]>[0]>
+  corrections: Map<string, Parameters<CorrectionsTransaction["saveCorrection"]>[0]>
   idempotency: Map<string, IdempotencyRecord>
   auditEvents: Array<AuditEvent>
 }
@@ -71,7 +72,7 @@ export const memoryStore = (state: MemoryState): InvoicingDependencies["store"] 
       convertedInvoiceId: working.invoiceConversions.get(proforma.id)?.resultingInvoiceId
         ?? [...working.issued.values()].find((invoice) => invoice.organizationId === proforma.organizationId
           && invoice.sourceProformaId === proforma.id)?.id ?? null })
-    const transaction: InvoicingTransaction & CustomersTransaction & CatalogTransaction & IssuerTransaction = {
+    const transaction: InvoicingTransaction & CustomersTransaction & CatalogTransaction & IssuerTransaction & ProformaTransaction & CorrectionsTransaction = {
       saveIssuer: (issuer) => Effect.sync(() => { working.issuers.set(issuer.organizationId, issuer) }),
       findIssuer: (organizationId) => Effect.succeed(working.issuers.get(organizationId)),
       addDocumentSeries: (documentSeries) => Effect.suspend(() => {

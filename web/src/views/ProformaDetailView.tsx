@@ -1,9 +1,9 @@
-import { ErrorAlert, Loading } from "../components/AsyncState.tsx"
-import { CommercialDocument } from "../components/CommercialDocument.tsx"
-import { Page } from "../components/Page.tsx"
+import { ErrorAlert, Loading } from "../components/layout/AsyncState.tsx"
+import { CommercialDocument } from "../components/document/CommercialDocument.tsx"
+import { Page } from "../components/layout/Page.tsx"
 import { Button } from "../components/ui/Button.tsx"
 import { ButtonLink } from "../components/ui/ButtonLink.tsx"
-import { useProformaDetail } from "../proforma-hooks.ts"
+import { useProformaDetail } from "../hooks/proforma-hooks.ts"
 
 export const ProformaDetailView = ({ id }: { readonly id: string }) => {
   const state = useProformaDetail(id)

@@ -11,6 +11,42 @@ docs/RELEASE.md   (this file)
 docs/LOCAL_DEVELOPMENT.md
 ```
 
+## Source verification before building a release
+
+Run `pnpm verify` before building the image. The size gate keeps the existing
+6,000-character file cap and the 40,000-character / 15-file cube caps; it also checks
+production source files under `standalone/` and `web/` without treating either tree
+as a cube. Generated `standalone/ui-dist` is excluded, not runtime adapters. `bin/`
+and root tooling/config files are outside that file-only extension.
+
+Host/UI refactors must also preserve the HTTP contract and runtime error/idempotency
+mapping, transaction behavior, session lifetime and PDF assets. Verify browser flows
+on an isolated fixture and smoke-test the built runtime, not a live data volume.
+The UI builder intentionally copies only `standalone/http/ui-routes.ts` from the
+host; browser imports must not expand that runtime dependency accidentally.
+
+`pnpm gate:boundaries` checks all of `web/src` (including files unreachable from
+`App.tsx`), alongside the cube and host trees. It runs in `pnpm verify`, also used
+by the release CI verification job. Frontend source dependencies follow this matrix:
+
+| Source | Allowed targets within `web/src` |
+| --- | --- |
+| `lib/` | `lib/` |
+| `hooks/` | `lib/`, `hooks/` |
+| `components/` | `lib/`, `hooks/`, `components/` |
+| `views/` | `lib/`, `hooks/`, `components/`, `views/` |
+
+`App.tsx` and `main.tsx` compose the layers, never the reverse. Components may use
+hooks and other component groups; views may compose other views. Type-only imports,
+re-exports and dynamic imports follow the same rules, and cycles are forbidden.
+Browser source cannot import `cube/`, `standalone/`, `probes/` or `bin/`, except for
+the exact `App.tsx` → `standalone/http/ui-routes.ts` edge. That shared routes file
+must remain dependency-free, including third-party imports. Third-party packages
+are outside the layer matrix. Direct edges into packages and `probes/fixtures`
+remain visible to the rules, but their internals are not traversed.
+The CLI fixture tests in `probes/web-boundary-gate.test.mjs` exercise both allowed
+edges and rejected violations; no size thresholds or cube rules are relaxed.
+
 ## Install (first time, production host)
 
 ```bash

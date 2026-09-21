@@ -1,8 +1,8 @@
-import { EmptyState, ErrorAlert, Loading } from "../components/AsyncState.tsx"
-import { InvoiceAuthoringSession } from "../components/InvoiceAuthoringSession.tsx"
-import { Page } from "../components/Page.tsx"
+import { EmptyState, ErrorAlert, Loading } from "../components/layout/AsyncState.tsx"
+import { InvoiceAuthoringSession } from "../components/authoring/InvoiceAuthoringSession.tsx"
+import { Page } from "../components/layout/Page.tsx"
 import { ButtonLink } from "../components/ui/ButtonLink.tsx"
-import { useInvoiceAuthoringPage } from "../invoice-authoring-page-hooks.ts"
+import { useInvoiceAuthoringPage } from "../hooks/invoice-authoring-page-hooks.ts"
 
 interface InvoiceAuthoringViewProps {
   readonly id?: string

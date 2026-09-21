@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { cn } from "../../classnames.ts"
+import { cn } from "../../lib/classnames.ts"
 import { buttonVariants } from "./button-variants.ts"
 
 void test("builds typed invoice button variants", () => {

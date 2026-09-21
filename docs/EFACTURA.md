@@ -27,8 +27,8 @@ answers with `400` and the list of limits it breaks.
 | `cube/efactura/xml.ts` | deterministic serializer: element order is array order, no mixed content, no unrepresentable characters |
 | `cube/efactura/ubl.ts`, `ubl-party.ts` | the UBL document and party builders, in `xsd:sequence` order |
 | `cube/efactura/profile.ts` | the CIUS-RO constants, injected rather than hard-coded |
-| `standalone/efactura-mapper.ts` | the host translation from `IssuedInvoice` / `CorrectionDocument` |
-| `standalone/api.ts` — `efacturaXml` | renders the download; a mapping refusal travels as the list of reasons, not as a 500 |
+| `standalone/efactura/efactura-mapper.ts` | the host translation from `IssuedInvoice` / `CorrectionDocument` |
+| `standalone/api/api.ts` — `efacturaXml` | renders the download; a mapping refusal travels as the list of reasons, not as a 500 |
 | `cube/efactura/fixtures.test-support.ts` | the synthetic documents, all invented |
 
 The generator never imports the invoicing cube, and the mapper is the only code

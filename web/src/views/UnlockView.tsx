@@ -1,10 +1,10 @@
 import { useMutation } from "@tanstack/react-query"
 import { useEffect, useRef } from "react"
 
-import { ErrorAlert } from "../components/AsyncState.tsx"
-import { Page } from "../components/Page.tsx"
+import { ErrorAlert } from "../components/layout/AsyncState.tsx"
+import { Page } from "../components/layout/Page.tsx"
 import { Button } from "../components/ui/Button.tsx"
-import { formField, type FormSubmitEvent } from "../form.ts"
+import { formField, type FormSubmitEvent } from "../lib/form.ts"
 
 export const UnlockView = ({ onUnlock }: { readonly onUnlock: (token: string) => Promise<void> }) => {
   const tokenInput = useRef<HTMLInputElement>(null)
