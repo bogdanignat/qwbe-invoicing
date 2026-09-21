@@ -9,3 +9,6 @@ data/
 .env
 .env.*
 !.env.example
+frontend/.next/
+frontend/next-env.d.ts
+frontend/*.tsbuildinfo

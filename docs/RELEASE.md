@@ -13,9 +13,14 @@ docs/LOCAL_DEVELOPMENT.md
 
 ## Source verification before building a release
 
+T-1400 phase one adds an opt-in Next frontend, not a traffic cutover. See
+[`NEXT_PREVIEW.md`](NEXT_PREVIEW.md) for isolated containers and session/security
+contracts. `pnpm verify` now checks/builds both frontends; the release backend still
+serves the legacy UI until the remaining screens have been migrated.
+
 Run `pnpm verify` before building the image. The size gate keeps the existing
 6,000-character file cap and the 40,000-character / 15-file cube caps; it also checks
-production source files under `standalone/` and `web/` without treating either tree
+production source files under `standalone/`, `web/` and `frontend/src/` without treating these trees
 as a cube. Generated `standalone/ui-dist` is excluded, not runtime adapters. `bin/`
 and root tooling/config files are outside that file-only extension.
 

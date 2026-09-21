@@ -12,17 +12,19 @@
     "app": "node bin/qwbe-invoicing.ts",
     "build:ui": "vite build",
     "dev:ui": "vite",
+    "build:frontend": "pnpm --filter @qwbe/invoicing-frontend build",
+    "test:frontend:runtime": "node --test probes/frontend-runtime.mjs",
     "local:setup": "node scripts/local-warden.mjs",
     "pretest": "pnpm build:ui",
-    "test": "node --test \"cube/**/*.test.ts\" \"standalone/**/*.test.ts\" \"web/**/*.test.ts\" \"probes/**/*.test.mjs\"",
-    "typecheck": "tsc -p tsconfig.json && tsc -p web/tsconfig.json",
-    "lint": "eslint .",
+    "test": "node --test \"cube/**/*.test.ts\" \"standalone/**/*.test.ts\" \"web/**/*.test.ts\" \"frontend/src/**/*.test.ts\" \"probes/**/*.test.mjs\"",
+    "typecheck": "tsc -p tsconfig.json && tsc -p web/tsconfig.json && pnpm --filter @qwbe/invoicing-frontend typecheck",
+    "lint": "pnpm --filter @qwbe/invoicing-frontend typegen && eslint .",
     "gate:runtime": "node probes/runtime-version.mjs",
     "gate:package": "node probes/package-gate.mjs",
     "gate:test": "node probes/test-gate.mjs",
     "gate:size": "node probes/size-gate.mjs",
     "gate:boundaries": "node probes/boundary-gate.mjs",
-    "verify": "pnpm gate:runtime && pnpm lint && pnpm typecheck && pnpm test && pnpm gate:package && pnpm gate:test && pnpm gate:size && pnpm gate:boundaries"
+    "verify": "pnpm gate:runtime && pnpm lint && pnpm typecheck && pnpm test && pnpm build:frontend && pnpm test:frontend:runtime && pnpm gate:package && pnpm gate:test && pnpm gate:size && pnpm gate:boundaries"
   },
   "dependencies": {
     "@effect/platform": "0.96.1",

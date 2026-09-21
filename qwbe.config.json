@@ -4,7 +4,8 @@
   ],
   "sizeFileRoots": [
     "standalone",
-    "web"
+    "web",
+    "frontend/src"
   ],
   "sizeExcludedDirectories": [
     "standalone/ui-dist"

@@ -4,7 +4,7 @@ import tseslint from "typescript-eslint"
 
 export default tseslint.config(
   {
-    ignores: ["node_modules/**", "probes/fixtures/**", "standalone/ui-dist/**"],
+    ignores: ["**/node_modules/**", "probes/fixtures/**", "standalone/ui-dist/**", "frontend/.next/**", "frontend/next-env.d.ts"],
   },
   eslint.configs.recommended,
   ...tseslint.configs.strictTypeChecked,
@@ -29,7 +29,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ["web/**/*.{ts,tsx}"],
+    files: ["web/**/*.{ts,tsx}", "frontend/**/*.{ts,tsx}"],
     plugins: { "react-hooks": reactHooks },
     rules: { ...reactHooks.configs.recommended.rules },
   },

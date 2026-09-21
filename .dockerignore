@@ -13,3 +13,13 @@ FOUNDATION.md
 PRODUCT.md
 probes
 *.log
+**/node_modules
+**/.next
+**/*.tsbuildinfo
+frontend/next-env.d.ts
+.local
+.playwright-mcp
+**/secrets
+**/.env
+**/.env.*
+!**/.env.example

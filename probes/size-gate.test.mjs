@@ -147,21 +147,24 @@ test("refuses missing, non-directory and symbolic-link file roots", () => {
   }
 })
 
-test("size gate CLI fails on oversized host sources and invalid configured roots", () => {
+test("size gate CLI fails on oversized host and frontend/src sources and invalid configured roots", () => {
   const root = fixture()
   try {
     for (const name of ["size-gate.mjs", "size-gate-lib.mjs", "source-tree.mjs"]) {
       write(root, `probes/${name}`, readFileSync(new URL(name, import.meta.url), "utf8"))
     }
     symlinkSync(fileURLToPath(new URL("../node_modules", import.meta.url)), join(root, "node_modules"))
-    const config = { cubeRoots: [], sizeFileRoots: ["standalone"], caps: { maxCharsPerFile: 10, maxCharsPerUnit: 40000, maxFilesPerUnit: 15 } }
+    const config = { cubeRoots: [], sizeFileRoots: ["standalone", "frontend/src"], caps: { maxCharsPerFile: 10, maxCharsPerUnit: 40000, maxFilesPerUnit: 15 } }
     write(root, "qwbe.config.json", JSON.stringify(config))
     write(root, "standalone/adapter.ts", "export const adapter = 1\n")
+    write(root, "frontend/src/app/page.tsx", "export const Page = 1\n")
     const run = () => spawnSync(process.execPath, [join(root, "probes/size-gate.mjs")], { encoding: "utf8" })
     const overCap = run()
     assert.equal(overCap.status, 1)
     assert.match(overCap.stderr, /File over cap: standalone\/adapter.ts/)
+    assert.match(overCap.stderr, /File over cap: frontend\/src\/app\/page.tsx/)
     write(root, "standalone/adapter.ts", "const x=1")
+    write(root, "frontend/src/app/page.tsx", "const x=1")
     assert.equal(run().status, 0)
     write(root, "qwbe.config.json", JSON.stringify({ ...config, sizeFileRoots: ["missing"] }))
     const invalid = run()
