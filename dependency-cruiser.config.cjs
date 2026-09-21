@@ -1,3 +1,10 @@
+const frontendLayers = {
+  lib: "lib",
+  hooks: "lib|hooks",
+  components: "lib|hooks|components",
+  views: "lib|hooks|components|views",
+}
+
 module.exports = {
   forbidden: [
     {
@@ -24,6 +31,35 @@ module.exports = {
         ]
       },
     },
+    ...Object.entries(frontendLayers).map(([layer, allowed]) => ({
+      name: `web-${layer}-dependencies`,
+      severity: "error",
+      from: { path: `^web/src/${layer}/` },
+      // App/main compose these layers; neither is a dependency of a lower layer.
+      to: { path: "^web/src/", pathNot: `^web/src/(${allowed})/` },
+    })),
+    {
+      name: "web-does-not-import-backend-or-tooling",
+      severity: "error",
+      from: { path: "^web/src/" },
+      to: {
+        path: "^(cube|standalone|probes|bin)/",
+        pathNot: "^standalone/http/ui-routes[.]ts$",
+      },
+    },
+    {
+      name: "web-ui-routes-only-from-app",
+      severity: "error",
+      from: { path: "^web/src/", pathNot: "^web/src/App[.]tsx$" },
+      to: { path: "^standalone/http/ui-routes[.]ts$" },
+    },
+    {
+      name: "ui-routes-is-a-browser-leaf",
+      severity: "error",
+      from: { path: "^standalone/http/ui-routes[.]ts$" },
+      // The UI build copies only this file from the host. Keep it self-contained.
+      to: {},
+    },
     {
       name: "no-circular-dependencies",
       severity: "error",
@@ -32,8 +68,9 @@ module.exports = {
     },
   ],
   options: {
-    doNotFollow: { path: "node_modules" },
-    exclude: { path: "node_modules|probes/fixtures" },
+    // Keep direct edges for validation (notably the UI leaf and tooling rules),
+    // but do not traverse third-party packages or fixture implementation details.
+    doNotFollow: { path: "node_modules|probes/fixtures" },
     tsPreCompilationDeps: true,
     enhancedResolveOptions: {
       exportsFields: ["exports"],

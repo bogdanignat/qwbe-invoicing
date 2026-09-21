@@ -12,7 +12,7 @@ const repositoryRoot = join(dirname(fileURLToPath(import.meta.url)), "..")
 const executable = join(repositoryRoot, "node_modules", ".bin", "depcruise")
 
 export const runBoundaryGate = (root, cubeRoots) => {
-  const roots = [...cubeRoots, "standalone"].filter((path) => existsSync(join(root, path)))
+  const roots = [...cubeRoots, "standalone", "web/src"].filter((path) => existsSync(join(root, path)))
   const units = discoverCubeUnits(root, cubeRoots)
   const generated = {
     ...configuration,
