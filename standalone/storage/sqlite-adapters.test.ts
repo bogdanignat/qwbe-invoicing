@@ -14,6 +14,7 @@ import { correctionsTransactionAdapter } from "./sqlite-corrections.ts"
 import { customersTransactionAdapter } from "./sqlite-customers.ts"
 import { draftsTransactionAdapter } from "./sqlite-drafts.ts"
 import { invoicesTransactionAdapter } from "./sqlite-invoices.ts"
+import { invoiceRegisterTransactionAdapter } from "./sqlite-invoice-register.ts"
 import { issuerTransactionAdapter } from "./sqlite-issuer.ts"
 import { kernelTransactionAdapter } from "./sqlite-kernel.ts"
 import { paymentsTransactionAdapter } from "./sqlite-payments.ts"
@@ -27,7 +28,7 @@ const expectedInvoicingKeys = [
   "findCorrection", "findCustomer", "findDocumentSeries", "findDraft", "findIdempotencyRecord",
   "findIssuedInvoice", "findIssuer", "findLatestIssueDate", "findProductPreset", "findProforma",
   "findProformaConversion", "findProformaInvoiceConversion", "hasOpenDraftsForCustomer", "listCorrections",
-  "listCustomers", "listDocumentSeries", "listDrafts", "listIssuedInvoices", "listProductPresets",
+  "listCustomers", "listDocumentSeries", "listDrafts", "listInvoiceRegister", "listIssuedInvoices", "listProductPresets",
   "listProformas", "saveCorrection", "saveCustomer", "saveDraft", "saveIdempotencyRecord",
   "saveIssuedInvoice", "saveIssuer", "saveProductPreset", "saveProforma", "saveProformaConversion",
   "saveProformaInvoiceConversion", "softDeleteCustomer",
@@ -37,7 +38,7 @@ void test("domain adapters have disjoint keys and compose the characterized tran
   const database = new DatabaseSync(":memory:")
   try {
     const adapters = [
-      seriesTransactionAdapter(database), draftsTransactionAdapter(database), invoicesTransactionAdapter(database),
+      seriesTransactionAdapter(database), draftsTransactionAdapter(database), invoicesTransactionAdapter(database), invoiceRegisterTransactionAdapter(database),
       kernelTransactionAdapter(database), customersTransactionAdapter(database), catalogTransactionAdapter(database),
       issuerTransactionAdapter(database), proformasTransactionAdapter(database),
       proformaConversionsTransactionAdapter(database), correctionsTransactionAdapter(database),

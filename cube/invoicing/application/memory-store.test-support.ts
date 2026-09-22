@@ -14,13 +14,14 @@ import type { BrandingNormalizer, IssuerTransaction } from "../issuer/index.ts"
 import type { CatalogTransaction, ProductPreset } from "../catalog/index.ts"
 import type { Customer, CustomersTransaction } from "../customers/index.ts"
 import type { AuditEvent, IdempotencyRecord } from "../domain/invoice.ts"
-import type { CorrectionsTransaction } from "../corrections/index.ts"
+import type { CorrectionsTransaction, InvoiceRegisterCursor, InvoiceRegisterRow } from "../corrections/index.ts"
 import type { ProformaConversion, ProformaTransaction } from "../issuance/index.ts"
 import type { DraftInvoice, InvoicingDependencies, InvoicingTransaction, IssuedInvoice, Proforma } from "./invoicing.ts"
 import type { DocumentCursor, DraftCursor, NameCursor, PageQuery } from "./ports.ts"
 
 const sameSource = (value: { readonly source?: { readonly app: string; readonly kind: string; readonly id: string } }, source: { readonly app: string; readonly kind: string; readonly id: string } | undefined): boolean =>
   source === undefined || (value.source?.app === source.app && value.source.kind === source.kind && value.source.id === source.id)
+const binaryTextCompare = (left: string, right: string): number => left < right ? -1 : left > right ? 1 : 0
 const paged = <Item, Key>(sorted: ReadonlyArray<Item>, page: PageQuery<Key>, isAfter: (item: Item, after: Key) => boolean): ReadonlyArray<Item> => {
   const after = page.after
   const rest = after === undefined ? sorted : sorted.filter((item) => isAfter(item, after))
@@ -29,6 +30,9 @@ const paged = <Item, Key>(sorted: ReadonlyArray<Item>, page: PageQuery<Key>, isA
 const afterDocument = (item: { readonly issueDate: string; readonly number: number; readonly id: string }, after: DocumentCursor): boolean =>
   item.issueDate < after.issueDate || (item.issueDate === after.issueDate && item.number < after.number)
   || (item.issueDate === after.issueDate && item.number === after.number && item.id > after.id)
+const afterRegister = (item: InvoiceRegisterRow, after: InvoiceRegisterCursor): boolean =>
+  afterDocument(item, after) || (item.issueDate === after.issueDate && item.number === after.number
+    && item.id === after.id && item.kind > after.kind)
 const afterDraft = (item: { readonly issueDate: string; readonly id: string }, after: DraftCursor): boolean =>
   item.issueDate < after.issueDate || (item.issueDate === after.issueDate && item.id > after.id)
 const afterName = (name: string, id: string, after: NameCursor): boolean =>
@@ -195,6 +199,25 @@ export const memoryStore = (state: MemoryState): InvoicingDependencies["store"] 
           && (source === undefined || (c.source?.app === source.app && c.source.kind === source.kind && c.source.id === source.id)))
           .sort((a, b) => a.issuedAt.localeCompare(b.issuedAt)),
       ),
+      listInvoiceRegister: (organizationId, page, source) => Effect.sync(() => {
+        const invoices: ReadonlyArray<InvoiceRegisterRow> = [...working.issued.values()]
+          .filter((invoice) => invoice.organizationId === organizationId && sameSource(invoice, source))
+          .map((invoice) => ({ kind: "invoice", id: invoice.id, series: invoice.series, number: invoice.number,
+            issueDate: invoice.issueDate, customer: { name: invoice.customer.name }, currency: invoice.currency,
+            totalIncludingVat: invoice.totalIncludingVat, dueDate: invoice.dueDate, eFacturaStatus: invoice.eFacturaStatus }))
+        const corrections: ReadonlyArray<InvoiceRegisterRow> = [...working.corrections.values()]
+          .filter((correction) => correction.organizationId === organizationId && sameSource(correction, source))
+          .flatMap((correction) => {
+            const original = working.issued.get(correction.originalInvoiceId)
+            return original?.organizationId !== organizationId ? [] : [{ kind: "correction" as const, id: correction.id,
+              series: correction.series, number: correction.number, issueDate: correction.issueDate,
+              customer: { name: correction.customer.name }, currency: correction.currency,
+              totalIncludingVat: correction.totalIncludingVat, dueDate: null, eFacturaStatus: null,
+              originalReference: { id: original.id, series: original.series, number: original.number } }]
+          })
+        return paged([...invoices, ...corrections].sort((a, b) => b.issueDate.localeCompare(a.issueDate)
+          || b.number - a.number || binaryTextCompare(a.id, b.id) || binaryTextCompare(a.kind, b.kind)), page, afterRegister)
+      }),
       findIdempotencyRecord: (organizationId, key) => Effect.succeed(working.idempotency.get(`${organizationId}:${key}`)),
       saveIdempotencyRecord: (record) => Effect.sync(() => { working.idempotency.set(`${record.organizationId}:${record.key}`, record) }),
       appendAuditEvent: (event: AuditEvent) => Effect.sync(() => { working.auditEvents.push(event) }),

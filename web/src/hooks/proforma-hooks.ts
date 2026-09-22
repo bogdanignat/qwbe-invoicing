@@ -8,6 +8,7 @@ import { useOperationIdempotency } from "./operation-idempotency.ts"
 import { navigate } from "../lib/navigation.ts"
 import { usePagedList } from "./paged-query.ts"
 import { positiveInvoiceRequiresDueDate } from "../lib/invoice-authoring-state.ts"
+import { invalidateInvoiceRegister } from "../lib/query-cache.ts"
 
 export const useProformas = () => usePagedList(["proformas"], (page) => invoicingClient.listProformas(page))
 
@@ -32,7 +33,7 @@ export const useProformaDetail = (id: string) => {
       idempotency.complete("invoice")
       navigate(`/invoices/${encodeURIComponent(invoice.id)}`)
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["invoices"] }),
+        invalidateInvoiceRegister(queryClient),
         queryClient.invalidateQueries({ queryKey: ["proformas"] }),
         queryClient.invalidateQueries({ queryKey: ["proforma", id] }),
       ])

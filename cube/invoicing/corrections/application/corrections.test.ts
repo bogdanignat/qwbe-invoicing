@@ -90,6 +90,37 @@ void test("corrects an issued invoice exactly once with a negated immutable snap
   assert.equal(await Effect.runPromise(Effect.flip(denied.createCorrection(idempotent({ originalInvoiceId: invoice.id, reason: "Storno" })))) instanceof PermissionDenied, true)
 })
 
+void test("register pagination uses the same binary id ordering as its cursor", async () => {
+  const state = emptyState()
+  const service = createInvoicingService({
+    context: contextProvider({ identity, organization: { id: "org-1" } }),
+    clock: fixedClock, ids: sequentialIds(), store: memoryStore(state), branding: brandingNormalizer, cubeIdentity: "invoicing",
+  })
+  await Effect.runPromise(service.configureIssuer({
+    name: "Exemplu SRL", fiscalIdentifier: "12345674",
+    address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1", county: "RO-BT" },
+    legalForm: "srl", tradeRegistryNumber: "J40/123/2020", socialCapital: "200.00", iban: "", bankName: "",
+    defaultCurrency: "RON", defaultPaymentTermDays: 15, vatChange: { registered: true, effectiveFrom: "2025-08-01" }, branding: null,
+  }))
+  await Effect.runPromise(service.addDocumentSeries({ documentType: "invoice", series: "QWBE" }))
+  const invoice = await Effect.runPromise(service.issueInvoice(idempotent({
+    customer: { partyType: "company", name: "Client SRL", fiscalIdentifier: "87654329", vatRegistered: true,
+      address: { countryCode: "RO", city: "Iași", street: "Strada Mică 2", county: "RO-IS" } },
+    series: "QWBE", issueDate: "2026-09-01", dueDate: "2026-09-16", currency: "RON",
+    lines: [{ description: "Servicii", quantity: "1", unitPrice: "100.00", unitOfMeasure: each, vatRateCode: "RO_STANDARD" }],
+  })))
+  state.issued.delete(invoice.id)
+  state.issued.set("a", { ...invoice, id: "a" })
+  state.issued.set("Z", { ...invoice, id: "Z" })
+  const ids: Array<string> = []
+  let cursor: string | undefined
+  do {
+    const page = await Effect.runPromise(service.listInvoiceRegister(undefined, { limit: 1, ...(cursor === undefined ? {} : { cursor }) }))
+    ids.push(...page.items.map(({ id }) => id)); cursor = page.nextCursor ?? undefined
+  } while (cursor !== undefined)
+  assert.deepEqual(ids, ["Z", "a"])
+})
+
 void test("storno preserves article 310 facts and canonicalizes signed zero", async () => {
   const state = emptyState()
   const service = createInvoicingService({ context: contextProvider({ identity, organization: { id: "org-1" } }),

@@ -1,10 +1,5 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { runUiEffect } from "../../lib/api.ts"
-import { formField, type FormSubmitEvent } from "../../lib/form.ts"
 import { money, today } from "../../lib/format.ts"
-import { invoiceActionState } from "../../lib/invoice-state.ts"
-import { invoicingClient } from "../../lib/invoicing-client.ts"
-import { useIdempotencyKey } from "../../hooks/idempotency-key.ts"
+import { useCorrectionCreation } from "../../hooks/correction-hooks.ts"
 import type { CorrectionDocument, PaymentSummary } from "../../lib/models.ts"
 import { EmptyState, ErrorAlert } from "../layout/AsyncState.tsx"
 import { Button } from "../ui/Button.tsx"
@@ -17,20 +12,7 @@ interface CorrectionPanelProps {
 }
 
 export const CorrectionPanel = ({ invoiceId, corrections, paymentSummary, notify }: CorrectionPanelProps) => {
-  const queryClient = useQueryClient()
-  const idempotency = useIdempotencyKey()
-  const state = invoiceActionState(paymentSummary, corrections)
-  const create = useMutation({
-    mutationFn: (body: Readonly<Record<string, unknown>>) => runUiEffect(invoicingClient.createCorrection(invoiceId, body, idempotency.current())),
-    onSuccess: async () => { idempotency.complete(); await queryClient.invalidateQueries({ queryKey: ["invoice", invoiceId] }); notify("Documentul storno a fost emis.") },
-    onError: idempotency.fail,
-  })
-  const submit = (event: FormSubmitEvent): void => {
-    event.preventDefault()
-    if (!window.confirm("Emiți un document storno integral? Documentul va fi fiscal și imuabil.")) return
-    const form = event.currentTarget
-    create.mutate({ reason: formField(form, "reason"), issueDate: formField(form, "issueDate") })
-  }
+  const { state, create, submit } = useCorrectionCreation({ invoiceId, corrections, paymentSummary, notify })
   return <section className="card operation-card">
     <div className="section-heading"><div><p className="eyebrow">Corecții fiscale</p><h2>Documente storno</h2></div><span className="count">{corrections.length}</span></div>
     {corrections.length === 0 ? <EmptyState>Factura nu are documente de corecție.</EmptyState> : <ol className="record-list correction-list">{corrections.map((correction) => <li key={correction.id}><div><strong>Storno {correction.series} {correction.number}</strong><span>{correction.issueDate} · {money(correction.totalIncludingVat, correction.currency)}</span></div><p>{correction.reason}</p></li>)}</ol>}

@@ -56,7 +56,7 @@ export interface Page<Item> { readonly items: ReadonlyArray<Item>; readonly next
 export const defaultPageSize = 100
 export const maximumPageSize = 200
 
-const invalidCursor = () => new ValidationFailure({ issues: ["cursor is invalid"] })
+export const invalidCursor = () => new ValidationFailure({ issues: ["cursor is invalid"] })
 
 const decodeCursor = (cursor: string): Readonly<Record<string, unknown>> => {
   let parsed: unknown
@@ -67,11 +67,11 @@ const decodeCursor = (cursor: string): Readonly<Record<string, unknown>> => {
 const encodeCursor = (key: Readonly<Record<string, string | number>>): string =>
   Buffer.from(JSON.stringify(key), "utf8").toString("base64url")
 
-const cursorText = (value: unknown): string => {
+export const cursorText = (value: unknown): string => {
   if (typeof value !== "string") throw invalidCursor()
   return value
 }
-const cursorInteger = (value: unknown): number => {
+export const cursorInteger = (value: unknown): number => {
   if (typeof value !== "number" || !Number.isInteger(value)) throw invalidCursor()
   return value
 }
@@ -84,7 +84,7 @@ const pageLimit = (request: PageRequest | undefined): number => {
   return limit
 }
 
-const pageQuery = <Key>(request: PageRequest | undefined, parse: (raw: Readonly<Record<string, unknown>>) => Key): PageQuery<Key> => {
+export const pageQuery = <Key>(request: PageRequest | undefined, parse: (raw: Readonly<Record<string, unknown>>) => Key): PageQuery<Key> => {
   const limit = pageLimit(request)
   return request?.cursor === undefined ? { limit } : { limit, after: parse(decodeCursor(request.cursor)) }
 }

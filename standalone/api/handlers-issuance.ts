@@ -7,6 +7,9 @@ import type { UseServices } from "./api-types.ts"
 import { applicationHttpApi } from "./http-api.ts"
 
 export const issuanceHandlers = (use: UseServices) => ({
+  listInvoiceRegister: HttpApiBuilder.handler(applicationHttpApi, "invoicing", "listInvoiceRegister", ({ urlParams }) =>
+    sourceFilter(urlParams).pipe(Effect.flatMap((source) => use((s) => s.invoicing.listInvoiceRegister(source, urlParams))),
+      Effect.mapError(errors("ValidationFailure")))),
   listIssuedInvoices: HttpApiBuilder.handler(applicationHttpApi, "invoicing", "listIssuedInvoices", ({ urlParams }) =>
     sourceFilter(urlParams).pipe(Effect.flatMap((source) => use((s) => s.invoicing.listIssuedInvoices(source, urlParams))),
       Effect.mapError(errors("ValidationFailure")))),

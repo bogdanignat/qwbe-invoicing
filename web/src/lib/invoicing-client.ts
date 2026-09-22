@@ -9,9 +9,10 @@ export type {
   ProductPresetInput, UpdateDraftInput,
 } from "./invoicing-client-types.ts"
 export type {
-  Customer, DocumentSeries, DraftInvoice, IssuedInvoice, IssuedInvoiceSummary,
+  Customer, DocumentSeries, DraftInvoice, IssuedInvoice,
   Issuer, PageRequest, ProductPreset, Proforma, ProformaSummary, VatCatalogue, VatRate,
 } from "./models.ts"
+export type { InvoiceRegisterRow } from "./invoice-register.ts"
 
 export const invoicingClient = {
   listCustomers: registryClient.listCustomers,
@@ -23,7 +24,7 @@ export const invoicingClient = {
   createProductPreset: registryClient.createProductPreset,
   updateProductPreset: registryClient.updateProductPreset,
   deleteProductPreset: registryClient.deleteProductPreset,
-  listInvoices: documentsClient.listInvoices,
+  listInvoiceRegister: documentsClient.listInvoiceRegister,
   getIssuer: settingsClient.getIssuer,
   saveIssuer: settingsClient.saveIssuer,
   getVatCatalogue: settingsClient.getVatCatalogue,

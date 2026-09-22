@@ -8,8 +8,10 @@ import * as F from "./schema-issuance.ts"
 import * as P from "./schema-payments.ts"
 import { EFacturaXml } from "./schema-documents.ts"
 import { ListQuery, SourceFilter } from "./schema-primitives.ts"
+import { InvoiceRegisterPage } from "./schema-invoice-register.ts"
 
 export const fiscalEndpoints = {
+  listInvoiceRegister: invoicingBase(validation(HttpApiEndpoint.get("listInvoiceRegister", "/invoice-register").setUrlParams(ListQuery).addSuccess(InvoiceRegisterPage))),
   listPayments: invoicingBase(notFound(HttpApiEndpoint.get("listPayments")`/invoices/${invoiceId}/payments`.addSuccess(P.PaymentSummary))),
   recordPayment: invoicingBase(conflict(notFound(validation(idempotentBody(HttpApiEndpoint.post("recordPayment")`/invoices/${invoiceId}/payments`.setPayload(P.PaymentInput).addSuccess(P.RecordPaymentResult)))))),
   reversePayment: invoicingBase(conflict(notFound(validation(idempotentBody(HttpApiEndpoint.post("reversePayment")`/invoices/${invoiceId}/payments/${paymentId}/reversal`.setPayload(P.ReversalInput).addSuccess(P.RecordPaymentResult)))))),

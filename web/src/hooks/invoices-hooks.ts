@@ -8,7 +8,8 @@ import { authoringPayloadMatchesDraft } from "../lib/invoice-authoring-state.ts"
 import { useIdempotencyKey } from "./idempotency-key.ts"
 import { navigate } from "../lib/navigation.ts"
 import { usePagedList } from "./paged-query.ts"
-import { evictDraftAfterNavigation } from "../lib/query-cache.ts"
+import { evictDraftAfterNavigation, invalidateInvoiceRegister, invoiceRegisterQueryKey } from "../lib/query-cache.ts"
+import { projectInvoiceRegisterRow } from "../lib/invoice-register.ts"
 
 interface InvoiceIssuanceInput {
   readonly draftId: string | undefined
@@ -33,7 +34,7 @@ export const useInvoiceIssuance = (input: InvoiceIssuanceInput) => {
       navigate(`/invoices/${encodeURIComponent(invoice.id)}`)
       if (input.draftId !== undefined) evictDraftAfterNavigation(input.draftId, (filter) => { queryClient.removeQueries(filter) })
       await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["invoices"] }),
+        invalidateInvoiceRegister(queryClient),
         queryClient.invalidateQueries({ queryKey: ["drafts"] }),
       ])
     },
@@ -49,7 +50,7 @@ export const useInvoiceIssuance = (input: InvoiceIssuanceInput) => {
 
 export const useInvoicesRegistry = () => {
   const queryClient = useQueryClient()
-  const invoices = usePagedList(["invoices"], (page) => invoicingClient.listInvoices(page))
+  const register = usePagedList(invoiceRegisterQueryKey, (page) => invoicingClient.listInvoiceRegister(page))
   const drafts = usePagedList(["drafts"], (page) => invoicingClient.listDrafts(page))
   const removal = useMutation({
     mutationFn: (id: string) => runUiEffect(invoicingClient.deleteDraft(id)),
@@ -61,7 +62,8 @@ export const useInvoicesRegistry = () => {
   const removeDraft = (id: string, customerName: string): void => {
     if (window.confirm(`Ștergi draftul pentru „${customerName}”?`)) removal.mutate(id)
   }
-  return { invoices, drafts, removal: { pending: removal.isPending, error: removal.error, removeDraft } }
+  const registerRows = register.items?.map(projectInvoiceRegisterRow)
+  return { register: { ...register, items: registerRows }, drafts, removal: { pending: removal.isPending, error: removal.error, removeDraft } }
 }
 
 export const useInvoiceDetail = (id: string) => {

@@ -13,6 +13,9 @@ export const cube = {
 
 export { createCorrectionOperations } from "./application/corrections.ts"
 export type { CorrectionOperations } from "./application/corrections.ts"
+export { createInvoiceRegisterOperations } from "./application/register.ts"
+export type { InvoiceRegisterOperations } from "./application/register.ts"
 export type { CorrectionsTransaction } from "./application/ports.ts"
 export { negateMoney, validateCreateCorrectionInput } from "./domain/corrections.ts"
 export type { CorrectionDocument, CreateCorrectionInput } from "./domain/corrections.ts"
+export type { InvoiceRegisterCursor, InvoiceRegisterKind, InvoiceRegisterRow } from "./domain/register.ts"
