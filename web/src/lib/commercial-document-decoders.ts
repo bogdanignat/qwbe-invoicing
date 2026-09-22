@@ -4,7 +4,7 @@ import {
   decodeBuyer, decodeIssuedIssuerCompanySnapshot, decodeIssuerSnapshot,
 } from "./party-decoders.ts"
 import type { IssuerCompanySnapshot } from "./party-models.ts"
-import type { IssuedInvoice, IssuedInvoiceSummary, Proforma, ProformaSummary } from "./document-models.ts"
+import type { IssuedInvoice, Proforma, ProformaSummary } from "./document-models.ts"
 
 const decodeInvoiceWithIssuer = <Value extends IssuerCompanySnapshot>(
   input: unknown,
@@ -37,9 +37,6 @@ const decodeInvoiceWithIssuer = <Value extends IssuerCompanySnapshot>(
 
 export const decodeInvoice: Decoder<IssuedInvoice> = (input) =>
   decodeInvoiceWithIssuer(input, decodeIssuerSnapshot)
-export const decodeInvoiceSummary: Decoder<IssuedInvoiceSummary> = (input) =>
-  decodeInvoiceWithIssuer(input, decodeIssuedIssuerCompanySnapshot)
-
 const decodeProformaWithIssuer = <Value extends IssuerCompanySnapshot>(
   input: unknown,
   decodeIssuer: Decoder<Value>,

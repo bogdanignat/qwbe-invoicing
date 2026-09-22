@@ -15,6 +15,7 @@ import { correctionsTransactionAdapter } from "./sqlite-corrections.ts"
 import { customersTransactionAdapter } from "./sqlite-customers.ts"
 import { draftsTransactionAdapter } from "./sqlite-drafts.ts"
 import { invoicesTransactionAdapter } from "./sqlite-invoices.ts"
+import { invoiceRegisterTransactionAdapter } from "./sqlite-invoice-register.ts"
 import { issuerTransactionAdapter } from "./sqlite-issuer.ts"
 import { kernelTransactionAdapter } from "./sqlite-kernel.ts"
 import { paymentsPersistence, paymentsTransactionAdapter } from "./sqlite-payments.ts"
@@ -66,6 +67,7 @@ const applicationTransactionAdapter = (database: DatabaseSync): ApplicationTrans
   ...seriesTransactionAdapter(database),
   ...draftsTransactionAdapter(database),
   ...invoicesTransactionAdapter(database),
+  ...invoiceRegisterTransactionAdapter(database),
   ...kernelTransactionAdapter(database),
   ...customersTransactionAdapter(database),
   ...catalogTransactionAdapter(database),

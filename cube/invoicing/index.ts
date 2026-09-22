@@ -40,5 +40,5 @@ export type * from "./domain/inputs.ts"
 export type { BrandingNormalizer, IssuerProfile, ConfigureIssuerInput, RawIssuerBrandingImage, RawIssuerBranding, VatChange } from "./issuer/index.ts"
 export type { Proforma, ProformaSummary, ProformaConversion, ProformaInvoiceConversion,
   IssueProformaInput, ConvertProformaInput, AuthoringProformaInput } from "./issuance/index.ts"
-export type { CorrectionDocument, CreateCorrectionInput } from "./corrections/index.ts"
+export type { CorrectionDocument, CreateCorrectionInput, InvoiceRegisterCursor, InvoiceRegisterKind, InvoiceRegisterRow } from "./corrections/index.ts"
 export type * from "./domain/unit-of-measures.ts"

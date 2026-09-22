@@ -9,7 +9,7 @@ export type {
 } from "./catalog-models.ts"
 export type {
   CorrectionDocument, DocumentSource, DraftInvoice, DraftLine, IssuedInvoice,
-  IssuedInvoiceSummary, Page, PageRequest, Payment, PaymentSummary, Proforma,
+  Page, PageRequest, Payment, PaymentSummary, Proforma,
   ProformaSummary, VatBreakdown,
 } from "./document-models.ts"
 export { decodeCustomer } from "./party-decoders.ts"
@@ -23,11 +23,11 @@ export {
 } from "./vat-model-decoders.ts"
 export { decodeDraft } from "./document-decoders.ts"
 export {
-  decodeInvoice, decodeInvoiceSummary, decodeProforma, decodeProformaSummary,
+  decodeInvoice, decodeProforma, decodeProformaSummary,
 } from "./commercial-document-decoders.ts"
 export { decodeCorrection, decodePaymentSummary } from "./ledger-decoders.ts"
 export {
   decodeCorrections, decodeCustomerPage, decodeCustomers, decodeDeleted, decodeDraftPage,
-  decodeDrafts, decodeInvoicePage, decodeInvoices, decodePage, decodeProductPresetPage,
+  decodeDrafts, decodePage, decodeProductPresetPage,
   decodeProformaPage, decodeProformas,
 } from "./page-decoders.ts"

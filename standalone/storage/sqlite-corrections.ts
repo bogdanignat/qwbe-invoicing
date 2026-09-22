@@ -6,7 +6,9 @@ import { correctionFrom } from "./sqlite-correction-rows.ts"
 import { vatTreatment } from "./sqlite-document-lines.ts"
 import { sourceFilter, sourceValues } from "./sqlite-document-query.ts"
 
-export const correctionsTransactionAdapter = (database: DatabaseSync): CorrectionsTransaction => ({
+type CorrectionDocumentsTransaction = Pick<CorrectionsTransaction, "saveCorrection" | "findCorrection" | "listCorrections">
+
+export const correctionsTransactionAdapter = (database: DatabaseSync): CorrectionDocumentsTransaction => ({
   saveCorrection: (correction) => write("save correction", () => {
     database.prepare(`INSERT INTO correction_documents
       (id, organization_id, source_app, source_kind, source_id, original_invoice_id, fiscal_year, document_type, series, number, issue_date, issued_at, reason, currency,

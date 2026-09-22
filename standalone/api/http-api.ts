@@ -16,7 +16,7 @@ export const operationNames = [
   "listDrafts", "getDraft", "createDraft", "updateDraft", "deleteDraft",
   "addDraftLine", "updateDraftLine", "deleteDraftLine", "issueDraftInvoice", "issueInvoice",
   "listPayments", "recordPayment", "reversePayment", "createCorrection", "listCorrections", "getCorrection",
-  "listIssuedInvoices", "getIssuedInvoice", "renderInvoicePdf", "downloadInvoicePdf",
+  "listInvoiceRegister", "listIssuedInvoices", "getIssuedInvoice", "renderInvoicePdf", "downloadInvoicePdf",
   "downloadInvoiceEFactura", "downloadCorrectionEFactura",
   "issueDraftProforma", "issueProforma", "listProformas", "getProforma", "issueInvoiceFromProforma", "createDraftInvoiceFromProforma",
   "renderProformaPdf", "downloadProformaPdf", "getSession", "createSession", "deleteSession",
@@ -32,7 +32,7 @@ const invoicing = HttpApiGroup.make("invoicing")
   .add(d.addDraftLine).add(d.updateDraftLine).add(d.deleteDraftLine).add(d.issueDraftInvoice)
   .add(f.listPayments).add(f.recordPayment).add(f.reversePayment).add(f.createCorrection)
   .add(f.listCorrections).add(f.getCorrection).add(f.downloadCorrectionEFactura)
-  .add(f.listIssuedInvoices).add(f.issueInvoice).add(f.getIssuedInvoice).add(f.downloadInvoiceEFactura)
+  .add(f.listInvoiceRegister).add(f.listIssuedInvoices).add(f.issueInvoice).add(f.getIssuedInvoice).add(f.downloadInvoiceEFactura)
   .add(f.issueDraftProforma).add(f.listProformas).add(f.issueProforma).add(f.getProforma)
   .add(f.issueInvoiceFromProforma).add(f.createDraftInvoiceFromProforma)
 const documents = HttpApiGroup.make("documents")

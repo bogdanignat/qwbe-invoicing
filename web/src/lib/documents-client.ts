@@ -2,13 +2,15 @@ import { Effect } from "effect"
 import { apiBlob, apiRequest } from "./api-transport.ts"
 import { encoded, ignored, paged } from "./client-paths.ts"
 import {
-  decodeCorrection, decodeCorrections, decodeDraft, decodeInvoice, decodeInvoicePage,
-  decodePaymentSummary, decodeProforma, decodeProformaPage, type PageRequest,
+  decodeCorrection, decodeCorrections, decodeDraft, decodeInvoice, decodePaymentSummary,
+  decodeProforma, decodeProformaPage, type PageRequest,
 } from "./models.ts"
+import { decodeInvoiceRegisterPage } from "./invoice-register.ts"
 import type { AuthoringDocumentInput, AuthoringProformaInput, InvoiceBundleEffect } from "./invoicing-client-types.ts"
 
 export const documentsClient = {
-  listInvoices: (page?: PageRequest) => apiRequest(paged("/api/invoices", page), decodeInvoicePage),
+  listInvoiceRegister: (page?: PageRequest) =>
+    apiRequest(paged("/api/invoice-register", page), decodeInvoiceRegisterPage),
   issueInvoice: (body: AuthoringDocumentInput, idempotencyKey: string) =>
     apiRequest("/api/invoices", decodeInvoice, { method: "POST", body, idempotencyKey }),
   issueProforma: (body: AuthoringProformaInput, idempotencyKey: string) =>

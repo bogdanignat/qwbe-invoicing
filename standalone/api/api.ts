@@ -46,6 +46,7 @@ const invoicingGroup = (runtime: ApiRuntime) => {
         (original) => ({ correction, original })))).pipe(
       Effect.flatMap(({ correction, original }) => efacturaXml(() => mapCorrection(correction, original))),
       Effect.mapError(errors("ResourceNotFound", "ValidationFailure"))))
+    .handle("listInvoiceRegister", i.listInvoiceRegister)
     .handle("listIssuedInvoices", i.listIssuedInvoices).handle("issueInvoice", i.issueInvoice)
     .handle("getIssuedInvoice", i.getIssuedInvoice)
     .handleRaw("downloadInvoiceEFactura", ({ path }) => use((s) => s.invoicing.getIssuedInvoice(path.id)).pipe(

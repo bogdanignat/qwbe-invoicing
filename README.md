@@ -290,6 +290,7 @@ handler on shutdown.
 | Drafts | `GET`, `POST /api/drafts`, `GET`, `PUT`, `DELETE /api/drafts/:id`, lines under `/api/drafts/:id/lines` |
 | Issue | `POST /api/invoices`, `POST /api/drafts/:id/issue` |
 | Invoices | `GET /api/invoices`, `GET /api/invoices/:id`, `POST`, `GET /api/invoices/:id/pdf` |
+| Invoice register | `GET /api/invoice-register` — paged invoices and storno documents |
 | Payments | `GET`, `POST /api/invoices/:id/payments`, `POST /api/invoices/:id/payments/:paymentId/reversal` |
 | Corrections | `GET`, `POST /api/invoices/:id/corrections`, `GET /api/corrections/:id` |
 | Proformas | `POST /api/proformas`, `POST /api/drafts/:id/proformas`, `GET /api/proformas`, `GET /api/proformas/:id`, `POST /api/proformas/:id/invoice`, `POST`, `GET /api/proformas/:id/pdf` |
@@ -353,10 +354,19 @@ their `-wal`/`-shm` files explicitly, keeping the token file. Then run `migrate 
 `migrate --apply --json`, a repeated dry-run and `doctor --json`. There is no backfill
 and no legacy-snapshot fallback.
 
-Registries (`GET /api/customers`, `/api/product-presets`, `/api/drafts`, `/api/invoices`, `/api/proformas`)
+Registries (`GET /api/customers`, `/api/product-presets`, `/api/drafts`, `/api/invoice-register`, `/api/invoices`, `/api/proformas`)
 are paged: the response is `{ "items": [...], "nextCursor": "..." | null }`, `?limit=` takes 1 to 200
 (default 100) and `?cursor=` repeats the previous `nextCursor`. Documents are ordered by issue date,
 number and id, registries by name and id, so a cursor stays valid while new records arrive.
+
+`GET /api/invoice-register` is the read-only mixed fiscal register; `GET /api/invoices`
+keeps its invoice-only contract. Every row has `kind`, its own `id`, series, number,
+issue date, customer name, currency and stored total. Invoice rows expose nullable
+`dueDate` and their non-null `eFacturaStatus`, and omit `originalReference`. Correction
+rows retain their negative total, expose `dueDate: null`, `eFacturaStatus: null`, and
+reference the organization-scoped original invoice by id, series and number. The mixed
+register uses a dedicated opaque cursor that also contains `kind`; invoice-list cursors
+are rejected rather than interpreted in a different ordering.
 
 Issued invoices have no `DELETE`. Mistakes are handled through correction documents, which are
 numbered in the invoice series like any other invoice (Codul fiscal art. 330). Issue dates cannot be

@@ -71,10 +71,6 @@ export interface IssuedInvoice extends DocumentTotals {
   readonly eFacturaStatus: string
 }
 
-export type IssuedInvoiceSummary = Omit<IssuedInvoice, "issuer"> & {
-  readonly issuer: IssuerCompanySnapshot
-}
-
 export interface Proforma extends DocumentTotals {
   readonly actorId: string
   readonly id: string

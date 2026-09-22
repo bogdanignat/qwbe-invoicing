@@ -8,12 +8,12 @@ import { useInvoicesRegistry } from "../hooks/invoices-hooks.ts"
 
 export const InvoicesView = () => {
   const state = useInvoicesRegistry()
-  if (state.invoices.items === undefined && state.invoices.isPending) return <Loading />
-  if (state.invoices.items === undefined) return <Page title="Facturi" eyebrow="Documente și drafturi"><ErrorAlert error={state.invoices.error} /></Page>
+  if (state.register.items === undefined && state.register.isPending) return <Loading />
+  if (state.register.items === undefined) return <Page title="Facturi" eyebrow="Documente și drafturi"><ErrorAlert error={state.register.error} /></Page>
   const draftItems = state.drafts.items ?? []
-  const invoiceItems = state.invoices.items
+  const registerItems = state.register.items
   return <Page title="Facturi" eyebrow="Documente și drafturi" actions={<ButtonLink href="/invoices/new">Factură nouă</ButtonLink>}>
-    {state.invoices.error === null ? null : <ErrorAlert error={state.invoices.error} />}
+    {state.register.error === null ? null : <ErrorAlert error={state.register.error} />}
     <section className="card overview-section">
       <div className="section-heading"><div><h2>Drafturi deschise</h2><p>Continuă editarea sau șterge documentele de lucru care nu mai sunt necesare.</p></div><span className="count">{draftItems.length}</span></div>
       {state.removal.error === null ? null : <ErrorAlert error={state.removal.error} />}
@@ -22,9 +22,9 @@ export const InvoicesView = () => {
       <LoadMore visible={state.drafts.hasMore} pending={state.drafts.loadingMore} onClick={state.drafts.loadMore} />
     </section>
     <section className="card">
-      <div className="section-heading"><div><h2>Registru de facturi</h2><p>Snapshot-uri fiscale imuabile, ordonate după emitere.</p></div><span className="count">{invoiceItems.length}</span></div>
-      {invoiceItems.length === 0 ? <EmptyState>Nu există încă facturi emise.</EmptyState> : <div className="table-wrap"><table><caption className="sr-only">Registru de facturi</caption><thead><tr><th>Număr</th><th>Client</th><th>Emisă</th><th>Scadență</th><th>Total</th><th>Status</th></tr></thead><tbody>{invoiceItems.map((invoice) => <tr key={invoice.id} className="clickable-row"><td><a href={`/invoices/${encodeURIComponent(invoice.id)}`}><strong>{invoice.series} {invoice.number}</strong></a></td><td>{invoice.customer.name}</td><td>{invoice.issueDate}</td><td>{invoice.dueDate ?? "—"}</td><td>{money(invoice.totalIncludingVat, invoice.currency)}</td><td><span className="badge">{invoice.eFacturaStatus}</span></td></tr>)}</tbody></table></div>}
-      <LoadMore visible={state.invoices.hasMore} pending={state.invoices.loadingMore} onClick={state.invoices.loadMore} />
+      <div className="section-heading"><div><h2>Registru de facturi</h2><p>Snapshot-uri fiscale imuabile, ordonate după emitere.</p></div><span className="count">{registerItems.length}</span></div>
+      {registerItems.length === 0 ? <EmptyState>Nu există încă facturi emise.</EmptyState> : <div className="table-wrap"><table><caption className="sr-only">Registru de facturi</caption><thead><tr><th>Număr</th><th>Client</th><th>Emisă</th><th>Scadență</th><th>Total</th><th>Status</th></tr></thead><tbody>{registerItems.map((row) => <tr key={row.key} className={row.documentHref === null ? undefined : "clickable-row"}><td>{row.documentHref === null ? <strong>{row.number}</strong> : <a href={row.documentHref}><strong>{row.number}</strong></a>}{row.kindLabel === null ? null : <small>{row.kindLabel}</small>}{row.originalInvoice === null ? null : <small><a href={row.originalInvoice.href}>{row.originalInvoice.label}</a></small>}</td><td>{row.customerName}</td><td>{row.issueDate}</td><td>{row.dueDate}</td><td>{row.total}</td><td><span className="badge">{row.status}</span></td></tr>)}</tbody></table></div>}
+      <LoadMore visible={state.register.hasMore} pending={state.register.loadingMore} onClick={state.register.loadMore} />
     </section>
   </Page>
 }
