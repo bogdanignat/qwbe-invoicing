@@ -128,6 +128,12 @@ export type CreateDraftInput = BuyerSource & {
   readonly currency?: "RON"
   readonly dueDate?: string | null
   readonly notes?: string | null
+  /**
+   * A draft is created whole: header and every line commit in one transaction
+   * under one idempotency key, so a lost answer leaves either the finished
+   * document or nothing — never a header a retry would have to reconcile.
+   */
+  readonly lines?: ReadonlyArray<DraftLineInput>
 }
 
 export type UpdateDraftInput = BuyerSource & {

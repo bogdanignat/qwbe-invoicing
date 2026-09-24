@@ -4,7 +4,8 @@ import { decodeDeleted, decodeDraft, decodeDraftPage, decodeInvoice, type PageRe
 import type { CreateDraftInput, DraftLineInput, UpdateDraftInput } from "./invoicing-client-types.ts"
 
 export const draftsClient = {
-  createDraft: (body: CreateDraftInput) => apiRequest("/api/drafts", decodeDraft, { method: "POST", body }),
+  createDraft: (body: CreateDraftInput, idempotencyKey: string) =>
+    apiRequest("/api/drafts", decodeDraft, { method: "POST", body, idempotencyKey }),
   listDrafts: (page?: PageRequest) => apiRequest(paged("/api/drafts", page), decodeDraftPage),
   getDraft: (id: string) => apiRequest(`/api/drafts/${encoded(id)}`, decodeDraft),
   updateDraft: (id: string, body: UpdateDraftInput) =>

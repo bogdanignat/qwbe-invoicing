@@ -13,8 +13,10 @@ export const draftHandlers = (use: UseServices) => ({
       Effect.mapError(errors("ValidationFailure")))),
   getDraft: HttpApiBuilder.handler(applicationHttpApi, "invoicing", "getDraft", ({ path }) =>
     use((s) => s.invoicing.getDraft(path.id)).pipe(Effect.mapError(errors("ResourceNotFound")))),
-  createDraft: HttpApiBuilder.handler(applicationHttpApi, "invoicing", "createDraft", ({ payload }) =>
-    use((s) => s.invoicing.createDraft(payload)).pipe(Effect.mapError(errors("ValidationFailure", "ResourceNotFound")))),
+  createDraft: HttpApiBuilder.handler(applicationHttpApi, "invoicing", "createDraft", ({ payload, headers }) =>
+    idempotent(headers["idempotency-key"], "create_draft", payload).pipe(
+      Effect.flatMap((input) => use((s) => s.invoicing.createDraft(input))),
+      Effect.mapError(errors("ValidationFailure", "ResourceNotFound", "DomainConflict")))),
   updateDraft: HttpApiBuilder.handler(applicationHttpApi, "invoicing", "updateDraft", ({ path, payload }) =>
     use((s) => s.invoicing.updateDraft({ draftId: path.id, ...payload })).pipe(
       Effect.mapError(errors("ValidationFailure", "ResourceNotFound", "DomainConflict")))),

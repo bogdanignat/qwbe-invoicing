@@ -82,7 +82,6 @@ export const authorDocument = (
   yield* checked(() => {
     validateDocumentSeries({ organizationId, documentType, series: input.series })
     if (input.currency !== undefined && input.currency !== "RON") throw new ValidationFailure({ issues: ["currency must be RON"] })
-    if ("lines" in input && input.lines.length === 0) throw new ValidationFailure({ issues: ["document must contain at least one line"] })
     validateDocumentNotes(input.notes)
   })
   const issuer = yield* transaction.findIssuer(organizationId)
@@ -92,7 +91,9 @@ export const authorDocument = (
   const customer = yield* buyerFrom(input, organizationId, transaction)
   const header = yield* dates(input.issueDate, input.dueDate)
   const source = yield* documentSource(input.source)
-  const lines = yield* Effect.forEach("lines" in input ? input.lines : [], (line) => Effect.flatMap(ids.next, (id) =>
+  // Authoring accepts a document without lines: a draft is allowed to stay
+  // incomplete. Issuance is what requires at least one line (see issuanceSource).
+  const lines = yield* Effect.forEach(input.lines ?? [], (line) => Effect.flatMap(ids.next, (id) =>
     checked(() => calculateLine({ ...line, id, vat: resolveVatConfiguration(issuer, line.vatRateCode, input.issueDate) }))))
   return { issuer, document: { organizationId, ...customer, ...(source === undefined ? {} : { source }), series: series.series, ...header, currency: "RON" as const,
     notes: input.notes ?? null, lines, ...calculateTotals(lines) } }

@@ -6,6 +6,7 @@ import { ErrorAlert, Loading } from "../components/AsyncState.tsx"
 import { Page } from "../components/Page.tsx"
 import { PrivateScreen } from "../components/PrivateScreen.tsx"
 import { InvoiceAuthoringSession } from "../components/authoring/InvoiceAuthoringSession.tsx"
+import { LockedDraftReadonly } from "../components/authoring/LockedDraftReadonly.tsx"
 import { useAuthenticatedShell } from "../hooks/use-authenticated-shell.ts"
 import { useInvoiceAuthoringPage } from "../hooks/use-invoice-authoring-page.ts"
 
@@ -37,11 +38,10 @@ export const InvoiceAuthoringView = ({ id }: InvoiceAuthoringViewProps) => {
         : page.kind === "invoice-series-required" ? <p className="setup-note">Nu există nicio serie de facturi configurată. Adaugă o serie pentru facturi în aplicația existentă, apoi revino aici.</p>
         : page.kind === "unit-catalogue-empty" ? <p className="setup-note">Catalogul de unități de măsură este gol. Verifică configurarea organizației în aplicația existentă, apoi reîncearcă.</p>
         : page.kind === "draft-missing" ? <p className="setup-note">Draftul cerut nu există sau nu mai este disponibil. <Link href="/invoices">Întoarce-te la registrul de facturi</Link>.</p>
-        : page.kind === "locked" ? <div className="card">
-          <h2>{page.title}</h2>
-          <p>{page.notice}</p>
-          <p><Link className="button secondary" href={page.registryHref}>{page.registryLabel}</Link></p>
-        </div>
+        : page.kind === "locked" ? <LockedDraftReadonly
+          title={page.title} notice={page.notice}
+          registryHref={page.registryHref} registryLabel={page.registryLabel}
+        />
         : <InvoiceAuthoringSession
           key={page.sessionKey}
           initialDraft={page.initialDraft}

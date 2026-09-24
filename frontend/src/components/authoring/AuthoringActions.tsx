@@ -13,7 +13,7 @@ export const AuthoringActions = ({ session }: { readonly session: InvoiceAuthori
   const { actions, feedback, status, draftDeletion, derivedNotice } = session
   return <section className="card authoring-section">
     <h2>Acțiuni document</h2>
-    <Button className="secondary full-width" type="submit" disabled={status.pending}>
+    <Button className="secondary full-width" type="submit" disabled={status.pending || status.recoveryBlocked}>
       {status.savePending ? "Se salvează toate modificările…" : "Salvează draftul"}
     </Button>
     <p className="hint">Draftul este opțional și rămâne editabil.</p>
@@ -25,7 +25,7 @@ export const AuthoringActions = ({ session }: { readonly session: InvoiceAuthori
     </Button>
     {draftDeletion.kind === "hidden" ? null : draftDeletion.kind === "available"
       ? <Button className="danger full-width" disabled={status.pending} onClick={actions.deleteDraft}>Șterge draftul</Button>
-      : <p className="status-note">{derivedNotice}</p>}
+      : draftDeletion.kind === "derived" ? <p className="status-note">{derivedNotice}</p> : null}
     <p className="hint">Dintr-un document nou poți emite direct. Dacă ai salvat deja draftul, salvează întâi orice modificare nouă.</p>
     {feedback.notice === null ? null : <p className="status-note" role="status" aria-live="polite">{feedback.notice}</p>}
   </section>

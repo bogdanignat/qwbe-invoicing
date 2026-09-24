@@ -60,6 +60,7 @@ export interface IdempotencyAttempt {
 }
 
 export type IdempotencyOperation =
+  | "create_draft"
   | "issue_invoice_direct"
   | "issue_invoice_from_draft"
   | "issue_proforma_direct"

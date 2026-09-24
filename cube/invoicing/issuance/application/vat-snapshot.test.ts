@@ -32,7 +32,7 @@ void test("SRL and PFA freeze VAT registration at issueDate on direct and draft 
       assert.equal(invoice.issuer.vatRegistered, registered)
       assert.equal(proforma.issuer.vatRegistered, registered)
       for (const kind of ["invoice", "proforma"]) {
-        const draft = await Effect.runPromise(service.createDraft(document))
+        const draft = await Effect.runPromise(service.createDraft(idempotent(document)))
         await Effect.runPromise(service.addDraftLine({ draftId: draft.id, ...line }))
         const issued = kind === "invoice"
           ? await Effect.runPromise(service.issueInvoice(idempotent({ draftId: draft.id })))
@@ -52,8 +52,8 @@ void test("rejects a draft whose breakdown alone is corrupt before numbering or 
     tradeRegistryNumber: "J40/123/2020", socialCapital: "200.00", iban: "", bankName: "", branding: null,
     address, defaultCurrency: "RON", defaultPaymentTermDays: 15, vatChange: { registered: true, effectiveFrom: "2025-08-01" } }))
   await Effect.runPromise(service.addDocumentSeries({ documentType: "invoice", series: "INV" }))
-  const draft = await Effect.runPromise(service.createDraft({ series: "INV", issueDate: "2026-09-01", dueDate: "2026-09-01",
-    customer: { partyType: "individual", name: "Client", fiscalIdentifier: "", vatRegistered: false, address } }))
+  const draft = await Effect.runPromise(service.createDraft(idempotent({ series: "INV", issueDate: "2026-09-01", dueDate: "2026-09-01",
+    customer: { partyType: "individual", name: "Client", fiscalIdentifier: "", vatRegistered: false, address } })))
   const complete = await Effect.runPromise(service.addDraftLine({ draftId: draft.id, description: "Serviciu", quantity: "1",
     unitPrice: "10", unitOfMeasure: each, vatRateCode: "RO_STANDARD" }))
   state.drafts.set(draft.id, { ...complete, vatBreakdown: complete.vatBreakdown.map((item) => ({ ...item, vatAmount: "2.09" })) })

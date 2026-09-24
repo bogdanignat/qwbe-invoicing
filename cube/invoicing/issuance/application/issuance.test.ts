@@ -52,31 +52,31 @@ void test("issues deterministic immutable invoice snapshots through the public s
     vatRegistered: true,
     address: { countryCode: "RO", city: "București", street: "Strada Mică 2", county: "RO-B", sector: 3 },
   }))
-  const unknownSeries = await Effect.runPromise(Effect.flip(service.createDraft({
+  const unknownSeries = await Effect.runPromise(Effect.flip(service.createDraft(idempotent({
     customerId: customer.id,
     issueDate: "2026-09-01",
     series: "UNKNOWN",
-  })))
+  }))))
   assert.equal(unknownSeries instanceof ResourceNotFound && unknownSeries.resource === "document_series", true)
-  const invalidDueDate = await Effect.runPromise(Effect.flip(service.createDraft({
+  const invalidDueDate = await Effect.runPromise(Effect.flip(service.createDraft(idempotent({
     customerId: customer.id,
     issueDate: "2026-09-01",
     series: "QWBE",
     dueDate: "2026-08-31",
-  })))
+  }))))
   assert.equal(invalidDueDate instanceof ValidationFailure, true)
-  const invalidCurrency = await Effect.runPromise(Effect.flip(service.createDraft({
+  const invalidCurrency = await Effect.runPromise(Effect.flip(service.createDraft(idempotent({
     customerId: customer.id,
     issueDate: "2026-09-01",
     series: "QWBE",
     currency: "EUR",
-  })))
+  }))))
   assert.equal(invalidCurrency instanceof ValidationFailure && invalidCurrency.issues.includes("currency must be RON"), true)
-  const draft = await Effect.runPromise(service.createDraft({
+  const draft = await Effect.runPromise(service.createDraft(idempotent({
     customerId: customer.id,
     issueDate: "2026-09-01",
     series: "QWBE",
-  }))
+  })))
   assert.equal(draft.series, "QWBE")
   assert.equal(draft.dueDate, null)
   await Effect.runPromise(service.addDraftLine({
@@ -139,11 +139,11 @@ void test("issues deterministic immutable invoice snapshots through the public s
   assert.deepEqual(await Effect.runPromise(service.listCustomers()), { items: [], nextCursor: null })
   const deletedCustomer = await Effect.runPromise(Effect.flip(service.getCustomer(customer.id)))
   assert.equal(deletedCustomer instanceof ResourceNotFound, true)
-  const newDraft = await Effect.runPromise(Effect.flip(service.createDraft({
+  const newDraft = await Effect.runPromise(Effect.flip(service.createDraft(idempotent({
     customerId: customer.id,
     issueDate: "2026-09-02",
     series: "QWBE",
-  })))
+  }))))
   assert.equal(newDraft instanceof ResourceNotFound, true)
   assert.equal((await Effect.runPromise(service.getIssuedInvoice(issued.id))).customer.name, "Client SRL")
 })
@@ -185,7 +185,7 @@ void test("failed invoice and proforma issuance rolls back both the document and
     vatRegistered: true,
     address: { countryCode: "RO", city: "Iași", street: "Strada Mică 2", county: "RO-IS" },
   }))
-  const draft = await Effect.runPromise(service.createDraft({ customerId: customer.id, issueDate: "2026-09-01", series: "QWBE", dueDate: "2026-09-16" }))
+  const draft = await Effect.runPromise(service.createDraft(idempotent({ customerId: customer.id, issueDate: "2026-09-01", series: "QWBE", dueDate: "2026-09-16" })))
   const deletion = await Effect.runPromise(Effect.flip(service.deleteCustomer(customer.id)))
   assert.equal(deletion instanceof DomainConflict && deletion.code === "customer_has_open_drafts", true)
   await Effect.runPromise(service.addDraftLine({
@@ -197,6 +197,9 @@ void test("failed invoice and proforma issuance rolls back both the document and
     vatRateCode: "RO_STANDARD",
   }))
   const auditBaseline = state.auditEvents.length
+  // Creating the draft is itself an idempotent operation now: the assertion
+  // below is about issuance consuming no further key, not about an empty table.
+  const idempotencyBaseline = state.idempotency.size
 
   const invoiceFailure = await Effect.runPromise(Effect.flip(service.issueInvoice(idempotent({ draftId: draft.id }))))
   assert.equal(invoiceFailure instanceof DomainConflict && invoiceFailure.code === "forced_failure", true)
@@ -217,11 +220,11 @@ void test("failed invoice and proforma issuance rolls back both the document and
   await expectConflict(auditFailing.issueInvoice(idempotent({ draftId: draft.id })), "forced_audit_failure")
   assert.equal(state.sequences.size, 0)
   assert.equal(state.issued.size, 0)
-  assert.equal(state.idempotency.size, 0)
+  assert.equal(state.idempotency.size, idempotencyBaseline)
   assert.equal(state.auditEvents.length, auditBaseline)
   assert.equal(state.drafts.get(draft.id)?.status, "draft")
 
-  const proformaDraft = await Effect.runPromise(service.createDraft({ customerId: customer.id, issueDate: "2026-09-01", series: "QWBE" }))
+  const proformaDraft = await Effect.runPromise(service.createDraft(idempotent({ customerId: customer.id, issueDate: "2026-09-01", series: "QWBE" })))
   await Effect.runPromise(service.addDraftLine({
     draftId: proformaDraft.id,
     description: "Avans",
@@ -254,7 +257,7 @@ void test("issues immutable proformas from saved drafts", async () => {
   const buyer = { partyType: "company" as const, name: "Client SRL", fiscalIdentifier: "87654329", vatRegistered: true,
     address: { countryCode: "RO", city: "Iași", street: "Strada Mică 2", county: "RO-IS" } }
   const savedCustomer = await Effect.runPromise(service.createCustomer(buyer))
-  const source = await Effect.runPromise(service.createDraft({ customerId: savedCustomer.id, series: "SAME", issueDate: "2026-09-01", dueDate: null }))
+  const source = await Effect.runPromise(service.createDraft(idempotent({ customerId: savedCustomer.id, series: "SAME", issueDate: "2026-09-01", dueDate: null })))
   await Effect.runPromise(service.addDraftLine({
     draftId: source.id, description: "Servicii", quantity: "1", unitPrice: "100", unitOfMeasure: each, vatRateCode: "RO_STANDARD",
   }))
@@ -272,7 +275,7 @@ void test("issues immutable proformas from saved drafts", async () => {
     draftId: source.id, description: "X", quantity: "1", unitPrice: "1", unitOfMeasure: each, vatRateCode: "RO_STANDARD",
   }), "draft_already_issued")
 
-  const invoiceSource = await Effect.runPromise(service.createDraft({ customer: buyer, series: "SAME", issueDate: "2026-09-01", dueDate: "2026-09-16" }))
+  const invoiceSource = await Effect.runPromise(service.createDraft(idempotent({ customer: buyer, series: "SAME", issueDate: "2026-09-01", dueDate: "2026-09-16" })))
   await Effect.runPromise(service.addDraftLine({ draftId: invoiceSource.id, description: "Direct", quantity: "1", unitPrice: "10", unitOfMeasure: each, vatRateCode: "RO_STANDARD" }))
   assert.equal((await Effect.runPromise(service.issueInvoice(idempotent({ draftId: invoiceSource.id })))).number, 1)
   assert.equal((await Effect.runPromise(service.listProformas())).items[0]?.convertedDraftId, null)
@@ -424,7 +427,7 @@ void test("freezes draft remarks into every issued snapshot and carries them thr
   const directInvoice = await Effect.runPromise(service.issueInvoice(idempotent(authored)))
   assert.equal(directInvoice.notes, remarks)
 
-  const invoiceDraft = await Effect.runPromise(service.createDraft({ customer, series: "INV", issueDate: "2026-09-01", dueDate: "2026-09-16", notes: remarks }))
+  const invoiceDraft = await Effect.runPromise(service.createDraft(idempotent({ customer, series: "INV", issueDate: "2026-09-01", dueDate: "2026-09-16", notes: remarks })))
   await Effect.runPromise(service.addDraftLine({ draftId: invoiceDraft.id, ...line }))
   assert.equal((await Effect.runPromise(service.issueInvoice(idempotent({ draftId: invoiceDraft.id })))).notes, remarks)
 
@@ -433,7 +436,7 @@ void test("freezes draft remarks into every issued snapshot and carries them thr
   const directProforma = await Effect.runPromise(service.issueProforma(idempotent({ ...authoredProforma, proformaSeries: "PRO" })))
   assert.equal(directProforma.notes, remarks)
 
-  const proformaDraft = await Effect.runPromise(service.createDraft({ customer, series: "INV", issueDate: "2026-09-01", dueDate: "2026-09-16", notes: remarks }))
+  const proformaDraft = await Effect.runPromise(service.createDraft(idempotent({ customer, series: "INV", issueDate: "2026-09-01", dueDate: "2026-09-16", notes: remarks })))
   await Effect.runPromise(service.addDraftLine({ draftId: proformaDraft.id, ...line }))
   const draftProforma = await Effect.runPromise(service.issueProforma(idempotent({ draftId: proformaDraft.id, series: "PRO" })))
   assert.equal(draftProforma.notes, remarks)

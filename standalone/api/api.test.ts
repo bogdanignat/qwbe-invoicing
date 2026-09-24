@@ -164,7 +164,7 @@ void test("requires host authentication and serves the complete invoice-core rou
     assert.equal(companyWithoutCui.status, 400)
     assert.equal((companyWithoutCui.body as { issues: ReadonlyArray<string> }).issues.includes("fiscalIdentifier is required for company"), true)
     const draftWithoutCui = await handleApiRequest({
-      method: "POST", url: "/api/drafts", authorization,
+      method: "POST", url: "/api/drafts", authorization, idempotencyKey: "http-draft-1",
       body: { customer: { partyType: "company", name: "Fără CUI SRL", fiscalIdentifier: "", vatRegistered: false,
         address: { countryCode: "RO", city: "Iași", street: "Strada 2", county: "RO-IS" } }, issueDate: "2026-09-01", series: "QWBE" },
     }, runtime)
@@ -205,6 +205,7 @@ void test("requires host authentication and serves the complete invoice-core rou
       method: "POST",
       url: "/api/drafts",
       authorization,
+      idempotencyKey: "http-draft-6",
       body: { customerId, issueDate: "2026-09-01", series: "QWBE" },
     }, runtime)
     assert.equal(draft.status, 200)
@@ -214,17 +215,17 @@ void test("requires host authentication and serves the complete invoice-core rou
     assert.equal((draft.body as { dueDate: string | null }).dueDate, null)
     assert.equal((draft.body as { sourceProformaId: string | null }).sourceProformaId, null)
     const invalidDueDate = await handleApiRequest({
-      method: "POST", url: "/api/drafts", authorization,
+      method: "POST", url: "/api/drafts", authorization, idempotencyKey: "http-draft-2",
       body: { customerId, issueDate: "2026-09-01", series: "QWBE", dueDate: 7 },
     }, runtime)
     assert.equal(invalidDueDate.status, 400)
     const ambiguousBuyer = await handleApiRequest({
-      method: "POST", url: "/api/drafts", authorization,
+      method: "POST", url: "/api/drafts", authorization, idempotencyKey: "http-draft-3",
       body: { customerId, customer: customer.body, issueDate: "2026-09-01", series: "QWBE" },
     }, runtime)
     assert.equal(ambiguousBuyer.status, 400)
     const disposable = await handleApiRequest({
-      method: "POST", url: "/api/drafts", authorization,
+      method: "POST", url: "/api/drafts", authorization, idempotencyKey: "http-draft-4",
       body: { customer: { partyType: "individual", name: "Client unic", fiscalIdentifier: "", vatRegistered: false,
         address: { countryCode: "RO", city: "Iași", street: "Strada 3", county: "RO-IS" } }, issueDate: "2026-09-01", series: "QWBE" },
     }, runtime)
@@ -332,7 +333,7 @@ void test("requires host authentication and serves the complete invoice-core rou
       count: (payments.body as { payments: ReadonlyArray<unknown> }).payments.length,
     }, { status: "partially_paid", paidAmount: "50.00", remainingAmount: "71.00", count: 3 })
     const proformaDraft = await handleApiRequest({
-      method: "POST", url: "/api/drafts", authorization,
+      method: "POST", url: "/api/drafts", authorization, idempotencyKey: "http-draft-5",
       body: { customerId, issueDate: "2026-09-05", dueDate: "2026-09-20", series: "QWBE",
         source: { app: "crm", kind: "offer", id: "offer-1" } },
     }, runtime)
@@ -689,7 +690,7 @@ void test("carries document remarks through the HTTP contract and rejects invali
 
     const draft = await call("POST", "/api/drafts", {
       customer, issueDate: "2026-09-01", dueDate: "2026-09-16", series: "QWBE", notes: remarks,
-    })
+    }, "notes-draft")
     assert.equal(draft.status, 200)
     assert.equal(notesOf(draft), remarks)
     const draftId = (draft.body as { id: string }).id
@@ -697,8 +698,11 @@ void test("carries document remarks through the HTTP contract and rejects invali
     assert.equal(notesOf(await call("PUT", `/api/drafts/${draftId}`, { customer, issueDate: "2026-09-01" })), remarks)
     assert.equal(notesOf(await call("PUT", `/api/drafts/${draftId}`, { customer, issueDate: "2026-09-01", notes: null })), null)
     assert.equal(notesOf(await call("PUT", `/api/drafts/${draftId}`, { customer, issueDate: "2026-09-01", dueDate: "2026-09-16", notes: remarks })), remarks)
-    for (const notes of ["", "   ", " marginal ", "x".repeat(501), 7, "tab\tstop", "linie\u2028separata", "paragraf\u2029separat"]) {
-      assert.equal((await call("POST", "/api/drafts", { customer, issueDate: "2026-09-01", series: "QWBE", notes })).status, 400, String(notes))
+    for (const [index, notes] of ["", "   ", " marginal ", "x".repeat(501), 7, "tab\tstop", "linie\u2028separata", "paragraf\u2029separat"].entries()) {
+      // The key is indexed, not derived from the rejected note: a note may hold
+      // characters an Idempotency-Key may not, and the 400 under test is the
+      // note's, not the header's.
+      assert.equal((await call("POST", "/api/drafts", { customer, issueDate: "2026-09-01", series: "QWBE", notes }, `notes-draft-${String(index)}`)).status, 400, String(notes))
       assert.equal((await call("PUT", `/api/drafts/${draftId}`, { customer, issueDate: "2026-09-01", notes })).status, 400, String(notes))
     }
     await call("POST", `/api/drafts/${draftId}/lines`, {

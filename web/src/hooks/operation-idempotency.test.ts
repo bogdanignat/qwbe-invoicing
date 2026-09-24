@@ -30,3 +30,24 @@ void test("preserves the same key when a timeout or server failure leaves the co
     assert.equal(keys.current("create-proforma", "payload"), original, `HTTP ${String(status)}`)
   }
 })
+
+void test("a draft creation key follows the document intent, never the attempt", () => {
+  let sequence = 0
+  const keys = createOperationIdempotency(() => `key-${String(++sequence)}`)
+  const payload = JSON.stringify({ customerId: "customer-1", series: "QWBE", issueDate: "2026-09-01", dueDate: null, notes: null })
+  const key = keys.current("create-draft", payload)
+  // Retrying the save is the same intent: the key may not rotate, or the server
+  // authors a second draft for one document. The authoring hook deliberately
+  // never reports a create failure to `fail`, so no failure class can drop it.
+  assert.equal(keys.current("create-draft", payload), key)
+  for (const error of [new Error("network"), new ApiFailure({ message: "conflict", status: 409, issues: [] }),
+    new ApiFailure({ message: "unreadable", status: 200, issues: [] })]) {
+    assert.equal(keys.current("create-draft", payload), key, error.message)
+  }
+  // Editing the form is a different document, and gets its own key.
+  const edited = JSON.stringify({ customerId: "customer-1", series: "QWBE", issueDate: "2026-09-02", dueDate: null, notes: null })
+  assert.notEqual(keys.current("create-draft", edited), key)
+  // Once the draft exists the intent is spent; the next new document starts over.
+  keys.complete("create-draft")
+  assert.notEqual(keys.current("create-draft", payload), key)
+})

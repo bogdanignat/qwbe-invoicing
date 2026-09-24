@@ -103,7 +103,7 @@ void test("an Article 310 issuer: the product falls back to the exemption, a red
     })
     assert.equal(configured.status, 200)
     assert.equal((await value.call("POST", "/api/document-series", { documentType: "invoice", series: "INV" })).status, 200)
-    const draft = await value.call("POST", "/api/drafts", { customer: buyer, issueDate, series: "INV" })
+    const draft = await value.call("POST", "/api/drafts", { customer: buyer, issueDate, series: "INV" }, "vat-preference-draft-1")
     assert.equal(draft.status, 200)
     const draftId = Schema.decodeUnknownSync(S.DraftInvoice)(draft.body).id
     assert.equal((await value.call("POST", `/api/drafts/${draftId}/lines`, reducedLine)).status, 400)

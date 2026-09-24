@@ -137,7 +137,7 @@ void test("OpenAPI 3.1 mirrors paths, PDF encoding, and authentication metadata"
   assert.ok(draftResponseSchema?.required?.includes("sourceProformaId"))
   assert.ok(spec.paths["/api/customers"].post?.parameters.some((parameter) => parameter.name === "x-csrf-token"))
   assert.ok(spec.paths["/api/session"].delete?.parameters.some((parameter) => parameter.name === "x-csrf-token" && parameter.required))
-  for (const path of ["/api/drafts/{draftId}/issue", "/api/invoices", "/api/drafts/{draftId}/proformas",
+  for (const path of ["/api/drafts", "/api/drafts/{draftId}/issue", "/api/invoices", "/api/drafts/{draftId}/proformas",
     "/api/proformas", "/api/proformas/{id}/invoice", "/api/proformas/{id}/draft-invoice",
     "/api/invoices/{invoiceId}/corrections"]) {
     assert.ok(spec.paths[path]?.post?.parameters.some((parameter) => parameter.name === "idempotency-key" && parameter.required),
@@ -193,10 +193,9 @@ void test("OpenAPI 3.1 mirrors paths, PDF encoding, and authentication metadata"
   expectStatuses("post", "/api/document-series", ["409", "413"])
   for (const [method, path] of [["put", "/api/customers/{id}"], ["put", "/api/product-presets/{id}"],
     ["delete", "/api/product-presets/{id}"]] as const) expectStatuses(method, path, ["404", "413"])
-  for (const [method, path] of [["post", "/api/drafts"]] as const) {
-    expectStatuses(method, path, ["404", "413"])
-  }
-  for (const path of ["/api/invoices", "/api/proformas"]) expectStatuses("post", path, ["404", "409", "413"])
+  // Creating a draft is idempotent like issuing one, so it answers 409 too:
+  // a reused key, or a key whose draft was deleted.
+  for (const path of ["/api/drafts", "/api/invoices", "/api/proformas"]) expectStatuses("post", path, ["404", "409", "413"])
   for (const [method, path] of [
     ["delete", "/api/customers/{id}"], ["put", "/api/drafts/{id}"], ["delete", "/api/drafts/{id}"],
     ["post", "/api/drafts/{draftId}/lines"], ["put", "/api/drafts/{draftId}/lines/{lineId}"],

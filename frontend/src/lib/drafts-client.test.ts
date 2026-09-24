@@ -36,12 +36,12 @@ const draft = {
 void test("draft writes carry the CSRF token the session handed over", async () => {
   const { calls, transport } = recorder(() => draft)
   const client = createDraftsClient(transport)
-  await client.createDraft("csrf-1", { series: "FCT", issueDate: "2026-01-01" } as never)
+  await client.createDraft("csrf-1", { series: "FCT", issueDate: "2026-01-01" } as never, "key-1")
   const write = calls[0]
   if (write === undefined || write.options === undefined) throw new Error("expected a write call")
   assert.deepEqual(
     [write.path, write.options.method, write.options.csrfToken, write.options.idempotencyKey],
-    ["/api/drafts", "POST", "csrf-1", undefined],
+    ["/api/drafts", "POST", "csrf-1", "key-1"],
   )
 })
 

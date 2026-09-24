@@ -50,3 +50,25 @@ void test("only a failure a repeat could answer differently is offered a retry",
   assert.equal(isTransientFailure(new ApiFailure({ message: "x", status: 401 })), false)
   assert.equal(isTransientFailure(new Error("decoder refused the payload")), false)
 })
+
+void test("a domain conflict is read as Romanian, not as the bare `DomainConflict` tag", () => {
+  // The 409 body is `{ error: 'DomainConflict', code }` with no `message`
+  // (standalone/api/schema-errors-session.ts:25).
+  const conflicts = [
+    "idempotency_key_reused", "draft_creation_result_deleted",
+    "invoice_already_issued", "derived_draft_cannot_be_deleted",
+  ]
+  for (const code of conflicts) {
+    const failure = parseApiFailure({ error: "DomainConflict", code }, 409)
+    assert.equal(failure.code, code, code)
+    assert.equal(failure.status, 409, code)
+    assert.equal(failure.message.includes("DomainConflict"), false, code)
+    assert.equal(failure.message.includes(code), false, code)
+    assert.ok(failure.message.length > 20, code)
+  }
+})
+
+void test("a spent idempotency key names the registry as the next step", () => {
+  const failure = parseApiFailure({ error: "DomainConflict", code: "idempotency_key_reused" }, 409)
+  assert.match(failure.message, /registrul de facturi/)
+})

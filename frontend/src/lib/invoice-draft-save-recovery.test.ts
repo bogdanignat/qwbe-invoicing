@@ -5,14 +5,20 @@ import {
   draftWith, editable, form, harness, networkFailure, serverLine,
 } from "./invoice-draft-save-controller.test.ts"
 import { createInvoiceIssuanceController } from "./invoice-issuance-controller.ts"
-import { createOperationIdempotency } from "./operation-idempotency.ts"
+import { memoryStorage, recoveryHarness } from "./invoice-draft-save-controller.test.ts"
 import { ApiFailure } from "./api-errors.ts"
 
 /**
- * The lost-answer races: draft and line writes carry no server idempotency, so
- * nothing here is retried blindly — every resume is reconciled against a fresh
- * read, and every answer the reconciliation cannot attribute blocks the save
- * instead of risking a duplicate line.
+ * The lost-answer races. Creating a draft is one idempotent request, so its lost
+ * answer is kept as an intent and replayed under the same key, never re-sent
+ * blindly. The line and header writes on an *existing* draft carry no server
+ * idempotency, so every resume there is reconciled against a fresh read, and
+ * every answer the reconciliation cannot attribute blocks the save instead of
+ * risking a duplicate line.
+ *
+ * The line races therefore start from a draft that already exists: after the
+ * atomic create the server already holds every line, and the pending-line loop
+ * is precisely what does not run.
  */
 
 void test("a create whose answer was lost blocks the save: no id came back to reconcile with", async () => {
@@ -35,13 +41,12 @@ void test("a create whose answer was lost blocks the save: no id came back to re
 void test("a line create whose answer was lost is reconciled from the fresh read, not re-sent", async () => {
   const persisted = draftWith("draft-1", [serverLine("line-1", "Consultanță", "100.00")])
   const setup = harness({
-    createDraft: () => draftWith("draft-1", []),
     addDraftLine: () => { throw networkFailure() },
     getDraft: () => persisted,
   })
   const outcome = await setup.controller.save({
-    draft: undefined, form: form(), lines: [editable("k1", "Consultanță", "100.00")],
-    forcedUpdateLineIds: () => [], navigateOnCreate: true,
+    draft: draftWith("draft-1", []), form: form(), lines: [editable("k1", "Consultanță", "100.00")],
+    forcedUpdateLineIds: () => [], navigateOnCreate: false,
   })
   assert.equal(outcome.kind, "saved")
   // The line was sent exactly once: the fresh read confirmed it landed.
@@ -53,13 +58,12 @@ void test("a line create whose answer was lost is reconciled from the fresh read
 void test("a line create the fresh read cannot see is re-sent exactly once", async () => {
   const withLine = draftWith("draft-1", [serverLine("line-1", "Consultanță", "100.00")])
   const setup = harness({
-    createDraft: () => draftWith("draft-1", []),
     addDraftLine: (_args, call) => (call === 1 ? Promise.reject(networkFailure()) : Promise.resolve(withLine)),
     getDraft: () => draftWith("draft-1", []),
   })
   const outcome = await setup.controller.save({
-    draft: undefined, form: form(), lines: [editable("k1", "Consultanță", "100.00")],
-    forcedUpdateLineIds: () => [], navigateOnCreate: true,
+    draft: draftWith("draft-1", []), form: form(), lines: [editable("k1", "Consultanță", "100.00")],
+    forcedUpdateLineIds: () => [], navigateOnCreate: false,
   })
   assert.equal(outcome.kind, "saved")
   assert.equal(setup.calls.filter((call) => call.method === "addDraftLine").length, 2)
@@ -67,13 +71,12 @@ void test("a line create the fresh read cannot see is re-sent exactly once", asy
 
 void test("a line create whose retry also loses its answer blocks the save", async () => {
   const setup = harness({
-    createDraft: () => draftWith("draft-1", []),
     addDraftLine: () => { throw networkFailure() },
     getDraft: () => draftWith("draft-1", []),
   })
   const outcome = await setup.controller.save({
-    draft: undefined, form: form(), lines: [editable("k1", "Consultanță", "100.00")],
-    forcedUpdateLineIds: () => [], navigateOnCreate: true,
+    draft: draftWith("draft-1", []), form: form(), lines: [editable("k1", "Consultanță", "100.00")],
+    forcedUpdateLineIds: () => [], navigateOnCreate: false,
   })
   assert.equal(outcome.kind, "unconfirmed")
   assert.equal(setup.calls.filter((call) => call.method === "addDraftLine").length, 2)
@@ -86,15 +89,14 @@ void test("a line create whose retry also loses its answer blocks the save", asy
 
 void test("a fresh read that cannot be interpreted blocks the save instead of guessing", async () => {
   const setup = harness({
-    createDraft: () => draftWith("draft-1", []),
     addDraftLine: () => { throw networkFailure() },
     getDraft: () => draftWith("draft-1", [
       serverLine("line-1", "Consultanță", "100.00"), serverLine("line-2", "Consultanță", "100.00"),
     ]),
   })
   const outcome = await setup.controller.save({
-    draft: undefined, form: form(), lines: [editable("k1", "Consultanță", "100.00")],
-    forcedUpdateLineIds: () => [], navigateOnCreate: true,
+    draft: draftWith("draft-1", []), form: form(), lines: [editable("k1", "Consultanță", "100.00")],
+    forcedUpdateLineIds: () => [], navigateOnCreate: false,
   })
   assert.equal(outcome.kind, "unconfirmed")
   assert.equal(setup.calls.filter((call) => call.method === "addDraftLine").length, 1)
@@ -159,7 +161,6 @@ void test("a screen that unmounted mid-save receives no effects", async () => {
 
 void test("a session that ended before a chained write sends nothing further", async () => {
   const setup = harness({
-    createDraft: () => draftWith("draft-1", []),
     addDraftLine: () => {
       setup.session.owns = false
       throw networkFailure()
@@ -167,8 +168,8 @@ void test("a session that ended before a chained write sends nothing further", a
     getDraft: () => draftWith("draft-1", [serverLine("line-1", "Consultanță", "100.00")]),
   })
   const outcome = await setup.controller.save({
-    draft: undefined, form: form(), lines: [editable("k1", "Consultanță", "100.00")],
-    forcedUpdateLineIds: () => [], navigateOnCreate: true,
+    draft: draftWith("draft-1", []), form: form(), lines: [editable("k1", "Consultanță", "100.00")],
+    forcedUpdateLineIds: () => [], navigateOnCreate: false,
   })
   assert.equal(outcome.kind, "aborted")
   assert.equal(setup.calls.filter((entry) => entry.method === "getDraft").length, 0)
@@ -243,8 +244,9 @@ void test("a create whose outcome is unknown blocks issuance: the composition se
       getDraft: () => { throw new Error("unscripted getDraft") },
       issueDraft: () => { issued.push("issueDraft"); throw new Error("unscripted issueDraft") },
       issueInvoice: () => { issued.push("issueInvoice"); throw new Error("unscripted issueInvoice") },
+      replayInvoiceIssuance: () => { issued.push("replayInvoiceIssuance"); throw new Error("unscripted replay") },
     },
-    idempotency: createOperationIdempotency(),
+    recovery: recoveryHarness(() => memoryStorage()).port,
     csrfToken: () => "csrf-token",
     epoch: () => 1,
     ownsEpoch: () => true,

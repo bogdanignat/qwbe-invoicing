@@ -52,6 +52,7 @@ export type CreateDraftInput = BuyerSource & {
   readonly currency?: "RON"
   readonly dueDate?: string | null
   readonly notes?: string | null
+  readonly lines?: ReadonlyArray<DraftLineInput>
 }
 
 export type UpdateDraftInput = BuyerSource & {

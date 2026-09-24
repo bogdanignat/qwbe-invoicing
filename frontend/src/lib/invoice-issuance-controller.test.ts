@@ -1,9 +1,9 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { createInvoiceIssuanceController, type IssuanceClient } from "./invoice-issuance-controller.ts"
-import type { IssuanceRequest } from "./invoice-issuance-controller.ts"
-import { createOperationIdempotency } from "./operation-idempotency.ts"
+import { createInvoiceIssuanceController } from "./invoice-issuance-controller.ts"
+import type { IssuanceClient, IssuanceRequest } from "./invoice-issuance-types.ts"
+import { memoryStorage, recoveryHarness, type MemoryStorage } from "./invoice-draft-save-controller.test.ts"
 import { ApiFailure } from "./api-errors.ts"
 import type { AuthoringDocumentInput, DraftInvoice } from "./draft-models.ts"
 import type { IssuedInvoice } from "./document-snapshot.ts"
@@ -50,14 +50,17 @@ interface Setup {
   readonly effects: string[]
   readonly session: { owns: boolean; alive: boolean }
   readonly keys: () => number
+  readonly storage: MemoryStorage
 }
 
-const setup = (client: Partial<Record<"getDraft" | "issueDraft" | "issueInvoice", (argument: unknown, key: string) => unknown>>): Setup => {
+const setup = (
+  client: Partial<Record<"getDraft" | "issueDraft" | "issueInvoice", (argument: unknown, key: string) => unknown>>,
+  storage: MemoryStorage = memoryStorage(),
+): Setup => {
   const calls: Array<{ method: string; key: string | undefined }> = []
   const effects: string[] = []
   const session = { owns: true, alive: true }
-  let keyCount = 0
-  const idempotency = createOperationIdempotency(() => { keyCount += 1; return `key-${String(keyCount)}` })
+  const recovery = recoveryHarness(() => storage)
   const record = (method: string, key: string | undefined): void => { calls.push({ method, key }) }
   const clientAdapter: IssuanceClient = {
     getDraft: (id) => Promise.resolve().then(() => {
@@ -78,10 +81,16 @@ const setup = (client: Partial<Record<"getDraft" | "issueDraft" | "issueInvoice"
       if (handler === undefined) throw new Error("unscripted issueInvoice")
       return handler(body, idempotencyKey) as IssuedInvoice
     }),
+    replayInvoiceIssuance: (_csrfToken, body, idempotencyKey) => Promise.resolve().then(() => {
+      record("replayInvoiceIssuance", idempotencyKey)
+      const handler = client.issueInvoice
+      if (handler === undefined) throw new Error("unscripted replayInvoiceIssuance")
+      return handler(body, idempotencyKey) as IssuedInvoice
+    }),
   }
   const controller = createInvoiceIssuanceController({
     client: clientAdapter,
-    idempotency,
+    recovery: recovery.port,
     csrfToken: () => "csrf-token",
     epoch: () => 3,
     ownsEpoch: () => session.owns,
@@ -91,7 +100,11 @@ const setup = (client: Partial<Record<"getDraft" | "issueDraft" | "issueInvoice"
       onOutcomeUnknown: (draftId) => { effects.push(`onOutcomeUnknown:${draftId ?? "none"}`) },
     },
   })
-  return { issue: (request) => controller.issue({ blockedMessage: undefined, ...request }), unconfirmedIssue: controller.unconfirmedIssue, calls, effects, session, keys: () => keyCount }
+  return {
+    issue: (request) => controller.issue({ blockedMessage: undefined, ...request }),
+    unconfirmedIssue: controller.unconfirmedIssue,
+    calls, effects, session, storage, keys: () => recovery.keys().length,
+  }
 }
 
 void test("a document without a draft is issued directly and its effects run", async () => {
@@ -173,11 +186,20 @@ void test("an edited payload cannot replay an older answer under the old key", a
 
 void test("a second click while issuing changes nothing", async () => {
   let release: (() => void) | undefined
+  // The handshake, not a tick count: the first request must be observed to have
+  // left before it is released, however many awaits the controller takes to
+  // reach it. Without it this test deadlocks whenever that path grows a hop.
+  let reached: (() => void) | undefined
+  const sent = new Promise<void>((resolve) => { reached = resolve })
   const world = setup({
-    issueInvoice: () => new Promise<IssuedInvoice>((resolve) => { release = () => { resolve(issuedInvoice) } }),
+    issueInvoice: () => new Promise<IssuedInvoice>((resolve) => {
+      release = () => { resolve(issuedInvoice) }
+      reached?.()
+    }),
   })
   const first = world.issue({ draftId: undefined, payload })
   const second = await world.issue({ draftId: undefined, payload })
+  await sent
   release?.()
   assert.equal((await first).kind, "issued")
   assert.equal(second.kind, "busy")

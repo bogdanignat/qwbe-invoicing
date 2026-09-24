@@ -1,6 +1,7 @@
 import { decodeDeleted, decodeDraft, decodeDraftPage } from "./draft-decoders.ts"
 import { decodeIssuedInvoice } from "./document-snapshot-decoders.ts"
 import { encoded, paged } from "./client-paths.ts"
+import { readableWrite } from "./unreadable-answer.ts"
 import type { BrowserTransport } from "./browser-transport.ts"
 import type {
   AuthoringDocumentInput, CreateDraftInput, DraftLineInput, DraftInvoice, UpdateDraftInput,
@@ -12,13 +13,20 @@ import type { Page, PageRequest } from "./model-decoder.ts"
  * Draft and issuance endpoints, built from the session's transport.
  *
  * Every write states its CSRF token — the transport attaches nothing on its
- * own — and the two issuance calls add the idempotency key the server replays
- * a lost answer by. Draft and line writes carry no key because the server
- * offers them none: they are not safely repeatable, which is why the save
- * controller reconciles before resuming one.
+ * own. Draft creation and the two issuance calls carry the idempotency key the
+ * server replays a lost answer by; the line and header writes carry none,
+ * because the server offers them none: they are not safely repeatable, which is
+ * why the save controller reconciles before resuming one.
+ *
+ * Every write also passes through `readableWrite`: an answer that arrived but
+ * could not be read is an unknown outcome, not a failed request, and the
+ * recovery path depends on telling the two apart. Reads are left alone — a read
+ * that cannot be decoded changed nothing on the server.
  */
 export interface DraftsClient {
-  readonly createDraft: (csrfToken: string, body: CreateDraftInput) => Promise<DraftInvoice>
+  readonly createDraft: (csrfToken: string, body: CreateDraftInput, idempotencyKey: string, signal?: AbortSignal) => Promise<DraftInvoice>
+  /** A replay sends the stored request as it was sent, not a payload rebuilt from the current form. */
+  readonly replayDraftCreation: (csrfToken: string, body: unknown, idempotencyKey: string) => Promise<DraftInvoice>
   readonly listDrafts: (page: PageRequest | undefined, signal: AbortSignal) => Promise<Page<DraftInvoice>>
   readonly getDraft: (id: string, signal: AbortSignal) => Promise<DraftInvoice>
   readonly updateDraft: (csrfToken: string, id: string, body: UpdateDraftInput) => Promise<DraftInvoice>
@@ -28,13 +36,28 @@ export interface DraftsClient {
   readonly deleteDraftLine: (csrfToken: string, id: string, lineId: string) => Promise<DraftInvoice>
   readonly issueDraft: (csrfToken: string, id: string, idempotencyKey: string) => Promise<IssuedInvoice>
   readonly issueInvoice: (csrfToken: string, body: AuthoringDocumentInput, idempotencyKey: string) => Promise<IssuedInvoice>
+  readonly replayInvoiceIssuance: (csrfToken: string, body: unknown, idempotencyKey: string) => Promise<IssuedInvoice>
+}
+
+interface WriteOptions {
+  readonly csrfToken: string
+  readonly method: "POST" | "PUT" | "DELETE"
+  readonly body?: unknown
+  readonly idempotencyKey?: string
+  readonly signal?: AbortSignal
 }
 
 export const createDraftsClient = (transport: BrowserTransport): DraftsClient => {
-  const draft = (path: string, options: { readonly csrfToken: string; readonly method: "POST" | "PUT" | "DELETE"; readonly body?: unknown }) =>
-    decodeDraftPromise(transport.json(path, { ...options, body: options.body ?? {} }))
+  const write = <T>(path: string, options: WriteOptions, decode: (value: unknown) => T): Promise<T> =>
+    readableWrite(transport.json(path, { ...options, body: options.body ?? {} }).then(decode))
+  const draft = (path: string, options: WriteOptions) => write(path, options, decodeDraft)
+  const postDraft = (csrfToken: string, body: unknown, idempotencyKey: string, signal?: AbortSignal) =>
+    draft("/api/drafts", { csrfToken, method: "POST", body, idempotencyKey, ...(signal === undefined ? {} : { signal }) })
+  const postInvoice = (csrfToken: string, body: unknown, idempotencyKey: string) =>
+    write("/api/invoices", { csrfToken, method: "POST", body, idempotencyKey }, decodeIssuedInvoice)
   return {
-    createDraft: (csrfToken, body) => draft("/api/drafts", { csrfToken, method: "POST", body }),
+    createDraft: (csrfToken, body, idempotencyKey, signal) => postDraft(csrfToken, body, idempotencyKey, signal),
+    replayDraftCreation: postDraft,
     listDrafts: async (page, signal) =>
       decodeDraftPage(await transport.json(paged("/api/drafts", page), { signal })),
     getDraft: async (id, signal) =>
@@ -42,7 +65,7 @@ export const createDraftsClient = (transport: BrowserTransport): DraftsClient =>
     updateDraft: (csrfToken, id, body) =>
       draft(`/api/drafts/${encoded(id)}`, { csrfToken, method: "PUT", body }),
     deleteDraft: async (csrfToken, id) => {
-      decodeDeleted(await transport.json(`/api/drafts/${encoded(id)}`, { csrfToken, method: "DELETE", body: {} }))
+      await write(`/api/drafts/${encoded(id)}`, { csrfToken, method: "DELETE" }, decodeDeleted)
     },
     addDraftLine: (csrfToken, id, body) =>
       draft(`/api/drafts/${encoded(id)}/lines`, { csrfToken, method: "POST", body }),
@@ -50,16 +73,9 @@ export const createDraftsClient = (transport: BrowserTransport): DraftsClient =>
       draft(`/api/drafts/${encoded(id)}/lines/${encoded(lineId)}`, { csrfToken, method: "PUT", body }),
     deleteDraftLine: (csrfToken, id, lineId) =>
       draft(`/api/drafts/${encoded(id)}/lines/${encoded(lineId)}`, { csrfToken, method: "DELETE" }),
-    issueDraft: async (csrfToken, id, idempotencyKey) =>
-      decodeIssuedInvoice(await transport.json(`/api/drafts/${encoded(id)}/issue`, {
-        csrfToken, method: "POST", body: {}, idempotencyKey,
-      })),
-    issueInvoice: async (csrfToken, body, idempotencyKey) =>
-      decodeIssuedInvoice(await transport.json("/api/invoices", {
-        csrfToken, method: "POST", body, idempotencyKey,
-      })),
+    issueDraft: (csrfToken, id, idempotencyKey) =>
+      write(`/api/drafts/${encoded(id)}/issue`, { csrfToken, method: "POST", idempotencyKey }, decodeIssuedInvoice),
+    issueInvoice: (csrfToken, body, idempotencyKey) => postInvoice(csrfToken, body, idempotencyKey),
+    replayInvoiceIssuance: postInvoice,
   }
 }
-
-const decodeDraftPromise = (input: Promise<unknown>): Promise<DraftInvoice> =>
-  input.then((value) => decodeDraft(value))

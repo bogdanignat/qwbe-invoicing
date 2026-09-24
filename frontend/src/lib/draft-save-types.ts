@@ -2,9 +2,13 @@ import type {
   CreateDraftInput, DraftInvoice, DraftLineInput, UpdateDraftInput,
 } from "./draft-models.ts"
 import type { EditableInvoiceLine, InvoiceAuthoringForm } from "./invoice-authoring-model.ts"
+import type { RecoveryPort } from "./operation-recovery-port.ts"
 
 export interface DraftSaveClient {
-  readonly createDraft: (csrfToken: string, body: CreateDraftInput) => Promise<DraftInvoice>
+  /** The whole document in one request, under a key chosen before it leaves. */
+  readonly createDraft: (csrfToken: string, body: CreateDraftInput, idempotencyKey: string) => Promise<DraftInvoice>
+  /** The stored request, sent exactly as it was sent: a replay must not be rebuilt from the current form. */
+  readonly replayDraftCreation: (csrfToken: string, body: unknown, idempotencyKey: string) => Promise<DraftInvoice>
   readonly getDraft: (id: string) => Promise<DraftInvoice>
   readonly updateDraft: (csrfToken: string, id: string, body: UpdateDraftInput) => Promise<DraftInvoice>
   readonly addDraftLine: (csrfToken: string, id: string, body: DraftLineInput) => Promise<DraftInvoice>
@@ -37,6 +41,7 @@ export interface DraftSaveDependencies {
   /** Whether the screen that started the write is still mounted. */
   readonly alive: () => boolean
   readonly effects: DraftSaveEffects
+  readonly recovery: RecoveryPort
 }
 
 export type SaveOutcome =

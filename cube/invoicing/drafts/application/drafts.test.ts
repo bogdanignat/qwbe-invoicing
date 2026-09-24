@@ -27,7 +27,7 @@ void test("authors snapshot-owned drafts and recalculates every server-derived a
     partyType: "company", name: "Original SRL", fiscalIdentifier: "87654329", vatRegistered: true,
     address: { countryCode: "RO", city: "Iași", street: "Strada Mică 2", county: "RO-IS" },
   }))
-  const savedDraft = await Effect.runPromise(service.createDraft({ customerId: saved.id, series: "QWBE", issueDate: "2025-07-31", dueDate: "2025-08-15" }))
+  const savedDraft = await Effect.runPromise(service.createDraft(idempotent({ customerId: saved.id, series: "QWBE", issueDate: "2025-07-31", dueDate: "2025-08-15" })))
   assert.equal(savedDraft.customer.name, "Original SRL")
   assert.equal(savedDraft.totalIncludingVat, "0.00")
   state.customers.set(saved.id, { ...saved, name: "Directory Renamed SRL" })
@@ -40,11 +40,11 @@ void test("authors snapshot-owned drafts and recalculates every server-derived a
     partyType: "individual" as const, name: "Ion Popescu", fiscalIdentifier: "", vatRegistered: false,
     address: { countryCode: "RO", city: "Cluj-Napoca", street: "Strada Unu 1", county: "RO-CJ" },
   }
-  const invalidSource = await Effect.runPromise(Effect.flip(service.createDraft({
+  const invalidSource = await Effect.runPromise(Effect.flip(service.createDraft(idempotent({
     customerId: saved.id, customer: inlineBuyer, series: "QWBE", issueDate: "2025-07-31",
-  } as never)))
+  } as never))))
   assert.equal(invalidSource instanceof ValidationFailure, true)
-  const draft = await Effect.runPromise(service.createDraft({ customer: inlineBuyer, series: "QWBE", issueDate: "2025-07-31", dueDate: "2025-08-15" }))
+  const draft = await Effect.runPromise(service.createDraft(idempotent({ customer: inlineBuyer, series: "QWBE", issueDate: "2025-07-31", dueDate: "2025-08-15" })))
   assert.equal(draft.customerId, undefined)
   let edited = await Effect.runPromise(service.addDraftLine({
     draftId: draft.id, description: "Consultanță", quantity: "1", unitPrice: "100", unitOfMeasure: each, vatRateCode: "RO_STANDARD",
@@ -78,7 +78,7 @@ void test("authors snapshot-owned drafts and recalculates every server-derived a
     const failure = await Effect.runPromise(Effect.flip(mutation))
     assert.equal(failure instanceof DomainConflict && failure.code === "invoice_already_issued", true)
   }
-  const disposable = await Effect.runPromise(service.createDraft({ customer: inlineBuyer, series: "QWBE", issueDate: "2025-08-02" }))
+  const disposable = await Effect.runPromise(service.createDraft(idempotent({ customer: inlineBuyer, series: "QWBE", issueDate: "2025-08-02" })))
   await Effect.runPromise(service.deleteDraft(disposable.id))
   assert.equal(await Effect.runPromise(Effect.flip(service.getDraft(disposable.id))) instanceof ResourceNotFound, true)
 })
@@ -103,8 +103,8 @@ void test("captures, replaces and clears free-form remarks on a draft", async ()
   }
   const header = { customer: buyer, series: "QWBE", issueDate: "2025-08-01" }
   const remarks = "Livrare în 3 tranșe.\nPlata la recepție."
-  assert.equal((await Effect.runPromise(service.createDraft(header))).notes, null)
-  const draft = await Effect.runPromise(service.createDraft({ ...header, notes: remarks }))
+  assert.equal((await Effect.runPromise(service.createDraft(idempotent(header)))).notes, null)
+  const draft = await Effect.runPromise(service.createDraft(idempotent({ ...header, notes: remarks })))
   assert.equal(draft.notes, remarks)
   const untouched = await Effect.runPromise(service.updateDraft({ customer: buyer, draftId: draft.id, issueDate: "2025-08-01" }))
   assert.equal(untouched.notes, remarks)
@@ -114,9 +114,9 @@ void test("captures, replaces and clears free-form remarks on a draft", async ()
   assert.equal(cleared.notes, null)
   assert.equal((await Effect.runPromise(service.getDraft(draft.id))).notes, null)
   const maximum = "x".repeat(300)
-  assert.equal((await Effect.runPromise(service.createDraft({ ...header, notes: maximum }))).notes, maximum)
+  assert.equal((await Effect.runPromise(service.createDraft(idempotent({ ...header, notes: maximum })))).notes, maximum)
   for (const notes of ["", "   ", " marginal ", `${maximum}x`, "tab\tstop", "linie\u2028separata", "paragraf\u2029separat"]) {
-    const created = await Effect.runPromise(Effect.flip(service.createDraft({ ...header, notes })))
+    const created = await Effect.runPromise(Effect.flip(service.createDraft(idempotent({ ...header, notes }))))
     assert.equal(created instanceof ValidationFailure, true, notes)
     const updated = await Effect.runPromise(Effect.flip(service.updateDraft({ customer: buyer, draftId: draft.id, issueDate: "2025-08-01", notes })))
     assert.equal(updated instanceof ValidationFailure, true, notes)

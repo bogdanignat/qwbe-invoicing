@@ -4,14 +4,15 @@ import { checked, draftPageQuery, missing, pageOf, type Authorize, type Operatio
 import { DomainConflict, type InvoicingFailure } from "../../contracts/failures.ts"
 import type { InvoicingPermissions } from "../../contracts/permissions.ts"
 import { calculateLine } from "../../domain/calculation.ts"
-import type { DocumentSource, DraftInvoice } from "../../domain/invoice.ts"
+import type { DocumentSource, DraftInvoice, Idempotent } from "../../domain/invoice.ts"
 import type { CreateDraftInput, UpdateDraftInput } from "../../domain/inputs.ts"
 import { validateDocumentNotes, validateDocumentSource } from "../../domain/validation.ts"
 import { resolveVatConfiguration } from "../../issuer/index.ts"
-import { authorDocument, buyerFrom, dates, documentSource, findEditable, withTotals, type AuthoringTransaction } from "./authoring.ts"
+import { buyerFrom, dates, documentSource, findEditable, withTotals, type AuthoringTransaction } from "./authoring.ts"
+import { createDraftOperation } from "./draft-creation.ts"
 
 export interface DraftDocumentOperations {
-  readonly createDraft: (input: CreateDraftInput) => Effect.Effect<DraftInvoice, InvoicingFailure>
+  readonly createDraft: (input: Idempotent<CreateDraftInput>) => Effect.Effect<DraftInvoice, InvoicingFailure>
   readonly getDraft: (id: string) => Effect.Effect<DraftInvoice, InvoicingFailure>
   readonly listDrafts: (source?: DocumentSource, page?: PageRequest) => Effect.Effect<Page<DraftInvoice>, InvoicingFailure>
   readonly updateDraft: (input: UpdateDraftInput) => Effect.Effect<DraftInvoice, InvoicingFailure>
@@ -23,16 +24,7 @@ export const createDraftDocumentOperations = (
   permissions: InvoicingPermissions,
   authorize: Authorize,
 ): DraftDocumentOperations => {
-  const createDraft = (input: CreateDraftInput) => Effect.gen(function*() {
-    const context = yield* authorize(permissions.draftInvoices)
-    const id = yield* dependencies.ids.next
-    return yield* dependencies.store.transaction((transaction) => Effect.gen(function*() {
-      const { document } = yield* authorDocument(input, context.organization.id, transaction, dependencies.ids)
-      const draft: DraftInvoice = { id, ...document, status: "draft", sourceProformaId: null }
-      yield* transaction.saveDraft(draft)
-      return structuredClone(draft)
-    }))
-  })
+  const createDraft = createDraftOperation(dependencies, permissions.draftInvoices, authorize)
   const getDraft = (id: string) => Effect.gen(function*() {
     const context = yield* authorize(permissions.read)
     const draft = yield* dependencies.store.transaction((transaction) => transaction.findDraft(context.organization.id, id))

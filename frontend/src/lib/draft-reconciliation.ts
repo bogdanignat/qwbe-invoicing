@@ -1,4 +1,5 @@
 import { ApiFailure } from "./api-errors.ts"
+import { UnreadableAnswer } from "./unreadable-answer.ts"
 import type { DraftInvoice, DraftLineInput } from "./draft-models.ts"
 import type { InvoiceAuthoringForm } from "./invoice-authoring-model.ts"
 import { headerMatchesDraft } from "./invoice-authoring-readiness.ts"
@@ -6,13 +7,16 @@ import { lineInputMatches } from "./invoice-authoring-options.ts"
 
 /**
  * A failure whose request may still have committed: the answer never arrived,
- * or a gateway answered for a request whose outcome is unknowable from here.
- * Only the server's own idempotency store (issuance) or a reconciliation read
- * (drafts) can say what happened, so nothing here retries blindly.
+ * a gateway answered for a request whose outcome is unknowable from here, or
+ * the answer arrived and could not be read (`UnreadableAnswer`, raised only at
+ * a write boundary). Only the server's own idempotency store (issuance) or a
+ * reconciliation read (drafts) can say what happened, so nothing here retries
+ * blindly.
  */
 export const isLostResponse = (error: unknown): boolean =>
-  error instanceof ApiFailure
-  && (error.status === undefined || error.status === 408 || error.status >= 500)
+  error instanceof UnreadableAnswer
+  || (error instanceof ApiFailure
+    && (error.status === undefined || error.status === 408 || error.status >= 500))
 
 export type Reconciliation =
   | { readonly kind: "persisted"; readonly draft: DraftInvoice }

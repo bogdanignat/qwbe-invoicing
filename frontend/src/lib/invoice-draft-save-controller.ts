@@ -1,22 +1,25 @@
+import { createDraftStep } from "./draft-save-create.ts"
 import { createDraftDeletions } from "./draft-save-deletions.ts"
 import { createDraftWriteSteps } from "./draft-save-writes.ts"
-import { UNCONFIRMED_CREATE, type DraftSaveDependencies, type Fresh, type SaveOutcome } from "./draft-save-types.ts"
+import type {
+  DraftSaveDependencies, Fresh, SaveOutcome, SaveRequest,
+} from "./draft-save-types.ts"
 import type { DraftInvoice } from "./draft-models.ts"
 import type { EditableInvoiceLine } from "./invoice-authoring-model.ts"
-import { createDraftPayload } from "./invoice-authoring-payload.ts"
 import { headerMatchesDraft, pendingLineOperations } from "./invoice-authoring-readiness.ts"
 import { draftLinesForEditing } from "./invoice-authoring-options.ts"
-import { isLostResponse } from "./draft-reconciliation.ts"
 import { requireCsrf } from "./require-csrf.ts"
 
 /**
  * The save orchestration, as a plain object so the races can be tested without
- * a DOM: create, then header, then one line at a time, each answer recorded
- * before the next request leaves, every chained write preceded and every
- * answer followed by an ownership check.
+ * a DOM. A document that does not exist yet is created whole, in one
+ * idempotent request, and the save ends there. A document that already exists
+ * takes the incremental path: header, then one line at a time, each answer
+ * recorded before the next request leaves, every chained write preceded and
+ * every answer followed by an ownership check.
  *
- * Draft and line writes carry no server idempotency: a lost answer cannot be
- * retried blindly. A lost answer on a *known* draft is reconciled against a
+ * Only the create carries server idempotency; the update writes do not, so a
+ * lost answer on those cannot be retried blindly. A lost answer on a *known* draft is reconciled against a
  * fresh read before anything is re-sent, and when reconciliation cannot tell
  * what happened the save is blocked rather than risk a duplicate line.
  */
@@ -44,8 +47,15 @@ export const createInvoiceDraftSaveController = (dependencies: DraftSaveDependen
   }
 
   const writes = createDraftWriteSteps({ client: dependencies.client, owns, freshDraft, blocked })
+  const creation = {
+    client: dependencies.client,
+    effects: dependencies.effects,
+    recovery: dependencies.recovery,
+    owns,
+    blocked,
+  }
 
-  const save = async (request: import("./draft-save-types.ts").SaveRequest): Promise<SaveOutcome> => {
+  const save = async (request: SaveRequest): Promise<SaveOutcome> => {
     if (saveInFlight) return { kind: "busy" }
     const message = unconfirmedMessage
     if (message !== undefined) return { kind: "unconfirmed", message }
@@ -55,18 +65,12 @@ export const createInvoiceDraftSaveController = (dependencies: DraftSaveDependen
       const csrfToken = requireCsrf(dependencies.csrfToken())
       let workingDraft = request.draft
       let workingLines = request.lines
+      // The create is terminal: the server already holds every line, so the
+      // pending-line loop below is exactly what must not run afterwards.
       if (workingDraft === undefined) {
-        if (!owns(started)) return { kind: "aborted" }
-        try {
-          workingDraft = await dependencies.client.createDraft(csrfToken, createDraftPayload(request.form))
-        } catch (error) {
-          if (!owns(started)) return { kind: "aborted" }
-          // No id came back, so no read can reconcile: the draft list is the recovery.
-          return isLostResponse(error) ? blocked(UNCONFIRMED_CREATE) : { kind: "error", error }
-        }
-        if (!owns(started)) return { kind: "aborted" }
-        dependencies.effects.recordDraft(workingDraft)
-      } else if (!headerMatchesDraft(request.form, workingDraft)) {
+        return await createDraftStep(creation, started, csrfToken, request)
+      }
+      if (!headerMatchesDraft(request.form, workingDraft)) {
         const header = await writes.writeHeader(started, csrfToken, request.form, workingDraft)
         if ("outcome" in header) return header.outcome
         workingDraft = header.draft

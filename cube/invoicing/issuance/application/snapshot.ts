@@ -46,6 +46,9 @@ export const issuanceSource = (
   if (!("draftId" in input)) {
     const payload = "proformaSeries" in input ? { ...input, series: input.proformaSeries } : input
     const source = { ...(yield* authorDocument(payload, organizationId, transaction, ids, kind)), draft: undefined }
+    // Drafts may be empty; a document being issued may not. The rule lives on
+    // the issuance path only, so authoring stays shared with draft creation.
+    if (source.document.lines.length === 0) return yield* Effect.fail(new ValidationFailure({ issues: ["document must contain at least one line"] }))
     return { ...source, issuer: yield* issuerAtIssuance(source.issuer, source.document) }
   }
   const draft = yield* transaction.findDraft(organizationId, input.draftId)

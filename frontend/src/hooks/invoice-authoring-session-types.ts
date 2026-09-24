@@ -1,5 +1,7 @@
 import type { BuyerSnapshot, Customer, DraftInvoice, Issuer, ProductPreset, UnitOfMeasure, VatCatalogue, VatRate } from "../lib/draft-models.ts"
 import type { DraftDeletionState } from "../lib/invoice-authoring-workflow.ts"
+import type { RecoveryRecord } from "../lib/operation-recovery-types.ts"
+import type { RecoveryNoticeModel } from "../lib/operation-recovery-view.ts"
 import type {
   BuyerMode, EditableInvoiceLine, InvoiceAuthoringForm, PartyType,
 } from "../lib/invoice-authoring-model.ts"
@@ -64,6 +66,8 @@ export interface InvoiceAuthoringSession {
     readonly notesMaxLength: number
     readonly dueDateIssue: string | null
     readonly notice: string | null
+    /** An unresolved write from this tab, described well enough to be recognised in the registry. */
+    readonly recoveryNotice: RecoveryNoticeModel | undefined
   }
   readonly status: {
     readonly pending: boolean
@@ -71,6 +75,9 @@ export interface InvoiceAuthoringSession {
     readonly invoicePending: boolean
     readonly canIssueInvoice: boolean
     readonly dueDateRequired: boolean
+    /** Nothing new may be written while an earlier operation is unresolved or the journal cannot be read. */
+    readonly recoveryBlocked: boolean
+    readonly recoveryPending: boolean
   }
   readonly draftDeletion: DraftDeletionState
   readonly derivedNotice: string
@@ -91,5 +98,7 @@ export interface InvoiceAuthoringSession {
     readonly save: () => void
     readonly issueInvoice: () => void
     readonly deleteDraft: () => void
+    readonly replayRecovery: (record: RecoveryRecord) => void
+    readonly dismissRecovery: () => void
   }
 }

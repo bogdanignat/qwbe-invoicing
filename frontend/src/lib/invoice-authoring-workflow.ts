@@ -10,9 +10,12 @@ export type DraftDeletionState =
   | { readonly kind: "hidden" }
   | { readonly kind: "available" }
   | { readonly kind: "derived" }
+  /** Already sealed as a fiscal document: the delete button has no business being offered. */
+  | { readonly kind: "issued" }
 
 export const draftDeletionState = (draft: DraftInvoice | undefined): DraftDeletionState => {
   if (draft === undefined) return { kind: "hidden" }
+  if (draft.status !== "draft") return { kind: "issued" }
   if (draft.sourceProformaId === null) return { kind: "available" }
   return { kind: "derived" }
 }

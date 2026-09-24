@@ -3,10 +3,12 @@ import { useState, type Dispatch, type SetStateAction } from "react"
 
 import { runUiEffect } from "../lib/api.ts"
 import {
-  createDraftPayload, draftLinePayload, draftLinesForEditing, headerMatchesDraft, pendingLineOperations, updateDraftPayload,
+  draftLinePayload, draftLinesForEditing, headerMatchesDraft, pendingLineOperations, updateDraftPayload,
   type EditableInvoiceLine, type InvoiceAuthoringForm,
 } from "../lib/invoice-authoring-state.ts"
 import { invoicingClient } from "../lib/invoicing-client.ts"
+import { createServerDraft } from "./draft-creation.ts"
+import { useOperationIdempotency } from "./operation-idempotency.ts"
 import type { DraftInvoice } from "../lib/models.ts"
 import { navigate } from "../lib/navigation.ts"
 
@@ -32,6 +34,7 @@ interface SaveResult {
 
 export const useInvoiceAuthoringDraft = (input: DraftEditingInput) => {
   const queryClient = useQueryClient()
+  const idempotency = useOperationIdempotency()
   const [draft, setDraft] = useState(input.initialDraft)
   const recordServerDraft = (updated: DraftInvoice): void => {
     setDraft(updated)
@@ -42,7 +45,7 @@ export const useInvoiceAuthoringDraft = (input: DraftEditingInput) => {
       let workingDraft = request.draft
       let workingLines = request.lines
       if (workingDraft === undefined) {
-        workingDraft = await runUiEffect(invoicingClient.createDraft(createDraftPayload(request.form)))
+        workingDraft = await createServerDraft(request.form, idempotency)
         recordServerDraft(workingDraft)
       } else if (!headerMatchesDraft(request.form, workingDraft)) {
         workingDraft = await runUiEffect(invoicingClient.updateDraft(workingDraft.id, updateDraftPayload(request.form)))

@@ -106,13 +106,13 @@ void test("persists an issued snapshot across store recreation and isolates orga
     const preset = await Effect.runPromise(service.createProductPreset({ description: "  Servicii software  ", unitPrice: "125.5", unitOfMeasure: each }))
     assert.equal(preset.unitPrice, "125.50")
     assert.deepEqual(await Effect.runPromise(service.listProductPresets()), { items: [preset], nextCursor: null })
-    const draft = await Effect.runPromise(service.createDraft({
+    const draft = await Effect.runPromise(service.createDraft(idempotent({
       customerId: customer.id,
       issueDate: "2026-09-01",
       dueDate: "2026-09-16",
       series: "QWBE",
       source: { app: "crm", kind: "contract", id: "contract-1" },
-    }))
+    })))
     const databaseBeforeIssue = new DatabaseSync(databasePath(directory))
     try {
       assert.throws(() => databaseBeforeIssue.prepare("UPDATE invoice_drafts SET series = 'PRO' WHERE id = ?").run(draft.id))
@@ -142,10 +142,10 @@ void test("persists an issued snapshot across store recreation and isolates orga
     assert.deepEqual(issued.issuer.branding, {
       text: "Marca A", image: { pngBase64: "iVBORw0KGgo=", width: 12, height: 6 },
     })
-    const proformaSource = await Effect.runPromise(service.createDraft({
+    const proformaSource = await Effect.runPromise(service.createDraft(idempotent({
       customerId: customer.id, issueDate: "2026-09-01", dueDate: "2026-09-16", series: "QWBE",
       source: { app: "crm", kind: "offer", id: "offer-1" },
-    }))
+    })))
     const proformaAuthored = await Effect.runPromise(service.addDraftLine({
       draftId: proformaSource.id, description: "Avans", quantity: "1", unitPrice: "50", unitOfMeasure: each, vatRateCode: "RO_STANDARD",
     }))
@@ -410,7 +410,7 @@ void test("round-trips document remarks and keeps them immutable once issued", a
     }
     const remarks = "Livrare în tranșe.\nGaranție 24 de luni."
     const line = { description: "Servicii", quantity: "1", unitPrice: "100", unitOfMeasure: each, vatRateCode: "RO_STANDARD" }
-    const draft = await Effect.runPromise(service.createDraft({ customer, series: "QWBE", issueDate: "2026-09-01", dueDate: "2026-09-16", notes: remarks }))
+    const draft = await Effect.runPromise(service.createDraft(idempotent({ customer, series: "QWBE", issueDate: "2026-09-01", dueDate: "2026-09-16", notes: remarks })))
     await Effect.runPromise(service.addDraftLine({ draftId: draft.id, ...line }))
     assert.equal((await Effect.runPromise(service.getDraft(draft.id))).notes, remarks)
     assert.equal((await Effect.runPromise(service.listDrafts())).items[0]?.notes, remarks)
@@ -425,7 +425,7 @@ void test("round-trips document remarks and keeps them immutable once issued", a
     assert.equal((await Effect.runPromise(readBack.getProforma(proforma.id))).notes, remarks)
     assert.equal((await Effect.runPromise(readBack.listIssuedInvoices())).items[0]?.notes, remarks)
     assert.equal((await Effect.runPromise(readBack.listProformas())).items[0]?.notes, remarks)
-    const open = await Effect.runPromise(service.createDraft({ customer, series: "QWBE", issueDate: "2026-09-01" }))
+    const open = await Effect.runPromise(service.createDraft(idempotent({ customer, series: "QWBE", issueDate: "2026-09-01" })))
     const database = new DatabaseSync(databasePath(directory))
     try {
       assert.throws(() => database.prepare("UPDATE issued_invoices SET notes = 'altceva' WHERE id = ?").run(invoice.id))
