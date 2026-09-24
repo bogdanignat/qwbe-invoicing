@@ -61,3 +61,8 @@ export const ROMANIAN_COUNTIES: ReadonlyArray<RomanianCounty> = [
 
 export const romanianCountyName = (code: string): string =>
   ROMANIAN_COUNTIES.find((county) => county.code === code)?.name ?? code
+
+export const isRomanianCountyCode = (code: string): boolean =>
+  ROMANIAN_COUNTIES.some((county) => county.code === code)
+
+export const countyRequiresSector = (county: string): boolean => county === "RO-B"

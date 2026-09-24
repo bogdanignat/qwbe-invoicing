@@ -209,6 +209,17 @@ export const startUpstreamFixture = async () => {
       response.write(Buffer.alloc(32_768, 7))
       return
     }
+    // The headers a mutation carries — the CSRF proof and the idempotency key
+    // an issuance replays by — are part of the contract, so the upstream
+    // records exactly what it was asked for the probe to compare against.
+    if (request.url === "/api/idempotency-echo") {
+      response.writeHead(200, { "content-type": "application/json" })
+      response.end(JSON.stringify({
+        idempotencyKey: request.headers["idempotency-key"] ?? null,
+        csrfToken: request.headers["x-csrf-token"] ?? null,
+      }))
+      return
+    }
     if (request.url === "/api/customers") oversizedAttempts += 1
     response.writeHead(200, { "content-type": "application/json" })
     response.end("{}")

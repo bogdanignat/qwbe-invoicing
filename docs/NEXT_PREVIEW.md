@@ -1,5 +1,11 @@
 # Next frontend preview — T-1400, phase one
 
+> **T-1400 phase two (this branch, `feat/T-1400-next-authoring`):** invoice authoring and
+> drafts are now migrated. `/invoices/new` authors a new invoice or draft,
+> `/drafts/[id]` resumes one, and `/invoices` gained a "Factură nouă" CTA plus a cursor-paged
+> drafts section. See the **Authoring and drafts** section below for the design notes and the
+> exact gaps that remain. The existing Vite UI remains operational; nothing is cut over.
+
 The new `frontend/` package is an opt-in application in the existing pnpm workspace.
 It provides the unlock screen, session restore/logout, and the invoice register with
 the invoice and correction document screens. **The remaining business screens — issuing,
@@ -162,6 +168,47 @@ the proxy forwards `Max-Age` unchanged and validates rather than shortens it
 (`frontend/src/lib/server/proxy-cookie.ts`), and the only fixture route that answers
 `401` belongs to the stub API used by `probes/frontend-runtime.mjs`, which the browser
 fixture does not go through. No change was made for it.
+
+## Authoring and drafts (T-1400 phase two)
+
+- Authoring reads (issuer, series, units, VAT regimes, customers, product presets) go through
+  a reference client built from the session's transport; the issuer answers `404` → `null` →
+  an "issuer-required" state, not an error. Customers and presets page by cursor with explicit
+  "load more" — no silent 200-row cap.
+- Saves are orchestrated by a pure controller (`lib/invoice-draft-save-controller.ts`): create,
+  then header, then one line at a time, server IDs retained after each confirmed answer, every
+  chained write preceded and every answer followed by a session-ownership check. A lost answer
+  on a known draft is reconciled against a fresh read before anything is re-sent; an
+  unattributable outcome blocks the save with an explicit "rezultatul salvării nu este
+  confirmat" notice instead of risking a duplicate line, and points at the drafts list for
+  reconciliation. A lost answer on the initial create blocks resubmission for the same reason.
+- Issuance (`lib/invoice-issuance-controller.ts`) goes straight to `POST /invoices` for an
+  unsaved document, or reads the saved draft fresh and compares the full intent
+  (`authoringPayloadMatchesDraft`) before `POST /drafts/{id}/issue`. The idempotency key
+  (`lib/operation-idempotency.ts`, per operation + canonical payload fingerprint) is kept
+  across a lost answer and across a draft already reading `issued`, so a legitimate replay is
+  never blocked; the legacy `idempotency-key.ts` (which reset on any `5xx`) is deliberately
+  **not** ported.
+- The series is chosen before the first save and read-only afterwards (`UpdateDraftInput` has
+  no series). The due date is optional in a draft and required at issuance only when the
+  fiscal total rounds positive. Issued invoices are immutable; a draft already issued (or
+  issued as a proforma in the legacy app) renders a notice whose only registry link is
+  `/invoices` — this frontend has no proforma screens and no dead links. A draft derived from
+  a proforma stays editable and issuable but cannot be deleted.
+- The buyer is a saved customer or a one-time party (B2B/B2C, manual CUI/CNP validation, no
+  CUI lookup), TVA rates resolve from the issuer's configurations on the document date, and
+  lines saved under a rate the issuer can no longer charge are re-saved before issuance.
+- Everything is tested with Node `--test` against the pure controllers, decoders and clients
+  (no DOM): save/resume/lost answers, double-click single-flight, epoch/unmount guards,
+  idempotency reuse rules, due-date rounding, stale VAT, concurrent-change comparison and
+  the derived-draft restrictions. The BFF probe now also asserts `idempotency-key` header
+  passthrough next to `x-csrf-token`.
+
+**Gaps (not migrated in this phase):** proforma screens and any proforma conversion entry,
+CUI lookup/provider integration, master-data CRUD (customers, presets, series), issuer
+settings, payments, storno authoring, CUI T-1371, and a real-browser pass over the new
+screens (supervisor delegates that separately). The register/drafts browser pass and the
+`/invoices/new` vs `/invoices/[id]` route precedence remain to be verified in a browser.
 
 ## Isolated container preview
 

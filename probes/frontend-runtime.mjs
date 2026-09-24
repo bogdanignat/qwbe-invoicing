@@ -212,6 +212,33 @@ void test("standalone runtime carries document downloads through with their own 
     }
   })
 
+void test("standalone runtime forwards the mutation headers untouched", { timeout: 30_000 }, async () => {
+  const upstream = await startUpstreamFixture()
+  let frontend
+  try {
+    frontend = await startFrontend(upstream.origin)
+    const headers = (extra = {}) => canonicalHeaders(frontend.origin, extra)
+    // A draft save signs with the session's CSRF token; an issuance adds the
+    // idempotency key the server replays a lost answer by. Both must reach the
+    // upstream as sent — the BFF neither invents nor drops them.
+    const echoed = await httpRequest({ origin: frontend.origin, path: "/api/qwbe/idempotency-echo",
+      method: "POST",
+      headers: headers({ origin: frontend.origin, "content-type": "application/json",
+        "x-csrf-token": "session-csrf-proof", "idempotency-key": "issue-invoice-key-1" }),
+      chunks: ["{}"] })
+    assert.equal(echoed.status, 200)
+    assert.deepEqual(json(echoed), { idempotencyKey: "issue-invoice-key-1", csrfToken: "session-csrf-proof" })
+    const withoutKey = await httpRequest({ origin: frontend.origin, path: "/api/qwbe/idempotency-echo",
+      method: "POST",
+      headers: headers({ origin: frontend.origin, "content-type": "application/json", "x-csrf-token": "t" }),
+      chunks: ["{}"] })
+    assert.deepEqual(json(withoutKey), { idempotencyKey: null, csrfToken: "t" })
+  } finally {
+    await frontend?.close()
+    await upstream.close()
+  }
+})
+
 // The public name the deployment answers on, deliberately different from both the
 // bound address and every upstream hostname used below.
 const publicHost = "invoicing.example.test"

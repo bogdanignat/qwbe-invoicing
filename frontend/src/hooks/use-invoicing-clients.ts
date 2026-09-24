@@ -1,8 +1,14 @@
 import { useMemo } from "react"
 
 import { useAuth } from "./auth-context.ts"
-import { createInvoiceDocumentsClient, createInvoiceRegisterClient } from "../lib/invoicing-clients.ts"
+import {
+  createInvoiceDocumentsClient, createInvoiceRegisterClient,
+} from "../lib/invoicing-clients.ts"
 import type { InvoiceDocumentsClient, InvoiceRegisterClient } from "../lib/invoicing-clients.ts"
+import { createDraftsClient } from "../lib/drafts-client.ts"
+import type { DraftsClient } from "../lib/drafts-client.ts"
+import { createAuthoringReferenceClient } from "../lib/authoring-reference-client.ts"
+import type { AuthoringReferenceClient } from "../lib/authoring-reference-client.ts"
 
 /**
  * The single place where the session's transport becomes a data client.
@@ -15,6 +21,8 @@ import type { InvoiceDocumentsClient, InvoiceRegisterClient } from "../lib/invoi
 export interface InvoicingClients {
   readonly register: InvoiceRegisterClient
   readonly documents: InvoiceDocumentsClient
+  readonly drafts: DraftsClient
+  readonly reference: AuthoringReferenceClient
 }
 
 export const useInvoicingClients = (): InvoicingClients => {
@@ -22,5 +30,7 @@ export const useInvoicingClients = (): InvoicingClients => {
   return useMemo(() => ({
     register: createInvoiceRegisterClient(transport),
     documents: createInvoiceDocumentsClient(transport),
+    drafts: createDraftsClient(transport),
+    reference: createAuthoringReferenceClient(transport),
   }), [transport])
 }
