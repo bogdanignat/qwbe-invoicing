@@ -1,7 +1,7 @@
 import type { IncomingHttpHeaders } from "node:http"
 
 import type { ProxyConfig } from "./config.ts"
-import { normalizedSessionSetCookie } from "./proxy-cookie.ts"
+import { isSessionSetCookie, normalizedSessionSetCookie } from "./proxy-cookie.ts"
 
 export { validSessionSetCookie } from "./proxy-cookie.ts"
 
@@ -58,22 +58,39 @@ export const proxyRequestHeaders = (request: Request, config: ProxyConfig): Requ
 
 const responseNames = new Set(["content-type", "content-disposition", "etag", "retry-after", "allow"])
 
+export type ResponseHeaderResult =
+  | { readonly ok: true; readonly headers: Headers }
+  | { readonly ok: false; readonly error: "invalid_upstream_cookie" }
+
+/**
+ * A session cookie the contract rejects is a failure, not a header to drop.
+ *
+ * Dropping it silently would answer 200 with a body the caller reads as success
+ * while the session it was told it received never exists, so the browser keeps
+ * the previous cookie or none at all. More than one session cookie in a single
+ * response is the same failure by another route: the response describes two
+ * sessions and nothing here may pick the one that counts. Foreign cookies stay
+ * ignored — they were never part of this contract.
+ */
 export const proxyResponseHeaders = (
   headers: IncomingHttpHeaders,
   rawHeaders: ReadonlyArray<string>,
   requireSecureCookie: boolean,
-): Headers => {
+): ResponseHeaderResult => {
   const result = new Headers({ "cache-control": "no-store", "x-content-type-options": "nosniff" })
   for (const [name, value] of Object.entries(headers)) {
     if (!responseNames.has(name) || typeof value !== "string") continue
     result.set(name, value)
   }
+  let sessionCookies = 0
   for (let index = 0; index < rawHeaders.length; index += 2) {
     if (rawHeaders[index]?.toLowerCase() !== "set-cookie") continue
     const value = rawHeaders[index + 1]
-    if (value === undefined) continue
+    if (value === undefined || !isSessionSetCookie(value)) continue
+    sessionCookies += 1
     const normalized = normalizedSessionSetCookie(value, requireSecureCookie)
-    if (normalized !== undefined) result.append("set-cookie", normalized)
+    if (sessionCookies > 1 || normalized === undefined) return { ok: false, error: "invalid_upstream_cookie" }
+    result.append("set-cookie", normalized)
   }
-  return result
+  return { ok: true, headers: result }
 }

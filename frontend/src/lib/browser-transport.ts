@@ -18,12 +18,18 @@ export interface BrowserTransport {
 
 interface Dependencies {
   readonly fetch?: typeof fetch
-  readonly onUnauthorized: () => void
+  readonly epoch?: () => number
+  readonly onUnauthorized: (epoch: number) => void
 }
 
-export const createBrowserTransport = ({ fetch: fetchImpl = fetch, onUnauthorized }: Dependencies): BrowserTransport => {
+export const createBrowserTransport = (
+  { fetch: fetchImpl = fetch, epoch = () => 0, onUnauthorized }: Dependencies,
+): BrowserTransport => {
   const response = async (path: string, options: TransportOptions = {}): Promise<Response> => {
     const method = options.method ?? "GET"
+    // The session generation this request belongs to, read before the request leaves:
+    // a 401 that arrives after a newer session started must not close that newer session.
+    const started = epoch()
     let result: Response
     try {
       result = await fetchImpl(browserApiPath(path), {
@@ -42,7 +48,7 @@ export const createBrowserTransport = ({ fetch: fetchImpl = fetch, onUnauthorize
       if (cause instanceof Error && cause.name === "AbortError") throw cause
       throw new ApiFailure({ message: cause instanceof Error ? cause.message : "Conexiunea cu API-ul a eșuat." })
     }
-    if (result.status === 401 && options.unauthorized !== "ignore") onUnauthorized()
+    if (result.status === 401 && options.unauthorized !== "ignore") onUnauthorized(started)
     if (!result.ok) {
       const body = await readJson(result).catch(() => undefined)
       throw parseApiFailure(body, result.status)

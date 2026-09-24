@@ -20,7 +20,7 @@ export interface SessionClient {
 }
 
 export const createSessionClient = (transport: BrowserTransport): SessionClient => ({
-  restore: async (signal) => decode(await transport.json("/api/session", { signal })),
+  restore: async (signal) => decode(await transport.json("/api/session", { signal, unauthorized: "ignore" })),
   login: async (token, signal) => decode(await transport.json("/api/session", {
     method: "POST",
     body: { token: token.trim() },

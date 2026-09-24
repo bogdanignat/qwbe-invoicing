@@ -1,4 +1,5 @@
-import { ApiFailure } from "./api-errors.ts"
+import { ApiFailure, LogoutUnconfirmedError } from "./api-errors.ts"
+import { createSessionEpoch } from "./session-epoch.ts"
 import type { AuthenticatedSession } from "./api-contracts.ts"
 
 export type AuthStatus = "checking" | "locked" | "authenticated" | "restore-error"
@@ -19,7 +20,19 @@ export interface AuthController {
   readonly restore: () => Promise<void>
   readonly login: (token: string) => Promise<void>
   readonly logout: () => Promise<void>
-  readonly unauthorized: () => void
+  readonly unauthorized: (epoch: number) => void
+  readonly epoch: () => number
+  /**
+   * Whether the session a caller started in is still the session in place.
+   *
+   * A request that already left cannot be unsent, so a mutation reads this in
+   * its own completion callback: if the session it belonged to has since ended
+   * or been replaced, its side effects — a download, a cache write, a redirect
+   * — belong to nobody and are dropped rather than applied to whoever is
+   * authenticated now.
+   */
+  readonly ownsEpoch: (epoch: number) => boolean
+  readonly csrfToken: () => string | undefined
   readonly route: (pathname: string) => void
 }
 interface Dependencies {
@@ -36,17 +49,11 @@ interface ActiveOperation {
   promise: Promise<void>
 }
 
-export const initialAuthSnapshot: AuthSnapshot = {
-  status: "checking", error: undefined, loginPending: false, logoutPending: false,
-}
+/** A snapshot with no operation in flight; every transition here is a settled one. */
+const settled = (status: AuthStatus, error?: unknown): AuthSnapshot =>
+  ({ status, error, loginPending: false, logoutPending: false })
 
-export class LogoutUnconfirmedError extends Error {
-  constructor(cause: unknown) {
-    const detail = cause instanceof Error ? ` ${cause.message}` : ""
-    super(`Serverul nu a confirmat ieșirea; sesiunea poate rămâne activă.${detail}`)
-    this.name = "LogoutUnconfirmedError"
-  }
-}
+export const initialAuthSnapshot: AuthSnapshot = settled("checking")
 
 export const createAuthController = (dependencies: Dependencies): AuthController => {
   let state = initialAuthSnapshot
@@ -54,6 +61,7 @@ export const createAuthController = (dependencies: Dependencies): AuthController
   let generation = 0
   let active: ActiveOperation | undefined
   let mounted = false
+  const sessionEpoch = createSessionEpoch()
   const emit = (next: AuthSnapshot): void => { state = next; dependencies.publish(next) }
   const current = (operation: ActiveOperation): boolean =>
     mounted && active === operation && generation === operation.id && !operation.controller.signal.aborted
@@ -76,23 +84,25 @@ export const createAuthController = (dependencies: Dependencies): AuthController
     return operation.promise
   }
   const anonymous = (): void => {
+    sessionEpoch.close()
     csrfToken = undefined
     dependencies.clearCache()
-    emit({ status: "locked", error: undefined, loginPending: false, logoutPending: false })
+    emit(settled("locked"))
     route(dependencies.pathname())
   }
   const restore = (): Promise<void> => begin("restore", async (operation) => {
-    emit({ status: "checking", error: undefined, loginPending: false, logoutPending: false })
+    emit(settled("checking"))
     try {
       const restored = await dependencies.session.restore(operation.controller.signal)
       if (!current(operation)) return
+      sessionEpoch.open()
       csrfToken = restored.csrfToken
-      emit({ status: "authenticated", error: undefined, loginPending: false, logoutPending: false })
+      emit(settled("authenticated"))
       route(dependencies.pathname())
     } catch (error) {
       if (!current(operation)) return
       if (error instanceof ApiFailure && error.status === 401) anonymous()
-      else emit({ status: "restore-error", error, loginPending: false, logoutPending: false })
+      else emit(settled("restore-error", error))
     }
   })
   const login = (token: string): Promise<void> => begin("login", async (operation) => {
@@ -100,37 +110,46 @@ export const createAuthController = (dependencies: Dependencies): AuthController
     try {
       const authenticated = await dependencies.session.login(token, operation.controller.signal)
       if (!current(operation)) return
+      sessionEpoch.open()
       csrfToken = authenticated.csrfToken
       dependencies.clearCache()
-      emit({ status: "authenticated", error: undefined, loginPending: false, logoutPending: false })
+      emit(settled("authenticated"))
       route(dependencies.pathname())
     } catch (error) {
       if (!current(operation)) return
       csrfToken = undefined
-      emit({ status: "locked", error, loginPending: false, logoutPending: false })
+      emit(settled("locked", error))
     }
   })
-  const logout = (): Promise<void> => begin("logout", async (operation) => {
-    emit({ status: "authenticated", error: state.error, loginPending: false, logoutPending: true })
-    try {
-      if (csrfToken === undefined) throw new Error("Sesiunea locală nu are un token CSRF valid.")
-      await dependencies.session.logout(csrfToken, operation.controller.signal)
-      if (current(operation)) anonymous()
-    } catch (error) {
-      if (!current(operation)) return
-      if (error instanceof ApiFailure && error.status === 401) anonymous()
-      else emit({ status: "authenticated", error: new LogoutUnconfirmedError(error), loginPending: false, logoutPending: false })
-    }
-  })
+  const logout = (): Promise<void> => {
+    const token = csrfToken
+    if (state.status !== "authenticated" || token === undefined) return Promise.resolve()
+    return begin("logout", async (operation) => {
+      emit({ status: "authenticated", error: state.error, loginPending: false, logoutPending: true })
+      try {
+        await dependencies.session.logout(token, operation.controller.signal)
+        if (current(operation)) anonymous()
+      } catch (error) {
+        if (!current(operation)) return
+        if (error instanceof ApiFailure && error.status === 401) anonymous()
+        else emit(settled("authenticated", new LogoutUnconfirmedError(error)))
+      }
+    })
+  }
   return {
     mount: () => { mounted = true },
-    dispose: () => { mounted = false; active?.controller.abort(); active = undefined; generation += 1 },
+    dispose: () => {
+      mounted = false; active?.controller.abort(); active = undefined; generation += 1; sessionEpoch.close()
+    },
     restore,
     login,
     logout,
     route,
-    unauthorized: () => {
-      if (!mounted) return
+    epoch: sessionEpoch.value,
+    ownsEpoch: sessionEpoch.owns,
+    csrfToken: () => csrfToken,
+    unauthorized: (epoch) => {
+      if (!mounted || !sessionEpoch.owns(epoch)) return
       active?.controller.abort(); active = undefined; generation += 1
       anonymous()
     },

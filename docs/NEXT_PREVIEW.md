@@ -1,8 +1,9 @@
 # Next frontend preview — T-1400, phase one
 
 The new `frontend/` package is an opt-in application in the existing pnpm workspace.
-It provides the unlock screen, session restore/logout and an authenticated preview
-landing page. **The invoice list and other business screens are not migrated yet.**
+It provides the unlock screen, session restore/logout, and the invoice register with
+the invoice and correction document screens. **The remaining business screens — issuing,
+drafts, catalog, customers, issuer settings, payments — are not migrated yet.**
 The existing Vite UI, public API, default Compose/Warden routing and release image
 remain operational. This phase does not switch traffic or remove `web/`.
 
@@ -25,6 +26,39 @@ remain operational. This phase does not switch traffic or remove `web/`.
 - Mutation requests require exact configured Origin and CSRF. BFF rejects incoming
   Authorization, duplicate session cookies, path traversal and untrusted forwarded
   identities. It does not follow upstream redirects or retry mutations automatically.
+- An upstream `Set-Cookie` for `qwbe_session` that does not satisfy the cookie contract,
+  or a second session cookie in the same response, fails the request with `502
+  invalid_upstream_cookie` instead of being silently dropped from a `200`. A valid
+  issue and a valid clear are forwarded unchanged; foreign cookie names are not forwarded.
+- An HTTPS upstream is validated under the **upstream** identity: the BFF rewrites `Host`
+  to the public origin, and Node would otherwise derive SNI and the certificate identity
+  check from that rewritten header. A hostname upstream is asked for by that hostname; an
+  IP-literal upstream sends an explicitly empty server name — not an omitted one — because
+  RFC 6066 admits no address in SNI and Node then checks the certificate's IP entries.
+  Trust comes from the process' own CA store (`NODE_EXTRA_CA_CERTS` at deployment level);
+  there is no application setting for it and no bundled certificate.
+- A `401` is attributed to the **session** the request *started* in, counted separately
+  from the operation generation that cancels superseded restore/login/logout work: a
+  logout the server refuses (`403`, `502`) cancels its own operation but leaves the
+  session in place, so a `401` issued before that attempt is still honoured. A late `401`
+  from a superseded session cannot close the session that replaced it, and once a session
+  is closed, further `401`s are absorbed: a private view still mounted while the redirect
+  to `/unlock` commits cannot re-trigger the cache wipe and the redirect. Session restore
+  owns its own `401` and does not raise the shared event. Leaving a session cancels the
+  in-flight queries before clearing the cache: the wipe alone already aborts them and
+  discards late answers, while cancelling is what returns mounted observers to `idle`
+  instead of leaving them waiting on a query that no longer exists.
+- Every data read belongs to the authenticated shell: a query is `enabled` only while the
+  session status is `authenticated` and passes the query's `signal` to the transport, so a
+  view left mounted during the redirect neither keeps asking for private data nor leaves a
+  request running after its screen is gone.
+- Every data mutation captures the session epoch before it is sent and drops its own late
+  side effects — downloads, cache writes, navigation — when that epoch is no longer the
+  session in place. `AuthController.ownsEpoch` is the single seam for that question, and
+  the document download is the first mutation to use it: a PDF whose render started in a
+  session that has since ended is fetched, then discarded rather than saved.
+- Logout is a no-op unless the session is authenticated and holds a CSRF token; it is
+  never fabricated from an unauthenticated or token-less state.
 - PDF/XML remain byte streams with ETag and download headers. Requests are limited to
   1,000,000 bytes. A 30-second end-to-end deadline includes body upload; timeout after
   backend commit is an uncertain outcome, not a promise of rollback. Explicit retries
@@ -59,6 +93,75 @@ gateway errors. The deployed 30-second timeout is exercised without shortening t
 production configuration. Servers, credentials and database fixtures are cleaned up.
 Binary transport checks use controlled byte fixtures; they do not replace the
 existing backend document-generation tests or the browser checks for each migrated screen.
+
+The runtime probes also write escaped paths to the socket verbatim — a URL parser in
+the test would resolve `..` before the server ever saw it — and assert both a non-`200`
+answer and that the upstream fixture recorded **no** request for them. Upstream session
+cookies are exercised through the real proxy (valid issue, valid clear, tampered,
+malformed, duplicated). TLS is exercised against a throwaway CA and leaf certificate
+generated with `openssl` into a temporary directory per run and trusted only by the
+freshly spawned Next child through `NODE_EXTRA_CA_CERTS`: a trusted certificate for the
+upstream hostname succeeds while the public `Host` differs, and a wrong-hostname or
+unknown-issuer certificate fails with `502`. The same is asserted for an upstream
+addressed by `127.0.0.1`: its IP certificate is accepted while the public host is a
+different name, the upstream observes **no** server name in the handshake, and a
+certificate for another address, a certificate for the public host name, or an unknown
+issuer each fail with `502`. Missing or pre-1.1.1 `openssl` is reported by name before
+any certificate command runs, instead of surfacing as `spawnSync openssl ENOENT` inside a
+TLS assertion. Nothing is checked in and no verification is disabled.
+
+**Coverage above is code-level; the screens were also driven in a real browser.** That
+pass ran against the Node standalone Next build talking to a real backend on a temporary
+isolated fixture — **not** against `compose.preview.yaml`; the container preview was not
+exercised in this session. It checked keyboard focus visibility on the
+light surface and on the sidebar, login, session restore across a reload, logout, a
+wrong token, and a `502` during restore followed by a successful retry, at desktop and
+at 320 px and 390 px widths. No unexpected JavaScript console errors were observed.
+Screenshots are kept outside the repository, under `/tmp/qwbe-t1425/screenshots`.
+
+**The invoice register, the invoice and correction detail screens and the PDF/XML
+downloads have since been driven in a real browser too**, against an isolated fixture
+that seeds one issued invoice and one correction of it through the public API. The pass
+checked: unlock with the fixture token; the register listing both documents; the kind
+and search filters; the invoice detail and the correction detail; the invoice PDF
+download (rendered by `POST` then fetched) and both e-Factura XML downloads; the signed
+totals on the correction; a full page reload while authenticated; logout; and the
+register at a 320 px viewport. No unexpected JavaScript console errors were observed.
+Screenshots are kept outside the repository: the final pass is archived under
+`/tmp/qwbe-t1400-registry/browser-evidence-final`, together with its screenshots.
+
+The two defects that pass found — a missing document answered with the backend tag
+`ResourceNotFound` printed verbatim, and a failed detail load offering no way to ask
+again — are fixed and **have since been re-driven in a real browser**. That final pass,
+over the same isolated fixture, checked: every route at desktop and at a 320 px
+viewport, with no horizontal overflow; the emitter block naming counties in words
+rather than ISO codes, `Cod TVA RO<cui>`, the share capital in RON and the e-Factura
+status as `Netrimisă`; the fixture-only non-VAT document displaying `Scutit TVA
+art. 310`; a missing document answered with the localized message; a detail load
+failing with `500`/`502` and recovering through **Reîncearcă**; and a real PDF download
+through the browser's own, uncontrolled download path. Logout leaks nothing: a stale
+download whose `200` arrived only after logout produced **zero** download events. No
+unexpected JavaScript console error was observed anywhere in the pass.
+
+The register's own retry **passed** its browser check too. A first-page `502` is recovered
+by **Reîncearcă**: the refetch restores both rows. A `502` on the next page keeps the row
+already loaded, and **Reîncearcă** on that failure calls `fetchNextPage`, appending the
+second row without duplicating or discarding anything. A `404` is not transient and offers
+no retry at all. Browser MCP verified each case through the DOM and the network log in the
+final pass, with zero unexpected JavaScript console errors. The preview stays opt-in
+because the rest of T-1400 — issuing, drafts, catalog, customers, issuer settings,
+payments — is not migrated or cut over, **not** because retry is unchecked.
+
+One honest limitation: the retry phase split is currently covered by a temporary observer
+probe plus this browser pass, not by a permanent hook regression test (non-blocking,
+Fable LOW).
+
+The same pass reported an apparent early session expiry. It was **not reproduced**: the
+browser session lives 30 days (`sessionLifetimeSeconds`, `standalone/auth/browser-session.ts`),
+the proxy forwards `Max-Age` unchanged and validates rather than shortens it
+(`frontend/src/lib/server/proxy-cookie.ts`), and the only fixture route that answers
+`401` belongs to the stub API used by `probes/frontend-runtime.mjs`, which the browser
+fixture does not go through. No change was made for it.
 
 ## Isolated container preview
 

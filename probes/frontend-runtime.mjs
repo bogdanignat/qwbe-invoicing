@@ -3,7 +3,8 @@ import { Buffer } from "node:buffer"
 import test from "node:test"
 import { URL } from "node:url"
 
-import { abortAfterFirstChunk, httpRequest, startBackendFixture, startFrontend, startUpstreamFixture } from "./frontend-runtime-fixture.mjs"
+import { abortAfterFirstChunk, createTlsMaterial, httpRequest, rawHttpRequest, sessionCookies, startBackendFixture,
+  startFrontend, startTlsUpstreamFixture, startUpstreamFixture } from "./frontend-runtime-fixture.mjs"
 
 const json = (response) => JSON.parse(response.body.toString("utf8"))
 const canonicalHeaders = (origin, extra = {}) => ({ host: new URL(origin).host, ...extra })
@@ -118,6 +119,191 @@ void test("standalone runtime preserves raw upstream semantics and closes aborte
     await upstream.close()
   }
 })
+
+void test("standalone runtime keeps escaped paths off the upstream and refuses a foreign session cookie",
+  { timeout: 60_000 }, async () => {
+    const upstream = await startUpstreamFixture()
+    let frontend
+    try {
+      frontend = await startFrontend(upstream.origin)
+      const headers = canonicalHeaders(frontend.origin)
+
+      // A control request proves the upstream really records what it is asked for,
+      // so an empty record below means "nothing arrived", not "nothing is watched".
+      const control = await httpRequest({ origin: frontend.origin, path: "/api/qwbe/cookie-foreign", headers })
+      assert.equal(control.status, 200)
+      assert.deepEqual(upstream.requestedUrls(), ["/api/cookie-foreign"])
+
+      // Paths are written to the socket verbatim: a URL parser in the probe would
+      // resolve the traversal before it could ever reach the server under test.
+      for (const path of ["/api/qwbe/../health", "/api/qwbe/%2e%2e/health", "/api/qwbe/..%2Fhealth",
+        "/api/qwbe/%252e%252e/health", "/api/qwbe/x%2F..%2F..%2Fhealth", "/api/qwbe/customer%5cadmin",
+        "/api/qwbe//evil", "/api/qwbe/./../health", "/api/qwbe/.%2e/health", "/api/qwbe/%00"]) {
+        const escaped = await rawHttpRequest({ origin: frontend.origin, path, headers })
+        assert.notEqual(escaped.status, 200, path)
+        assert.deepEqual(upstream.requestedUrls(), ["/api/cookie-foreign"], path)
+      }
+      assert.equal(control.headers["set-cookie"], undefined)
+
+      const issued = await httpRequest({ origin: frontend.origin, path: "/api/qwbe/cookie-issued", headers })
+      assert.equal(issued.status, 200)
+      assert.deepEqual(issued.headers["set-cookie"], [sessionCookies.issued])
+      const cleared = await httpRequest({ origin: frontend.origin, path: "/api/qwbe/cookie-clear", headers })
+      assert.equal(cleared.status, 200)
+      assert.deepEqual(cleared.headers["set-cookie"], [sessionCookies.clear])
+
+      // An upstream cookie the contract rejects fails the response; dropping it
+      // would answer 200 to a browser that never received the session it expects.
+      for (const path of ["cookie-tampered", "cookie-malformed", "cookie-multiple", "cookie-issue-and-clear"]) {
+        const refused = await httpRequest({ origin: frontend.origin, path: `/api/qwbe/${path}`, headers })
+        assert.equal(refused.status, 502, path)
+        assert.deepEqual(json(refused), { error: "invalid_upstream_cookie" }, path)
+        assert.equal(refused.headers["set-cookie"], undefined, path)
+      }
+    } finally {
+      await frontend?.close()
+      await upstream.close()
+    }
+  })
+
+void test("standalone runtime carries document downloads through with their own media type",
+  { timeout: 30_000 }, async () => {
+    const upstream = await startUpstreamFixture()
+    let frontend
+    try {
+      frontend = await startFrontend(upstream.origin)
+      const headers = (extra = {}) => canonicalHeaders(frontend.origin, extra)
+
+      // A PDF is rendered by a POST and then read; the read must come back as a
+      // PDF, named, and with the validator the upstream issued. A proxy that
+      // normalised any of the three would hand the browser a file it saves as
+      // the route's last path segment, with the wrong type.
+      const rendered = await httpRequest({ origin: frontend.origin, path: "/api/qwbe/invoices/inv-1/pdf",
+        method: "POST", headers: headers({ origin: frontend.origin, "content-type": "application/json" }), chunks: ["{}"] })
+      assert.equal(rendered.status, 200)
+      const pdf = await httpRequest({ origin: frontend.origin, path: "/api/qwbe/invoices/inv-1/pdf",
+        headers: headers({ accept: "application/pdf" }) })
+      assert.equal(pdf.status, 200)
+      assert.deepEqual(pdf.body, upstream.binary)
+      assert.equal(pdf.headers["content-type"], "application/pdf")
+      assert.equal(pdf.headers["content-disposition"], 'attachment; filename="factura-FCT-12.pdf"')
+      assert.equal(pdf.headers.etag, '"invoice-pdf"')
+
+      for (const path of ["/api/qwbe/invoices/inv-1/efactura.xml", "/api/qwbe/corrections/cor-1/efactura.xml"]) {
+        const xml = await httpRequest({ origin: frontend.origin, path, headers: headers({ accept: "application/xml" }) })
+        assert.equal(xml.status, 200, path)
+        assert.equal(xml.headers["content-type"], "application/xml", path)
+        assert.equal(xml.headers["content-disposition"], 'attachment; filename="document.xml"', path)
+        assert.equal(xml.headers.etag, '"document-xml"', path)
+        assert.equal(xml.body.toString("utf8"), "<Invoice/>", path)
+      }
+
+      // A download refused as unauthenticated has to arrive as a 401: that status
+      // is what the transport reports against the epoch the request left with, and
+      // a proxy that rewrote it would leave an expired session on screen.
+      const expired = await httpRequest({ origin: frontend.origin, path: "/api/qwbe/invoices/expired/pdf",
+        headers: headers({ accept: "application/pdf" }) })
+      assert.equal(expired.status, 401)
+      assert.deepEqual(json(expired), { error: "unauthorized" })
+      assert.equal(expired.headers["set-cookie"], undefined)
+    } finally {
+      await frontend?.close()
+      await upstream.close()
+    }
+  })
+
+// The public name the deployment answers on, deliberately different from both the
+// bound address and every upstream hostname used below.
+const publicHost = "invoicing.example.test"
+
+/**
+ * One request through a deployed frontend to an HTTPS upstream, under a public
+ * origin that is neither the upstream's name nor the address it is bound to.
+ *
+ * The proxy rewrites `Host` to that public origin, so the handshake is where the
+ * upstream identity is decided: each attempt reports both the answer and the
+ * server name the upstream saw asked for.
+ */
+const tlsAttempt = async (material, caPath, { host, path = "/api/qwbe/session" } = {}) => {
+  const upstream = await startTlsUpstreamFixture(material, host === undefined ? {} : { host })
+  let frontend
+  try {
+    frontend = await startFrontend(upstream.origin,
+      { env: { NODE_EXTRA_CA_CERTS: caPath, FRONTEND_ORIGIN: `http://${publicHost}` } })
+    const response = await httpRequest({ origin: frontend.origin, path, headers: { host: publicHost } })
+    return { response, serverNames: upstream.serverNames() }
+  } finally {
+    await frontend?.close()
+    await upstream.close()
+  }
+}
+
+void test("standalone runtime validates the upstream certificate under the upstream hostname",
+  { timeout: 90_000 }, async () => {
+    const trusted = createTlsMaterial("localhost")
+    const mismatched = createTlsMaterial("other.invalid")
+    const foreign = createTlsMaterial("localhost")
+    try {
+      // Unless a server name is given, Node derives both SNI and the identity it
+      // checks from the rewritten Host header, and the certificate would be judged
+      // under the public name instead of the upstream's own.
+      const accepted = await tlsAttempt(trusted, trusted.caPath)
+      assert.equal(accepted.response.status, 200)
+      assert.deepEqual(json(accepted.response), { tls: true })
+      assert.deepEqual(accepted.serverNames, ["localhost"])
+
+      const wrongName = await tlsAttempt(mismatched, mismatched.caPath)
+      assert.equal(wrongName.response.status, 502)
+      assert.deepEqual(json(wrongName.response), { error: "upstream_unavailable" })
+
+      const unknownIssuer = await tlsAttempt(foreign, trusted.caPath)
+      assert.equal(unknownIssuer.response.status, 502)
+      assert.deepEqual(json(unknownIssuer.response), { error: "upstream_unavailable" })
+    } finally {
+      trusted.close()
+      mismatched.close()
+      foreign.close()
+    }
+  })
+
+void test("standalone runtime validates an upstream addressed by a literal address against that address",
+  { timeout: 120_000 }, async () => {
+    const trusted = createTlsMaterial("127.0.0.1", "IP:127.0.0.1")
+    const otherAddress = createTlsMaterial("127.0.0.2", "IP:127.0.0.2")
+    const publicName = createTlsMaterial(publicHost)
+    const foreign = createTlsMaterial("127.0.0.1", "IP:127.0.0.1")
+    try {
+      // An address carries no SNI (RFC 6066), and leaving the server name out
+      // altogether is not the same thing: Node would then fill it from the rewritten
+      // Host header and check this certificate under the public name. The upstream
+      // must see no name asked for, and its address certificate must still be
+      // accepted even though the public origin is something else entirely.
+      const accepted = await tlsAttempt(trusted, trusted.caPath, { host: "127.0.0.1" })
+      assert.equal(accepted.response.status, 200)
+      assert.deepEqual(json(accepted.response), { tls: true })
+      assert.deepEqual(accepted.serverNames, [false])
+
+      const wrongAddress = await tlsAttempt(otherAddress, otherAddress.caPath, { host: "127.0.0.1" })
+      assert.equal(wrongAddress.response.status, 502)
+      assert.deepEqual(json(wrongAddress.response), { error: "upstream_unavailable" })
+
+      // A certificate for the public name, from a trusted issuer, is exactly what a
+      // rewritten Host header would have accepted; the address it was reached at is
+      // not in it, so it must be refused.
+      const rewrittenName = await tlsAttempt(publicName, publicName.caPath, { host: "127.0.0.1" })
+      assert.equal(rewrittenName.response.status, 502)
+      assert.deepEqual(json(rewrittenName.response), { error: "upstream_unavailable" })
+
+      const unknownIssuer = await tlsAttempt(foreign, trusted.caPath, { host: "127.0.0.1" })
+      assert.equal(unknownIssuer.response.status, 502)
+      assert.deepEqual(json(unknownIssuer.response), { error: "upstream_unavailable" })
+    } finally {
+      trusted.close()
+      otherAddress.close()
+      publicName.close()
+      foreign.close()
+    }
+  })
 
 void test("standalone runtime enforces the deployed upstream deadline", { timeout: 60_000 }, async () => {
   const upstream = await startUpstreamFixture()

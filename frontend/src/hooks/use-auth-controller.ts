@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react"
 import type { AuthController as AuthViewController } from "./auth-context.ts"
 import { createAuthController, initialAuthSnapshot } from "../lib/auth-controller.ts"
 import { createBrowserTransport } from "../lib/browser-transport.ts"
+import { resetSessionCache } from "../lib/session-cache.ts"
 import { createSessionClient } from "../lib/session-client.ts"
 
 export const useAuthController = (): AuthViewController => {
@@ -12,18 +13,20 @@ export const useAuthController = (): AuthViewController => {
   const router = useRouter()
   const pathname = usePathname()
   const [state, setState] = useState(initialAuthSnapshot)
-  const controller = useMemo(() => {
-    let unauthorized = (): void => undefined
-    const transport = createBrowserTransport({ onUnauthorized: () => { unauthorized() } })
-    const created = createAuthController({
-      session: createSessionClient(transport),
+  const { controller, transport } = useMemo(() => {
+    let unauthorized: (epoch: number) => void = () => undefined
+    let epoch = (): number => 0
+    const created = createBrowserTransport({ epoch: () => epoch(), onUnauthorized: (started) => { unauthorized(started) } })
+    const auth = createAuthController({
+      session: createSessionClient(created),
       publish: setState,
-      clearCache: () => { queryClient.clear() },
+      clearCache: () => { resetSessionCache(queryClient) },
       navigate: (path) => { router.replace(path) },
       pathname: () => window.location.pathname,
     })
-    unauthorized = created.unauthorized
-    return created
+    unauthorized = auth.unauthorized
+    epoch = auth.epoch
+    return { controller: auth, transport: created }
   }, [queryClient, router])
 
   useEffect(() => {
@@ -38,5 +41,9 @@ export const useAuthController = (): AuthViewController => {
     login: controller.login,
     logout: controller.logout,
     retryRestore: controller.restore,
+    transport,
+    csrfToken: controller.csrfToken,
+    epoch: controller.epoch,
+    ownsEpoch: controller.ownsEpoch,
   }
 }
