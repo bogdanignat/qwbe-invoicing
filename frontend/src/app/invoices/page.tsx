@@ -1,5 +1,5 @@
-import { InvoicesPreviewView } from "../../views/InvoicesPreviewView.tsx"
+import { InvoicesView } from "../../views/InvoicesView.tsx"
 
 export default function InvoicesPage() {
-  return <InvoicesPreviewView />
+  return <InvoicesView />
 }

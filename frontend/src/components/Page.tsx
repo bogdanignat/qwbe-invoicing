@@ -1,6 +1,16 @@
 import type { ReactNode } from "react"
 
-export const Page = ({ title, eyebrow, children }: { readonly title: string; readonly eyebrow: string; readonly children: ReactNode }) => <>
-  <header className="page-header"><div><p className="eyebrow">{eyebrow}</p><h1>{title}</h1></div></header>
+interface PageProps {
+  readonly title: string
+  readonly eyebrow: string
+  readonly actions?: ReactNode
+  readonly children: ReactNode
+}
+
+export const Page = ({ title, eyebrow, actions, children }: PageProps) => <>
+  <header className="page-header">
+    <div><p className="eyebrow">{eyebrow}</p><h1>{title}</h1></div>
+    {actions === undefined ? null : <div className="page-actions">{actions}</div>}
+  </header>
   {children}
 </>

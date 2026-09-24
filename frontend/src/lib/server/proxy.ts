@@ -1,5 +1,6 @@
 import * as http from "node:http"
 import * as https from "node:https"
+import { isIP } from "node:net"
 import { Readable } from "node:stream"
 
 import type { ProxyConfig } from "./config.ts"
@@ -26,6 +27,25 @@ const errorResponse = (status: number, error: string, method = "GET"): Response 
 const noResponseBody = (method: string, status: number): boolean =>
   method === "HEAD" || status === 204 || status === 205 || status === 304
 
+/**
+ * The name the upstream certificate is checked under, decided here rather than left
+ * to be derived from a header this proxy rewrote.
+ *
+ * For a hostname it is that hostname. For a literal address it is the empty
+ * string, which is a decision and not an omission: RFC 6066 admits no address in
+ * SNI, and an address needs no name to be checked against because Node matches it
+ * against the certificate's IP entries instead. Left out entirely, Node fills the
+ * gap from the outgoing `Host` header — the public origin — and would then judge
+ * the upstream certificate under the deployment's public name, which the upstream
+ * has no reason to carry: a valid address certificate is rejected, and a
+ * certificate for the public name would be accepted from a host that is not it.
+ */
+const serverName = (upstream: URL): string | undefined => {
+  if (upstream.protocol !== "https:") return undefined
+  const hostname = upstream.hostname.replace(/^\[|\]$/gu, "")
+  return isIP(hostname) === 0 ? hostname : ""
+}
+
 const upstreamRequest = (
   request: Request,
   config: ProxyConfig,
@@ -35,16 +55,21 @@ const upstreamRequest = (
   deadlineAt: number,
 ): Promise<Response> => new Promise((resolve, reject) => {
   const transport = config.upstreamBase.protocol === "https:" ? https : http
+  const upstreamServerName = serverName(config.upstreamBase)
   let receivedHeaders = false
   let settled = false
   let incomingResponse: http.IncomingMessage | undefined
-  const options: http.RequestOptions = {
+  const options: https.RequestOptions = {
     protocol: config.upstreamBase.protocol,
     hostname: config.upstreamBase.hostname,
     port: config.upstreamBase.port || undefined,
     method: request.method,
     path,
     headers: { ...headers, ...(body === undefined ? {} : { "content-length": String(body.byteLength) }) },
+    // The upstream is addressed by its own name or address, while the Host header
+    // carries the public origin; `serverName` decides which identity the certificate
+    // is checked under so that nothing is left for Node to derive from that header.
+    ...(upstreamServerName === undefined ? {} : { servername: upstreamServerName }),
   }
   const cleanup = (): void => {
     clearTimeout(deadline)
@@ -63,7 +88,15 @@ const upstreamRequest = (
       reject(new UpstreamRedirect())
       return
     }
-    const responseHeaders = proxyResponseHeaders(incoming.headers, incoming.rawHeaders, config.frontendOrigin.protocol === "https:")
+    const checkedHeaders = proxyResponseHeaders(incoming.headers, incoming.rawHeaders, config.frontendOrigin.protocol === "https:")
+    if (!checkedHeaders.ok) {
+      settled = true
+      cleanup()
+      incoming.destroy()
+      resolve(errorResponse(502, checkedHeaders.error, request.method))
+      return
+    }
+    const responseHeaders = checkedHeaders.headers
     incoming.on("error", cleanup)
     incoming.once("end", cleanup)
     incoming.once("close", cleanup)

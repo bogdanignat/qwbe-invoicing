@@ -12,6 +12,17 @@ export class ApiFailure extends Error {
   }
 }
 
+/**
+ * A logout the server never confirmed, which is not the same as a session ended.
+ */
+export class LogoutUnconfirmedError extends Error {
+  constructor(cause: unknown) {
+    const detail = cause instanceof Error ? ` ${cause.message}` : ""
+    super(`Serverul nu a confirmat ieșirea; sesiunea poate rămâne activă.${detail}`)
+    this.name = "LogoutUnconfirmedError"
+  }
+}
+
 const failureMessages: Readonly<Record<string, string>> = {
   AuthenticationRequired: "Sesiunea a expirat. Introdu din nou tokenul API.",
   csrf_validation_failed: "Sesiunea nu a putut valida cererea. Reîncarcă pagina și încearcă din nou.",
@@ -27,6 +38,34 @@ const failureMessages: Readonly<Record<string, string>> = {
   authorization_not_allowed: "Browserul nu poate trimite autentificare Bearer către această rută.",
   request_body_too_large: "Cererea este prea mare.",
   not_found: "Ruta API cerută nu există.",
+  // The fiscal API answers a missing document with the bare tag `ResourceNotFound`
+  // (standalone/api/schema-errors-session.ts:23) and a missing renderable document
+  // with `DocumentNotFound`. Without an entry here `parseApiFailure` falls through
+  // to `error` itself and the screen prints the tag.
+  ResourceNotFound: "Documentul cerut nu există sau nu mai este disponibil.",
+  DocumentNotFound: "Documentul cerut nu există sau nu mai este disponibil.",
+  PermissionDenied: "Nu ai acces la acest document.",
+  DocumentsPermissionDenied: "Nu ai acces la acest document.",
+  ArtifactConflict: "Documentul este generat chiar acum. Încearcă din nou în câteva momente.",
+  DocumentRenderingFailure: "Documentul nu a putut fi generat. Încearcă din nou.",
+  DocumentPersistenceFailure: "Documentul nu a putut fi salvat. Încearcă din nou.",
+  PersistenceFailure: "Datele nu au putut fi citite. Încearcă din nou.",
+  internal_failure: "Serviciul API a întâmpinat o eroare. Încearcă din nou.",
+}
+
+/**
+ * Whether the failure is one a second identical request could survive.
+ *
+ * The answer is read from the HTTP status rather than from the message: a
+ * network failure carries no status at all, a `429` and any `5xx` are the
+ * server saying *not now*, and everything else — `400`, `403`, `404`, `409` —
+ * is a settled answer that retrying only repeats. A `401` is not offered a
+ * retry either: the session controller already turns it into a re-unlock.
+ */
+export const isTransientFailure = (error: unknown): boolean => {
+  if (!(error instanceof ApiFailure)) return false
+  const { status } = error
+  return status === undefined || status === 408 || status === 429 || status >= 500
 }
 
 export const parseApiFailure = (input: unknown, status: number): ApiFailure => {

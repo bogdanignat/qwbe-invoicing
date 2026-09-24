@@ -1,7 +1,7 @@
 import { useAuth } from "./auth-context.ts"
 import type { AuthStatus } from "../lib/auth-controller.ts"
 
-export interface InvoicesPreviewModel {
+export interface AuthenticatedShellModel {
   readonly status: AuthStatus
   readonly error: unknown
   readonly logoutPending: boolean
@@ -9,7 +9,15 @@ export interface InvoicesPreviewModel {
   readonly retryRestore: () => void
 }
 
-export const useInvoicesPreviewModel = (): InvoicesPreviewModel => {
+/**
+ * What every private screen needs from the session, and nothing more.
+ *
+ * The screens read the session through this rather than through `useAuth`
+ * directly, so a view never holds the transport or the CSRF accessor it has no
+ * business calling, and the promise-returning controller actions arrive as
+ * plain handlers a button can be given.
+ */
+export const useAuthenticatedShell = (): AuthenticatedShellModel => {
   const auth = useAuth()
   return {
     status: auth.status,

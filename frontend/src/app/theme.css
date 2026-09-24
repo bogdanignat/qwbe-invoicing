@@ -28,6 +28,11 @@
   --color-invoice-sidebar-foot: #9fb8a7;
   --color-invoice-sidebar-hover: rgb(255 255 255 / 10%);
   --color-invoice-connected: #5bd386;
+  --color-invoice-secondary-border: #c4d2c8;
+  --color-invoice-secondary-surface: #f2f6f3;
+  --color-invoice-badge-surface: #eef2ef;
+  --color-invoice-storno-text: #6f2424;
+  --color-invoice-storno-surface: #fdeceb;
   --radius-invoice-control: .625rem;
   --radius-invoice-container: .75rem;
   --radius-invoice-panel: 1rem;

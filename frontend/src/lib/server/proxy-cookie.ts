@@ -46,3 +46,24 @@ export const normalizedSessionSetCookie = (value: string, requireSecure: boolean
 
 export const validSessionSetCookie = (value: string, requireSecure = true): boolean =>
   normalizedSessionSetCookie(value, requireSecure) !== undefined
+
+/**
+ * Whether a Set-Cookie claims the session name, regardless of whether it is valid.
+ *
+ * Validity and ownership are different questions: `normalizedSessionSetCookie`
+ * answers `undefined` both for a foreign cookie, which is simply not ours to
+ * forward, and for a malformed session cookie, which is a broken upstream we
+ * must not paper over. Only the name decides which of the two it is.
+ *
+ * Space between the name and `=` makes the header malformed, not foreign. RFC
+ * 6265 admits none there, so `parse` keeps refusing it and the response still
+ * fails — but it must fail as a broken session cookie, answering `502`, rather
+ * than be mistaken for someone else's cookie and dropped from a `200` that then
+ * claims a session the browser never received. Ownership is read with the
+ * padding allowed; acceptance is not widened by a single character. The name is
+ * compared case-sensitively, so `QWBE_SESSION=` stays a foreign cookie.
+ */
+const sessionName = /^qwbe_session[ \t]*=/u
+
+export const isSessionSetCookie = (value: string): boolean =>
+  sessionName.test((value.split(";", 1)[0] ?? "").trim())

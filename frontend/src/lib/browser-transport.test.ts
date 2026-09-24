@@ -47,6 +47,23 @@ void test("can reserve an expected 401 for the owning auth operation", async () 
   assert.equal(unauthorized, 0)
 })
 
+void test("reports the session generation the request started in, not the one it ends in", async () => {
+  const reported: Array<number> = []
+  let generation = 7
+  const transport = createBrowserTransport({
+    fetch: () => {
+      // A new session begins while this request is still in flight.
+      generation += 1
+      return Promise.resolve(Response.json({ error: "invalid_session" }, { status: 401 }))
+    },
+    epoch: () => generation,
+    onUnauthorized: (started) => { reported.push(started) },
+  })
+  await assert.rejects(transport.json("/api/invoices"), (error: unknown) => error instanceof ApiFailure && error.status === 401)
+  assert.deepEqual(reported, [7])
+  assert.equal(generation, 8)
+})
+
 void test("preserves aborts and distinguishes network and invalid JSON failures", async () => {
   const aborted = new Error("aborted")
   aborted.name = "AbortError"

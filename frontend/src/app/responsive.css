@@ -8,6 +8,16 @@
   .sidebar-foot > span { display: none; }
   .locked .sidebar { display: none; }
   main { padding: 1.75rem 1rem 4rem; }
+  /* Each row becomes its own card: the column heading travels with the value in
+     `data-label`, so a 320 px screen never has to scroll a table sideways. */
+  thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+  tr { display: block; padding: .6rem 0; border-bottom: 1px solid var(--color-invoice-border); }
+  td { display: grid; gap: .1rem; padding: .3rem 0; border: 0; }
+  td::before { content: attr(data-label); color: var(--color-invoice-muted); font-size: .72rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+  td.numeric { text-align: left; }
+  .badge.storno { justify-self: start; }
+  .section-heading, .page-header { flex-direction: column; align-items: flex-start; }
+  .totals { justify-content: flex-start; }
 }
 
 @media (prefers-reduced-motion: reduce) {

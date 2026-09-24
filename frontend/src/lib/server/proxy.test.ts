@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import { decodeProxyConfig, type ProxyConfig } from "./config.ts"
-import { proxyRequestHeaders, validSessionSetCookie } from "./proxy-headers.ts"
+import { proxyRequestHeaders, proxyResponseHeaders, validSessionSetCookie } from "./proxy-headers.ts"
 import { mapProxyPath } from "./proxy-path.ts"
 
 const config: ProxyConfig = {
@@ -84,4 +84,46 @@ void test("only host-only secure session cookies satisfy the response contract",
     `${secure}; Domain=example.test`, `${secure}; Priority=High`, `${secure}; HttpOnly`]) {
     assert.equal(validSessionSetCookie(tampered), false, tampered)
   }
+})
+
+void test("a session cookie the contract rejects fails the response instead of disappearing from it", () => {
+  const issued = `qwbe_session=${"a".repeat(43)}; Path=/api; HttpOnly; SameSite=Strict; Secure; Max-Age=2592000`
+  const clear = "qwbe_session=; Path=/api; HttpOnly; SameSite=Strict; Secure; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Max-Age=0"
+  const rawHeaders = (...cookies: ReadonlyArray<string>) => cookies.flatMap((cookie) => ["Set-Cookie", cookie])
+  const forwarded = (result: ReturnType<typeof proxyResponseHeaders>) =>
+    result.ok ? result.headers.getSetCookie() : undefined
+
+  assert.deepEqual(forwarded(proxyResponseHeaders({}, rawHeaders(issued), true)), [issued])
+  assert.deepEqual(forwarded(proxyResponseHeaders({}, rawHeaders(clear), true)), [clear])
+
+  // A cookie that never claimed the session name was never ours to forward.
+  assert.deepEqual(forwarded(proxyResponseHeaders({}, rawHeaders("theme=dark; Path=/"), true)), [])
+  // Neither is one that only looks like it: the name is matched case-sensitively.
+  assert.deepEqual(forwarded(proxyResponseHeaders({}, rawHeaders(issued.replace("qwbe_session", "QWBE_SESSION")), true)), [])
+  assert.deepEqual(forwarded(proxyResponseHeaders({}, rawHeaders(issued.replace("qwbe_session", "qwbe_session_x")), true)), [])
+
+  for (const [name, cookies] of [
+    ["tampered path", [issued.replace("Path=/api", "Path=/")]],
+    ["tampered SameSite", [issued.replace("SameSite=Strict", "SameSite=Lax")]],
+    ["host-wide domain", [`${issued}; Domain=example.test`]],
+    ["malformed value", ["qwbe_session=short; Path=/api; HttpOnly; SameSite=Strict; Secure; Max-Age=60"]],
+    ["insecure issue on an https origin", [issued.replace("; Secure", "")]],
+    ["two issued sessions", [issued, issued]],
+    ["an issue beside a clear", [issued, clear]],
+    ["a valid cookie followed by a rejected one", [issued, issued.replace("Path=/api", "Path=/")]],
+    // Padding before `=` is a malformed session cookie, not a foreign one: it must
+    // fail the response rather than vanish from a 200 that promises a session.
+    ["space before the name separator", [issued.replace("qwbe_session=", "qwbe_session =")]],
+    ["tab before the name separator", [issued.replace("qwbe_session=", "qwbe_session\t=")]],
+    ["padded name beside a valid cookie", [issued, issued.replace("qwbe_session=", "qwbe_session =")]],
+  ] as const) {
+    assert.deepEqual(proxyResponseHeaders({}, rawHeaders(...cookies), true),
+      { ok: false, error: "invalid_upstream_cookie" }, name)
+  }
+
+  // Off an https origin the clear cookie is still honoured, normalized to Secure.
+  const insecureClear = clear.replace("; Secure", "")
+  assert.deepEqual(forwarded(proxyResponseHeaders({}, rawHeaders(insecureClear), true)), [`${insecureClear}; Secure`])
+  assert.deepEqual(forwarded(proxyResponseHeaders({}, rawHeaders(issued.replace("; Secure", "")), false)),
+    [issued.replace("; Secure", "")])
 })
