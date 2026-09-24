@@ -6,6 +6,7 @@ import { useInvoicingClients } from "./use-invoicing-clients.ts"
 import { isTransientFailure } from "../lib/api-errors.ts"
 import { documentFilename } from "../lib/browser-download.ts"
 import { projectCorrectionDocument, projectIssuedInvoice, type DocumentSnapshotView } from "../lib/document-projection.ts"
+import { requireCsrf } from "../lib/require-csrf.ts"
 
 export interface DocumentDetailModel {
   readonly view: DocumentSnapshotView | undefined
@@ -26,16 +27,6 @@ export interface DocumentDetailModel {
  */
 const retryAction = (error: unknown, refetch: () => void): (() => void) | undefined =>
   isTransientFailure(error) ? refetch : undefined
-
-/**
- * Rendering a PDF is a write, so it needs the token that proves the session
- * asked for it. Without one there is nothing to sign the request with and the
- * attempt fails here rather than as an opaque `403` from the API.
- */
-const requireCsrf = (csrfToken: string | undefined): string => {
-  if (csrfToken === undefined) throw new Error("Sesiunea nu mai poate semna cererea. Reîncarcă pagina.")
-  return csrfToken
-}
 
 export const useInvoiceDetail = (id: string): DocumentDetailModel => {
   const { status } = useAuth()

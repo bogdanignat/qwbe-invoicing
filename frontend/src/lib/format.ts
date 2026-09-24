@@ -10,6 +10,12 @@ export const money = (value: string, currency: string): string => `${value} ${cu
 export const orDash = (value: string | null | undefined): string =>
   value === null || value === undefined || value === "" ? "—" : value
 
+export const today = (): string => {
+  const date = new Date()
+  const twoDigits = (value: number): string => String(value).padStart(2, "0")
+  return `${String(date.getFullYear())}-${twoDigits(date.getMonth() + 1)}-${twoDigits(date.getDate())}`
+}
+
 /**
  * How a VAT treatment is named on a document, category first.
  *

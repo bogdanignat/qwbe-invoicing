@@ -20,7 +20,14 @@ import type {
  * that every field the screen renders is present and of the declared type, so a
  * contract change surfaces at the boundary rather than as a blank cell.
  */
-const decodeAddress: Decoder<Address> = (input) => {
+/**
+ * The authoring screens build documents, not just read them, so they re-export
+ * these structural decoders: a draft, a customer and a document snapshot share
+ * the same party and unit shapes the backend seals, and one definition keeps a
+ * contract change failing at a single boundary. The authoring side adds its
+ * own invariants where writing requires them; reading stays structural.
+ */
+export const decodeAddress: Decoder<Address> = (input) => {
   const value = object(input)
   const sector = optionalInteger(value.sector, "sector")
   const postalCode = optionalText(value.postalCode, "postalCode")
@@ -53,7 +60,7 @@ const decodeIssuer: Decoder<IssuerSnapshot> = (input) => {
   }
 }
 
-const decodeBuyer: Decoder<BuyerSnapshot> = (input) => {
+export const decodeBuyer: Decoder<BuyerSnapshot> = (input) => {
   const value = object(input)
   const partyType = text(value.partyType, "partyType")
   if (partyType !== "company" && partyType !== "individual") throw new Error("invalid partyType")
@@ -64,7 +71,7 @@ const decodeBuyer: Decoder<BuyerSnapshot> = (input) => {
   }
 }
 
-const decodeUnitOfMeasure: Decoder<UnitOfMeasure> = (input) => {
+export const decodeUnitOfMeasure: Decoder<UnitOfMeasure> = (input) => {
   const value = object(input)
   return { code: text(value.code, "unitOfMeasure.code"), name: text(value.name, "unitOfMeasure.name") }
 }
