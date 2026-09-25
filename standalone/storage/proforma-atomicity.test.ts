@@ -265,9 +265,9 @@ void test("derived draft lineage, guards, replay, dates, and frozen copies survi
     ))), "derived_draft_cannot_issue_proforma")
     assert.deepEqual(databaseCounts(value.directory), guardBefore)
 
-    const ordinary = await Effect.runPromise(service.createDraft({
+    const ordinary = await Effect.runPromise(service.createDraft(idempotent("create_draft", "ordinary-draft-1", {
       customer, series: "INV", issueDate: "2026-09-10", dueDate: "2026-09-25",
-    }))
+    })))
     await Effect.runPromise(service.addDraftLine({ draftId: ordinary.id, description: "Avans", quantity: "1", unitPrice: "10",
       unitOfMeasure: each, vatRateCode: "RO_STANDARD" }))
     const ordinaryProforma = await Effect.runPromise(service.issueProforma(idempotent(

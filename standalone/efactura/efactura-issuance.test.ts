@@ -90,7 +90,7 @@ void test("direct positive invoice rejects missing dueDate without consuming iss
 void test("positive draft may remain undated but issuance rejects it atomically", async () => {
   const value = await fixture()
   try {
-    const draft = await value.call("POST", "/api/drafts", { customer: buyer, series: "INV", issueDate: "2026-09-05" })
+    const draft = await value.call("POST", "/api/drafts", { customer: buyer, series: "INV", issueDate: "2026-09-05" }, "efactura-draft-1")
     assert.equal(draft.status, 200)
     assert.equal((draft.body as { dueDate: string | null }).dueDate, null)
     const draftId = (draft.body as { id: string }).id
@@ -155,7 +155,7 @@ void test("unsaved UI due-date gating agrees with public invoice totals at the c
   try {
     for (const quantity of ["0.0001", "0.0049", "0.0050", "0.0051", "1.0000"]) {
       const input = { ...line, quantity, unitPrice: "1.00" }
-      const draft = await value.call("POST", "/api/drafts", { customer: buyer, series: "INV", issueDate: "2026-09-05" })
+      const draft = await value.call("POST", "/api/drafts", { customer: buyer, series: "INV", issueDate: "2026-09-05" }, `efactura-draft-${quantity}`)
       assert.equal(draft.status, 200)
       const draftId = (draft.body as { id: string }).id
       const calculated = await value.call("POST", `/api/drafts/${draftId}/lines`, input)

@@ -3,9 +3,12 @@ import { useEffect, useState } from "react"
 
 import { useAuth } from "./auth-context.ts"
 import { useInvoicingClients } from "./use-invoicing-clients.ts"
+import { useOperationRecovery } from "./use-operation-recovery.ts"
 import { isTransientFailure } from "../lib/api-errors.ts"
 import { createOperationLifetime } from "../lib/authoring-operation-lifetime.ts"
+import { lifetimeMountEffect, lifetimeRequestsEffect } from "../lib/authoring-lifetime-wiring.ts"
 import { createInvoiceDraftSaveController, type InvoiceDraftSaveController } from "../lib/invoice-draft-save-controller.ts"
+import { draftRemovalFeedback } from "../lib/draft-removal-feedback.ts"
 import type { SaveOutcome } from "../lib/draft-save-types.ts"
 import { draftDeletionState } from "../lib/invoice-authoring-workflow.ts"
 import type { DraftInvoice } from "../lib/draft-models.ts"
@@ -62,18 +65,14 @@ export const useDrafts = (): DraftsListModel => {
   // Two lifetimes, kept outside React: the mount decides whether an answer may
   // still reach this screen, the session decides how long the reconciliation
   // read may live. They are read when an operation runs, never during render.
+  const recovery = useOperationRecovery()
   const [lifetime] = useState(createOperationLifetime)
-  useEffect(() => {
-    lifetime.activate()
-    return () => { lifetime.deactivate() }
-  }, [lifetime])
-  useEffect(() => {
-    const generation = lifetime.beginRequests()
-    return () => { lifetime.endRequests(generation) }
-  }, [lifetime, status])
+  useEffect(() => lifetimeMountEffect(lifetime), [lifetime])
+  useEffect(() => lifetimeRequestsEffect(lifetime), [lifetime, status])
   const [controller] = useState<InvoiceDraftSaveController>(() => createInvoiceDraftSaveController({
     client: {
-      createDraft: (token, body) => clients.drafts.createDraft(token, body),
+      createDraft: (token, body, key) => clients.drafts.createDraft(token, body, key),
+      replayDraftCreation: (token, body, key) => clients.drafts.replayDraftCreation(token, body, key),
       getDraft: (id) => clients.drafts.getDraft(id, lifetime.signal()),
       updateDraft: (token, id, body) => clients.drafts.updateDraft(token, id, body),
       addDraftLine: (token, id, body) => clients.drafts.addDraftLine(token, id, body),
@@ -85,6 +84,7 @@ export const useDrafts = (): DraftsListModel => {
     epoch,
     ownsEpoch,
     alive: () => lifetime.isAlive(),
+    recovery: recovery.port,
     // The list never saves or edits, so those effects have no work here; the
     // deletion effects keep this screen's cache honest.
     effects: {
@@ -98,6 +98,7 @@ export const useDrafts = (): DraftsListModel => {
     },
   }))
   const removal = useMutation({ mutationFn: (draft: DraftInvoice): Promise<SaveOutcome> => controller.deleteDraft(draft) })
+  const feedback = draftRemovalFeedback(removal.data, removal.error, removal.isPending)
   return {
     items: query.data?.pages.flatMap((page) => page.items),
     isPending: query.isPending,
@@ -115,7 +116,7 @@ export const useDrafts = (): DraftsListModel => {
       if (window.confirm(`Ștergi draftul pentru „${draft.customer.name}”?`)) removal.mutate(draft)
     },
     canDeleteDraft: draftIsDeletable,
-    removalPending: removal.isPending,
-    removalError: removal.data !== undefined && removal.data.kind === "error" ? removal.data.error : removal.error,
+    removalPending: feedback.pending,
+    removalError: feedback.error,
   }
 }

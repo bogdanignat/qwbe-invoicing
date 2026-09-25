@@ -8,6 +8,7 @@ import { InvoiceAuthoringHeader } from "./InvoiceAuthoringHeader.tsx"
 import { InvoiceLinesEditor } from "./InvoiceLinesEditor.tsx"
 import { InvoiceTotals } from "./InvoiceTotals.tsx"
 import { AuthoringActions } from "./AuthoringActions.tsx"
+import { OperationRecoveryNotice } from "./OperationRecoveryNotice.tsx"
 import { Textarea } from "../ui/Textarea.tsx"
 import { ErrorAlert } from "../AsyncState.tsx"
 
@@ -23,6 +24,10 @@ export const InvoiceAuthoringSession = (input: InvoiceAuthoringSessionInput) => 
   return <>
     {feedback.backgroundErrors.map((issue, index) => <ErrorAlert key={`${issue.error.message}-${String(index)}`} error={issue.error} onRetry={issue.retry} />)}
     {feedback.mutationError === null || feedback.mutationError === undefined ? null : <ErrorAlert error={feedback.mutationError} />}
+    <OperationRecoveryNotice
+      notice={feedback.recoveryNotice} pending={status.recoveryPending}
+      onReplay={actions.replayRecovery} onDismiss={actions.dismissRecovery}
+    />
     {feedback.resumableSave
       ? <p className="status-note" role="status">Draftul a fost creat și păstrat în această pagină. Corectează eroarea și apasă din nou „Salvează draftul”; vor fi retrimise numai liniile rămase sau modificate.</p>
       : null}

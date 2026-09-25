@@ -6,10 +6,14 @@ import { useAuth } from "./auth-context.ts"
 import { useInvoicingClients } from "./use-invoicing-clients.ts"
 import { invoiceRegisterQueryKey } from "./use-invoice-register.ts"
 import { draftsQueryKey, draftQueryKey } from "./use-drafts.ts"
-import { useOperationIdempotency } from "./use-operation-idempotency.ts"
 import { createOperationLifetime } from "../lib/authoring-operation-lifetime.ts"
-import { createInvoiceIssuanceController, type InvoiceIssuanceController, type IssuanceOutcome } from "../lib/invoice-issuance-controller.ts"
+import { lifetimeMountEffect, lifetimeRequestsEffect } from "../lib/authoring-lifetime-wiring.ts"
+import { issuanceAllowed } from "../lib/invoice-authoring-derived.ts"
+import { createInvoiceIssuanceController } from "../lib/invoice-issuance-controller.ts"
+import type { InvoiceIssuanceController, IssuanceOutcome } from "../lib/invoice-issuance-types.ts"
 import type { AuthoringDocumentInput } from "../lib/draft-models.ts"
+import type { RecoveryPort } from "../lib/operation-recovery-port.ts"
+import type { KnownWrite } from "../lib/operation-recovery-view.ts"
 
 interface InvoiceIssuanceInput {
   readonly draftId: string | undefined
@@ -18,14 +22,19 @@ interface InvoiceIssuanceInput {
   readonly workflowPending: boolean
   /** A save whose outcome is unknown blocks issuance: the controller refuses it before any request. */
   readonly blockedMessage: string | undefined
+  readonly recovery: RecoveryPort
 }
 
 export interface InvoiceIssuanceModel {
   readonly pending: boolean
   readonly error: unknown
+  /** The invoice exists but the screen could not follow it: named here so nothing is issued twice. */
+  readonly knownResult: KnownWrite | undefined
   readonly canIssue: boolean
   readonly unconfirmedMessage: string | undefined
   readonly issue: () => void
+  /** Acknowledges a known result: the screen drops the outcome it could not follow and opens up again. */
+  readonly reset: () => void
 }
 
 /**
@@ -47,28 +56,22 @@ export const useInvoiceIssuance = (input: InvoiceIssuanceInput): InvoiceIssuance
   const clients = useInvoicingClients()
   const queryClient = useQueryClient()
   const router = useRouter()
-  const idempotency = useOperationIdempotency()
   // The reconciliation read is tracked: its request dies with the screen or
   // the session (a status change is a session boundary), instead of wandering
   // off with a signal nobody can abort. Re-authentication gets a fresh one,
   // while the mount axis stays untouched — a new session's rights are decided
   // by the epoch checks in the controller, not by this lifetime.
   const [lifetime] = useState(createOperationLifetime)
-  useEffect(() => {
-    lifetime.activate()
-    return () => { lifetime.deactivate() }
-  }, [lifetime])
-  useEffect(() => {
-    const generation = lifetime.beginRequests()
-    return () => { lifetime.endRequests(generation) }
-  }, [lifetime, auth.status])
+  useEffect(() => lifetimeMountEffect(lifetime), [lifetime])
+  useEffect(() => lifetimeRequestsEffect(lifetime), [lifetime, auth.status])
   const [controller] = useState<InvoiceIssuanceController>(() => createInvoiceIssuanceController({
     client: {
       getDraft: (id) => clients.drafts.getDraft(id, lifetime.signal()),
       issueDraft: (csrfToken, id, idempotencyKey) => clients.drafts.issueDraft(csrfToken, id, idempotencyKey),
       issueInvoice: (csrfToken, body, idempotencyKey) => clients.drafts.issueInvoice(csrfToken, body, idempotencyKey),
+      replayInvoiceIssuance: (csrfToken, body, key) => clients.drafts.replayInvoiceIssuance(csrfToken, body, key),
     },
-    idempotency,
+    recovery: input.recovery,
     csrfToken: auth.csrfToken,
     epoch: auth.epoch,
     ownsEpoch: auth.ownsEpoch,
@@ -76,8 +79,10 @@ export const useInvoiceIssuance = (input: InvoiceIssuanceInput): InvoiceIssuance
     effects: {
       onIssued: (invoice, draftId) => {
         router.push(`/invoices/${encodeURIComponent(invoice.id)}`)
+        // The draft is gone as a draft: its cache entry is dropped now, not on
+        // a timer nobody owns and an unmount would leave running.
         if (draftId !== undefined) {
-          window.setTimeout(() => { queryClient.removeQueries({ queryKey: draftQueryKey(draftId), exact: true }) }, 0)
+          queryClient.removeQueries({ queryKey: draftQueryKey(draftId), exact: true })
         }
         void queryClient.invalidateQueries({ queryKey: invoiceRegisterQueryKey })
         void queryClient.invalidateQueries({ queryKey: draftsQueryKey })
@@ -101,15 +106,34 @@ export const useInvoiceIssuance = (input: InvoiceIssuanceInput): InvoiceIssuance
     }),
   })
   const unconfirmedMessage = controller.unconfirmedIssue()
-  const canIssue = input.canIssue && !input.workflowPending && !mutation.isPending
+  const outcome = mutation.data
+  // Issued, but the navigation or the cache write after it failed. The invoice
+  // is real and named; issuing again from this same screen would seal a second
+  // one under a fresh key, so the button stays closed until the user follows
+  // the link the notice shows.
+  const knownResult: KnownWrite | undefined = outcome !== undefined && outcome.kind === "issued" && outcome.effectsError !== undefined
+    ? { kind: "invoice", id: outcome.invoice.id, effectsError: outcome.effectsError }
+    : undefined
+  const canIssue = issuanceAllowed({
+    requested: input.canIssue, workflowPending: input.workflowPending,
+    issuePending: mutation.isPending, knownResult,
+  })
+  // `mutation.error` is the throw the controller never caught — a missing CSRF
+  // token, a programming fault — and it has to reach the screen too, or an
+  // issuance that never left looks like nothing happened.
+  const outcomeError = outcome === undefined
+    ? null
+    : outcome.kind === "error" ? outcome.error : (outcome.kind === "issued" ? outcome.effectsError ?? null : null)
   return {
     pending: mutation.isPending,
-    error: mutation.data !== undefined && mutation.data.kind === "error" ? mutation.data.error : null,
+    error: outcomeError ?? mutation.error,
+    knownResult,
     canIssue,
     unconfirmedMessage,
     issue: () => {
       if (!canIssue) return
       if (window.confirm("Emiți factura? Numărul și documentul fiscal devin imuabile.")) mutation.mutate()
     },
+    reset: () => { mutation.reset() },
   }
 }

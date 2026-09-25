@@ -304,13 +304,14 @@ void test("lists and creates document series with the final API contract", async
     const requestBody = createCall.init.body
     if (typeof requestBody !== "string") throw new Error("Expected document series request body to be JSON")
     assert.deepEqual(JSON.parse(requestBody), { documentType: "invoice", series: "QWBE" })
-    await runUiEffect(invoicingClient.createDraft({ customerId: "customer-1", series: "QWBE", issueDate: "2026-09-01" }))
+    await runUiEffect(invoicingClient.createDraft({ customerId: "customer-1", series: "QWBE", issueDate: "2026-09-01" }, "key-create-draft"))
     const draftCall = calls[3]
     assert.ok(draftCall)
     assert.equal(draftCall.path, "/api/drafts")
     const draftRequestBody = draftCall.init.body
     if (typeof draftRequestBody !== "string") throw new Error("Expected draft request body to be JSON")
     assert.deepEqual(JSON.parse(draftRequestBody), { customerId: "customer-1", series: "QWBE", issueDate: "2026-09-01" })
+    assert.equal(new Headers(draftCall.init.headers).get("idempotency-key"), "key-create-draft")
   } finally {
     await runUiEffect(clearApiSession)
     globalThis.fetch = originalFetch

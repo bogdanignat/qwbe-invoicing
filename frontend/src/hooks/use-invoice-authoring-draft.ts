@@ -6,10 +6,12 @@ import { useAuth } from "./auth-context.ts"
 import { useInvoicingClients } from "./use-invoicing-clients.ts"
 import { draftsQueryKey, draftQueryKey } from "./use-drafts.ts"
 import { createOperationLifetime } from "../lib/authoring-operation-lifetime.ts"
+import { lifetimeMountEffect, lifetimeRequestsEffect } from "../lib/authoring-lifetime-wiring.ts"
 import { createInvoiceDraftSaveController, type InvoiceDraftSaveController } from "../lib/invoice-draft-save-controller.ts"
 import type { SaveOutcome } from "../lib/draft-save-types.ts"
 import type { DraftInvoice } from "../lib/draft-models.ts"
 import type { EditableInvoiceLine, InvoiceAuthoringForm } from "../lib/invoice-authoring-model.ts"
+import type { RecoveryPort } from "../lib/operation-recovery-port.ts"
 
 interface AuthoringDraftInput {
   readonly initialDraft: DraftInvoice | undefined
@@ -17,6 +19,7 @@ interface AuthoringDraftInput {
   readonly lines: ReadonlyArray<EditableInvoiceLine>
   readonly setLines: Dispatch<SetStateAction<ReadonlyArray<EditableInvoiceLine>>>
   readonly forcedUpdateLineIds: (draft: DraftInvoice) => ReadonlyArray<string>
+  readonly recovery: RecoveryPort
 }
 
 export interface AuthoringDraftModel {
@@ -60,18 +63,13 @@ export const useInvoiceAuthoringDraft = (input: AuthoringDraftInput): AuthoringD
   // while the mount axis stays untouched — a new session's rights are decided
   // by the epoch checks in the controller, not by this lifetime.
   const [lifetime] = useState(createOperationLifetime)
-  useEffect(() => {
-    lifetime.activate()
-    return () => { lifetime.deactivate() }
-  }, [lifetime])
-  useEffect(() => {
-    const generation = lifetime.beginRequests()
-    return () => { lifetime.endRequests(generation) }
-  }, [lifetime, auth.status])
+  useEffect(() => lifetimeMountEffect(lifetime), [lifetime])
+  useEffect(() => lifetimeRequestsEffect(lifetime), [lifetime, auth.status])
   const setLines = input.setLines
   const [controller] = useState<InvoiceDraftSaveController>(() => createInvoiceDraftSaveController({
     client: {
-      createDraft: (csrfToken, body) => clients.drafts.createDraft(csrfToken, body),
+      createDraft: (csrfToken, body, key) => clients.drafts.createDraft(csrfToken, body, key),
+      replayDraftCreation: (csrfToken, body, key) => clients.drafts.replayDraftCreation(csrfToken, body, key),
       getDraft: (id) => clients.drafts.getDraft(id, lifetime.signal()),
       updateDraft: (csrfToken, id, body) => clients.drafts.updateDraft(csrfToken, id, body),
       addDraftLine: (csrfToken, id, body) => clients.drafts.addDraftLine(csrfToken, id, body),
@@ -83,6 +81,7 @@ export const useInvoiceAuthoringDraft = (input: AuthoringDraftInput): AuthoringD
     epoch: auth.epoch,
     ownsEpoch: auth.ownsEpoch,
     alive: () => lifetime.isAlive(),
+    recovery: input.recovery,
     effects: {
       recordDraft: (updated) => {
         setDraft(updated)

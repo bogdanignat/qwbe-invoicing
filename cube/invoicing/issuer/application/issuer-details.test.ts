@@ -63,11 +63,13 @@ void test("invalid issuer details fail validation without overwriting the profil
 void test("all direct and draft issuance routes refuse incomplete SRL/PFA without consuming numbers or idempotency", async () => {
   for (const patch of [{ socialCapital: "" }, { tradeRegistryNumber: "" }, { legalForm: "pfa" as const, tradeRegistryNumber: "", socialCapital: "" }]) {
     const { service, state } = await setup()
-    const draft = await Effect.runPromise(service.createDraft(document))
+    const draft = await Effect.runPromise(service.createDraft(idempotent(document)))
     const line = document.lines[0]
     assert.ok(line)
     await Effect.runPromise(service.addDraftLine({ draftId: draft.id, ...line }))
     await Effect.runPromise(service.configureIssuer({ ...input, ...patch }))
+    // The draft above consumed one key; issuance must consume none on top of it.
+    const idempotencyBaseline = state.idempotency.size
     const operations: Effect.Effect<unknown, InvoicingFailure>[] = [service.issueInvoice(idempotent(document)), service.issueInvoice(idempotent({ draftId: draft.id })),
       service.issueProforma(idempotent({ ...proformaDocument, proformaSeries: "PRO" })), service.issueProforma(idempotent({ draftId: draft.id, series: "PRO" }))]
     for (const operation of operations) {
@@ -76,7 +78,7 @@ void test("all direct and draft issuance routes refuse incomplete SRL/PFA withou
       assert.ok(result.left instanceof ValidationFailure)
     }
     assert.equal(state.sequences.size, 0)
-    assert.equal(state.idempotency.size, 0)
+    assert.equal(state.idempotency.size, idempotencyBaseline)
     assert.equal(state.issued.size, 0)
     assert.equal(state.proformas.size, 0)
     assert.equal(state.drafts.get(draft.id)?.status, "draft")

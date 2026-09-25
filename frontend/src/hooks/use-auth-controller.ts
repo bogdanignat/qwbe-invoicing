@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react"
 import type { AuthController as AuthViewController } from "./auth-context.ts"
 import { createAuthController, initialAuthSnapshot } from "../lib/auth-controller.ts"
 import { createBrowserTransport } from "../lib/browser-transport.ts"
+import { operationRecoveryJournal } from "../lib/operation-recovery-instance.ts"
 import { resetSessionCache } from "../lib/session-cache.ts"
 import { createSessionClient } from "../lib/session-client.ts"
 
@@ -20,7 +21,13 @@ export const useAuthController = (): AuthViewController => {
     const auth = createAuthController({
       session: createSessionClient(created),
       publish: setState,
-      clearCache: () => { resetSessionCache(queryClient) },
+      // A session boundary also strips the recovery journal: the stored request
+      // and its key leave with the session, while the fact that something was
+      // unresolved stays behind as a marker nobody can silently purge.
+      clearCache: () => {
+        resetSessionCache(queryClient)
+        operationRecoveryJournal.strip()
+      },
       navigate: (path) => { router.replace(path) },
       pathname: () => window.location.pathname,
     })

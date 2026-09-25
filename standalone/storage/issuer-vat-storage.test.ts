@@ -53,8 +53,8 @@ void test("round-trips frozen issuer VAT status for invoices, proformas, convers
       fiscalIdentifier: "87654329", vatRegistered: true,
       address: { countryCode: "RO", city: "Cluj", street: "Strada 2", county: "RO-CJ" } }))
     const issueDraft = async (vatRateCode: string) => {
-      const draft = await Effect.runPromise(service.createDraft({ customerId: customer.id, series: "INV",
-        issueDate: now.toISOString().slice(0, 10), dueDate: "2026-09-30" }))
+      const draft = await Effect.runPromise(service.createDraft(request({ customerId: customer.id, series: "INV",
+        issueDate: now.toISOString().slice(0, 10), dueDate: "2026-09-30" })))
       await Effect.runPromise(service.addDraftLine({ draftId: draft.id, description: "Servicii", quantity: "1",
         unitPrice: "100", unitOfMeasure: each, vatRateCode }))
       return draft

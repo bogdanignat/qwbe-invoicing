@@ -51,6 +51,14 @@ const failureMessages: Readonly<Record<string, string>> = {
   DocumentPersistenceFailure: "Documentul nu a putut fi salvat. Încearcă din nou.",
   PersistenceFailure: "Datele nu au putut fi citite. Încearcă din nou.",
   internal_failure: "Serviciul API a întâmpinat o eroare. Încearcă din nou.",
+  // `DomainConflict` answers carry a programmatic `code` and no `message`
+  // (standalone/api/schema-errors-session.ts:25). Without an entry here
+  // `parseApiFailure` falls back to the bare `error` tag and the screen shows
+  // `DomainConflict` instead of what actually happened.
+  idempotency_key_reused: "Cheia de idempotență a fost deja folosită pentru un alt document. Verifică registrul de facturi înainte de a încerca din nou.",
+  draft_creation_result_deleted: "Draftul creat sub această cheie a fost între timp șters. Începe un document nou.",
+  invoice_already_issued: "Factura a fost deja emisă. Deschide-o din registrul de facturi.",
+  derived_draft_cannot_be_deleted: "Draftul provine dintr-o proformă și nu poate fi șters.",
 }
 
 /**

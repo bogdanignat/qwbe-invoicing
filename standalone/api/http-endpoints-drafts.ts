@@ -9,7 +9,7 @@ import { IssuedInvoice } from "./schema-issuance.ts"
 export const draftEndpoints = {
   listDrafts: invoicingBase(validation(HttpApiEndpoint.get("listDrafts", "/drafts").setUrlParams(ListQuery).addSuccess(D.DraftInvoicePage))),
   getDraft: invoicingBase(notFound(HttpApiEndpoint.get("getDraft")`/drafts/${id}`.addSuccess(D.DraftInvoice))),
-  createDraft: invoicingBase(notFound(validation(body(HttpApiEndpoint.post("createDraft", "/drafts").setPayload(D.DraftInput).addSuccess(D.DraftInvoice))))),
+  createDraft: invoicingBase(conflict(notFound(validation(idempotentBody(HttpApiEndpoint.post("createDraft", "/drafts").setPayload(D.DraftInput).addSuccess(D.DraftInvoice)))))),
   updateDraft: invoicingBase(conflict(notFound(validation(body(HttpApiEndpoint.put("updateDraft")`/drafts/${id}`.setPayload(D.UpdateDraftInput).addSuccess(D.DraftInvoice)))))),
   deleteDraft: invoicingBase(conflict(notFound(body(HttpApiEndpoint.del("deleteDraft")`/drafts/${id}`.addSuccess(Deleted))))),
   addDraftLine: invoicingBase(conflict(notFound(validation(body(HttpApiEndpoint.post("addDraftLine")`/drafts/${draftId}/lines`.setPayload(D.DraftLineInput).addSuccess(D.DraftInvoice)))))),

@@ -59,9 +59,9 @@ const issueFixture = async (directory: string): Promise<{ readonly invoiceId: st
     vatRegistered: true,
     address: { countryCode: "RO", city: "Iași", street: "Șoseaua Națională 2", county: "RO-IS" },
   }))
-  const draft = await Effect.runPromise(service.createDraft({
+  const draft = await Effect.runPromise(service.createDraft(idempotent("fixture-draft-1", {
     customerId: customer.id, issueDate: "2026-09-01", dueDate: "2026-09-16", series: "QWBE",
-  }))
+  })))
   await Effect.runPromise(service.addDraftLine({
     draftId: draft.id,
     description: "Servicii de consultanță",
@@ -71,9 +71,9 @@ const issueFixture = async (directory: string): Promise<{ readonly invoiceId: st
     vatRateCode: "RO_STANDARD",
   }))
   const invoiceId = (await Effect.runPromise(service.issueInvoice(idempotent("fixture-invoice", { draftId: draft.id })))).id
-  const proformaDraft = await Effect.runPromise(service.createDraft({
+  const proformaDraft = await Effect.runPromise(service.createDraft(idempotent("fixture-draft-2", {
     customerId: customer.id, issueDate: "2026-09-01", dueDate: "2026-09-16", series: "QWBE",
-  }))
+  })))
   await Effect.runPromise(service.addDraftLine({
     draftId: proformaDraft.id, description: "Avans", quantity: "1", unitPrice: "50", unitOfMeasure: each, vatRateCode: "RO_STANDARD",
   }))

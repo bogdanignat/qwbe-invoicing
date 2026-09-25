@@ -23,6 +23,8 @@ export type AuthoringDocumentInput = BuyerSource & {
   readonly lines: ReadonlyArray<RawDocumentLine>
 }
 
+// A draft may be created empty or with its lines in the same transaction; a
+// document only needs lines when it is issued.
 export type CreateDraftInput = BuyerSource & {
   readonly source?: DocumentSource
   readonly series: string
@@ -30,6 +32,7 @@ export type CreateDraftInput = BuyerSource & {
   readonly currency?: string
   readonly dueDate?: string | null
   readonly notes?: string | null
+  readonly lines?: ReadonlyArray<RawDocumentLine>
 }
 
 export type UpdateDraftInput = BuyerSource & {
