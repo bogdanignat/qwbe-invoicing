@@ -133,7 +133,8 @@ export interface Issuer {
   readonly defaultPaymentTermDays: number
   readonly vatConfigurations: ReadonlyArray<VatConfiguration>
   readonly currentVat: VatRegistration | null
-  readonly branding?: IssuerBranding | null
+  /** Always answered, `null` when the issuer has no brand at all: `standalone/api/schema-issuer.ts:51`. */
+  readonly branding: IssuerBranding | null
 }
 
 export interface ProductPreset {

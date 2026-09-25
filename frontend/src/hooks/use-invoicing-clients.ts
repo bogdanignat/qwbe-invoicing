@@ -15,6 +15,8 @@ import { createProformasClient } from "../lib/proformas-client.ts"
 import type { ProformasClient } from "../lib/proformas-client.ts"
 import { createRegistryClient } from "../lib/registry-client.ts"
 import type { RegistryClient } from "../lib/registry-client.ts"
+import { createSettingsClient } from "../lib/settings-client.ts"
+import type { SettingsClient } from "../lib/settings-client.ts"
 
 /**
  * The single place where the session's transport becomes a data client.
@@ -34,6 +36,8 @@ export interface InvoicingClients {
   readonly proformas: ProformasClient
   /** The same three writes with an opaque body: resending an intent written down before the first attempt. */
   readonly proformaReplay: ProformaReplayClient
+  /** The settings screen's writes: the issuer profile and one new document series. */
+  readonly settings: SettingsClient
 }
 
 export const useInvoicingClients = (): InvoicingClients => {
@@ -46,5 +50,6 @@ export const useInvoicingClients = (): InvoicingClients => {
     registry: createRegistryClient(transport),
     proformas: createProformasClient(transport),
     proformaReplay: createProformaReplayClient(transport),
+    settings: createSettingsClient(transport),
   }), [transport])
 }

@@ -14,6 +14,8 @@
  */
 export const CUSTOMER_FORM = "customer"
 export const PRODUCT_FORM = "product"
+export const ISSUER_FORM = "issuer"
+export const SERIES_FORM = "series"
 
 export interface RegistryFieldAria {
   readonly id: string

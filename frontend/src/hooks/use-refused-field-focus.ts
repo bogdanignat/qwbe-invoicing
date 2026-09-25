@@ -2,8 +2,7 @@
 
 import { useEffect } from "react"
 
-import { focusAndReveal } from "../lib/focus.ts"
-import { registryFieldId } from "../lib/registry-fields.ts"
+import { focusRegistryField } from "../lib/focus.ts"
 
 /**
  * Moves the keyboard to the control a submit just refused.
@@ -22,6 +21,6 @@ import { registryFieldId } from "../lib/registry-fields.ts"
 export const useRefusedFieldFocus = (form: string, refused: string | undefined): void => {
   useEffect(() => {
     if (refused === undefined) return
-    focusAndReveal(document.getElementById(registryFieldId(form, refused)))
+    focusRegistryField(form, refused)
   }, [form, refused])
 }

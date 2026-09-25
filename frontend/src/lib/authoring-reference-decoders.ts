@@ -1,5 +1,6 @@
 import { array, integer, nullableText, object, optionalText, text, type Decoder } from "./model-decoder.ts"
 import { decodeAddress, decodeUnitOfMeasure } from "./document-snapshot-decoders.ts"
+import { decodeIssuerBranding } from "./branding-decoder.ts"
 import type {
   DocumentSeries, Issuer, ProductPreset, VatCatalogue, VatConfiguration, VatRate, VatRegistration,
 } from "./draft-models.ts"
@@ -47,6 +48,9 @@ export const decodeIssuer: Decoder<Issuer> = (input) => {
     defaultPaymentTermDays: integer(value.defaultPaymentTermDays, "defaultPaymentTermDays"),
     vatConfigurations,
     currentVat,
+    // Branding is decoded in `branding-decoder.ts`: the settings screen edits it,
+    // and an answer that omits the field is a contract error, not a logo-less issuer.
+    branding: decodeIssuerBranding(value.branding),
   }
 }
 

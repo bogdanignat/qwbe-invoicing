@@ -1,3 +1,5 @@
+import { registryFieldId } from "./registry-fields.ts"
+
 /**
  * Moves the keyboard to a heading and brings it into view.
  *
@@ -15,4 +17,16 @@ export const focusAndReveal = (element: HTMLElement | null): void => {
   const reducedMotion = typeof window.matchMedia === "function"
     && window.matchMedia("(prefers-reduced-motion: reduce)").matches
   element.scrollIntoView({ block: "nearest", behavior: reducedMotion ? "auto" : "smooth" })
+}
+
+/**
+ * The same move, aimed at a form control by the id `registry-fields.ts` derives.
+ *
+ * Two callers need it and neither of them holds a ref: the refusal focus, which
+ * runs from an effect, and the branding controls, which unmount themselves as
+ * the effect of their own click and would otherwise drop the keyboard on
+ * `document.body`.
+ */
+export const focusRegistryField = (form: string, field: string): void => {
+  focusAndReveal(document.getElementById(registryFieldId(form, field)))
 }

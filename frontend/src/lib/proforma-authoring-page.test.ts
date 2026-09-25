@@ -15,7 +15,7 @@ const issuer: Issuer = {
   address: { countryCode: "RO", city: "București", street: "Str. Lungă 1", county: "RO-B", sector: 3 },
   legalForm: "srl", tradeRegistryNumber: "J40/1234/2020", iban: "RO49AAAA1B31007593840000",
   bankName: "Banca Transilvania", socialCapital: "200.00", defaultCurrency: "RON", defaultPaymentTermDays: 14,
-  vatConfigurations: [], currentVat: null,
+  vatConfigurations: [], currentVat: null, branding: null,
 }
 
 const vatCatalogue: VatCatalogue = {

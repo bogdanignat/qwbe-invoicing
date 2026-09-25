@@ -145,3 +145,26 @@ td small { display: block; margin-top: .2rem; color: var(--color-invoice-muted);
 .document-notes p { margin: 0; }
 .spinner { width: 2rem; height: 2rem; border: 3px solid var(--color-invoice-border); border-top-color: var(--color-invoice-primary); border-radius: 50%; animation: spin .8s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
+/* Settings: the issuer profile, its brand, and the field guide in a native dialog. */
+.form-card { display: grid; gap: 1.25rem; }
+.form-card hr { width: 100%; height: 1px; margin: 0; border: 0; background: var(--color-invoice-border); }
+.form-card h3 { margin: 0; color: var(--color-invoice-muted); font-size: .76rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+.branding-fields { display: grid; gap: .8rem; margin: 0; padding: 0; border: 0; }
+.branding-fields legend { padding: 0 0 .45rem; color: var(--color-invoice-label); font-size: .76rem; font-weight: 750; }
+.branding-preview { display: flex; flex-wrap: wrap; gap: .8rem; align-items: center; padding: .8rem; border: 1px solid var(--color-invoice-border); border-radius: var(--radius-invoice-control); background: var(--color-invoice-secondary-surface); }
+.branding-preview img { max-width: min(18rem, 100%); height: auto; }
+.document-series-form { gap: .9rem; }
+.settings-help-dialog { width: min(46rem, 92vw); max-height: 86vh; padding: 0; border: 1px solid var(--color-invoice-border); border-radius: var(--radius-invoice-panel); color: var(--color-invoice-ink); background: var(--color-invoice-surface); }
+.settings-help-dialog::backdrop { background: rgb(23 33 27 / 45%); }
+.settings-help-dialog header { display: flex; gap: 1rem; align-items: flex-start; justify-content: space-between; padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--color-invoice-border); }
+.settings-help-dialog h2 { margin: .2rem 0 0; font-size: 1.15rem; }
+.dialog-close { min-width: 2.2rem; min-height: 2.2rem; border: 1px solid var(--color-invoice-control-border); border-radius: var(--radius-invoice-control); color: var(--color-invoice-label); background: var(--color-invoice-surface); font-size: 1.1rem; cursor: pointer; }
+.dialog-close:hover { border-color: var(--color-invoice-control-border-hover); }
+.settings-help-body { display: grid; gap: 1.4rem; max-height: 60vh; padding: 1.25rem 1.5rem; overflow-y: auto; }
+.settings-help-body h3 { margin: 0 0 .5rem; font-size: .84rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: var(--color-invoice-muted); }
+.settings-help-body dl { display: grid; gap: .8rem; margin: 0; }
+.settings-help-body dt { color: var(--color-invoice-label); font-size: .82rem; font-weight: 750; }
+.settings-help-body dd { margin: .2rem 0 0; color: var(--color-invoice-muted); font-size: .86rem; line-height: 1.55; }
+.settings-help-body .help-highlight { padding: .7rem .9rem; border-left: 3px solid var(--color-invoice-primary-hover); border-radius: var(--radius-invoice-control); background: var(--color-invoice-primary-soft); }
+.settings-help-note { margin: .9rem 0 0; color: var(--color-invoice-muted); font-size: .8rem; line-height: 1.55; }
+.dialog-actions { display: flex; justify-content: flex-end; padding: 1rem 1.5rem; border-top: 1px solid var(--color-invoice-border); }

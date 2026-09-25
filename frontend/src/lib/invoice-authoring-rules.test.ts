@@ -35,7 +35,7 @@ const issuer = (configurations: ReadonlyArray<VatConfiguration>): Issuer => ({
   address: { countryCode: "RO", city: "B", street: "s", county: "RO-B", sector: 1 },
   legalForm: "srl", tradeRegistryNumber: "J40/1/2020", iban: "RO00XXXX0000000000", bankName: "Banca",
   socialCapital: "100.00", defaultCurrency: "RON", defaultPaymentTermDays: 14,
-  vatConfigurations: configurations, currentVat: null,
+  vatConfigurations: configurations, currentVat: null, branding: null,
 })
 
 const draftLine = (vatRateCode: string, vatRate: string, id: string): DraftInvoice["lines"][number] => ({
