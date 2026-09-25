@@ -1,4 +1,5 @@
 import type { Customer, DraftInvoice, Issuer, ProductPreset, UnitOfMeasure, VatCatalogue } from "../lib/draft-models.ts"
+import type { AuthoringRegistryHref } from "../lib/invoice-authoring-model.ts"
 import type { BackgroundError } from "./invoice-authoring-session-types.ts"
 
 export type InvoiceAuthoringPageState =
@@ -12,7 +13,7 @@ export type InvoiceAuthoringPageState =
     readonly kind: "locked"
     readonly title: string
     readonly notice: string
-    readonly registryHref: "/invoices"
+    readonly registryHref: AuthoringRegistryHref
     readonly registryLabel: string
   }
   | { readonly kind: "draft-missing" }

@@ -1,19 +1,13 @@
-import { ApiFailure } from "./api-errors.ts"
 import type { AuthoringDocumentInput } from "./draft-models.ts"
 import type { IssuedInvoice } from "./document-snapshot.ts"
 import { authoringPayloadMatchesDraft } from "./invoice-authoring-payload.ts"
-import { isLostResponse } from "./draft-reconciliation.ts"
 import {
   CONCURRENT_CHANGE, UNCONFIRMED_ISSUE, UNCONFIRMED_ISSUE_EDITED,
   type InvoiceIssuanceController, type IssuanceDependencies, type IssuanceOutcome, type IssuanceRequest,
 } from "./invoice-issuance-types.ts"
-import { requireCsrf } from "./require-csrf.ts"
-import { operationFingerprint } from "./operation-idempotency.ts"
 import { issueInvoiceIntent } from "./operation-recovery-intent.ts"
 import type { RecoveryRequest } from "./operation-recovery-types.ts"
-import { NOT_HYDRATED, RESOLVE_FAILED, isRecoveryConflict } from "./operation-recovery-port.ts"
-
-const refused = (message: string): IssuanceOutcome => ({ kind: "error", error: new Error(message) })
+import { createRecoverableWriter } from "./recoverable-write.ts"
 
 /**
  * Issuance, as a plain object so the races can be tested without a DOM.
@@ -33,17 +27,13 @@ const refused = (message: string): IssuanceOutcome => ({ kind: "error", error: n
  * attempt looks like from the server's side.
  */
 export const createInvoiceIssuanceController = (dependencies: IssuanceDependencies): InvoiceIssuanceController => {
-  let inFlight = false
-  let unconfirmedFingerprint: string | undefined
-  const owns = (started: number): boolean =>
-    dependencies.alive() && dependencies.ownsEpoch(started)
+  const writer = createRecoverableWriter(dependencies)
 
-  const guardDraft = async (started: number, request: IssuanceRequest): Promise<IssuanceOutcome | undefined> => {
+  const guardDraft = async (request: IssuanceRequest): Promise<string | undefined> => {
     if (request.draftId === undefined) return undefined
     const fresh = await dependencies.client.getDraft(request.draftId)
-    if (!owns(started)) return { kind: "aborted" }
     return fresh.status === "draft" && !authoringPayloadMatchesDraft(request.payload, fresh)
-      ? refused(CONCURRENT_CHANGE)
+      ? CONCURRENT_CHANGE
       : undefined
   }
 
@@ -56,68 +46,22 @@ export const createInvoiceIssuanceController = (dependencies: IssuanceDependenci
   }
 
   const issue = async (request: IssuanceRequest): Promise<IssuanceOutcome> => {
-    if (inFlight) return { kind: "busy" }
-    if (request.blockedMessage !== undefined) return refused(request.blockedMessage)
-    if (!dependencies.recovery.hydrated()) return refused(NOT_HYDRATED)
-    const fingerprint = operationFingerprint(request.payload)
-    if (unconfirmedFingerprint !== undefined && unconfirmedFingerprint !== fingerprint) {
-      return refused(UNCONFIRMED_ISSUE_EDITED)
-    }
-    inFlight = true
-    try {
-      const started = dependencies.epoch()
-      const csrfToken = requireCsrf(dependencies.csrfToken())
-      if (!owns(started)) return { kind: "aborted" }
-      let guarded: IssuanceOutcome | undefined
-      try {
-        guarded = await guardDraft(started, request)
-      } catch (error) {
-        // A read, not a write: whatever it says, no invoice was emitted.
-        return owns(started) ? { kind: "error", error } : { kind: "aborted" }
-      }
-      if (guarded !== undefined) return guarded
-      const claimed = dependencies.recovery.claim(issueInvoiceIntent(request.payload, request.draftId))
-      if (claimed.kind === "blocked") return refused(claimed.message)
-      const { record } = claimed
-      let invoice: IssuedInvoice
-      try {
-        invoice = await send(csrfToken, record.request, record.key, claimed.replay, request.payload)
-      } catch (error) {
-        if (!owns(started)) return { kind: "aborted" }
-        if (isLostResponse(error)) {
-          // The answer may exist in the server's idempotency store only: the
-          // intent and its key stay, so a retry replays this exact document,
-          // while an edited one is refused rather than issued twice.
-          unconfirmedFingerprint = fingerprint
-          dependencies.effects.onOutcomeUnknown(request.draftId)
-          return { kind: "error", error }
-        }
-        unconfirmedFingerprint = undefined
-        const code = error instanceof ApiFailure ? error.code : undefined
-        if (code !== undefined && isRecoveryConflict(code)) {
-          dependencies.recovery.markConflict(record.key, code)
-        } else {
-          dependencies.recovery.resolve(record.key)
-        }
-        return { kind: "error", error }
-      }
-      if (!owns(started)) return { kind: "aborted" }
-      unconfirmedFingerprint = undefined
-      const cleared = dependencies.recovery.resolve(record.key)
-      try {
-        dependencies.effects.onIssued(invoice, request.draftId)
-      } catch (effectsError) {
-        return { kind: "issued", invoice, effectsError }
-      }
-      return cleared ? { kind: "issued", invoice } : { kind: "issued", invoice, effectsError: new Error(RESOLVE_FAILED) }
-    } finally {
-      inFlight = false
-    }
+    const outcome = await writer.run<IssuedInvoice>({
+      intent: issueInvoiceIntent(request.payload, request.draftId),
+      blockedMessage: request.blockedMessage,
+      changedMessage: UNCONFIRMED_ISSUE_EDITED,
+      preflight: () => guardDraft(request),
+      send: (csrfToken, record, replay) => send(csrfToken, record.request, record.key, replay, request.payload),
+      onSettled: (invoice) => { dependencies.effects.onIssued(invoice, request.draftId) },
+      onOutcomeUnknown: () => { dependencies.effects.onOutcomeUnknown(request.draftId) },
+    })
+    if (outcome.kind !== "done") return outcome
+    const { result: invoice, effectsError } = outcome
+    return effectsError === undefined ? { kind: "issued", invoice } : { kind: "issued", invoice, effectsError }
   }
 
   return {
     issue,
-    unconfirmedIssue: (): string | undefined =>
-      unconfirmedFingerprint === undefined ? undefined : UNCONFIRMED_ISSUE,
+    unconfirmedIssue: (): string | undefined => writer.unconfirmed() ? UNCONFIRMED_ISSUE : undefined,
   }
 }

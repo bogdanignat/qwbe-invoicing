@@ -80,7 +80,6 @@ export interface InvoiceAuthoringSession {
     readonly recoveryPending: boolean
   }
   readonly draftDeletion: DraftDeletionState
-  readonly derivedNotice: string
   readonly actions: {
     readonly changeForm: (patch: Partial<InvoiceAuthoringForm>) => void
     readonly chooseBuyerMode: (buyerMode: BuyerMode) => void

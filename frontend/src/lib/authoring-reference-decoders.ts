@@ -1,12 +1,18 @@
-import { array, integer, nullableText, object, optionalInteger, optionalText, text, type Decoder } from "./model-decoder.ts"
-import { decodeAddress, decodeBuyer, decodeUnitOfMeasure } from "./document-snapshot-decoders.ts"
-import { decodePage } from "./model-decoder.ts"
+import { array, integer, nullableText, object, optionalText, text, type Decoder } from "./model-decoder.ts"
+import { decodeAddress, decodeUnitOfMeasure } from "./document-snapshot-decoders.ts"
 import type {
-  Customer, DocumentSeries, Issuer, ProductPreset, VatCatalogue, VatConfiguration, VatRate, VatRegistration,
+  DocumentSeries, Issuer, ProductPreset, VatCatalogue, VatConfiguration, VatRate, VatRegistration,
 } from "./draft-models.ts"
 import { canonicalVatTreatment, decodeVatCategoryCode } from "./draft-decoders.ts"
 
 /** Decoders for the reference data an authoring session reads: registries, catalogues and the issuer profile. */
+
+/**
+ * The two registry records are decoded in `registry-decoders.ts`: the writes
+ * need them too. They are re-exported here so the reference client keeps its
+ * single import.
+ */
+export { decodeCustomerPage, decodeProductPresetPage } from "./registry-decoders.ts"
 
 export const decodeDocumentSeries: Decoder<DocumentSeries> = (input) => {
   const value = object(input)
@@ -20,33 +26,6 @@ export const decodeDocumentSeriesList: Decoder<ReadonlyArray<DocumentSeries>> = 
 
 export const decodeUnitOfMeasures: Decoder<ReadonlyArray<ProductPreset["unitOfMeasure"]>> = (input) =>
   array(input, decodeUnitOfMeasure, "unitOfMeasures")
-
-const decodeCustomer: Decoder<Customer> = (input) => {
-  const value = object(input)
-  const defaultPaymentTermDays = optionalInteger(value.defaultPaymentTermDays, "defaultPaymentTermDays")
-  if (defaultPaymentTermDays !== undefined && defaultPaymentTermDays < 0) {
-    throw new Error("invalid defaultPaymentTermDays")
-  }
-  return {
-    ...decodeBuyer(input),
-    id: text(value.id, "id"),
-    organizationId: text(value.organizationId, "organizationId"),
-    ...(defaultPaymentTermDays === undefined ? {} : { defaultPaymentTermDays }),
-  }
-}
-
-const decodeProductPreset: Decoder<ProductPreset> = (input) => {
-  const value = object(input)
-  const preferredVatRateCode = optionalText(value.preferredVatRateCode, "preferredVatRateCode")
-  return {
-    id: text(value.id, "id"),
-    organizationId: text(value.organizationId, "organizationId"),
-    description: text(value.description, "description"),
-    unitPrice: text(value.unitPrice, "unitPrice"),
-    unitOfMeasure: decodeUnitOfMeasure(value.unitOfMeasure),
-    ...(preferredVatRateCode === undefined ? {} : { preferredVatRateCode }),
-  }
-}
 
 export const decodeIssuer: Decoder<Issuer> = (input) => {
   const value = object(input)
@@ -121,6 +100,3 @@ export const decodeVatCatalogue: Decoder<VatCatalogue> = (input) => {
   const value = object(input)
   return { rates: array(value.rates, decodeVatRate, "rates") }
 }
-
-export const decodeCustomerPage = decodePage(decodeCustomer)
-export const decodeProductPresetPage = decodePage(decodeProductPreset)

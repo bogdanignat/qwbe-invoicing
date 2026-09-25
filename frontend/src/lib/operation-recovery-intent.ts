@@ -2,6 +2,8 @@ import type { AuthoringDocumentInput, CreateDraftInput } from "./draft-models.ts
 import { operationFingerprint } from "./operation-idempotency.ts"
 import type { RecoveryIntent } from "./operation-recovery-journal.ts"
 import type { RecoverySummary } from "./operation-recovery-types.ts"
+import type { ProformaConversionTarget } from "./proforma-conversion.ts"
+import type { AuthoringProformaInput } from "./proforma-models.ts"
 
 /**
  * The intent behind one recoverable write, built from the payload that is
@@ -48,3 +50,50 @@ export const issueInvoiceIntent = (
   fingerprint: operationFingerprint(payload),
   summary: recoverySummary(payload),
 })
+
+/**
+ * Authoring a proforma. The document travels whole in the body, like a created
+ * draft, so the body is the request and the fingerprint is that body — the
+ * series is read out of `proformaSeries` for the card, because that is what the
+ * proforma schema calls it.
+ */
+export const createProformaIntent = (body: AuthoringProformaInput): RecoveryIntent => ({
+  operation: "create-proforma",
+  request: { kind: "create-proforma", body },
+  fingerprint: operationFingerprint(body),
+  summary: {
+    buyerName: body.customer === undefined ? SAVED_CUSTOMER : body.customer.name,
+    series: body.proformaSeries,
+    issueDate: body.issueDate,
+    lineCount: body.lines.length,
+  },
+})
+
+export interface ConvertProformaIntentInput {
+  readonly target: ProformaConversionTarget
+  readonly proformaId: string
+  readonly invoiceSeries: string
+  /** Built from the proforma by the screen: the journal never reads a document itself. */
+  readonly summary: RecoverySummary
+}
+
+/**
+ * Converting a proforma. The two targets are two operations, not one with a
+ * flag: the card has to say which document was asked for, and a lost answer to
+ * "make me an invoice" must never be settled by replaying "make me a draft".
+ *
+ * The proforma's id enters the fingerprint although it travels in the path
+ * rather than in the body — two different proformas converted into the same
+ * series would otherwise look like one request replayed, and the second would be
+ * sent under the first one's key.
+ */
+export const convertProformaIntent = (input: ConvertProformaIntentInput): RecoveryIntent => {
+  const operation = input.target === "invoice" ? "convert-proforma-invoice" : "convert-proforma-draft"
+  const body = { invoiceSeries: input.invoiceSeries }
+  return {
+    operation,
+    request: { kind: operation, proformaId: input.proformaId, body },
+    fingerprint: operationFingerprint({ ...body, proformaId: input.proformaId, target: input.target }),
+    summary: input.summary,
+  }
+}

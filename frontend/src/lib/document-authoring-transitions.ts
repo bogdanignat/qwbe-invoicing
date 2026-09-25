@@ -1,8 +1,18 @@
+/**
+ * How an authoring form changes, one named transition at a time.
+ *
+ * Every function here takes a form and returns the next form: no state, no
+ * screen, no document family. An invoice and a proforma share every one of
+ * these moves — choosing a buyer, deriving the due date from the payment term,
+ * switching the party type — so they live in one place and each authoring
+ * session applies them to its own state.
+ */
 import type { BuyerSnapshot, UnitOfMeasure } from "./document-snapshot.ts"
 import type { Customer, DraftInvoice, Issuer } from "./draft-models.ts"
+import { addCalendarDays } from "./calendar-days.ts"
 import { countyRequiresSector } from "./romanian-counties.ts"
 import { normalizeRomanianCui } from "./vat-defaults.ts"
-import type { BuyerMode, InvoiceAuthoringForm, PartyType } from "./invoice-authoring-model.ts"
+import type { BuyerMode, DocumentAuthoringForm, PartyType } from "./document-authoring-form-model.ts"
 
 export const initialBuyerSelection = (
   hasSavedCustomers: boolean,
@@ -11,21 +21,11 @@ export const initialBuyerSelection = (
   customerId: "",
 })
 
-export const addCalendarDays = (date: string, days: number): string => {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isSafeInteger(days) || days < 0) return ""
-  const value = new Date(`${date}T00:00:00.000Z`)
-  if (Number.isNaN(value.getTime()) || value.toISOString().slice(0, 10) !== date) return ""
-  value.setUTCDate(value.getUTCDate() + days)
-  if (Number.isNaN(value.getTime())) return ""
-  const shifted = value.toISOString()
-  return /^\d{4}-\d{2}-\d{2}T/.test(shifted) ? shifted.slice(0, 10) : ""
-}
-
 const paymentTermFor = (customer: Customer | undefined, issuer: Issuer): number =>
   customer?.defaultPaymentTermDays ?? issuer.defaultPaymentTermDays
 
 export const selectedSavedCustomer = (
-  form: InvoiceAuthoringForm,
+  form: DocumentAuthoringForm,
   customers: ReadonlyArray<Customer>,
 ): Customer | undefined => form.buyerMode === "saved"
   ? customers.find((customer) => customer.id === form.customerId)
@@ -36,7 +36,7 @@ export const newAuthoringForm = (
   series: string,
   hasSavedCustomers: boolean,
   issueDate: string,
-): InvoiceAuthoringForm => ({
+): DocumentAuthoringForm => ({
   ...initialBuyerSelection(hasSavedCustomers),
   partyType: "company",
   name: "",
@@ -57,12 +57,12 @@ export const newAuthoringForm = (
 })
 
 export const selectSavedCustomer = (
-  form: InvoiceAuthoringForm,
+  form: DocumentAuthoringForm,
   customerId: string,
   customer: Customer | undefined,
   issuer: Issuer,
   deriveDueDate: boolean,
-): InvoiceAuthoringForm => ({
+): DocumentAuthoringForm => ({
   ...form,
   customerId,
   ...(deriveDueDate && customer !== undefined
@@ -71,12 +71,12 @@ export const selectSavedCustomer = (
 })
 
 export const selectIssueDate = (
-  form: InvoiceAuthoringForm,
+  form: DocumentAuthoringForm,
   issueDate: string,
   customer: Customer | undefined,
   issuer: Issuer,
   deriveDueDate: boolean,
-): InvoiceAuthoringForm => ({
+): DocumentAuthoringForm => ({
   ...form,
   issueDate,
   ...(deriveDueDate && !form.dueDateEdited
@@ -85,17 +85,17 @@ export const selectIssueDate = (
 })
 
 export const editDueDate = (
-  form: InvoiceAuthoringForm,
+  form: DocumentAuthoringForm,
   dueDate: string,
-): InvoiceAuthoringForm => ({ ...form, dueDate, dueDateEdited: true })
+): DocumentAuthoringForm => ({ ...form, dueDate, dueDateEdited: true })
 
 export const selectBuyerMode = (
-  form: InvoiceAuthoringForm,
+  form: DocumentAuthoringForm,
   buyerMode: BuyerMode,
   customers: ReadonlyArray<Customer>,
   issuer: Issuer,
   deriveDueDate: boolean,
-): InvoiceAuthoringForm => {
+): DocumentAuthoringForm => {
   const next = { ...form, buyerMode }
   if (!deriveDueDate || form.dueDateEdited) return next
   return {
@@ -108,45 +108,45 @@ export const selectBuyerMode = (
   }
 }
 
-export const selectedTaxIdentifier = (form: InvoiceAuthoringForm): string =>
+export const selectedTaxIdentifier = (form: DocumentAuthoringForm): string =>
   form.partyType === "company" ? form.companyTaxIdentifier : form.individualTaxIdentifier
 
 export const selectBuyerCounty = (
-  form: InvoiceAuthoringForm,
+  form: DocumentAuthoringForm,
   county: string,
-): InvoiceAuthoringForm => ({
+): DocumentAuthoringForm => ({
   ...form,
   county,
   sector: countyRequiresSector(county) ? form.sector : undefined,
 })
 
 export const editBuyerFiscalIdentifier = (
-  form: InvoiceAuthoringForm,
+  form: DocumentAuthoringForm,
   value: string,
-): InvoiceAuthoringForm => form.partyType === "company"
+): DocumentAuthoringForm => form.partyType === "company"
   ? { ...form, companyTaxIdentifier: normalizeRomanianCui(value) }
   : { ...form, individualTaxIdentifier: value.replace(/\D/g, "") }
 
 export const selectBuyerSector = (
-  form: InvoiceAuthoringForm,
+  form: DocumentAuthoringForm,
   sector: string,
-): InvoiceAuthoringForm => ({ ...form, sector: Number(sector) })
+): DocumentAuthoringForm => ({ ...form, sector: Number(sector) })
 
 export const switchBuyerMode = (
-  form: InvoiceAuthoringForm,
+  form: DocumentAuthoringForm,
   buyerMode: BuyerMode,
-): InvoiceAuthoringForm => ({ ...form, buyerMode })
+): DocumentAuthoringForm => ({ ...form, buyerMode })
 
 export const switchPartyType = (
-  form: InvoiceAuthoringForm,
+  form: DocumentAuthoringForm,
   partyType: PartyType,
-): InvoiceAuthoringForm => ({
+): DocumentAuthoringForm => ({
   ...form,
   partyType,
   vatRegistered: partyType === "individual" ? false : form.vatRegistered,
 })
 
-export const formFromDraft = (draft: DraftInvoice): InvoiceAuthoringForm => ({
+export const formFromDraft = (draft: DraftInvoice): DocumentAuthoringForm => ({
   buyerMode: draft.customerId === undefined ? "one-time" : "saved",
   customerId: draft.customerId ?? "",
   partyType: draft.customer.partyType,

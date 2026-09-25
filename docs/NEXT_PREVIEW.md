@@ -8,8 +8,9 @@
 
 The new `frontend/` package is an opt-in application in the existing pnpm workspace.
 It provides the unlock screen, session restore/logout, and the invoice register with
-the invoice and correction document screens. **The remaining business screens — issuing,
-drafts, catalog, customers, issuer settings, payments — are not migrated yet.**
+the invoice and correction document screens. **The remaining business screens — issuer
+settings, payments — are not migrated yet** (issuing, drafts, proformas, the product
+catalogue and the customer registry are, in the phases described below).
 The existing Vite UI, public API, default Compose/Warden routing and release image
 remain operational. This phase does not switch traffic or remove `web/`.
 
@@ -155,8 +156,8 @@ already loaded, and **Reîncearcă** on that failure calls `fetchNextPage`, appe
 second row without duplicating or discarding anything. A `404` is not transient and offers
 no retry at all. Browser MCP verified each case through the DOM and the network log in the
 final pass, with zero unexpected JavaScript console errors. The preview stays opt-in
-because the rest of T-1400 — issuing, drafts, catalog, customers, issuer settings,
-payments — is not migrated or cut over, **not** because retry is unchecked.
+because the rest of T-1400 — issuer settings, payments — is not migrated or cut over,
+**not** because retry is unchecked.
 
 One honest limitation: the retry phase split is currently covered by a temporary observer
 probe plus this browser pass, not by a permanent hook regression test (non-blocking,
@@ -192,9 +193,9 @@ fixture does not go through. No change was made for it.
 - The series is chosen before the first save and read-only afterwards (`UpdateDraftInput` has
   no series). The due date is optional in a draft and required at issuance only when the
   fiscal total rounds positive. Issued invoices are immutable; a draft already issued (or
-  issued as a proforma in the legacy app) renders a notice whose only registry link is
-  `/invoices` — this frontend has no proforma screens and no dead links. A draft derived from
-  a proforma stays editable and issuable but cannot be deleted.
+  issued as a proforma in the legacy app) renders a notice pointing at the registry that
+  actually holds the document — `/invoices`, or `/proformas` since phase three. A draft derived
+  from a proforma stays editable and issuable but cannot be deleted.
 - The buyer is a saved customer or a one-time party (B2B/B2C, manual CUI/CNP validation, no
   CUI lookup), TVA rates resolve from the issuer's configurations on the document date, and
   lines saved under a rate the issuer can no longer charge are re-saved before issuance.
@@ -204,11 +205,75 @@ fixture does not go through. No change was made for it.
   the derived-draft restrictions. The BFF probe now also asserts `idempotency-key` header
   passthrough next to `x-csrf-token`.
 
-**Gaps (not migrated in this phase):** proforma screens and any proforma conversion entry,
-CUI lookup/provider integration, master-data CRUD (customers, presets, series), issuer
-settings, payments, storno authoring, CUI T-1371, and a real-browser pass over the new
-screens (supervisor delegates that separately). The register/drafts browser pass and the
-`/invoices/new` vs `/invoices/[id]` route precedence remain to be verified in a browser.
+**Gaps (not migrated in this phase):** CUI lookup/provider integration, document-series
+CRUD, issuer settings, payments, storno authoring, CUI T-1371, and a
+real-browser pass over the new screens (supervisor delegates that separately). The
+register/drafts browser pass and the `/invoices/new` vs `/invoices/[id]` route precedence
+remain to be verified in a browser. Proforma screens are migrated — see below.
+
+## Proformas (T-1400 phase three)
+
+Migrated routes: `/proformas` (cursor-paginated register), `/proformas/[id]` (document) and
+`/proformas/new` (authoring). The shell navigates to all three; no proforma link is dead.
+
+- A proforma is **not** a fiscal document: downloads are PDF only, there is no e-Factura
+  section anywhere on the detail screen, and the authoring screen says so next to the save.
+- Authoring is one request (`POST /api/proformas`) over the shared authoring modules
+  (issuer/VAT/units/customers/presets, buyer editor, lines editor). There is no draft and no
+  issuance step, so the whole document — series included — is chosen before the single save,
+  and the save is confirmed in a dialog because the number and the document become immutable
+  the moment the server answers. A positive proforma left without a due date is legal and
+  saveable, with a note saying it will then only convert into a *draft* invoice.
+- Blocking prerequisites are the issuer, the VAT catalogue and the unit catalogue, derived
+  purely (`lib/proforma-authoring-page.ts`). A missing proforma series is **not** blocking: the
+  form opens with a setup note beside a closed save.
+- Conversion lives on the detail screen: to an issued invoice (needs a due date) or to a draft
+  invoice, each under `ConvertProformaInput = { invoiceSeries }` with the invoice series
+  catalogue filtered to `documentType === "invoice"`, issuance explicitly confirmed. The single
+  conflict code `proforma_already_converted` is surfaced as a state, not as a failure.
+- Every write (save and both conversions) claims its idempotency key in the shared operation
+  recovery journal *before* the request, under `create-proforma` /
+  `convert-proforma-invoice` / `convert-proforma-draft`; a lost answer keeps the key for a
+  replay and, on the authoring screen, closes the form and points at `/proformas` instead of
+  offering a second save under a new key.
+- Tested with Node `--test` against the pure layers (page state, readiness, save controller,
+  conversion derivation and error classification, register projection and decoders); no DOM.
+
+## Master data — products and customers (T-1400 phase four)
+
+Migrated routes: `/products` (the product catalogue, canonical in
+`standalone/http/ui-routes.ts` — not `/product-presets`) and `/customers` (the customer
+registry). Both shell links are now live; `/settings` is still absent.
+
+- Master-data writes live in their own client (`lib/registry-client.ts`), separate from the
+  read-only reference client. They carry **CSRF only**: the backend requires no idempotency
+  key for them (`standalone/api/http-endpoints-master-data.ts`), there is nothing to replay,
+  and a duplicate created by a repeated request is deletable — unlike an issued number. So
+  none of the operation-recovery machinery is wired to them, deliberately.
+- Each screen is a registry on the left and an editor on the right. What may be saved and
+  which single field refuses it are pure modules (`lib/product-preset-form.ts`,
+  `lib/customer-form.ts`, `lib/customer-payload.ts`), so the rules are tested without a DOM
+  and the components only place the message the model named.
+- The preset VAT rules are ported as functions (`lib/product-preset-vat.ts`): only taxable
+  rates in force may be preferred (article 310 is a status of the issuer, never of a
+  product), a preference that has expired keeps an option of its own labelled `(expirată)`
+  and blocks the save until it is replaced. The legacy assertions that went through markup
+  are now assertions on those functions.
+- Customer validation reuses the modules the authoring buyer already goes through
+  (`normalizeRomanianCui`, `romanianCuiPattern`, `countyRequiresSector`,
+  `isRomanianCountyCode`): a CUI keeps its digits without the `RO` prefix, a CNP is 13
+  digits or empty, and a sector exists for Bucharest alone — switching the county drops it
+  so a stale sector is never sent with another county's address.
+- There is no global toast in this frontend: each screen keeps its own notice
+  (`lib/registry-feedback.ts`) next to the panel that changed, and a deletion is confirmed
+  with the sentence that states the fact — documents already issued keep their own copy and
+  do not change.
+- The rates are resolved on the browser's own date (`lib/format.ts` `today()`), which is
+  what authoring already does, rather than on a second notion of "today"; the legacy screen
+  used `todayIn("Europe/Bucharest")`.
+- Focus follows the record that opens: the editor owns the ref and moves the keyboard to its
+  heading through `hooks/use-editor-heading-focus.ts`. That effect is the only one on either
+  screen, and it does what an effect is for — a DOM action after a render.
 
 ## Isolated container preview
 

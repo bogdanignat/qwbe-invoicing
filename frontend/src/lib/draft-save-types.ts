@@ -72,5 +72,5 @@ export type Fresh =
 export const UNCONFIRMED_CREATE = "Rezultatul salvării nu este confirmat: cererea poate să fi ajuns sau nu la server. Întoarce-te la registrul de facturi, reîncarcă lista de drafturi și deschide draftul creat înainte de a continua."
 export const UNCONFIRMED_LINE = "Rezultatul salvării liniei nu poate fi confirmat, iar un nou „Salvează” ar putea dubla linii. Întoarce-te la registrul de facturi, reîncarcă lista de drafturi și deschide draftul înainte de a continua."
 export const UNCONFIRMED_HEADER = "Rezultatul salvării datelor generale nu poate fi confirmat, iar un nou „Salvează” ar putea dubla modificările. Întoarce-te la registrul de facturi, reîncarcă lista de drafturi și deschide draftul înainte de a continua."
-export const DERIVED_DRAFT_DELETE_REFUSED = "Draftul creat din proformă nu poate fi șters: proforma din aplicația existentă îl controlează."
+export const DERIVED_DRAFT_DELETE_REFUSED = "Draftul creat din proformă nu poate fi șters: proforma sursă îl controlează. Deschide proforma din care a fost creat dacă vrei să renunți la el."
 export const ISSUED_DRAFT_DELETE_REFUSED = "Draftul a fost deja emis ca document fiscal și nu mai poate fi șters."

@@ -7,10 +7,10 @@ import { useAuthoringRecovery } from "./use-authoring-recovery.ts"
 import type { InvoiceAuthoringSession, InvoiceAuthoringSessionInput } from "./invoice-authoring-session-types.ts"
 import { today } from "../lib/format.ts"
 import { authoringDerived, authoringRecoveryDerived } from "../lib/invoice-authoring-derived.ts"
-import { draftLinesForEditing } from "../lib/invoice-authoring-options.ts"
-import { formFromDraft, newAuthoringForm } from "../lib/invoice-authoring-transitions.ts"
+import { draftLinesForEditing } from "../lib/document-authoring-options.ts"
+import { formFromDraft, newAuthoringForm } from "../lib/document-authoring-transitions.ts"
 import { newEditableInvoiceLine, preferredUnitOfMeasure } from "../lib/invoice-authoring-model.ts"
-import { derivedDraftNotice, draftDeletionState, invoiceDueDateIssue, issuerIssuanceWarning } from "../lib/invoice-authoring-workflow.ts"
+import { draftDeletionState, invoiceDueDateIssue, issuerIssuanceWarning } from "../lib/invoice-authoring-workflow.ts"
 import { documentNotesIssue, documentNotesMaxLength } from "../lib/invoice-notes-validation.ts"
 import { countyRequiresSector } from "../lib/romanian-counties.ts"
 import { defaultVatCode } from "../lib/vat-defaults.ts"
@@ -112,7 +112,6 @@ export const useInvoiceAuthoringSession = (input: InvoiceAuthoringSessionInput):
       recoveryBlocked: recoveryState.blocked, recoveryPending: recovery.pending,
     },
     draftDeletion: draftDeletionState(draft),
-    derivedNotice: derivedDraftNotice,
     actions: {
       ...editorActions,
       deleteLine: draftWorkflow.deleteLine,

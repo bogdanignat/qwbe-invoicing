@@ -16,6 +16,28 @@ export const today = (): string => {
   return `${String(date.getFullYear())}-${twoDigits(date.getMonth() + 1)}-${twoDigits(date.getDate())}`
 }
 
+/** The zone the organization's fiscal dates are read in (cube/invoicing/domain/validation.ts:16). */
+export const ORGANIZATION_TIME_ZONE = "Europe/Bucharest"
+
+/**
+ * The calendar date in a named zone, independent of the browser's own.
+ *
+ * A VAT rate is retired on a date the server reads in Europe/Bucharest. Asking
+ * the browser instead makes the offered rates depend on where the machine
+ * thinks it is: between midnight in Bucharest and midnight in UTC on the day a
+ * rate changes, a `TZ=UTC` browser would still offer the withdrawn rate the
+ * server then refuses — and would hide the new one. So every decision about
+ * which rate may be preferred reads the date from here.
+ */
+export const todayIn = (timeZone: string, now: Date = new Date()): string => {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone, year: "numeric", month: "2-digit", day: "2-digit",
+  }).formatToParts(now)
+  const part = (type: Intl.DateTimeFormatPartTypes): string =>
+    parts.find((entry) => entry.type === type)?.value ?? ""
+  return `${part("year")}-${part("month")}-${part("day")}`
+}
+
 /**
  * How a VAT treatment is named on a document, category first.
  *

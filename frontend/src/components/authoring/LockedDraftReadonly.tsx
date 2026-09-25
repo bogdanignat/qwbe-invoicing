@@ -4,11 +4,13 @@ import Link from "next/link"
 
 import { OperationRecoveryNotice } from "./OperationRecoveryNotice.tsx"
 import { useAuthoringRecovery } from "../../hooks/use-authoring-recovery.ts"
+import type { AuthoringRegistryHref } from "../../lib/invoice-authoring-model.ts"
 
 interface LockedDraftReadonlyProps {
   readonly title: string
   readonly notice: string
-  readonly registryHref: string
+  /** The registry the locked document belongs to — invoices or proformas — decided by the caller. */
+  readonly registryHref: AuthoringRegistryHref
   readonly registryLabel: string
 }
 

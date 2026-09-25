@@ -3,6 +3,8 @@ import type { DraftInvoice } from "./draft-models.ts"
 import type { IssuedInvoice } from "./document-snapshot.ts"
 import { isLostResponse } from "./draft-reconciliation.ts"
 import { isRecoveryConflict, type RecoveryPort } from "./operation-recovery-port.ts"
+import { sendStoredRequest, type ReplayClient, type ReplayResult } from "./operation-replay-requests.ts"
+import type { ProformaIdentity } from "./proforma-replay-client.ts"
 import type { KnownWrite } from "./operation-recovery-view.ts"
 import type { RecoveryRecord } from "./operation-recovery-types.ts"
 
@@ -19,16 +21,15 @@ import type { RecoveryRecord } from "./operation-recovery-types.ts"
  *
  * Nothing is ever sent automatically: this runs when the user asks for it.
  */
-export interface ReplayClient {
-  readonly replayDraftCreation: (csrfToken: string, body: unknown, idempotencyKey: string) => Promise<DraftInvoice>
-  readonly issueDraft: (csrfToken: string, id: string, idempotencyKey: string) => Promise<IssuedInvoice>
-  readonly replayInvoiceIssuance: (csrfToken: string, body: unknown, idempotencyKey: string) => Promise<IssuedInvoice>
-}
-
 export interface ReplayEffects {
-  /** The draft as the server holds it now — never the stored snapshot written back over it. */
-  readonly onDraft: (draft: DraftInvoice) => void
-  readonly onIssued: (invoice: IssuedInvoice) => void
+  /**
+   * The draft as the server holds it now — never the stored snapshot written
+   * back over it. `sourceProformaId` is present when the draft came from a
+   * conversion, so the proforma that produced it can be refreshed too.
+   */
+  readonly onDraft: (draft: DraftInvoice, sourceProformaId: string | undefined) => void
+  readonly onIssued: (invoice: IssuedInvoice, sourceProformaId: string | undefined) => void
+  readonly onProforma: (proforma: ProformaIdentity) => void
 }
 
 export type ReplayOutcome =
@@ -40,6 +41,7 @@ export type ReplayOutcome =
    */
   | { readonly kind: "draft"; readonly draft: DraftInvoice; readonly effectsError?: unknown }
   | { readonly kind: "issued"; readonly invoice: IssuedInvoice; readonly effectsError?: unknown }
+  | { readonly kind: "proforma"; readonly proforma: ProformaIdentity; readonly effectsError?: unknown }
   | { readonly kind: "unknown"; readonly error: unknown }
   | { readonly kind: "conflict"; readonly error: unknown }
   | { readonly kind: "error"; readonly error: unknown }
@@ -62,12 +64,26 @@ export const replayKnownResult = (outcome: ReplayOutcome | undefined): KnownWrit
   if (outcome === undefined) return undefined
   if (outcome.kind === "draft") return { kind: "draft", id: outcome.draft.id, effectsError: outcome.effectsError }
   if (outcome.kind === "issued") return { kind: "invoice", id: outcome.invoice.id, effectsError: outcome.effectsError }
+  if (outcome.kind === "proforma") return { kind: "proforma", id: outcome.proforma.id, effectsError: outcome.effectsError }
   return undefined
 }
+
+/** The document is confirmed either way: the failure of the follow-up travels alongside it, never instead of it. */
+const withEffectsError = (result: ReplayResult, effectsError: unknown): ReplayOutcome =>
+  result.kind === "draft"
+    ? { kind: "draft", draft: result.draft, effectsError }
+    : result.kind === "issued"
+      ? { kind: "issued", invoice: result.invoice, effectsError }
+      : { kind: "proforma", proforma: result.proforma, effectsError }
 
 export const createOperationReplay = (dependencies: ReplayDependencies) => {
   let inFlight = false
   const owns = (started: number): boolean => dependencies.alive() && dependencies.ownsEpoch(started)
+  const applyEffects = (result: ReplayResult): void => {
+    if (result.kind === "draft") dependencies.effects.onDraft(result.draft, result.sourceProformaId)
+    else if (result.kind === "issued") dependencies.effects.onIssued(result.invoice, result.sourceProformaId)
+    else dependencies.effects.onProforma(result.proforma)
+  }
 
   const replay = async (record: RecoveryRecord): Promise<ReplayOutcome> => {
     if (inFlight) return { kind: "aborted" }
@@ -77,30 +93,16 @@ export const createOperationReplay = (dependencies: ReplayDependencies) => {
       const started = dependencies.epoch()
       const csrfToken = dependencies.csrfToken()
       if (!owns(started)) return { kind: "aborted" }
-      const request = record.request
       try {
-        if (request.kind === "create-draft") {
-          const draft = await dependencies.client.replayDraftCreation(csrfToken, request.body, record.key)
-          if (!owns(started)) return { kind: "aborted" }
-          dependencies.recovery.resolve(record.key)
-          try {
-            dependencies.effects.onDraft(draft)
-          } catch (effectsError) {
-            return { kind: "draft", draft, effectsError }
-          }
-          return { kind: "draft", draft }
-        }
-        const invoice = request.kind === "issue-draft"
-          ? await dependencies.client.issueDraft(csrfToken, request.draftId, record.key)
-          : await dependencies.client.replayInvoiceIssuance(csrfToken, request.body, record.key)
+        const result = await sendStoredRequest(dependencies.client, csrfToken, record.request, record.key)
         if (!owns(started)) return { kind: "aborted" }
         dependencies.recovery.resolve(record.key)
         try {
-          dependencies.effects.onIssued(invoice)
+          applyEffects(result)
         } catch (effectsError) {
-          return { kind: "issued", invoice, effectsError }
+          return withEffectsError(result, effectsError)
         }
-        return { kind: "issued", invoice }
+        return result
       } catch (error) {
         if (!owns(started)) return { kind: "aborted" }
         // Still unknown: the intent and the key stay, so the next attempt is

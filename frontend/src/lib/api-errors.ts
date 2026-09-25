@@ -59,6 +59,20 @@ const failureMessages: Readonly<Record<string, string>> = {
   draft_creation_result_deleted: "Draftul creat sub această cheie a fost între timp șters. Începe un document nou.",
   invoice_already_issued: "Factura a fost deja emisă. Deschide-o din registrul de facturi.",
   derived_draft_cannot_be_deleted: "Draftul provine dintr-o proformă și nu poate fi șters.",
+  // A conversion is allowed once: the answer carries this code and an English
+  // `message`, so without an entry here the screen would print the English one.
+  proforma_already_converted: "Proforma a fost deja convertită. Reîncarcă pagina pentru a deschide documentul rezultat.",
+  // The master-data conflicts the two registry screens can produce. The delete
+  // of a customer an open draft still names is the only one of business origin
+  // (cube/invoicing/customers/application/customers.ts:64); the rest come from
+  // the store and mean the record moved under the screen
+  // (standalone/storage/sqlite-customers.ts:33,50, sqlite-catalog.ts:30,
+  // sqlite-rows.ts:27).
+  customer_has_open_drafts: "Clientul este folosit de un draft deschis. Șterge sau finalizează draftul, apoi încearcă din nou.",
+  customer_not_found: "Clientul nu mai există în registru. Reîncarcă lista de clienți.",
+  customer_id_taken: "Clientul nu a putut fi salvat: identificatorul este deja folosit. Reîncarcă lista de clienți și încearcă din nou.",
+  product_preset_id_taken: "Produsul nu a putut fi salvat: identificatorul este deja folosit. Reîncarcă lista de produse și încearcă din nou.",
+  persistence_conflict: "Datele s-au schimbat în paralel. Reîncarcă pagina și încearcă din nou.",
 }
 
 /**

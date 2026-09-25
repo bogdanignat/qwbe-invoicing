@@ -3,7 +3,7 @@ import { UnreadableAnswer } from "./unreadable-answer.ts"
 import type { DraftInvoice, DraftLineInput } from "./draft-models.ts"
 import type { InvoiceAuthoringForm } from "./invoice-authoring-model.ts"
 import { headerMatchesDraft } from "./invoice-authoring-readiness.ts"
-import { lineInputMatches } from "./invoice-authoring-options.ts"
+import { lineInputMatches } from "./document-authoring-options.ts"
 
 /**
  * A failure whose request may still have committed: the answer never arrived,

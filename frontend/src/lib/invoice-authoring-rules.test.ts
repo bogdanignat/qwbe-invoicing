@@ -3,10 +3,12 @@ import test from "node:test"
 
 import { authoringAccess } from "./invoice-authoring-readiness.ts"
 import { authoringPayloadMatchesDraft } from "./invoice-authoring-payload.ts"
-import { derivedDraftNotice, draftDeletionState, invoiceDueDateIssue } from "./invoice-authoring-workflow.ts"
+import { draftDeletionState, invoiceDueDateIssue } from "./invoice-authoring-workflow.ts"
+import { DERIVED_DRAFT_DELETE_REFUSED } from "./draft-save-types.ts"
+import { authoringSeriesOptions } from "./document-authoring-options.ts"
 import { documentNotesIssue, documentNotesMaxLength } from "./invoice-notes-validation.ts"
 import { positiveInvoiceRequiresDueDate } from "./invoice-positive-total.ts"
-import { formFromDraft } from "./invoice-authoring-transitions.ts"
+import { formFromDraft } from "./document-authoring-transitions.ts"
 import { defaultVatCode, issuerVatRegistrationOn, presetVatCode, vatRatesForIssuer } from "./vat-defaults.ts"
 import { hasStaleDraftTax, staleDraftLineIds } from "./vat-snapshots.ts"
 import type { DraftInvoice, Issuer, VatCatalogue, VatConfiguration, VatRate } from "./draft-models.ts"
@@ -101,23 +103,45 @@ void test("a form rebuilt from a draft matches that draft's header", async () =>
   assert.equal(headerMatchesDraft({ ...form, notes: "alta" }, draft), false)
 })
 
-void test("an issued or proforma-issued draft is locked, and the only registry is the invoices one", () => {
+void test("a locked draft points at the registry it belongs to, not always at the invoices one", () => {
   assert.equal(authoringAccess("draft").editable, true)
   const issued = authoringAccess("issued")
   assert.equal(issued.editable, false)
   assert.equal(issued.registryHref, "/invoices")
   const proforma = authoringAccess("proforma_issued")
   assert.equal(proforma.editable, false)
-  assert.equal(proforma.registryHref, "/invoices")
-  assert.ok(!JSON.stringify(proforma).includes("/proformas"))
+  // The document is a proforma: sending the user to the invoice register would
+  // be sending them to a list it is not in.
+  assert.equal(proforma.registryHref, "/proformas")
+  assert.match(proforma.registryLabel, /proforme/)
+  assert.ok(!proforma.notice.includes("aplicația existentă"))
 })
 
 void test("a derived draft cannot be deleted, but stays editable and issuable", () => {
   assert.equal(draftDeletionState(undefined).kind, "hidden")
   assert.equal(draftDeletionState(draftOf()).kind, "available")
-  assert.equal(draftDeletionState(draftOf({ sourceProformaId: "prof-1" })).kind, "derived")
-  assert.ok(derivedDraftNotice.includes("Nu poate fi șters"))
-  assert.ok(!derivedDraftNotice.includes("/proformas"))
+  const derived = draftDeletionState(draftOf({ sourceProformaId: "prof 1" }))
+  assert.equal(derived.kind, "derived")
+  assert.ok(derived.notice.message.includes("Nu poate fi șters"))
+  // The notice names the proforma that owns it, and the id is encoded once.
+  assert.equal(derived.notice.proformaHref, "/proformas/prof%201")
+  assert.ok(!derived.notice.message.includes("aplicația existentă"))
+})
+
+void test("the refusal to delete a derived draft names the source proforma", () => {
+  assert.ok(DERIVED_DRAFT_DELETE_REFUSED.includes("proforma sursă"))
+  assert.ok(!DERIVED_DRAFT_DELETE_REFUSED.includes("aplicația existentă"))
+})
+
+void test("a screen offers the series of the document it authors, never the other family's", () => {
+  const series = [
+    { documentType: "invoice", series: "FCT" },
+    { documentType: "proforma", series: "PRO" },
+    { documentType: "invoice", series: "FCT2" },
+  ] as const
+  assert.deepEqual(authoringSeriesOptions(series, "invoice"), ["FCT", "FCT2"])
+  assert.deepEqual(authoringSeriesOptions(series, "proforma"), ["PRO"])
+  assert.deepEqual(authoringSeriesOptions([], "proforma"), [])
 })
 
 void test("notes validation mirrors the server rules", () => {

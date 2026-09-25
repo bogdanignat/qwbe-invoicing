@@ -106,7 +106,16 @@ const decodeVatBreakdownEntry: Decoder<VatBreakdownEntry> = (input) => {
   }
 }
 
-const decodeBody = (value: JsonObject) => ({
+/**
+ * The shared body, decoded once for every document that carries it.
+ *
+ * It is exported for the proforma decoder, which lives in its own file because
+ * its head is its own: re-listing these twelve fields there would mean a
+ * contract change failing in one document family and silently passing in the
+ * other. The argument is the already-narrowed object, so the caller keeps
+ * ownership of its own `id` and head fields.
+ */
+export const decodeDocumentBody = (value: JsonObject) => ({
   issuer: decodeIssuer(value.issuer),
   customer: decodeBuyer(value.customer),
   lines: array(value.lines, decodeLine, "lines"),
@@ -123,7 +132,7 @@ const decodeBody = (value: JsonObject) => ({
 export const decodeIssuedInvoice: Decoder<IssuedInvoice> = (input) => {
   const value = object(input)
   return {
-    ...decodeBody(value),
+    ...decodeDocumentBody(value),
     id: text(value.id, "id"),
     dueDate: nullableText(value.dueDate, "dueDate"),
     notes: nullableText(value.notes, "notes"),
@@ -136,7 +145,7 @@ export const decodeIssuedInvoice: Decoder<IssuedInvoice> = (input) => {
 export const decodeCorrectionDocument: Decoder<CorrectionDocument> = (input) => {
   const value = object(input)
   return {
-    ...decodeBody(value),
+    ...decodeDocumentBody(value),
     id: text(value.id, "id"),
     originalInvoiceId: text(value.originalInvoiceId, "originalInvoiceId"),
     reason: text(value.reason, "reason"),

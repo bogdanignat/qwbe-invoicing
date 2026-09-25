@@ -90,7 +90,35 @@ export interface VatCatalogue {
   readonly rates: ReadonlyArray<VatRate>
 }
 
-/** The issuer profile the settings API serves; branding belongs to the PDF, not to authoring. */
+/**
+ * The logo the backend stores, always re-encoded to PNG on the way in
+ * (`standalone/api/branding-normalizer.ts`), which is why the answer names the
+ * encoding it kept rather than the one that was uploaded.
+ */
+export interface IssuerBrandingImage {
+  readonly pngBase64: string
+  readonly width: number
+  readonly height: number
+}
+
+/**
+ * Either half may be absent, but not both: the backend refuses a branding object
+ * that carries neither text nor image
+ * (`cube/invoicing/issuer/application/issuer.ts:45`). "No branding at all" is
+ * `null`, not an empty object.
+ */
+export interface IssuerBranding {
+  readonly text: string | null
+  readonly image: IssuerBrandingImage | null
+}
+
+/**
+ * The issuer profile the settings API serves.
+ *
+ * Branding is part of it because the settings screen edits it; the authoring and
+ * document screens ignore the field — what they show is the rendered PDF, which
+ * already has the logo burned in.
+ */
 export interface Issuer {
   readonly organizationId: string
   readonly name: string
@@ -105,6 +133,7 @@ export interface Issuer {
   readonly defaultPaymentTermDays: number
   readonly vatConfigurations: ReadonlyArray<VatConfiguration>
   readonly currentVat: VatRegistration | null
+  readonly branding?: IssuerBranding | null
 }
 
 export interface ProductPreset {

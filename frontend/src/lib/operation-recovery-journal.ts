@@ -1,5 +1,5 @@
 import {
-  decodeJournalEntry, RECOVERY_VERSION,
+  decodeJournalEntry, operationOf, RECOVERY_VERSION,
   type JournalEntry, type RecoveryOperation, type RecoveryRecord, type RecoveryRequest, type RecoverySummary,
 } from "./operation-recovery-types.ts"
 
@@ -7,11 +7,14 @@ import {
  * The single unresolved write a tab is allowed to have, written down before the
  * request leaves and cleared only by an answer that settles it.
  *
- * One slot, not one per screen: saving a new draft and issuing an invoice are
- * the same risk, and two controllers — two mounts, the two halves of a
- * StrictMode rehearsal — must not each believe they hold the only intent. A
- * claim that does not match what is already stored is refused, so a changed
- * document cannot start a second operation while the first is unresolved.
+ * One slot, not one per screen and not one per document family: saving a draft,
+ * issuing an invoice, issuing a proforma and converting one are the same risk,
+ * and two controllers — two mounts, the two halves of a StrictMode rehearsal —
+ * must not each believe they hold the only intent. A claim that does not match
+ * what is already stored is refused, so a changed document cannot start a
+ * second operation while the first is unresolved, and an unresolved proforma
+ * write blocks invoice writes exactly as an invoice write blocks a proforma:
+ * one unanswered request at a time is the whole point.
  *
  * The scope is the tab and the origin (session storage), which is what a reload
  * has to survive and what must not leak between tabs or outlive the browser
@@ -56,11 +59,13 @@ export interface RecoveryJournal {
 
 export const RECOVERY_SLOT = "qwbe.operation-recovery"
 
-export const BLOCKED_OTHER = "O operație anterioară nu este încă rezolvată. Retrimite-o sau confirmă că ai verificat registrul înainte de a începe alta."
-export const BLOCKED_CONFLICT = "Operația anterioară a fost refuzată definitiv de server. Verifică registrul și închide avertismentul înainte de a continua."
-export const BLOCKED_MARKER = "Sesiunea a expirat cu o operație nerezolvată. Verifică registrul de facturi și închide avertismentul înainte de a scrie din nou."
+export const BLOCKED_OTHER = "O operație anterioară nu este încă rezolvată. Retrimite-o sau confirmă că ai verificat registrul de facturi și proforme înainte de a începe alta."
+export const BLOCKED_CONFLICT = "Operația anterioară a fost refuzată definitiv de server. Verifică registrul de facturi și proforme și închide avertismentul înainte de a continua."
+export const BLOCKED_MARKER = "Sesiunea a expirat cu o operație nerezolvată. Verifică registrul de facturi și proforme și închide avertismentul înainte de a scrie din nou."
 export const BLOCKED_UNAVAILABLE = "Registrul local de recuperare nu este disponibil, deci o cerere trimisă acum nu ar putea fi recuperată. Nu am trimis nimic."
-export const BLOCKED_CORRUPT = "Registrul local de recuperare este deteriorat. Verifică registrul de facturi și închide avertismentul înainte de a scrie din nou."
+export const BLOCKED_CORRUPT = "Registrul local de recuperare este deteriorat. Verifică registrul de facturi și proforme și închide avertismentul înainte de a scrie din nou."
+/** Not a situation the user created: a caller paired an operation with a request that is not its own. */
+export const BLOCKED_MISMATCH = "Cererea nu corespunde operației anunțate, deci nu ar putea fi recuperată corect. Nu am trimis nimic."
 
 interface Dependencies {
   /** Read when it is needed, never at module load: on the server there is no storage to reach for. */
@@ -107,6 +112,10 @@ export const createRecoveryJournal = (dependencies: Dependencies): RecoveryJourn
 
   const claim = (intent: RecoveryIntent): ClaimResult => {
     const entry = read()
+    // The pair is checked here and not only when reading back: a record whose
+    // operation and request disagree titles one write and replays another, and
+    // writing it would mean the mistake is first seen after a reload.
+    if (operationOf(intent.request) !== intent.operation) return { kind: "blocked", entry, message: BLOCKED_MISMATCH }
     if (entry.kind === "unavailable") return { kind: "blocked", entry, message: BLOCKED_UNAVAILABLE }
     if (entry.kind === "corrupt") return { kind: "blocked", entry, message: BLOCKED_CORRUPT }
     if (entry.kind === "marker") return { kind: "blocked", entry, message: BLOCKED_MARKER }

@@ -2,8 +2,8 @@ import { money, orDash, vatTreatmentLabel } from "./format.ts"
 import { eFacturaStatusLabel, invoiceDetailHref } from "./invoice-register-projection.ts"
 import { romanianCountyName } from "./romanian-counties.ts"
 import type {
-  Address, BuyerSnapshot, CorrectionDocument, DocumentLine, IssuedInvoice, IssuerSnapshot,
-  VatBreakdownEntry,
+  Address, BuyerSnapshot, CorrectionDocument, DocumentBody, DocumentLine, IssuedInvoice,
+  IssuerSnapshot, VatBreakdownEntry,
 } from "./document-snapshot.ts"
 
 export interface LabelledValue {
@@ -134,8 +134,17 @@ const totals = (
   { label: "Total cu TVA", value: money(document.totalIncludingVat, document.currency) },
 ]
 
-const body = (
-  document: IssuedInvoice | CorrectionDocument,
+/**
+ * Everything a document's body renders as, exported for the third one.
+ *
+ * The parameter is the shared body rather than a union of the two documents
+ * modelled here, so the proforma projection — which has its own head and its own
+ * file — composes the same five sections instead of restating them. Nothing in
+ * it reads a head field; widening the type is what makes that a compile-time
+ * fact rather than a convention.
+ */
+export const documentBodyView = (
+  document: DocumentBody,
 ): Pick<DocumentSnapshotView, "heading" | "parties" | "lines" | "vatRows" | "totals"> => ({
   heading: `${document.series} ${String(document.number)}`,
   parties: [issuerView(document.issuer), customerView(document.customer)],
@@ -145,7 +154,7 @@ const body = (
 })
 
 export const projectIssuedInvoice = (invoice: IssuedInvoice): DocumentSnapshotView => ({
-  ...body(invoice),
+  ...documentBodyView(invoice),
   facts: [
     { label: "Emisă", value: invoice.issueDate },
     { label: "Scadență", value: orDash(invoice.dueDate) },
@@ -164,7 +173,7 @@ export const projectIssuedInvoice = (invoice: IssuedInvoice): DocumentSnapshotVi
  * fiscal document.
  */
 export const projectCorrectionDocument = (correction: CorrectionDocument): DocumentSnapshotView => ({
-  ...body(correction),
+  ...documentBodyView(correction),
   facts: [
     { label: "Emisă", value: correction.issueDate },
     { label: "Monedă", value: correction.currency },

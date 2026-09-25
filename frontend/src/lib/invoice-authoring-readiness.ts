@@ -3,8 +3,9 @@ import type {
   AuthoringAccess, AuthoringReadiness, AuthoringTaxReadiness,
   EditableInvoiceLine, InvoiceAuthoringForm, LineSaveOperation,
 } from "./invoice-authoring-model.ts"
-import { selectedTaxIdentifier } from "./invoice-authoring-transitions.ts"
-import { lineInputMatches } from "./invoice-authoring-options.ts"
+import { documentLinesReady, documentTaxReadiness } from "./document-authoring-readiness.ts"
+import { selectedTaxIdentifier } from "./document-authoring-transitions.ts"
+import { lineInputMatches } from "./document-authoring-options.ts"
 
 export const headerMatchesDraft = (form: InvoiceAuthoringForm, draft: DraftInvoice): boolean => {
   const sameBuyer = form.buyerMode === "saved"
@@ -49,13 +50,7 @@ export const linesMatchDraft = (
 export const authoringTaxReadiness = (
   readiness: AuthoringReadiness,
   staleTax: boolean,
-): AuthoringTaxReadiness => ({
-  canIssue: readiness.canIssue && !staleTax,
-  synchronized: readiness.synchronized && !staleTax,
-  warning: staleTax
-    ? "Configurația TVA s-a schimbat. Actualizează și salvează configurația TVA a liniilor afectate înainte de emitere."
-    : null,
-})
+): AuthoringTaxReadiness => documentTaxReadiness(readiness, staleTax)
 
 export const authoringReadiness = (
   form: InvoiceAuthoringForm,
@@ -68,13 +63,7 @@ export const authoringReadiness = (
     && draft !== undefined
     && headerMatchesDraft(form, draft)
     && linesMatchDraft(lines, draft)
-  const hasLines = lines.length > 0 && lines.every((line) =>
-    line.description.trim() !== ""
-    && line.quantity.trim() !== ""
-    && line.unitPrice.trim() !== ""
-    && line.unitOfMeasure.code.trim() !== ""
-    && line.unitOfMeasure.name.trim() !== ""
-    && line.vatRateCode.trim() !== "")
+  const hasLines = documentLinesReady(lines)
   return {
     editable,
     synchronized,
@@ -92,9 +81,9 @@ export const authoringAccess = (status: DraftInvoice["status"]): AuthoringAccess
   }
   if (status === "proforma_issued") return {
     editable: false,
-    notice: "Acest draft a fost deja emis ca proformă în aplicația existentă și este blocat. Nu mai poate fi modificat, șters sau emis din nou.",
-    registryHref: "/invoices",
-    registryLabel: "Deschide registrul de facturi",
+    notice: "Acest draft a fost deja emis ca proformă și este blocat. Nu mai poate fi modificat, șters sau emis din nou.",
+    registryHref: "/proformas",
+    registryLabel: "Deschide registrul de proforme",
   }
   return { editable: true }
 }

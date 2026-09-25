@@ -122,6 +122,11 @@ td.numeric, th.numeric { text-align: right; font-variant-numeric: tabular-nums; 
 td small { display: block; margin-top: .2rem; color: var(--color-invoice-muted); font-size: .76rem; }
 .badge { display: inline-block; padding: .2rem .55rem; border-radius: 999px; background: var(--color-invoice-badge-surface); font-size: .74rem; font-weight: 700; }
 .badge.storno { margin-top: .25rem; color: var(--color-invoice-storno-text); background: var(--color-invoice-storno-surface); }
+.badge.muted { color: var(--color-invoice-muted); background: var(--color-invoice-badge-surface); }
+.badge.info { color: var(--color-invoice-label); background: var(--color-invoice-secondary-surface); }
+.badge.positive { color: var(--color-invoice-primary); background: var(--color-invoice-primary-soft); }
+.conversion-state { display: flex; flex-wrap: wrap; gap: .6rem; align-items: center; margin: 0 0 1rem; }
+.button-row { display: flex; flex-wrap: wrap; gap: .6rem; }
 .empty-state { margin: 0; padding: 1.75rem 0; color: var(--color-invoice-muted); text-align: center; }
 .load-more { display: flex; justify-content: center; margin-top: 1.1rem; }
 .back-link { margin: 0 0 1rem; font-size: .85rem; }
