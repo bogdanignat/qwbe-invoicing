@@ -5,7 +5,7 @@ import { Effect } from "effect"
 import { createInvoicingService, type RequestContext } from "../../cube/invoicing/index.ts"
 import { createPaymentsService } from "../../cube/payments/index.ts"
 import { createStandaloneArtifactService } from "../documents/artifact-runtime.ts"
-import { createSqlitePaymentsStore, createSqliteStore } from "../storage/sqlite-store.ts"
+import { createPostgresPaymentsStore, createPostgresStore } from "../storage/postgres-store.ts"
 import { brandingNormalizer } from "./branding-normalizer.ts"
 import { CurrentRequest } from "./api-context.ts"
 import type { ApiRuntime, ApiServices, UseServices } from "./api-types.ts"
@@ -16,10 +16,10 @@ const services = (runtime: ApiRuntime, context: RequestContext): ApiServices => 
   const current = { current: Effect.succeed(context) }
   return {
     invoicing: createInvoicingService({ context: current, clock, ids,
-      store: createSqliteStore(runtime.dataDirectory), branding: brandingNormalizer, cubeIdentity: "invoicing" }),
+      store: createPostgresStore(runtime.pool), branding: brandingNormalizer, cubeIdentity: "invoicing" }),
     payments: createPaymentsService({ context: current, clock, ids,
-      store: createSqlitePaymentsStore(runtime.dataDirectory), cubeIdentity: "payments" }),
-    documents: createStandaloneArtifactService(runtime.dataDirectory, Effect.succeed({
+      store: createPostgresPaymentsStore(runtime.pool), cubeIdentity: "payments" }),
+    documents: createStandaloneArtifactService(runtime.dataDirectory, runtime.pool, Effect.succeed({
       identity: { id: context.identity.id, permissions: context.identity.permissions }, organization: context.organization,
     })),
   }

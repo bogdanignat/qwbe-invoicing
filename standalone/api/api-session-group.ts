@@ -16,7 +16,9 @@ export const sessionsGroup = (runtime: ApiRuntime) => HttpApiBuilder.group(appli
     if (decoded._tag === "Left" || decoded.right.token.trim().length === 0) {
       return HttpServerResponse.unsafeJson({ error: "invalid_credentials" }, { status: 400 })
     }
-    const login = session.login({ token: decoded.right.token, origin: request.headers.origin, host: request.headers.host })
+    const login = yield* Effect.promise(() => session.login({
+      token: decoded.right.token, origin: request.headers.origin, host: request.headers.host,
+    }))
     if (login.kind === "forbidden") return HttpServerResponse.unsafeJson({ error: "origin_not_allowed" }, { status: 403 })
     if (login.kind === "unauthorized") return HttpServerResponse.unsafeJson({ error: "invalid_credentials" }, {
       status: 401, headers: { "set-cookie": session.clearCookie },
@@ -25,13 +27,19 @@ export const sessionsGroup = (runtime: ApiRuntime) => HttpApiBuilder.group(appli
       headers: { "set-cookie": login.setCookie },
     })
   }))
-  .handleRaw("deleteSession", ({ headers, request }) => Effect.map(CurrentSession, (current) => {
+  .handleRaw("deleteSession", ({ headers, request }) => Effect.gen(function*() {
+    const current = yield* CurrentSession
     const session = runtime.browserSession
-    const authorized = session?.authorize({ cookie: current.cookie, method: "DELETE", csrfToken: headers["x-csrf-token"],
-      origin: request.headers.origin, host: request.headers.host })
-    if (session === undefined || authorized?.kind !== "authorized") {
+    if (session === undefined) return HttpServerResponse.unsafeJson({ error: "csrf_validation_failed" }, { status: 403 })
+    const authorized = yield* Effect.promise(() => session.authorize({
+      cookie: current.cookie, method: "DELETE", csrfToken: headers["x-csrf-token"],
+      origin: request.headers.origin, host: request.headers.host,
+    }))
+    if (authorized.kind !== "authorized") {
       return HttpServerResponse.unsafeJson({ error: "csrf_validation_failed" }, { status: 403 })
     }
-    session.revoke(current.cookie)
+    // Awaited, not fired and forgotten: the cookie is cleared only once the row
+    // is actually gone, so a failed revoke is a failed request.
+    yield* Effect.promise(() => session.revoke(current.cookie))
     return HttpServerResponse.unsafeJson({ authenticated: false }, { headers: { "set-cookie": session.clearCookie } })
   })))

@@ -1,25 +1,22 @@
 import assert from "node:assert/strict"
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
-import { tmpdir } from "node:os"
+import { writeFileSync } from "node:fs"
 import { join } from "node:path"
 import test from "node:test"
 
 import { handleApiRequest } from "./api.test-support.ts"
 import { createRequestAuthenticator } from "../auth/auth.ts"
-import { applyMigrations } from "../storage/migrations.ts"
+import { withMigrated } from "../storage/postgres-rig.test-support.ts"
 
 void test("direct proforma authoring needs only a proforma series configuration", async () => {
-  const directory = mkdtempSync(join(tmpdir(), "qwbe-proforma-api-"))
-  const token = "p".repeat(64)
-  const tokenFile = join(directory, "api-token")
-  writeFileSync(tokenFile, token, { mode: 0o600 })
-  try {
-    applyMigrations(directory)
+  await withMigrated("proforma_api", async (fixture) => {
+    const token = "p".repeat(64)
+    const tokenFile = join(fixture.dataDirectory, "api-token")
+    writeFileSync(tokenFile, token, { mode: 0o600 })
     const authorization = `Bearer ${token}`
     const runtime = {
-      authenticate: createRequestAuthenticator({ host: "127.0.0.1", port: 3000, dataDirectory: directory,
-        nodeEnvironment: "test", authTokenFile: tokenFile, organizationId: "org-1" }),
-      dataDirectory: directory,
+      authenticate: createRequestAuthenticator(fixture.config({ authTokenFile: tokenFile })),
+      pool: fixture.pool,
+      dataDirectory: fixture.dataDirectory,
       now: () => new Date("2026-09-05T10:00:00.000Z"),
     }
     const issuer = await handleApiRequest({ method: "PUT", url: "/api/issuer", authorization, body: {
@@ -47,7 +44,5 @@ void test("direct proforma authoring needs only a proforma series configuration"
     const id = (created.body as { id: string }).id
     assert.deepEqual((await handleApiRequest({ method: "GET", url: `/api/proformas/${id}`, authorization, body: undefined }, runtime)).body,
       created.body)
-  } finally {
-    rmSync(directory, { recursive: true, force: true })
-  }
+  })
 })

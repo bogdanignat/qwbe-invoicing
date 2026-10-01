@@ -1,0 +1,788 @@
+{
+  "checkPredicates": [
+    {
+      "table": "product_presets",
+      "column": "unit_price",
+      "predicates": [
+        {
+          "ordinal": 2,
+          "scope": "column",
+          "expression": "unit_price NOT GLOB '*[^0-9.]*' AND unit_price GLOB '[0-9]*.[0-9][0-9]' AND length(unit_price)-length(replace(unit_price,'.',''))=1",
+          "parameterized": "? NOT GLOB '*[^0-9.]*' AND ? GLOB '[0-9]*.[0-9][0-9]' AND length(?)-length(replace(?,'.',''))=1",
+          "globOccurrences": 2
+        }
+      ],
+      "results": [
+        {
+          "value": "1.00",
+          "outcomes": [
+            {
+              "ordinal": 2,
+              "outcome": "satisfied"
+            }
+          ]
+        },
+        {
+          "value": "0.00",
+          "outcomes": [
+            {
+              "ordinal": 2,
+              "outcome": "satisfied"
+            }
+          ]
+        },
+        {
+          "value": "10.25",
+          "outcomes": [
+            {
+              "ordinal": 2,
+              "outcome": "satisfied"
+            }
+          ]
+        },
+        {
+          "value": "1.000",
+          "outcomes": [
+            {
+              "ordinal": 2,
+              "outcome": "violated"
+            }
+          ]
+        },
+        {
+          "value": "1.0",
+          "outcomes": [
+            {
+              "ordinal": 2,
+              "outcome": "violated"
+            }
+          ]
+        },
+        {
+          "value": "1",
+          "outcomes": [
+            {
+              "ordinal": 2,
+              "outcome": "violated"
+            }
+          ]
+        },
+        {
+          "value": "x1.00",
+          "outcomes": [
+            {
+              "ordinal": 2,
+              "outcome": "violated"
+            }
+          ]
+        },
+        {
+          "value": "1..00",
+          "outcomes": [
+            {
+              "ordinal": 2,
+              "outcome": "violated"
+            }
+          ]
+        },
+        {
+          "value": "1.00.00",
+          "outcomes": [
+            {
+              "ordinal": 2,
+              "outcome": "violated"
+            }
+          ]
+        },
+        {
+          "value": "-1.00",
+          "outcomes": [
+            {
+              "ordinal": 2,
+              "outcome": "violated"
+            }
+          ]
+        },
+        {
+          "value": ".50",
+          "outcomes": [
+            {
+              "ordinal": 2,
+              "outcome": "violated"
+            }
+          ]
+        },
+        {
+          "value": "1.0a",
+          "outcomes": [
+            {
+              "ordinal": 2,
+              "outcome": "violated"
+            }
+          ]
+        },
+        {
+          "value": "",
+          "outcomes": [
+            {
+              "ordinal": 2,
+              "outcome": "violated"
+            }
+          ]
+        },
+        {
+          "value": " 1.00",
+          "outcomes": [
+            {
+              "ordinal": 2,
+              "outcome": "violated"
+            }
+          ]
+        },
+        {
+          "value": "1.00 ",
+          "outcomes": [
+            {
+              "ordinal": 2,
+              "outcome": "violated"
+            }
+          ]
+        },
+        {
+          "value": "1,00",
+          "outcomes": [
+            {
+              "ordinal": 2,
+              "outcome": "violated"
+            }
+          ]
+        },
+        {
+          "value": "٠.٠٠",
+          "outcomes": [
+            {
+              "ordinal": 2,
+              "outcome": "violated"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "table": "document_series",
+      "column": "series",
+      "predicates": [
+        {
+          "ordinal": 2,
+          "scope": "table",
+          "expression": "length(series)BETWEEN 1 AND 20 AND substr(series,1,1)GLOB'[A-Z0-9]'AND series NOT GLOB'*[^A-Z0-9_-]*'",
+          "parameterized": "length(?)BETWEEN 1 AND 20 AND substr(?,1,1)GLOB'[A-Z0-9]'AND ? NOT GLOB'*[^A-Z0-9_-]*'",
+          "globOccurrences": 2
+        }
+      ],
+      "results": [
+        {
+          "value": "A1",
+          "outcomes": [
+            {
+              "ordinal": 2,
+              "outcome": "satisfied"
+            }
+          ]
+        },
+        {
+          "value": "INV_2026",
+          "outcomes": [
+            {
+              "ordinal": 2,
+              "outcome": "satisfied"
+            }
+          ]
+        },
+        {
+          "value": "A-1",
+          "outcomes": [
+            {
+              "ordinal": 2,
+              "outcome": "satisfied"
+            }
+          ]
+        },
+        {
+          "value": "A",
+          "outcomes": [
+            {
+              "ordinal": 2,
+              "outcome": "satisfied"
+            }
+          ]
+        },
+        {
+          "value": "1A",
+          "outcomes": [
+            {
+              "ordinal": 2,
+              "outcome": "satisfied"
+            }
+          ]
+        },
+        {
+          "value": "a1",
+          "outcomes": [
+            {
+              "ordinal": 2,
+              "outcome": "violated"
+            }
+          ]
+        },
+        {
+          "value": "_A1",
+          "outcomes": [
+            {
+              "ordinal": 2,
+              "outcome": "violated"
+            }
+          ]
+        },
+        {
+          "value": "A/1",
+          "outcomes": [
+            {
+              "ordinal": 2,
+              "outcome": "violated"
+            }
+          ]
+        },
+        {
+          "value": "A 1",
+          "outcomes": [
+            {
+              "ordinal": 2,
+              "outcome": "violated"
+            }
+          ]
+        },
+        {
+          "value": "A_",
+          "outcomes": [
+            {
+              "ordinal": 2,
+              "outcome": "satisfied"
+            }
+          ]
+        },
+        {
+          "value": "",
+          "outcomes": [
+            {
+              "ordinal": 2,
+              "outcome": "violated"
+            }
+          ]
+        },
+        {
+          "value": "AAAAAAAAAAAAAAAAAAAAA",
+          "outcomes": [
+            {
+              "ordinal": 2,
+              "outcome": "violated"
+            }
+          ]
+        },
+        {
+          "value": "Ă1",
+          "outcomes": [
+            {
+              "ordinal": 2,
+              "outcome": "violated"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "table": "idempotency_records",
+      "column": "fingerprint",
+      "predicates": [
+        {
+          "ordinal": 3,
+          "scope": "column",
+          "expression": "length(fingerprint)=71 AND substr(fingerprint,1,7)='sha256:' AND substr(fingerprint,8)NOT GLOB '*[^0-9a-f]*'",
+          "parameterized": "length(?)=71 AND substr(?,1,7)='sha256:' AND substr(?,8)NOT GLOB '*[^0-9a-f]*'",
+          "globOccurrences": 1
+        }
+      ],
+      "results": [
+        {
+          "value": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+          "outcomes": [
+            {
+              "ordinal": 3,
+              "outcome": "satisfied"
+            }
+          ]
+        },
+        {
+          "value": "sha256:0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF",
+          "outcomes": [
+            {
+              "ordinal": 3,
+              "outcome": "violated"
+            }
+          ]
+        },
+        {
+          "value": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcde",
+          "outcomes": [
+            {
+              "ordinal": 3,
+              "outcome": "violated"
+            }
+          ]
+        },
+        {
+          "value": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdeg",
+          "outcomes": [
+            {
+              "ordinal": 3,
+              "outcome": "violated"
+            }
+          ]
+        },
+        {
+          "value": "md5:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+          "outcomes": [
+            {
+              "ordinal": 3,
+              "outcome": "violated"
+            }
+          ]
+        },
+        {
+          "value": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+          "outcomes": [
+            {
+              "ordinal": 3,
+              "outcome": "violated"
+            }
+          ]
+        },
+        {
+          "value": "",
+          "outcomes": [
+            {
+              "ordinal": 3,
+              "outcome": "violated"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "table": "payment_idempotency_records",
+      "column": "fingerprint",
+      "predicates": [
+        {
+          "ordinal": 3,
+          "scope": "column",
+          "expression": "length(fingerprint)=71 AND substr(fingerprint,1,7)='sha256:' AND substr(fingerprint,8) NOT GLOB '*[^0-9a-f]*'",
+          "parameterized": "length(?)=71 AND substr(?,1,7)='sha256:' AND substr(?,8) NOT GLOB '*[^0-9a-f]*'",
+          "globOccurrences": 1
+        }
+      ],
+      "results": [
+        {
+          "value": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+          "outcomes": [
+            {
+              "ordinal": 3,
+              "outcome": "satisfied"
+            }
+          ]
+        },
+        {
+          "value": "sha256:0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF0123456789ABCDEF",
+          "outcomes": [
+            {
+              "ordinal": 3,
+              "outcome": "violated"
+            }
+          ]
+        },
+        {
+          "value": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcde",
+          "outcomes": [
+            {
+              "ordinal": 3,
+              "outcome": "violated"
+            }
+          ]
+        },
+        {
+          "value": "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdeg",
+          "outcomes": [
+            {
+              "ordinal": 3,
+              "outcome": "violated"
+            }
+          ]
+        },
+        {
+          "value": "md5:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+          "outcomes": [
+            {
+              "ordinal": 3,
+              "outcome": "violated"
+            }
+          ]
+        },
+        {
+          "value": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+          "outcomes": [
+            {
+              "ordinal": 3,
+              "outcome": "violated"
+            }
+          ]
+        },
+        {
+          "value": "",
+          "outcomes": [
+            {
+              "ordinal": 3,
+              "outcome": "violated"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "nocase": {
+    "rows": [
+      {
+        "id": "c1",
+        "name": "alpha"
+      },
+      {
+        "id": "c2",
+        "name": "Alpha"
+      },
+      {
+        "id": "c3",
+        "name": "ALPHA"
+      },
+      {
+        "id": "c4",
+        "name": "beta"
+      },
+      {
+        "id": "c5",
+        "name": "Ălpha"
+      },
+      {
+        "id": "c6",
+        "name": "ălpha"
+      },
+      {
+        "id": "c7",
+        "name": "Zeta"
+      },
+      {
+        "id": "c8",
+        "name": "zeta"
+      }
+    ],
+    "ordered": [
+      {
+        "id": "c1",
+        "name": "alpha"
+      },
+      {
+        "id": "c2",
+        "name": "Alpha"
+      },
+      {
+        "id": "c3",
+        "name": "ALPHA"
+      },
+      {
+        "id": "c4",
+        "name": "beta"
+      },
+      {
+        "id": "c7",
+        "name": "Zeta"
+      },
+      {
+        "id": "c8",
+        "name": "zeta"
+      },
+      {
+        "id": "c5",
+        "name": "Ălpha"
+      },
+      {
+        "id": "c6",
+        "name": "ălpha"
+      }
+    ],
+    "pages": [
+      [
+        {
+          "id": "c1",
+          "name": "alpha"
+        },
+        {
+          "id": "c2",
+          "name": "Alpha"
+        }
+      ],
+      [
+        {
+          "id": "c3",
+          "name": "ALPHA"
+        },
+        {
+          "id": "c4",
+          "name": "beta"
+        }
+      ],
+      [
+        {
+          "id": "c7",
+          "name": "Zeta"
+        },
+        {
+          "id": "c8",
+          "name": "zeta"
+        }
+      ],
+      [
+        {
+          "id": "c5",
+          "name": "Ălpha"
+        },
+        {
+          "id": "c6",
+          "name": "ălpha"
+        }
+      ]
+    ],
+    "cursorCaseMismatch": {
+      "cursor": {
+        "name": "ALPHA",
+        "id": "c2"
+      },
+      "page": [
+        {
+          "id": "c3",
+          "name": "ALPHA"
+        },
+        {
+          "id": "c4",
+          "name": "beta"
+        }
+      ]
+    },
+    "comparisons": {
+      "equal_ascii": 1,
+      "equal_diacritic": 0,
+      "ascii_order": 1,
+      "binary_would_reverse": 0
+    },
+    "plan": [
+      "SCAN names USING COVERING INDEX names_order"
+    ]
+  },
+  "jsonValid": [
+    {
+      "label": "empty-object",
+      "value": "{}",
+      "jsonValid": 1,
+      "jsonType": "object"
+    },
+    {
+      "label": "object",
+      "value": "{\"a\":1}",
+      "jsonValid": 1,
+      "jsonType": "object"
+    },
+    {
+      "label": "nested-object",
+      "value": "{\"a\":{\"b\":[1,2,3]}}",
+      "jsonValid": 1,
+      "jsonType": "object"
+    },
+    {
+      "label": "duplicate-keys",
+      "value": "{\"a\":1,\"a\":2}",
+      "jsonValid": 1,
+      "jsonType": "object"
+    },
+    {
+      "label": "empty-array",
+      "value": "[]",
+      "jsonValid": 1,
+      "jsonType": "array"
+    },
+    {
+      "label": "array",
+      "value": "[1,2,3]",
+      "jsonValid": 1,
+      "jsonType": "array"
+    },
+    {
+      "label": "number",
+      "value": "1",
+      "jsonValid": 1,
+      "jsonType": "integer"
+    },
+    {
+      "label": "negative-number",
+      "value": "-1.5e3",
+      "jsonValid": 1,
+      "jsonType": "real"
+    },
+    {
+      "label": "leading-zero-number",
+      "value": "01",
+      "jsonValid": 0,
+      "jsonType": "error: malformed JSON"
+    },
+    {
+      "label": "string",
+      "value": "\"a\"",
+      "jsonValid": 1,
+      "jsonType": "text"
+    },
+    {
+      "label": "true",
+      "value": "true",
+      "jsonValid": 1,
+      "jsonType": "true"
+    },
+    {
+      "label": "null-literal",
+      "value": "null",
+      "jsonValid": 1,
+      "jsonType": "null"
+    },
+    {
+      "label": "empty-string",
+      "value": "",
+      "jsonValid": 0,
+      "jsonType": "error: malformed JSON"
+    },
+    {
+      "label": "whitespace",
+      "value": " ",
+      "jsonValid": 0,
+      "jsonType": "error: malformed JSON"
+    },
+    {
+      "label": "unquoted-key",
+      "value": "{a:1}",
+      "jsonValid": 0,
+      "jsonType": "object"
+    },
+    {
+      "label": "single-quoted",
+      "value": "{'a':1}",
+      "jsonValid": 0,
+      "jsonType": "object"
+    },
+    {
+      "label": "truncated-array",
+      "value": "[1,2,",
+      "jsonValid": 0,
+      "jsonType": "error: malformed JSON"
+    },
+    {
+      "label": "trailing-comma",
+      "value": "[1,2,]",
+      "jsonValid": 0,
+      "jsonType": "array"
+    },
+    {
+      "label": "nan",
+      "value": "NaN",
+      "jsonValid": 0,
+      "jsonType": "null"
+    },
+    {
+      "label": "trailing-garbage",
+      "value": "{\"a\":1} x",
+      "jsonValid": 0,
+      "jsonType": "error: malformed JSON"
+    },
+    {
+      "label": "utf8-text",
+      "value": "{\"a\":\"ăîșț\"}",
+      "jsonValid": 1,
+      "jsonType": "object"
+    },
+    {
+      "label": "bom-prefixed",
+      "value": "﻿{\"a\":1}",
+      "jsonValid": 0,
+      "jsonType": "object"
+    },
+    {
+      "label": "nul-escape",
+      "value": "{\"a\":\"\\u0000\"}",
+      "jsonValid": 1,
+      "jsonType": "object"
+    }
+  ],
+  "money": [
+    {
+      "label": "number-integer",
+      "input": "1",
+      "stored": "1.0",
+      "storedType": "text",
+      "accepted": true
+    },
+    {
+      "label": "number-decimal",
+      "input": "1.5",
+      "stored": "1.5",
+      "storedType": "text",
+      "accepted": true
+    },
+    {
+      "label": "number-float-artifact",
+      "input": "0.30000000000000004",
+      "stored": "0.30000000000000004",
+      "storedType": "text",
+      "accepted": true
+    },
+    {
+      "label": "number-large",
+      "input": "1e+21",
+      "stored": "1.0e+21",
+      "storedType": "text",
+      "accepted": true
+    },
+    {
+      "label": "number-negative-zero",
+      "input": "0",
+      "stored": "0.0",
+      "storedType": "text",
+      "accepted": true
+    },
+    {
+      "label": "bigint",
+      "input": "10",
+      "stored": "10",
+      "storedType": "text",
+      "accepted": true
+    },
+    {
+      "label": "string",
+      "input": "1.00",
+      "stored": "1.00",
+      "storedType": "text",
+      "accepted": true
+    }
+  ]
+}

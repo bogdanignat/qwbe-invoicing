@@ -1,9 +1,5 @@
 import assert from "node:assert/strict"
 import { createHash } from "node:crypto"
-import { mkdtempSync, rmSync } from "node:fs"
-import { tmpdir } from "node:os"
-import { join } from "node:path"
-import { DatabaseSync } from "node:sqlite"
 import test from "node:test"
 
 import { Effect } from "effect"
@@ -11,8 +7,15 @@ import { Effect } from "effect"
 import {
   DomainConflict, PersistenceFailure, createInvoicingService, type InvoicingDependencies,
 } from "../../cube/invoicing/index.ts"
-import { applyMigrations, databasePath } from "./migrations.ts"
-import { createSqliteStore } from "./sqlite-store.ts"
+import { migratedFixture, type RawSql, type TestFixture } from "./postgres-rig.test-support.ts"
+import { createPostgresStore } from "./postgres-store.ts"
+
+/**
+ * Draft creation atomicity on PostgreSQL 16. The fixture is a fresh database per
+ * case instead of a fresh directory, and the counts are read with `Number`
+ * around them: `count(*)` is `bigint`, which arrives as a string and would
+ * compare unequal to a number for ever.
+ */
 
 const each = { code: "C62", name: "unitate" } as const
 const customer = {
@@ -42,10 +45,13 @@ const idempotent = <Input>(key: string, request: Input) => ({
   idempotency: { key, fingerprint: `sha256:${createHash("sha256").update(canonicalJson({ operation: "create_draft", input: request })).digest("hex")}` },
 })
 
-type Fixture = ReturnType<typeof fixture>
-const fixture = (label: string) => {
-  const directory = mkdtempSync(join(tmpdir(), `qwbe-draft-atomicity-${label}-`))
-  applyMigrations(directory)
+interface Fixture {
+  readonly database: TestFixture
+  readonly service: (store?: InvoicingDependencies["store"]) => ReturnType<typeof createInvoicingService>
+  readonly close: () => Promise<void>
+}
+const fixture = async (label: string): Promise<Fixture> => {
+  const database = await migratedFixture(`draft_${label}`)
   let nextId = 0
   const dependencies = {
     context: { current: Effect.succeed({
@@ -60,10 +66,10 @@ const fixture = (label: string) => {
     cubeIdentity: "invoicing",
   } as const
   return {
-    directory,
-    service: (store: InvoicingDependencies["store"] = createSqliteStore(directory)) =>
+    database,
+    service: (store: InvoicingDependencies["store"] = createPostgresStore(database.pool)) =>
       createInvoicingService({ ...dependencies, store }),
-    close: () => { rmSync(directory, { recursive: true, force: true }) },
+    close: () => database.close(),
   }
 }
 
@@ -75,24 +81,17 @@ const configure = async (value: Fixture) => {
 }
 
 const failureOf = <A, E>(effect: Effect.Effect<A, E>) => Effect.runPromise(Effect.flip(effect))
-const scalar = (database: DatabaseSync, sql: string): number => {
-  const row = database.prepare(sql).get()
-  assert.ok(row)
-  const value = Object.values(row)[0]
-  if (typeof value !== "number") throw new Error("scalar query did not return a number")
+const scalar = async (sql: RawSql, statement: string): Promise<number> => {
+  const value = Number(await sql.scalar(statement))
+  if (!Number.isInteger(value)) throw new Error(`scalar query did not return a count: ${statement}`)
   return value
 }
-const counts = (directory: string) => {
-  const database = new DatabaseSync(databasePath(directory), { readOnly: true })
-  try {
-    return {
-      drafts: scalar(database, "SELECT COUNT(*) FROM invoice_drafts"),
-      lines: scalar(database, "SELECT COUNT(*) FROM draft_lines"),
-      idempotency: scalar(database, "SELECT COUNT(*) FROM idempotency_records WHERE operation='create_draft'"),
-      audits: scalar(database, "SELECT COUNT(*) FROM audit_events WHERE action='draft.created'"),
-    }
-  } finally { database.close() }
-}
+const counts = async (sql: RawSql) => ({
+  drafts: await scalar(sql, "SELECT COUNT(*) FROM invoice_drafts"),
+  lines: await scalar(sql, "SELECT COUNT(*) FROM draft_lines"),
+  idempotency: await scalar(sql, "SELECT COUNT(*) FROM idempotency_records WHERE operation='create_draft'"),
+  audits: await scalar(sql, "SELECT COUNT(*) FROM audit_events WHERE action='draft.created'"),
+})
 
 const failingStore = (
   store: InvoicingDependencies["store"],
@@ -108,50 +107,51 @@ const request = { customer, series: "INV", issueDate: "2026-09-05", dueDate: "20
 
 void test("a failed draft creation leaves no header, no line, no key and no audit entry behind", { timeout: 60_000 }, async () => {
   for (const method of ["saveIdempotencyRecord", "appendAuditEvent"] as const) {
-    const value = fixture(`rollback-${method}`)
+    const value = await fixture(`rollback_${method === "appendAuditEvent" ? "audit" : "idem"}`)
     try {
       await configure(value)
-      const before = counts(value.directory)
+      const before = await counts(value.database.sql)
       const attempt = idempotent(`fault-${method}`, request)
-      const faulty = value.service(failingStore(createSqliteStore(value.directory), method))
+      const faulty = value.service(failingStore(createPostgresStore(value.database.pool), method))
       assert.ok(await failureOf(faulty.createDraft(attempt)) instanceof PersistenceFailure)
-      assert.deepEqual(counts(value.directory), before)
+      assert.deepEqual(await counts(value.database.sql), before)
 
       // The key was never spent, so the honest retry authors the draft once.
       const draft = await Effect.runPromise(value.service().createDraft(attempt))
       assert.equal(draft.lines.length, 2)
-      assert.deepEqual(counts(value.directory), { drafts: before.drafts + 1, lines: before.lines + 2,
+      assert.deepEqual(await counts(value.database.sql), { drafts: before.drafts + 1, lines: before.lines + 2,
         idempotency: before.idempotency + 1, audits: before.audits + 1 })
-    } finally { value.close() }
+    } finally { await value.close() }
   }
 })
 
-void test("two SQLite stores racing on one creation key produce exactly one draft", { timeout: 60_000 }, async () => {
+void test("two stores racing on one creation key produce exactly one draft", { timeout: 60_000 }, async () => {
   for (let index = 0; index < 4; index += 1) {
-    const value = fixture(`race-${String(index)}`)
+    const value = await fixture(`race_${String(index)}`)
     try {
       await configure(value)
       const attempt = idempotent(`race-${String(index)}`, request)
-      const first = value.service(createSqliteStore(value.directory))
-      const second = value.service(createSqliteStore(value.directory))
+      const first = value.service(createPostgresStore(value.database.pool))
+      const second = value.service(createPostgresStore(value.database.pool))
       const outcomes = await Promise.all([first, second].map((service) =>
         Effect.runPromise(Effect.either(Effect.map(service.createDraft(attempt), ({ id }) => id)))))
-      // Whoever loses the race either waits and replays the winner's draft, or
-      // the busy timeout turns it into a server failure the caller retries. What
-      // may never happen is two drafts from one key.
+      // Whoever loses the race either waits on the exclusive business lock and
+      // replays the winner's draft, or the lock timeout turns it into a server
+      // failure the caller retries. What may never happen is two drafts from one
+      // key.
       const identifiers = new Set(outcomes.flatMap((outcome) => outcome._tag === "Right" ? [outcome.right] : []))
       assert.equal(identifiers.size, 1)
-      assert.deepEqual(counts(value.directory), { drafts: 1, lines: 2, idempotency: 1, audits: 1 })
+      assert.deepEqual(await counts(value.database.sql), { drafts: 1, lines: 2, idempotency: 1, audits: 1 })
       for (const outcome of outcomes) if (outcome._tag === "Left") assert.ok(outcome.left instanceof PersistenceFailure)
       const replay = await Effect.runPromise(value.service().createDraft(attempt))
       assert.equal(replay.id, [...identifiers][0])
-      assert.deepEqual(counts(value.directory), { drafts: 1, lines: 2, idempotency: 1, audits: 1 })
-    } finally { value.close() }
+      assert.deepEqual(await counts(value.database.sql), { drafts: 1, lines: 2, idempotency: 1, audits: 1 })
+    } finally { await value.close() }
   }
 })
 
 void test("one key, a changed payload: refused as reused, with the stored draft untouched", async () => {
-  const value = fixture("conflict")
+  const value = await fixture("conflict")
   try {
     await configure(value)
     const service = value.service()
@@ -159,13 +159,13 @@ void test("one key, a changed payload: refused as reused, with the stored draft 
     const failure = await failureOf(service.createDraft(idempotent("shared", { ...request, notes: "Alt" })))
     assert.ok(failure instanceof DomainConflict)
     assert.equal(failure.code, "idempotency_key_reused")
-    assert.deepEqual(counts(value.directory), { drafts: 1, lines: 2, idempotency: 1, audits: 1 })
+    assert.deepEqual(await counts(value.database.sql), { drafts: 1, lines: 2, idempotency: 1, audits: 1 })
 
     // Deleting the draft makes the key a dead end rather than a second chance.
     await Effect.runPromise(service.deleteDraft(created.id))
     const deleted = await failureOf(service.createDraft(idempotent("shared", request)))
     assert.ok(deleted instanceof DomainConflict)
     assert.equal(deleted.code, "draft_creation_result_deleted")
-    assert.equal(counts(value.directory).drafts, 0)
-  } finally { value.close() }
+    assert.equal((await counts(value.database.sql)).drafts, 0)
+  } finally { await value.close() }
 })

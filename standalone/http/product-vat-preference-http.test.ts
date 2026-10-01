@@ -1,13 +1,12 @@
 import assert from "node:assert/strict"
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
-import { tmpdir } from "node:os"
+import { writeFileSync } from "node:fs"
 import { join } from "node:path"
 import test from "node:test"
 import { Schema } from "effect"
 
 import { handleApiRequest } from "../api/api.test-support.ts"
 import { createRequestAuthenticator } from "../auth/auth.ts"
-import { applyMigrations } from "../storage/migrations.ts"
+import { migratedFixture } from "../storage/postgres-rig.test-support.ts"
 import * as S from "../api/http-schemas.ts"
 import { vatChangeFromSelection } from "../../web/src/lib/issuer-settings-state.ts"
 import { decodeIssuer, decodeProductPreset, decodeVatCatalogue } from "../../web/src/lib/models.ts"
@@ -27,16 +26,15 @@ const each = { code: "C62", name: "unitate" }
 const book = { description: "Carte", unitPrice: "100", unitOfMeasure: each }
 const reducedLine = { description: "Carte", quantity: "1", unitPrice: "100", unitOfMeasure: each, vatRateCode: "RO_REDUCED" }
 const issueDate = "2026-09-16"
-const fixture = () => {
-  const directory = mkdtempSync(join(tmpdir(), "qwbe-product-vat-http-"))
+const fixture = async (label: string) => {
+  const rig = await migratedFixture(`pvp_${label}`)
   const token = "p".repeat(64)
-  const tokenFile = join(directory, "api-token")
+  const tokenFile = join(rig.dataDirectory, "api-token")
   writeFileSync(tokenFile, token, { mode: 0o600 })
-  applyMigrations(directory)
   const runtime = {
-    dataDirectory: directory, now: () => new Date("2026-09-16T10:00:00.000Z"),
-    authenticate: createRequestAuthenticator({ host: "127.0.0.1", port: 3000, dataDirectory: directory,
-      nodeEnvironment: "test", authTokenFile: tokenFile, organizationId: "org-1" }),
+    pool: rig.pool,
+    dataDirectory: rig.dataDirectory, now: () => new Date("2026-09-16T10:00:00.000Z"),
+    authenticate: createRequestAuthenticator(rig.config({ authTokenFile: tokenFile })),
   }
   const call = (method: string, url: string, body?: unknown, idempotencyKey?: string) => handleApiRequest({
     method, url, authorization: `Bearer ${token}`, body, ...(idempotencyKey === undefined ? {} : { idempotencyKey }),
@@ -51,11 +49,11 @@ const fixture = () => {
   const issue = (line: unknown, key: string) => call("POST", "/api/invoices", {
     customer: buyer, issueDate, dueDate: "2026-10-01", currency: "RON", series: "INV", lines: [line],
   }, key)
-  return { call, lineFromPreset, issue, close: () => { rmSync(directory, { recursive: true, force: true }) } }
+  return { call, lineFromPreset, issue, close: () => rig.close() }
 }
 
 void test("HTTP stores a product's preferred VAT code, clears it on a PUT without it and refuses bad codes", async () => {
-  const value = fixture()
+  const value = await fixture("store")
   try {
     const created = await value.call("POST", "/api/product-presets", { ...book, preferredVatRateCode: "RO_REDUCED" })
     assert.equal(created.status, 200)
@@ -71,11 +69,11 @@ void test("HTTP stores a product's preferred VAT code, clears it on a PUT withou
     const cleared = await value.call("PUT", `/api/product-presets/${preset.id}`, book)
     assert.equal(cleared.status, 200)
     assert.equal(Object.hasOwn(Schema.decodeUnknownSync(S.ProductPreset)(cleared.body), "preferredVatRateCode"), false)
-  } finally { value.close() }
+  } finally { await value.close() }
 })
 
 void test("a reduced-rate product on a registered issuer yields an invoice at the rate in force on the issue date", async () => {
-  const value = fixture()
+  const value = await fixture("resolve")
   try {
     const configured = await value.call("PUT", "/api/issuer", { ...issuer, vatChange: { registered: true, effectiveFrom: "2025-08-01" } })
     assert.equal(configured.status, 200)
@@ -90,13 +88,13 @@ void test("a reduced-rate product on a registered issuer yields an invoice at th
       ({ code, rate, vatBaseAmount, vatAmount, vatCategoryCode })),
     [{ code: "RO_REDUCED", rate: "11.00", vatBaseAmount: "100.00", vatAmount: "11.00", vatCategoryCode: "S" }])
     assert.equal(invoice.totalIncludingVat, "111.00")
-  } finally { value.close() }
+  } finally { await value.close() }
 })
 
 // The server knows nothing of product preferences: a line's code is checked against the
 // issuer on the document date, and an Article 310 issuer cannot charge a taxable rate.
 void test("an Article 310 issuer: the product falls back to the exemption, a reduced code sent directly is refused", async () => {
-  const value = fixture()
+  const value = await fixture("issue")
   try {
     const configured = await value.call("PUT", "/api/issuer", {
       ...issuer, vatChange: vatChangeFromSelection({ registered: false, effectiveFrom: "2025-08-01" }),
@@ -119,5 +117,5 @@ void test("an Article 310 issuer: the product falls back to the exemption, a red
     assert.deepEqual(invoice.lines.map(({ vatCategoryCode, vatRate }) => ({ vatCategoryCode, vatRate })), [{ vatCategoryCode: "O", vatRate: "0.00" }])
     assert.equal(invoice.vatTotal, "0.00")
     assert.equal(invoice.totalIncludingVat, "100.00")
-  } finally { value.close() }
+  } finally { await value.close() }
 })

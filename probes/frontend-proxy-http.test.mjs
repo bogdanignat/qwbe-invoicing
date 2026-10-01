@@ -1,23 +1,24 @@
 import assert from "node:assert/strict"
 import { once } from "node:events"
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
-import { tmpdir } from "node:os"
+import { writeFileSync } from "node:fs"
 import { join } from "node:path"
 import test from "node:test"
 import { URL } from "node:url"
 
 import { handleProxyRequest } from "../frontend/src/lib/server/proxy.ts"
 import { startServer } from "../standalone/http/http.ts"
-import { applyMigrations } from "../standalone/storage/migrations.ts"
+import { withMigrated } from "../standalone/storage/postgres-rig.test-support.ts"
 
 void test("HTTP development preview accepts the backend's non-Secure session cookie", async () => {
-  const directory = mkdtempSync(join(tmpdir(), "qwbe-frontend-http-"))
+  await withMigrated("frontend_http", async (fixture) => {
   const token = "h".repeat(64)
-  const tokenFile = join(directory, "api-token")
+  const tokenFile = join(fixture.dataDirectory, "api-token")
   writeFileSync(tokenFile, token, { mode: 0o600 })
-  applyMigrations(directory)
-  const backend = await startServer({ host: "127.0.0.1", port: 0, dataDirectory: directory,
-    nodeEnvironment: "development", authTokenFile: tokenFile, organizationId: "org-http" }, () => true)
+  const backend = await startServer(
+    fixture.config({ port: 0, nodeEnvironment: "development", authTokenFile: tokenFile, organizationId: "org-http" }),
+    fixture.pool,
+    () => Promise.resolve(true),
+  )
   try {
     if (!backend.server.listening) await once(backend.server, "listening")
     const address = backend.server.address()
@@ -38,6 +39,6 @@ void test("HTTP development preview accepts the backend's non-Secure session coo
     assert.equal((await resumed.json()).authenticated, true)
   } finally {
     await backend.close()
-    rmSync(directory, { recursive: true, force: true })
   }
+  })
 })

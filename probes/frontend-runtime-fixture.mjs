@@ -10,7 +10,7 @@ import { setTimeout } from "node:timers"
 import { fileURLToPath, URL } from "node:url"
 
 import { startServer } from "../standalone/http/http.ts"
-import { applyMigrations } from "../standalone/storage/migrations.ts"
+import { migratedFixture } from "../standalone/storage/postgres-rig.test-support.ts"
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..")
 const standaloneServer = join(repositoryRoot, "frontend/.next/standalone/frontend/server.js")
@@ -126,21 +126,54 @@ export const startFrontend = async (upstreamOrigin, { env = {} } = {}) => {
   return { origin, close: stopChild, logs: () => logs }
 }
 
+/**
+ * The real backend for the standalone-frontend probe, on PostgreSQL.
+ *
+ * Ported with the rest of the suite: the migration runner takes a pool
+ * (`applyMigrations(pool)`), `startServer` takes the pool positionally and
+ * `isReady` is async, so the old `startServer(config, () => true)` call put a
+ * function where the pool belongs — every query would have failed with
+ * `pool.query is not a function` and readiness would have answered 503. The rig
+ * fixture supplies the database, the pool, the migrated schema, DATA_DIR and the
+ * disposal, exactly as the ported proxy tests use it.
+ *
+ * `nodeEnvironment` is `development` for the reason that actually applies here:
+ * this probe speaks plain HTTP end to end, and `browser-session.ts` marks the
+ * session cookie `Secure` in production — a cookie no browser would send back
+ * over `http://127.0.0.1`. The credential is NOT the reason: it comes from the
+ * rig (`riggedPassword`) and never from `runtimeConfig`, so `nodeEnvironment`
+ * does not influence it at all. The production attribute is pinned on the real
+ * HTTP surface in `standalone/http/http-session.test.ts`, and the non-Secure
+ * cookie this fixture does issue is asserted in `frontend-runtime.mjs`. The
+ * token file is still a real 64-character secret on disk, mode 0600, because the
+ * frontend under test logs in through it.
+ */
 export const startBackendFixture = async () => {
-  const directory = mkdtempSync(join(tmpdir(), "qwbe-frontend-runtime-"))
+  const fixture = await migratedFixture("frontend_runtime")
   const token = "r".repeat(64)
-  const tokenFile = join(directory, "api-token")
+  const tokenFile = join(fixture.dataDirectory, "api-token")
   writeFileSync(tokenFile, token, { mode: 0o600 })
-  applyMigrations(directory)
-  const backend = await startServer({ host: "127.0.0.1", port: 0, dataDirectory: directory,
-    nodeEnvironment: "production", authTokenFile: tokenFile, organizationId: "org-runtime" }, () => true)
-  if (!backend.server.listening) await once(backend.server, "listening")
-  const address = backend.server.address()
-  if (address === null || typeof address === "string") throw new Error("backend fixture did not bind a TCP port")
-  return { origin: `http://127.0.0.1:${String(address.port)}`, token, close: async () => {
-    await backend.close()
-    rmSync(directory, { recursive: true, force: true })
-  } }
+  try {
+    const backend = await startServer(
+      fixture.config({ host: "127.0.0.1", port: 0, nodeEnvironment: "development", authTokenFile: tokenFile,
+        organizationId: "org-runtime" }),
+      fixture.pool,
+      () => Promise.resolve(true),
+    )
+    if (!backend.server.listening) await once(backend.server, "listening")
+    const address = backend.server.address()
+    if (address === null || typeof address === "string") throw new Error("backend fixture did not bind a TCP port")
+    return { origin: `http://127.0.0.1:${String(address.port)}`, token, close: async () => {
+      // The server borrows the pool and never ends it; the fixture owns it, and
+      // its `close` also disposes the API, removes DATA_DIR and gives the
+      // database back.
+      await backend.close()
+      await fixture.close()
+    } }
+  } catch (error) {
+    await fixture.close()
+    throw error
+  }
 }
 
 const sessionCookieValue = "a".repeat(43)

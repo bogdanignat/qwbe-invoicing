@@ -1,30 +1,25 @@
 import assert from "node:assert/strict"
-import { mkdtempSync, rmSync } from "node:fs"
-import { tmpdir } from "node:os"
-import { join } from "node:path"
 import test from "node:test"
 
 import { Effect } from "effect"
 
 import { createInvoicingService, invoicingPermissions, type IssuedInvoice } from "../../cube/invoicing/index.ts"
-import { applyMigrations } from "./migrations.ts"
-import { createSqliteStore } from "./sqlite-store.ts"
+import { withMigrated } from "./postgres-rig.test-support.ts"
+import { createPostgresStore } from "./postgres-store.ts"
 
 const permissions = invoicingPermissions("invoicing")
 const each = { code: "C62", name: "unitate" } as const
 let counter = 0
 const idempotent = <Input>(request: Input) => ({ request, idempotency: { key: `page-${String(++counter)}`, fingerprint: `sha256:${"0".repeat(64)}` } })
 
-void test("SQLite registries page with a keyset cursor in issue-date, number and id order", async () => {
-  const directory = mkdtempSync(join(tmpdir(), "qwbe-pagination-"))
-  try {
-    applyMigrations(directory)
+void test("the registries page with a keyset cursor in issue-date, number and id order", async () => {
+  await withMigrated("pagination", async ({ pool }) => {
     let next = 0
     const service = createInvoicingService({
       context: { current: Effect.succeed({ identity: { id: "u", username: "u", roles: ["admin"], permissions: Object.values(permissions) }, organization: { id: "org-1" } }) },
       clock: { now: Effect.succeed(new Date("2026-09-05T10:00:00.000Z")) },
       ids: { next: Effect.sync(() => `id-${String(++next).padStart(3, "0")}`) },
-      store: createSqliteStore(directory),
+      store: createPostgresStore(pool),
       branding: { normalize: () => Effect.die("branding normalization is not expected") },
       cubeIdentity: "invoicing",
     })
@@ -67,7 +62,5 @@ void test("SQLite registries page with a keyset cursor in issue-date, number and
     const rest = await Effect.runPromise(service.listCustomers({ limit: 2, cursor: first.nextCursor ?? "" }))
     assert.deepEqual(rest.items.map((item) => item.name), ["Zeta"])
     assert.equal(rest.nextCursor, null)
-  } finally {
-    rmSync(directory, { recursive: true, force: true })
-  }
+  })
 })

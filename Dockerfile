@@ -34,7 +34,25 @@ COPY bin ./bin
 COPY cube ./cube
 COPY standalone ./standalone
 COPY --from=ui-builder /app/standalone/ui-dist ./standalone/ui-dist
-RUN mkdir -p /data && chown -R node:node /app /data
+# `pg_dump`/`pg_restore` for the ops commands, installed in the runtime stage and
+# BEFORE `USER node`, because apk needs root. Client 16 exactly, matching the
+# server: a newer client writes an archive the older server cannot read back,
+# and the version is asserted at build time rather than trusted.
+#
+# The revision is pinned on purpose, against a live Alpine index: when the branch
+# rotates to a newer -rN this build stops working until the pin is bumped. Read
+# the current revision from the pinned base image itself:
+#   docker run --rm node:24.19.0-alpine@sha256:d32cdf61... \
+#     sh -c "apk add --no-cache --simulate postgresql16-client | tail -1"
+ARG PG_CLIENT_VERSION=16.15-r0
+RUN apk add --no-cache "postgresql16-client=${PG_CLIENT_VERSION}" \
+ && pg_dump --version | grep -q " 16\."
+# `/var/backups/staging` exists in the image and is owned by `node` because a named
+# volume mounted on a path the image does not have is created root-owned, and the
+# process runs unprivileged: `backup` would fail on `mkdtemp` with EACCES. Compose
+# points TMPDIR here so the staging tree lands on disk instead of the bounded tmpfs.
+RUN mkdir -p /data /var/backups/staging \
+ && chown -R node:node /app /data /var/backups/staging
 USER node
 EXPOSE 3000
 VOLUME ["/data"]

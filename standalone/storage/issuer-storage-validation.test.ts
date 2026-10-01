@@ -1,18 +1,21 @@
 import assert from "node:assert/strict"
-import { mkdtempSync, rmSync } from "node:fs"
-import { tmpdir } from "node:os"
-import { join } from "node:path"
-import { DatabaseSync } from "node:sqlite"
 import test from "node:test"
 import { Effect } from "effect"
 import { createInvoicingService, PersistenceFailure, type InvoicingFailure } from "../../cube/invoicing/index.ts"
-import { applyMigrations, databasePath } from "./migrations.ts"
-import { createSqliteStore } from "./sqlite-store.ts"
+import { withMigrated } from "./postgres-rig.test-support.ts"
+import { createPostgresStore } from "./postgres-store.ts"
+
+/**
+ * The reader's own validation, measured on rows the application could never
+ * write. `DROP TRIGGER` plus `PRAGMA ignore_check_constraints=ON` became
+ * `unguard`: PostgreSQL has no switch that suspends a CHECK, so the named
+ * constraints are dropped from this disposable database by name. Runtime
+ * immutability is still asserted first, on the guarded table, before anything is
+ * removed.
+ */
 
 void test("strict issuer reads refuse corrupt or noncanonical profile, invoice, proforma and correction fields", async () => {
-  const directory = mkdtempSync(join(tmpdir(), "issuer-corruption-"))
-  try {
-    applyMigrations(directory)
+  await withMigrated("issuer_corrupt", async ({ pool, sql }) => {
     let sequence = 0
     const service = createInvoicingService({
       context: { current: Effect.succeed({ identity: { id: "test", username: "test", roles: ["admin"], permissions: [
@@ -21,7 +24,7 @@ void test("strict issuer reads refuse corrupt or noncanonical profile, invoice, 
       ids: { next: Effect.sync(() => `id-${String(++sequence)}`) },
       clock: { now: Effect.succeed(new Date("2026-09-01T10:00:00Z")) },
       branding: { normalize: () => Effect.die("No image in this fixture") },
-      store: createSqliteStore(directory), cubeIdentity: "invoicing",
+      store: createPostgresStore(pool), cubeIdentity: "invoicing",
     })
     const profile = { name: "Test SRL", fiscalIdentifier: "12345674",
       address: { countryCode: "RO", city: "Iași", street: "Test 1", county: "RO-IS" },
@@ -47,38 +50,36 @@ void test("strict issuer reads refuse corrupt or noncanonical profile, invoice, 
       { table: "correction_documents", prefix: "issuer_", reads: [() => service.getCorrection(correction.id), () => service.listCorrections(invoice.id)] },
     ]
     for (const { table, prefix, reads } of cases) {
-      const database = new DatabaseSync(databasePath(directory))
-      try {
-        if (prefix !== "") assert.throws(() => { database.exec(`UPDATE ${table} SET ${prefix}bank_name='Changed'`) })
-        // Simulate offline corruption only in this disposable database. Normal
-        // runtime immutability is checked above before removing its triggers.
-        const triggers = database.prepare("SELECT name FROM sqlite_master WHERE type='trigger' AND tbl_name=?").all(table)
-        for (const trigger of triggers) {
-          assert.equal(typeof trigger.name, "string")
-          database.exec(`DROP TRIGGER "${String(trigger.name).replaceAll('"', '""')}"`)
-        }
-        database.exec("PRAGMA ignore_check_constraints=ON")
-        const mutations = [
-          ["legal_form", "SRL"], ["trade_registry_number", "BAD"], ["trade_registry_number", " j40/123/2020 "],
-          ["social_capital", "1.001"], ["social_capital", "200"], ["iban", "RO00INVALID"],
-          ["iban", "ro49aaaa1b31007593840000"], ["bank_name", "Bank\u200bName"], ["bank_name", " Bank "],
-          ...(prefix === "" ? [] : [["trade_registry_number", ""], ["social_capital", ""]]),
-        ]
-        for (const [field, value] of mutations) {
-          try {
-            database.prepare(`UPDATE ${table} SET ${prefix}${String(field)}=?`).run(String(value))
-            for (const read of reads) {
-              const result = await Effect.runPromise(Effect.either(read()))
-              assert.equal(result._tag, "Left", `${table}.${String(field)}=${String(value)}`)
-              assert.ok(result.left instanceof PersistenceFailure)
-            }
-          } finally {
-            const original = ({ legal_form: profile.legalForm, trade_registry_number: profile.tradeRegistryNumber,
-              social_capital: profile.socialCapital, iban: profile.iban, bank_name: profile.bankName } as Record<string, string>)[String(field)]
-            database.prepare(`UPDATE ${table} SET ${prefix}${String(field)}=?`).run(original ?? "")
+      // Still guarded here: the immutability trigger refuses the write, with the
+      // SQLSTATE the shared foundation function raises.
+      if (prefix !== "") {
+        assert.equal((await sql.rejects(`UPDATE ${table} SET ${prefix}bank_name='Changed'`)).code, "23514", table)
+      }
+      const removed = await sql.unguard([table])
+      // `issuers` is a mutable profile and carries no immutability trigger; the
+      // three snapshot tables do, and all four carry named CHECKs.
+      if (prefix !== "") assert.ok(removed.triggers.length > 0, `${table} must have had triggers to remove`)
+      assert.ok(removed.checks.length > 0, `${table} must have had CHECKs to remove`)
+      const mutations = [
+        ["legal_form", "SRL"], ["trade_registry_number", "BAD"], ["trade_registry_number", " j40/123/2020 "],
+        ["social_capital", "1.001"], ["social_capital", "200"], ["iban", "RO00INVALID"],
+        ["iban", "ro49aaaa1b31007593840000"], ["bank_name", "Bank\u200bName"], ["bank_name", " Bank "],
+        ...(prefix === "" ? [] : [["trade_registry_number", ""], ["social_capital", ""]]),
+      ]
+      for (const [field, value] of mutations) {
+        try {
+          await sql.query(`UPDATE ${table} SET ${prefix}${String(field)}=$1`, [String(value)])
+          for (const read of reads) {
+            const result = await Effect.runPromise(Effect.either(read()))
+            assert.equal(result._tag, "Left", `${table}.${String(field)}=${String(value)}`)
+            assert.ok(result.left instanceof PersistenceFailure)
           }
+        } finally {
+          const original = ({ legal_form: profile.legalForm, trade_registry_number: profile.tradeRegistryNumber,
+            social_capital: profile.socialCapital, iban: profile.iban, bank_name: profile.bankName } as Record<string, string>)[String(field)]
+          await sql.query(`UPDATE ${table} SET ${prefix}${String(field)}=$1`, [original ?? ""])
         }
-      } finally { database.close() }
+      }
     }
     const treatmentCases: { table: string; reads: (() => Effect.Effect<unknown, InvoicingFailure>)[] }[] = [
       { table: "issuer_tax_configurations", reads: [() => service.getIssuer()] },
@@ -90,24 +91,18 @@ void test("strict issuer reads refuse corrupt or noncanonical profile, invoice, 
       { table: "correction_tax_breakdown", reads: [() => service.getCorrection(correction.id), () => service.listCorrections(invoice.id)] },
     ]
     for (const { table, reads } of treatmentCases) {
-      const database = new DatabaseSync(databasePath(directory))
-      try {
-        for (const trigger of database.prepare("SELECT name FROM sqlite_master WHERE type='trigger' AND tbl_name=?").all(table)) {
-          database.exec(`DROP TRIGGER "${String(trigger.name).replaceAll('"', '""')}"`)
-        }
-        database.exec("PRAGMA ignore_check_constraints=ON")
-        const category = table.includes("lines") ? "tax_category" : "category"
-        database.prepare(`UPDATE ${table} SET ${category}='E',vat_exemption_reason=NULL`).run()
-        for (const read of reads) {
-          const result = await Effect.runPromise(Effect.either(read()))
-          assert.equal(result._tag, "Left", table)
-          assert.ok(result.left instanceof PersistenceFailure)
-        }
-        database.prepare(`UPDATE ${table} SET ${category}='S',vat_exemption_reason=NULL`).run()
-      } finally { database.close() }
+      assert.ok((await sql.unguard([table])).checks.length > 0, `${table} must have had CHECKs to remove`)
+      const category = table.includes("lines") ? "tax_category" : "category"
+      await sql.exec(`UPDATE ${table} SET ${category}='E',vat_exemption_reason=NULL`)
+      for (const read of reads) {
+        const result = await Effect.runPromise(Effect.either(read()))
+        assert.equal(result._tag, "Left", table)
+        assert.ok(result.left instanceof PersistenceFailure)
+      }
+      await sql.exec(`UPDATE ${table} SET ${category}='S',vat_exemption_reason=NULL`)
     }
     // Incomplete profiles are legitimate, unlike incomplete issued snapshots.
     await Effect.runPromise(service.configureIssuer({ ...profile, tradeRegistryNumber: "", socialCapital: "" }))
     assert.equal((await Effect.runPromise(service.getIssuer())).socialCapital, "")
-  } finally { rmSync(directory, { recursive: true, force: true }) }
+  })
 })

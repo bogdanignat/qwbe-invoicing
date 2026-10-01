@@ -66,8 +66,8 @@ const failureMessages: Readonly<Record<string, string>> = {
   // of a customer an open draft still names is the only one of business origin
   // (cube/invoicing/customers/application/customers.ts:64); the rest come from
   // the store and mean the record moved under the screen
-  // (standalone/storage/sqlite-customers.ts:33,50, sqlite-catalog.ts:30,
-  // sqlite-rows.ts:27).
+  // (standalone/storage/postgres-customers.ts:45,76, postgres-catalog.ts:42,
+  // postgres-errors.ts:63).
   customer_has_open_drafts: "Clientul este folosit de un draft deschis. Șterge sau finalizează draftul, apoi încearcă din nou.",
   customer_not_found: "Clientul nu mai există în registru. Reîncarcă lista de clienți.",
   customer_id_taken: "Clientul nu a putut fi salvat: identificatorul este deja folosit. Reîncarcă lista de clienți și încearcă din nou.",

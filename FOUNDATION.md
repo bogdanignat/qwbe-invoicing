@@ -74,14 +74,17 @@ mother runtime
 └── external invoicing application/sidecar
     ├── host adapters
     ├── invoicing cube
-    └── standalone-owned SQLite data
+    └── standalone-owned PostgreSQL data
 ```
 
 Bogdan confirmed this external application/sidecar direction for future mother
 integration. The mother may establish identity and installation lifecycle, but this
-application continues to own invoicing persistence in SQLite. It does not require a
-Postgres adapter and does not store invoicing records in the mother's Postgres
-schemas. The installation/authentication integration contract is not implemented.
+application continues to own invoicing persistence. Since T-1480 that persistence is
+PostgreSQL 16, in a container this project runs, on a volume this project owns — which
+does not change the direction: the records still do not live in the mother's Postgres
+schemas, no schema-per-cube or NOLOGIN role is adopted, and a shared database topology
+is not required. The installation/authentication integration contract is not
+implemented.
 
 The invoicing cube depends on host-provided contracts. It must not embed a specific
 authentication implementation in business logic.
@@ -241,7 +244,7 @@ Static boundaries must reject:
 
 - cube-to-cube imports;
 - cube imports of kernel store/discovery/state internals;
-- direct `node:sqlite` access from cube code;
+- direct `node:sqlite` and direct PostgreSQL driver (`pg`, `pg-pool`, `pg-native`, `pg-cursor`) access from cube code;
 - direct filesystem/process/module/vm access from cube code;
 - circular dependencies.
 
@@ -265,11 +268,12 @@ Two consequences explain why direct mounted persistence is not the selected
 integration direction:
 
 - the cube role has no `CREATE` on its schema, so a directly mounted cube cannot run its own DDL, not even through the declared `usesBatch` raw-SQL capability introduced by QWB-45. Relational tables with constraints and triggers, which is what the invoicing migrations declare, have no legal creation path in mounted mode today;
-- SQLite is no longer a mother concept at all. The SQLite dialect in the cube's migrations (`STRICT`, `GLOB`, triggers) is a standalone-host choice and must be treated as such, not as inherited design.
+- the dialect in the cube's migrations is a standalone-host choice and must be treated as such, not as inherited design. Since T-1480 that dialect is PostgreSQL 16 (named CHECK constraints, trigger functions, regex predicates in place of `GLOB`, folded expression indexes in place of `NOCASE`); before it, it was SQLite's (`STRICT`, `GLOB`). Neither was ever a mother concept.
 
-This app therefore remains SQLite-backed and externally integrated. A Postgres
-persistence adapter in this repository is not required by the future mother
-integration architecture.
+This app therefore remains externally integrated and owns its own database. Since
+T-1480 it is PostgreSQL 16, owned by the standalone host: the application role owns
+the `public` schema it migrates. That is not the mother's topology and does not move
+it closer to a mounted install — the two consequences above are unchanged.
 
 For the first invoicing slice, likely owned concepts include:
 
@@ -288,7 +292,7 @@ References to global accounts, organizations, contacts, products, or documents s
 
 ### Schema baselines during development
 
-While the project is in development (the "STADIU" section of `CLAUDE.md`), every cube owns exactly one migration, `<cube>-001-baseline`, holding the current definition of the tables its manifest declares, with their indexes and triggers; `standalone/storage/schema-baseline.test.ts` asserts that each baseline creates exactly the declared tables. A schema change edits the owning baseline instead of adding a migration. A database created from an earlier baseline is drift: `migrate` refuses it before writing and `doctor` reports it, and the answer is to recreate the database, which drops its data. The migrator never deletes a database itself. The runner applies the foundation and then each cube's migrations in cube order—customers, catalog, issuer, invoicing, payments in `invoicing.sqlite`—with a cube whose tables others reference first, never sorted by name. Numbered incremental migrations (`<cube>-002-...`) return only when the development stage ends. The immutability triggers are part of the baselines, and `standalone/ops/standalone.test.ts` still asserts that every one of them exists after migration.
+While the project is in development (the "STADIU" section of `CLAUDE.md`), every cube owns exactly one migration, `<cube>-001-baseline`, holding the current definition of the tables its manifest declares, with their indexes and triggers; `standalone/storage/schema-baseline.test.ts` asserts that each baseline creates exactly the declared tables. A schema change edits the owning baseline instead of adding a migration. A database created from an earlier baseline is drift: `migrate` refuses it before writing and `doctor` reports it, and the answer is to recreate the database, which drops its data. The migrator never deletes a database itself. The runner applies the foundation scope once and then each cube's migrations in cube order—customers, catalog, issuer, invoicing, payments, in one PostgreSQL database—with a cube whose tables others reference first, never sorted by name. The foundation scope is the host's: it owns `qwbe_abort()`, the single trigger function every refusal trigger calls, so the cube baselines are no longer self-sufficient SQL (`architecture/contract.json`, decision `functii-de-trigger-in-scope-foundation`). Numbered incremental migrations (`<cube>-002-...`) return only when the development stage ends. The immutability triggers are part of the baselines, and `standalone/ops/standalone.test.ts` still asserts that every one of them exists after migration.
 
 ## 8. Events are not workflows
 
@@ -376,8 +380,8 @@ not production measurements. Overlapping roots are deduplicated and invalid root
 fail the gate. `bin/` and root tooling/config files are outside this extension.
 
 Host adapters follow the existing domain ports rather than arbitrary file slices.
-`sqlite-store.ts` owns transaction lifetime and composes same-connection adapters;
-payments has its own adapter and store. API handlers receive a request-scoped service
+`postgres-store.ts` owns transaction lifetime and composes same-connection adapters
+over one pooled client; payments has its own adapter and store. API handlers receive a request-scoped service
 access function, not database or renderer factories. Service construction remains
 per request. Browser transport/session state has one owner, workflow hooks compose
 pure state and domain clients, and views compose presentation components. Existing
@@ -461,7 +465,7 @@ Sources: QWBE root `package.json`, `core/package.json`, and `core/tsconfig.json`
 
 ## 13. Package and installation constraints
 
-Since QWB-40 the mother publishes one shared checker, `checkPackageSource` from `qwbe-core/package` (documented in `docs/package-contract.md`). It judges a package root holding `qwbe-package.json` with a `cubes` array next to a `cubes/` directory: declared cubes must exist on disk and vice versa, imports must reach the kernel only through `qwbe-core/*`, and cube code may import none of `fs`, `fs/promises`, `child_process`, `worker_threads`, `module`, `vm`, `sqlite`. Optional rule sets: `readOnly` and `hierarchy` (child declares `parent` and a non-empty `dataMigration`, parent declares `screen: true`, each `manifest.name` equals its path leaf). A pack is expected to ship a `source-contract.test` that runs the checker and asserts zero findings, plus a runtime probe that boots the kernel and attacks the installed cube over HTTP.
+Since QWB-40 the mother publishes one shared checker, `checkPackageSource` from `qwbe-core/package` (documented in `docs/package-contract.md`). It judges a package root holding `qwbe-package.json` with a `cubes` array next to a `cubes/` directory: declared cubes must exist on disk and vice versa, imports must reach the kernel only through `qwbe-core/*`, and cube code may import none of `fs`, `fs/promises`, `child_process`, `worker_threads`, `module`, `vm`, `sqlite`. Note the list names `sqlite` and **not** `pg`: the mother's checker would not notice a cube importing the PostgreSQL driver, so `cube-does-not-touch-runtime-infrastructure` in this repository's own gate is the only defence against it. Optional rule sets: `readOnly` and `hierarchy` (child declares `parent` and a non-empty `dataMigration`, parent declares `screen: true`, each `manifest.name` equals its path leaf). A pack is expected to ship a `source-contract.test` that runs the checker and asserts zero findings, plus a runtime probe that boots the kernel and attacks the installed cube over HTTP.
 
 This repository's `cube/invoicing/` is a `kind: "cube"` package with `index.ts` at its root. The installer still accepts that shape (`install.ts` reads `cubes = [name]` and requires the root `index.ts`), but the shared checker cannot run on it because it assumes the `cubes/` layout. The nested `cube/invoicing/documents/qwbe-package.json` is a convention of this repository's own gates only; the mother ignores it and discovers `documents` as the child `invoicing/documents` through the directory. Open decision 7 in section 16 covers whether to reshape into a plugin pack.
 
@@ -523,7 +527,7 @@ qwbe-invoicing/
 │   ├── http/                   server, static UI, SPA route contract, readiness, API docs
 │   ├── auth/                   credentials, browser session, login throttle
 │   ├── api/                    HttpApi contract, schemas, handlers
-│   ├── storage/                SQLite store, row mappers, migration runner
+│   ├── storage/                PostgreSQL pool and store, row mappers, migration runner, schema fingerprint
 │   ├── documents/              PDF renderer, artifact store and recovery, fonts
 │   ├── efactura/               host mapping into the e-Factura cube
 │   ├── ops/                    CLI, backup, restore
@@ -573,10 +577,11 @@ These are not solved by copying the mother prototype:
 1. Exact invoicing MVP and legal jurisdiction.
 2. Organization selection and authorization contract.
 3. Immutable issued-invoice model and numbering guarantees.
-4. Resolved: standalone persistence remains SQLite. Future mother integration is an
-   external app/sidecar for installation and authentication, not a Postgres adapter
-   or storage of invoicing data in the mother's database. The integration protocol
-   remains open and unimplemented.
+4. Resolved: standalone persistence is this application's own database — PostgreSQL 16
+   since T-1480, SQLite before it. Future mother integration is an external
+   app/sidecar for installation and authentication, not storage of invoicing data in
+   the mother's database; the engine being the same product on both sides does not
+   make it the same database. The integration protocol remains open and unimplemented.
 5. Durable e-invoice submission workflow.
 6. API-only operation versus the selected React + Effect UI adapter.
 7. Distribution shape: one `kind: "cube"` package (current, installer-accepted, outside the shared checker) or a plugin pack with `cubes: ["invoicing", "invoicing/documents"]` that the `qwbe-core/package` checker and its `hierarchy` rule can judge.
@@ -607,7 +612,7 @@ Reviewed on 2 September 2026 after the mother's `main` moved from `987e11b` to `
 | Shared package contract checker, `qwbe-core/package`, `docs/package-contract.md` | QWB-40 | Not run: the `kind: "cube"` shape is outside the checker's `cubes/` layout. Own gates cover manifest shape, size, tests, boundaries, but not the `imports-internal` and `cube-builtins` rules the mother enforces. |
 | Per-cube field metadata, `version` drift gate, `fields`, `relations`, `searchable` | QWB-41 | Not applicable yet: the cube declares no `entity` and no HTTP handlers. Declare `version` once the cube serves an entity. |
 | External frontend auth: `QWBE_ALLOWED_ORIGINS`, CORS allowlist, httpOnly cookie through a proxy, 7-day token | QWB-42 | Aligned in spirit: the standalone host already keeps the token out of the browser behind an HttpOnly `SameSite=Strict` cookie. Session length differs (30 days here, 7 in the mother); not a contract. |
-| One Postgres, one schema per cube, NOLOGIN role per cube, kernel outbox, SQLite removed | QWB-43, QWB-44 | Intentionally separate: standalone persists in SQLite with relational tables and triggers. Confirmed future mother integration is an external app/sidecar for installation/authentication, not direct persistence in mother Postgres; the integration is not implemented. |
+| One Postgres, one schema per cube, NOLOGIN role per cube, kernel outbox, SQLite removed | QWB-43, QWB-44 | Intentionally separate: since T-1480 standalone persists in its own PostgreSQL 16 database, one `public` schema owned by the application role, with relational tables and triggers. The schema-per-cube layout and the NOLOGIN role per cube are deliberately **not** adopted. Confirmed future mother integration is an external app/sidecar for installation/authentication, not direct persistence in mother Postgres; the integration is not implemented. |
 | `usesBatch` raw-SQL capability (declared, outbox-exempt) | QWB-45 | Not usable as an escape: the role has no `CREATE`, so DDL is refused. |
 | Custom field values under the reserved `custom` key of a row body | QWB-46 | No impact on relational tables. `custom` becomes a reserved column name if the cube ever moves to the six-operation store. |
 | Installer strips a pack's top-level `frontend/`, `dist/`, `build/` | QWB-48 | No impact: the UI lives in `web/` and `standalone/ui-dist`, outside the package. Future external-app integration remains unimplemented. |

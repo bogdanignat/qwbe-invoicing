@@ -1,30 +1,24 @@
 import assert from "node:assert/strict"
-import { mkdtempSync, rmSync } from "node:fs"
-import { tmpdir } from "node:os"
-import { join } from "node:path"
-import { DatabaseSync } from "node:sqlite"
 import test from "node:test"
 
 import { Effect } from "effect"
 
 import { createInvoicingService, invoicingPermissions } from "../../cube/invoicing/index.ts"
-import { applyMigrations, databasePath } from "./migrations.ts"
-import { createSqliteStore } from "./sqlite-store.ts"
+import { withMigrated } from "./postgres-rig.test-support.ts"
+import { createPostgresStore } from "./postgres-store.ts"
 
 const each = { code: "C62", name: "unitate" } as const
 let key = 0
 const idem = <T>(request: T) => ({ request, idempotency: { key: `register-${String(++key)}`, fingerprint: `sha256:${"0".repeat(64)}` } })
 
 void test("mixed invoice register keyset pagination is stable for size 1/2, ties, source and organization", async () => {
-  const directory = mkdtempSync(join(tmpdir(), "qwbe-register-page-"))
-  try {
-    applyMigrations(directory)
+  await withMigrated("register_page", async ({ pool, sql }) => {
     const permissions = invoicingPermissions("invoicing")
     let id = 0
     const serviceFor = (organizationId: string) => createInvoicingService({
       context: { current: Effect.succeed({ identity: { id: "u", username: "u", roles: ["admin"], permissions: Object.values(permissions) }, organization: { id: organizationId } }) },
       clock: { now: Effect.succeed(new Date("2026-09-05T10:00:00.000Z")) }, ids: { next: Effect.sync(() => `id-${String(++id).padStart(3, "0")}`) },
-      store: createSqliteStore(directory), branding: { normalize: () => Effect.die("not expected") }, cubeIdentity: "invoicing",
+      store: createPostgresStore(pool), branding: { normalize: () => Effect.die("not expected") }, cubeIdentity: "invoicing",
     })
     const service = serviceFor("org-1")
     await Effect.runPromise(service.configureIssuer({ name: "Exemplu SRL", fiscalIdentifier: "12345674",
@@ -42,18 +36,32 @@ void test("mixed invoice register keyset pagination is stable for size 1/2, ties
     const correction = await Effect.runPromise(service.createCorrection(idem({ originalInvoiceId: second.id,
       reason: "Storno", issueDate: "2026-09-05", source: { app: "crm", kind: "order", id: "shared" } })))
     const third = await issue("2026-09-05", "shared")
-    const database = new DatabaseSync(databasePath(directory))
-    const columns = (database.prepare("PRAGMA table_info(correction_documents)").all() as unknown as ReadonlyArray<{ name: string }>).map(({ name }) => name)
+    // Two corrections no issuance path can produce: one sharing an id with an
+    // invoice (the register has to key on kind as well as id) and one belonging to
+    // another organization. The clone is an `INSERT ... SELECT` over the real
+    // column list, with the foreign-key and immutability triggers suspended —
+    // PostgreSQL enforces references unconditionally, where SQLite's
+    // `foreign_keys` pragma defaulted off and let the same insert through.
+    const columns = (await sql.query<{ readonly column_name: string }>(
+      `SELECT column_name FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'correction_documents' AND is_generated = 'NEVER'
+       ORDER BY ordinal_position`,
+    )).map(({ column_name }) => column_name)
     const cloneCorrection = (newId: string, organizationId: string, originalInvoiceId: string, number: number, issueDate: string) => {
       const replacements: Readonly<Record<string, string | number>> = { id: newId, organization_id: organizationId, original_invoice_id: originalInvoiceId, number, issue_date: issueDate }
-      const selected = columns.map((column) => Object.hasOwn(replacements, column) ? "?" : column).join(",")
-      const values = columns.filter((column) => Object.hasOwn(replacements, column)).map((column) => replacements[column] as string | number)
-      database.prepare(`INSERT INTO correction_documents (${columns.join(",")}) SELECT ${selected} FROM correction_documents WHERE id=?`)
-        .run(...values, correction.id)
+      const values: Array<string | number> = []
+      const selected = columns.map((column) => {
+        if (!Object.hasOwn(replacements, column)) return column
+        values.push(replacements[column] as string | number)
+        return `$${String(values.length)}`
+      }).join(",")
+      values.push(correction.id)
+      const statement = `INSERT INTO correction_documents (${columns.join(",")})`
+        + ` SELECT ${selected} FROM correction_documents WHERE id = $${String(values.length)}`
+      return sql.withoutTriggers((scoped) => scoped.query(statement, values))
     }
-    cloneCorrection(third.id, "org-1", second.id, third.number, third.issueDate)
-    cloneCorrection("cross-org-correction", "org-2", first.id, 99, "2026-09-05")
-    database.close()
+    await cloneCorrection(third.id, "org-1", second.id, third.number, third.issueDate)
+    await cloneCorrection("cross-org-correction", "org-2", first.id, 99, "2026-09-05")
     const expected = [`correction:${third.id}`, `invoice:${third.id}`, `correction:${correction.id}`, `invoice:${second.id}`, `invoice:${first.id}`]
     for (const limit of [1, 2]) {
       const seen: Array<string> = []
@@ -72,5 +80,5 @@ void test("mixed invoice register keyset pagination is stable for size 1/2, ties
     const tieCursor = Buffer.from(JSON.stringify({ issueDate: "2026-09-05", number: correction.number,
       id: correction.id, kind: "correction" })).toString("base64url")
     await assert.doesNotReject(Effect.runPromise(service.listInvoiceRegister(undefined, { limit: 2, cursor: tieCursor })))
-  } finally { rmSync(directory, { recursive: true, force: true }) }
+  })
 })

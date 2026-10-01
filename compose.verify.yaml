@@ -1,0 +1,139 @@
+# Verification harness only. It publishes no port, touches no application volume
+# and never runs the shipped image: it binds the working tree and runs the pinned
+# Node/pnpm pair so lint, typecheck, tests, gates and probes need no host runtime.
+# Entry point: scripts/verify-docker.sh (it exports HOST_UID/HOST_GID).
+#
+# `pnpm verify` runs `pnpm test`, and the suite is backed by PostgreSQL now, so the
+# harness owns a throwaway PostgreSQL 16 cluster of its own. It is the same service
+# definition `compose.test.yaml` carries — each rig in this repository owns its own
+# `db`, exactly as the five `compose.pg-*.yaml` rigs do, because a shared cluster
+# would couple two projects' lifetimes. Use `compose.test.yaml` for the fast
+# test-only loop; this file exists so the whole gate runs in one command.
+name: qwbe-invoicing-verify
+
+x-verify-image: &verify-image
+  image: qwbe-invoicing-verify:${VERIFY_IMAGE_TAG:-local}
+  build:
+    context: .
+    dockerfile: Dockerfile.verify
+    args:
+      HOST_UID: ${HOST_UID:?run through scripts/verify-docker.sh}
+      HOST_GID: ${HOST_GID:?run through scripts/verify-docker.sh}
+
+x-verify-volumes: &verify-volumes
+  - .:/app
+  - verify-node-modules:/app/node_modules
+  - verify-frontend-node-modules:/app/frontend/node_modules
+  - verify-pnpm-store:/pnpm-store
+  - verify-home:/home/verifier
+  - verify-secrets:/run/qwbe-verify
+
+services:
+  # The suite's cluster. Nothing here ships and nothing here persists: tmpfs, no
+  # published port, no application volume, no `-v` on `down`.
+  #
+  # `scram-sha-256` and not `trust`: `standalone/config.ts` reads the password from
+  # PGPASSWORD_FILE and the backup services hand a real credential to `pg_dump`, so
+  # a trusting cluster would let both paths pass while broken. The literal below is
+  # a rig fixture, is never read by the shipped stack and reaches no network — the
+  # cluster is unpublished.
+  db:
+    image: postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
+    environment:
+      POSTGRES_DB: verify
+      POSTGRES_USER: verify
+      POSTGRES_PASSWORD: rig-only-verify-password
+      POSTGRES_HOST_AUTH_METHOD: scram-sha-256
+      # The target cluster's locale: every database the rig creates is made with
+      # TEMPLATE template0 LC_COLLATE 'C' LC_CTYPE 'C' ENCODING 'UTF8'.
+      POSTGRES_INITDB_ARGS: --locale=C --encoding=UTF8 --auth-host=scram-sha-256
+      PGDATA: /var/lib/postgresql/data/pgdata
+    # Four test files in flight, each with an application pool of 4, a raw-SQL pool
+    # of 2, a maintenance connection (`max: 1`, held for the life of a runtime) and
+    # a short-lived creation connection: 8 per file, ~32 at the peak, plus the
+    # `pg_dump`/`psql` children of the ops suites. 64 leaves room for the
+    # session-lock cases without raising the budget to a number nothing explains.
+    command: ["postgres", "-c", "max_connections=64"]
+    tmpfs:
+      # 6g, the same budget as `compose.test.yaml`, because the same suite runs
+      # here: one database per test file plus one per case that has to see an empty
+      # cluster — about ninety from `template0` at ~7.5 MiB each, most of them
+      # carrying the migrated schema. A fixture reclaims its own database on
+      # `close` (`postgres-rig.test-support.ts`), so the cluster does not grow
+      # across runs, but `freshRuntime`/`emptyRuntime` databases live until the
+      # container dies and a crashed run leaves its own behind. 3g was measured
+      # too small: a full `pnpm test` filled it and the server answered
+      # `could not write init file` for the rest of the run.
+      - /var/lib/postgresql/data:size=6g,uid=70,gid=70
+      - /tmp
+      - /run/postgresql:uid=70,gid=70
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U verify -d verify"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 5s
+    restart: "no"
+
+  # A fresh named volume is created root-owned; the verifier runs as the host user,
+  # so ownership is handed over once, before anything else runs. Idempotent.
+  #
+  # It also writes the rig password where the suite reads it. The file, and not an
+  # environment variable, because that is how the shipped runtime reads it: the
+  # legacy CLI tests spawn `bin/qwbe-invoicing.ts` and it only ever looks at
+  # PGPASSWORD_FILE. Mode 0600 and the host UID, so the unprivileged verifier can
+  # read it and nothing else in the container can.
+  verify-init:
+    <<: *verify-image
+    user: "0:0"
+    environment:
+      QWBE_RIG_PGPASSWORD: rig-only-verify-password
+    command:
+      - |
+        set -eu
+        chown ${HOST_UID}:${HOST_GID} /app/node_modules /app/frontend/node_modules /pnpm-store /pnpm-store/store /home/verifier /run/qwbe-verify
+        umask 077
+        printf '%s' "$${QWBE_RIG_PGPASSWORD}" > /run/qwbe-verify/pgpassword
+        chown ${HOST_UID}:${HOST_GID} /run/qwbe-verify/pgpassword
+        chmod 600 /run/qwbe-verify/pgpassword
+    volumes: *verify-volumes
+    restart: "no"
+
+  verify:
+    <<: *verify-image
+    user: "${HOST_UID}:${HOST_GID}"
+    environment:
+      # NODE_ENV is deliberately not set: `next build` needs the production
+      # default, and every caller that cares (CLI guards, tests) sets it itself.
+      # Scratch only: tmpfs below, nothing in it survives the container.
+      DATA_DIR: /tmp/qwbe-verify-data
+      TMPDIR: /tmp
+      PGHOST: db
+      PGPORT: "5432"
+      # The cluster's own database. The suite never uses it for data: it is where
+      # `CREATE DATABASE` is issued from, serialised by a session advisory lock.
+      PGDATABASE: verify
+      PGUSER: verify
+      PGPASSWORD_FILE: /run/qwbe-verify/pgpassword
+      # `standalone/ops/postgres-backup.test.ts` builds the subprocess credential
+      # from PGPASSWORD. It is set for that suite only and never reaches a child of
+      # the CLI: the fixture's `childEnv` strips it, so the ported CLI tests prove
+      # the shipped path works from the secret file alone.
+      PGPASSWORD: rig-only-verify-password
+    depends_on:
+      verify-init:
+        condition: service_completed_successfully
+      db:
+        condition: service_healthy
+    volumes: *verify-volumes
+    tmpfs:
+      - /tmp:size=2g,mode=1777,uid=${HOST_UID},gid=${HOST_GID}
+    init: true
+    restart: "no"
+
+volumes:
+  verify-node-modules: {}
+  verify-frontend-node-modules: {}
+  verify-pnpm-store: {}
+  verify-home: {}
+  verify-secrets: {}

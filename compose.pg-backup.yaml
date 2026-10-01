@@ -1,0 +1,102 @@
+# The backup/restore suite, on a throwaway PostgreSQL 16 cluster.
+#
+# A fifth rig, added rather than folded into the four that exist: the verifier
+# (compose.verify.yaml), the driver probe, the schema gate and the adapter rig are
+# untouched. This one is the only place `pg_dump` and `psql` meet a real server.
+#
+# Nothing here ships and nothing here persists: the cluster lives on tmpfs, no
+# port is published, no application volume is referenced and the project name is
+# its own.
+#
+# Authentication is scram-sha-256 with a password that exists only inside this
+# rig, deliberately and unlike the adapter rig's `trust`: the dump and the restore
+# are subprocesses that must be handed a real credential through the child's own
+# environment, and `trust` would let that path pass while broken. The literal below
+# is a test fixture, is never read by the shipped stack — which uses
+# POSTGRES_PASSWORD_FILE — and reaches no network: the cluster is unpublished.
+#
+# Run:  docker compose --file compose.pg-backup.yaml run --rm backup
+# Down: docker compose --file compose.pg-backup.yaml down   (no volume, no -v)
+name: qwbe-invoicing-pg-backup
+
+services:
+  db:
+    image: postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
+    environment:
+      POSTGRES_DB: backup
+      POSTGRES_USER: backup
+      POSTGRES_PASSWORD: rig-only-backup-password
+      POSTGRES_HOST_AUTH_METHOD: scram-sha-256
+      POSTGRES_INITDB_ARGS: --locale=C --encoding=UTF8 --auth-host=scram-sha-256
+      PGDATA: /var/lib/postgresql/data/pgdata
+    # One database per case plus the pools of four; raised above the default 100
+    # only by what this suite opens.
+    command: ["postgres", "-c", "max_connections=64"]
+    tmpfs:
+      # 1g for the same reason as the adapter rig: `run --rm` leaves `db` running,
+      # so repeated runs accumulate one database per case in the same cluster.
+      # Bring the rig `down` between sessions and it starts empty again.
+      - /var/lib/postgresql/data:size=1g,uid=70,gid=70
+      - /tmp
+      - /run/postgresql:uid=70,gid=70
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U backup -d backup"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 5s
+    restart: "no"
+
+  backup:
+    # The image the application is built from, so the tools run on the real base
+    # layer. The client package is installed at start because the shipped
+    # Dockerfile is the integration step's to change, not this one's.
+    image: node:24.19.0-alpine@sha256:d32cdf619f63fe0471182d08996dd516c6275bb5fd31ae06e55a570bd9e1ad43
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGHOST: db
+      PGPORT: "5432"
+      PGDATABASE: backup
+      PGUSER: backup
+      PGPASSWORD: rig-only-backup-password
+      POSTGRESQL_CLIENT_PACKAGE: postgresql16-client=16.15-r0
+      # The staging tree of every operation lives here, and it is a tmpfs.
+      TMPDIR: /tmp
+    volumes:
+      - ./cube:/app/cube:ro
+      - ./standalone:/app/standalone:ro
+      - ./package.json:/app/package.json:ro
+      - ./tsconfig.json:/app/tsconfig.json:ro
+      - verify-node-modules:/app/node_modules:ro
+    tmpfs:
+      - /tmp:size=512m
+    working_dir: /app
+    # apk's own exit status is read, so a rotated index or a missing network stops
+    # the run with 3 instead of falling through to a 127 from a missing pg_dump.
+    # The major is then asserted from the tool itself: Alpine 3.24 also carries
+    # postgresql17-client and postgresql18-client.
+    command:
+      - sh
+      - -c
+      - |
+        set -eu
+        if ! apk add --no-cache "$${POSTGRESQL_CLIENT_PACKAGE}" >/tmp/apk.log 2>&1; then
+          tail -5 /tmp/apk.log
+          echo "STOP: installing $${POSTGRESQL_CLIENT_PACKAGE} failed"
+          exit 3
+        fi
+        pg_dump --version
+        psql --version
+        exec node --test \
+          standalone/ops/postgres-backup-archive.test.ts \
+          standalone/ops/postgres-backup.test.ts
+    init: true
+    restart: "no"
+
+volumes:
+  # Produced by the `qwbe-invoicing-verify` compose project; read-only here.
+  verify-node-modules:
+    external: true
+    name: qwbe-invoicing-verify_verify-node-modules

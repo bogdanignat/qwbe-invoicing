@@ -1,6 +1,5 @@
 import assert from "node:assert/strict"
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
-import { tmpdir } from "node:os"
+import { writeFileSync } from "node:fs"
 import { join } from "node:path"
 import test from "node:test"
 
@@ -8,22 +7,20 @@ import { Effect } from "effect"
 
 import { invoicingPermissions } from "../../cube/invoicing/index.ts"
 import { createRequestAuthenticator } from "../auth/auth.ts"
-import { applyMigrations } from "../storage/migrations.ts"
+import { withMigrated } from "../storage/postgres-rig.test-support.ts"
 import { handleApiRequest } from "./api.test-support.ts"
 
 const each = { code: "C62", name: "unitate" } as const
 
 void test("invoice register exposes invoices and corrections without changing /api/invoices", async () => {
-  const directory = mkdtempSync(join(tmpdir(), "qwbe-register-api-"))
-  const token = "r".repeat(64)
-  const tokenFile = join(directory, "api-token")
-  writeFileSync(tokenFile, token, { mode: 0o600 })
-  try {
-    applyMigrations(directory)
+  await withMigrated("register_api", async (fixture) => {
+    const token = "r".repeat(64)
+    const tokenFile = join(fixture.dataDirectory, "api-token")
+    writeFileSync(tokenFile, token, { mode: 0o600 })
     const makeRuntime = (organizationId: string) => ({
-      authenticate: createRequestAuthenticator({ host: "127.0.0.1", port: 3000, dataDirectory: directory,
-        nodeEnvironment: "test", authTokenFile: tokenFile, organizationId }),
-      dataDirectory: directory, now: () => new Date("2026-09-05T10:00:00.000Z"),
+      authenticate: createRequestAuthenticator(fixture.config({ authTokenFile: tokenFile, organizationId })),
+      pool: fixture.pool,
+      dataDirectory: fixture.dataDirectory, now: () => new Date("2026-09-05T10:00:00.000Z"),
     })
     const runtime = makeRuntime("org-1")
     const authorization = `Bearer ${token}`
@@ -86,5 +83,5 @@ void test("invoice register exposes invoices and corrections without changing /a
       permissions: Object.values(perms).filter((permission) => permission !== perms.read) }, organization: { id: "org-1" } }) }) }
     assert.equal((await call("GET", "/api/invoice-register", undefined, undefined, deniedRuntime)).status, 403)
     for (const method of ["POST", "PUT", "DELETE"]) assert.equal((await call(method, "/api/invoice-register", {})).status, 405)
-  } finally { rmSync(directory, { recursive: true, force: true }) }
+  })
 })

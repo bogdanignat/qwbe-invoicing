@@ -12,8 +12,8 @@
       "id": "cube",
       "folder": "cube",
       "contains": "cuburile-aplicatii livrabile: cube/invoicing (cu 8 cuburi copil), cube/payments, cube/efactura; fiecare cu qwbe-package.json, index.ts, domain/, application/, contracts/",
-      "canImport": "propriul interior, kernelul unui stramos din acelasi arbore, index.ts-ul exact al oricarei alte unitati din arbore, pachete npm",
-      "forbidden": "standalone/, probes/, frontend/, node:sqlite, node:fs, node:child_process, node:worker_threads, node:module, node:vm, node:process, alt arbore de cub",
+      "canImport": "propriul interior, kernelul unui stramos din acelasi arbore, index.ts-ul exact al oricarei alte unitati din arbore, pachete npm in afara driverului PostgreSQL (pg, pg-pool, pg-native, pg-cursor)",
+      "forbidden": "standalone/, probes/, frontend/, node:sqlite, node:fs, node:child_process, node:worker_threads, node:module, node:vm, node:process, pg, pg-pool, pg-native, pg-cursor, alt arbore de cub",
       "rules": [
         "cube-does-not-import-host-or-tooling",
         "cube-does-not-touch-runtime-infrastructure",
@@ -211,8 +211,8 @@
     {
       "id": "cube-does-not-touch-runtime-infrastructure",
       "severity": "error",
-      "description": "Codul din cube/ nu atinge infrastructura de runtime: sqlite, fs, fs/promises, child_process, worker_threads, module, vm, process (cu sau fara prefixul node:)",
-      "fixHint": "Accesul la stocare sau la proces se muta in standalone/storage sau standalone/ops, in spatele portului pe care cubul il declara; cubul primeste doar store-ul propriu."
+      "description": "Codul din cube/ nu atinge infrastructura de runtime: fs, fs/promises, child_process, worker_threads, module, vm, process (cu sau fara prefixul node:), node:sqlite si driverul PostgreSQL (pg, pg-pool, pg-native, pg-cursor). Aceeasi regula, patru alternative in to.path: specifier gol nerezolvat, node_modules/<pachet>, forma .pnpm store (dependency-cruiser urmareste symlink-urile si nu are optiune symlinks la 18.0.0).",
+      "fixHint": "Accesul la stocare sau la proces se muta in standalone/storage sau standalone/ops, in spatele portului pe care cubul il declara; cubul primeste doar store-ul propriu, niciodata un Pool sau un PoolClient."
     },
     {
       "id": "standalone-uses-only-public-cube-surface",
@@ -393,7 +393,7 @@
     {
       "id": "gate-e-izolare-de-lint",
       "title": "Gate-ul de granite e izolare de lint, nu sandbox",
-      "text": "Decis (deja in vigoare): granitele statice resping importuri cub-la-cub, acces la interne de kernel, node:sqlite si fs/process/module/vm direct din cub, si cicluri. Documentul spune explicit ca aceasta e izolare de lint, nu sandbox de securitate; izolarea la nivel de proces ramane o decizie viitoare separata. Sursa: FOUNDATION.md sectiunea 6.",
+      "text": "Decis (deja in vigoare): granitele statice resping importuri cub-la-cub, acces la interne de kernel, node:sqlite, driverul PostgreSQL (pg, pg-pool, pg-native, pg-cursor) si fs/process/module/vm direct din cub, si cicluri. Driverul e adaugat la regula existenta cube-does-not-touch-runtime-infrastructure, nu ca a 26-a regula: e acelasi interdict, pentru acelasi motiv, iar numarul de reguli ramane 25. checkPackageSource al mamei (FOUNDATION.md sectiunea 13) interzice sqlite dar nu pg, deci gate-ul local e singura aparare. Documentul spune explicit ca aceasta e izolare de lint, nu sandbox de securitate; izolarea la nivel de proces ramane o decizie viitoare separata. Sursa: FOUNDATION.md sectiunea 6.",
       "status": "decided",
       "decidedAt": null
     },
@@ -452,6 +452,13 @@
       "text": "Decis: analizorul native-boundaries emite signals.structure, signals.bigComponents si signals.logicInComponents mereu goale, pentru ca toate semnalele din architecture-report.v1 sunt euristici React/Next (marime de componenta, hooks, fetch in componente) si acest analizor nu presupune nimic despre framework. Absenta semnalelor nu e o dovada ca UI-ul respecta regulile React ale repository-ului; componentele mari sau logica din componente, daca exista, se vad din gate:size si din review, nu din acest raport. Sursa: personal-hub scripts/architecture-report/analyzers/native/summarize.mjs (EMPTY_SIGNALS) si architecture-report --help, sectiunea native-boundaries: coverage.",
       "status": "decided",
       "decidedAt": null
+    },
+    {
+      "id": "functii-de-trigger-in-scope-foundation",
+      "title": "Baseline-urile de cub nu mai sunt SQL auto-suficient: scope-ul foundation e al gazdei",
+      "text": "Decis (T-1480): pe PostgreSQL un trigger are nevoie de o functie, deci refuzul pe care SQLite il scria inline (SELECT RAISE(ABORT, '...')) devine qwbe_abort(), o singura functie partajata cu mesajul trecut ca TG_ARGV[0] si ERRCODE 23514. Ea e declarata in scope-ul foundation (000-foundation, un singur rand de ledger) si e detinuta de standalone/storage/postgres-foundation.ts, nu de un cub: 54 de copii ar fi 54 de locuri in care codul de eroare poate sa derive. Foundation se aplica o data, inaintea tuturor scope-urilor de cub. Consecinta, consemnata pentru ca e un cuplaj real: baseline-urile de cub nu mai sunt SQL auto-suficient, depind de o functie pe care gazda o detine. Cele 6 functii cu predicat in corp (qwbe_proforma_conversions_require_lineage, qwbe_proforma_invoice_conversions_match, qwbe_invoice_drafts_series_insert, qwbe_issued_invoices_lineage_insert, qwbe_proforma_lines_no_late_insert, qwbe_proforma_tax_no_late_insert) raman ale cubului invoicing, in contracts/migrations.json, pentru ca predicatul lor e domeniu, nu infrastructura. Nici un strat si nici o regula nu se adauga: 14 straturi, 25 de reguli.",
+      "status": "decided",
+      "decidedAt": "2026-10-01T00:00:00.000Z"
     }
   ]
 }

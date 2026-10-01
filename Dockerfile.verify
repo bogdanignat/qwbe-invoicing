@@ -1,0 +1,51 @@
+# syntax=docker/dockerfile:1.7@sha256:a57df69d0ea827fb7266491f2813635de6f17269be881f696fbfdf2d83dda33e
+#
+# Verification harness image. It never ships: it exists so `pnpm verify`, the CLI
+# and every probe run on the pinned Node/pnpm pair without a runtime on the host.
+# The repository is bind-mounted at /app by compose.verify.yaml; dependencies,
+# the pnpm store and HOME live in named volumes so a glibc host tree is never
+# shared with this musl container.
+ARG NODE_VERSION=24.19.0
+ARG NODE_IMAGE_DIGEST=sha256:d32cdf619f63fe0471182d08996dd516c6275bb5fd31ae06e55a570bd9e1ad43
+
+FROM node:${NODE_VERSION}-alpine@${NODE_IMAGE_DIGEST}
+
+ARG PNPM_VERSION=11.22.0
+# The host user owns every path the container writes to, so build output under the
+# bind mount (standalone/ui-dist, frontend/.next, *.tsbuildinfo) stays host-owned.
+ARG HOST_UID=1000
+ARG HOST_GID=1000
+
+ENV HOME=/home/verifier \
+    COREPACK_HOME=/opt/corepack \
+    COREPACK_ENABLE_DOWNLOAD_PROMPT=0 \
+    PNPM_CONFIG_STORE_DIR=/pnpm-store/store \
+    PNPM_CONFIG_UPDATE_NOTIFIER=false \
+    CI=true
+
+# The TLS cases of probes/frontend-runtime.mjs shell out to `openssl` for
+# throwaway certificates; the Node base image ships libssl but not the CLI.
+#
+# The exact revision is pinned on purpose, and it is pinned against a live
+# Alpine index: when branch 3.24 rotates to a newer -rN this build stops
+# working until the pin is bumped. That is deliberate — a silent upgrade is
+# worse than a loud failure. Bump it by reading the current revision from the
+# pinned base image itself and updating the line below, nothing else:
+#   docker run --rm node:24.19.0-alpine@sha256:d32cdf61... #     sh -c "apk add --no-cache --simulate openssl | tail -1"
+# `pnpm test` now includes standalone/ops/postgres-backup.test.ts, which drives the
+# real `pg_dump` and `psql`. The major is pinned, not merely the branch: Alpine 3.24
+# also carries postgresql17-client and postgresql18-client, and a 17 client against a
+# 16 server is a different artifact. Bump exactly as OPENSSL_VERSION above:
+#   docker run --rm node:24.19.0-alpine@sha256:d32cdf61... \
+#     sh -c "apk add --no-cache --simulate postgresql16-client | tail -1"
+ARG OPENSSL_VERSION=3.5.9-r0
+ARG POSTGRESQL_CLIENT_VERSION=16.15-r0
+RUN apk add --no-cache "openssl=${OPENSSL_VERSION}" "postgresql16-client=${POSTGRESQL_CLIENT_VERSION}" \
+ && corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate \
+ && mkdir -p "${HOME}" "${COREPACK_HOME}" /pnpm-store/store /app/node_modules /app/frontend/node_modules \
+ && chown -R ${HOST_UID}:${HOST_GID} "${HOME}" "${COREPACK_HOME}" /pnpm-store /app
+
+WORKDIR /app
+# Commands arrive as a single shell string from compose.verify.yaml / verify-docker.sh.
+ENTRYPOINT ["/bin/sh", "-c"]
+CMD ["pnpm verify"]

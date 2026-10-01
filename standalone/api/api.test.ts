@@ -1,6 +1,5 @@
 import assert from "node:assert/strict"
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
-import { tmpdir } from "node:os"
+import { writeFileSync } from "node:fs"
 import { join } from "node:path"
 import test from "node:test"
 
@@ -10,7 +9,7 @@ import sharp from "sharp"
 import { invoicingPermissions } from "../../cube/invoicing/index.ts"
 import { handleApiRequest } from "./api.test-support.ts"
 import { createRequestAuthenticator } from "../auth/auth.ts"
-import { applyMigrations } from "../storage/migrations.ts"
+import { withEmpty, withMigrated } from "../storage/postgres-rig.test-support.ts"
 
 const summaryOf = (document: unknown): unknown => {
   const value = document as { readonly issuer: Readonly<Record<string, unknown>> }
@@ -22,22 +21,14 @@ import { proformaTemplateVersion } from "../documents/pdf-renderer.ts"
 const each = { code: "C62", name: "unitate" } as const
 
 void test("requires host authentication and serves the complete invoice-core route sequence", async () => {
-  const directory = mkdtempSync(join(tmpdir(), "qwbe-api-"))
-  const token = "a".repeat(64)
-  const tokenFile = join(directory, "api-token")
-  writeFileSync(tokenFile, token, { mode: 0o600 })
-  try {
-    applyMigrations(directory)
+  await withMigrated("api_routes", async (fixture) => {
+    const token = "a".repeat(64)
+    const tokenFile = join(fixture.dataDirectory, "api-token")
+    writeFileSync(tokenFile, token, { mode: 0o600 })
     const runtime = {
-      authenticate: createRequestAuthenticator({
-        host: "127.0.0.1",
-        port: 3000,
-        dataDirectory: directory,
-        nodeEnvironment: "test",
-        authTokenFile: tokenFile,
-        organizationId: "org-1",
-      }),
-      dataDirectory: directory,
+      authenticate: createRequestAuthenticator(fixture.config({ authTokenFile: tokenFile })),
+      pool: fixture.pool,
+      dataDirectory: fixture.dataDirectory,
       // The route sequence writes literal September 2026 dates; pin "today" so chronology,
       // future-date and correction rules judge them the same way on every run.
       now: () => new Date("2026-09-05T10:00:00.000Z"),
@@ -486,10 +477,8 @@ void test("requires host authentication and serves the complete invoice-core rou
         issueDate: "2026-09-05", proformaSeries: "PRO" } }, runtime)
     assert.equal(draftBranchProforma.status, 200)
     const draftBranchProformaId = (draftBranchProforma.body as { id: string }).id
-    const otherOrganizationRuntime = { ...runtime, authenticate: createRequestAuthenticator({
-      host: "127.0.0.1", port: 3000, dataDirectory: directory, nodeEnvironment: "test", authTokenFile: tokenFile,
-      organizationId: "org-2",
-    }) }
+    const otherOrganizationRuntime = { ...runtime, authenticate: createRequestAuthenticator(
+      fixture.config({ authTokenFile: tokenFile, organizationId: "org-2" })) }
     assert.equal((await handleApiRequest({ method: "GET", url: `/api/proformas/${draftBranchProformaId}`,
       authorization, body: undefined }, otherOrganizationRuntime)).status, 404)
     assert.equal((await handleApiRequest({ method: "POST", url: `/api/proformas/${draftBranchProformaId}/draft-invoice`,
@@ -609,31 +598,25 @@ void test("requires host authentication and serves the complete invoice-core rou
     assert.equal(pdf.headers?.["content-type"], "application/pdf")
     assert.equal(pdf.headers["x-content-type-options"], "nosniff")
     assert.equal(Buffer.from((pdf.body as Uint8Array).subarray(0, 5)).toString("ascii"), "%PDF-")
-  } finally {
-    rmSync(directory, { recursive: true, force: true })
-  }
+  })
 })
 
+// Authentication answers before anything reads a body, so this one runs on a
+// fixture with no schema at all: a request that reached the database would fail
+// differently than 401.
 void test("authenticates before parsing protected request bodies", async () => {
-  const directory = mkdtempSync(join(tmpdir(), "qwbe-api-shape-"))
-  try {
-    applyMigrations(directory)
+  await withEmpty("api_shape", async (fixture) => {
+    const runtime = {
+      authenticate: createRequestAuthenticator(fixture.config({ authTokenFile: undefined })),
+      pool: fixture.pool,
+      dataDirectory: fixture.dataDirectory,
+    }
     const response = await handleApiRequest({
       method: "POST",
       url: "/api/customers",
       authorization: undefined,
       body: [],
-    }, {
-      authenticate: createRequestAuthenticator({
-        host: "127.0.0.1",
-        port: 3000,
-        dataDirectory: directory,
-        nodeEnvironment: "test",
-        authTokenFile: undefined,
-        organizationId: "org-1",
-      }),
-      dataDirectory: directory,
-    })
+    }, runtime)
     assert.equal(response.status, 401)
     for (const [method, url, body] of [
       ["POST", "/api/drafts/draft-1/proformas", { series: "PRO" }],
@@ -643,30 +626,20 @@ void test("authenticates before parsing protected request bodies", async () => {
       ["POST", "/api/proformas/proforma-1/pdf", {}],
       ["GET", "/api/proformas/proforma-1/pdf", undefined],
     ] as const) {
-      assert.equal((await handleApiRequest({ method, url, authorization: undefined, body }, {
-        authenticate: createRequestAuthenticator({ host: "127.0.0.1", port: 3000, dataDirectory: directory,
-          nodeEnvironment: "test", authTokenFile: undefined, organizationId: "org-1" }),
-        dataDirectory: directory,
-      })).status, 401)
+      assert.equal((await handleApiRequest({ method, url, authorization: undefined, body }, runtime)).status, 401)
     }
-  } finally {
-    rmSync(directory, { recursive: true, force: true })
-  }
+  })
 })
 
 void test("carries document remarks through the HTTP contract and rejects invalid ones", async () => {
-  const directory = mkdtempSync(join(tmpdir(), "qwbe-api-notes-"))
-  const token = "b".repeat(64)
-  const tokenFile = join(directory, "api-token")
-  writeFileSync(tokenFile, token, { mode: 0o600 })
-  try {
-    applyMigrations(directory)
+  await withMigrated("api_notes", async (fixture) => {
+    const token = "b".repeat(64)
+    const tokenFile = join(fixture.dataDirectory, "api-token")
+    writeFileSync(tokenFile, token, { mode: 0o600 })
     const runtime = {
-      authenticate: createRequestAuthenticator({
-        host: "127.0.0.1", port: 3000, dataDirectory: directory, nodeEnvironment: "test",
-        authTokenFile: tokenFile, organizationId: "org-1",
-      }),
-      dataDirectory: directory,
+      authenticate: createRequestAuthenticator(fixture.config({ authTokenFile: tokenFile })),
+      pool: fixture.pool,
+      dataDirectory: fixture.dataDirectory,
       now: () => new Date("2026-09-05T10:00:00.000Z"),
     }
     const authorization = `Bearer ${token}`
@@ -726,7 +699,5 @@ void test("carries document remarks through the HTTP contract and rejects invali
     const converted = await call("POST", `/api/proformas/${proformaId}/invoice`, { invoiceSeries: "QWBE" }, "notes-conversion")
     assert.equal(converted.status, 200)
     assert.equal(notesOf(converted), remarks)
-  } finally {
-    rmSync(directory, { recursive: true, force: true })
-  }
+  })
 })

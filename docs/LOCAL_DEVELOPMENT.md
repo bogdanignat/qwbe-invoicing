@@ -12,18 +12,36 @@ the external `warden` Docker network; it does not publish an application port.
 pnpm local:setup             # dry-run
 pnpm local:setup --apply     # starts Warden services and signs invoice.test once
 mkdir -p .local && chmod 700 .local
-openssl rand -hex 32 > .local/api-token && chmod 600 .local/api-token
+umask 077
+openssl rand -hex 32 > .local/api-token
+openssl rand -hex 32 > .local/pg-password        # the operator creates it; see below
+chmod 600 .local/api-token .local/pg-password
 docker compose build
 docker compose up -d
 docker compose ps
 curl --fail --cacert ~/.warden/ssl/rootca/certs/ca.cert.pem https://invoice.test/health/ready
 ```
 
-`migrate` runs once before `app` and initializes `/data/invoicing.sqlite` plus the
-child documents cube database `/data/documents.sqlite`. SQLite is a standalone-host
-choice: the QWBE mother has run one Postgres database with one schema per cube since
-QWB-44, so nothing here describes mounted operation (see `FOUNDATION.md` section 18). Repeated `docker compose up -d`
-is safe: both migration plans are idempotent and do not consume invoice numbers
+Both secrets are files the operator creates. Nothing in this repository holds a
+credential, no default password exists, and the PostgreSQL password is never passed
+as `PGPASSWORD`: the server reads it through `POSTGRES_PASSWORD_FILE` and the
+application through `PGPASSWORD_FILE`, so it reaches neither a child process nor
+`docker inspect`. Outside `development` a missing or empty password file is a refusal
+to start, not a fallback. `.env.example` lists the paths and the volume names.
+
+Persistence is a PostgreSQL 16 cluster in the `db` service — a container like
+everything else here, pinned by digest, on its own named volume, with the cluster
+initialised `--locale=C --encoding=UTF8` because the schema's indexes and keyset
+cursors are written against binary text ordering. Its port is not published; only the
+application network reaches it. PostgreSQL here is a standalone-host choice and the
+mother's Postgres is a different database: `FOUNDATION.md` section 18 explains why
+this still does not describe mounted operation.
+
+Boot order is enforced by Compose, not by documentation: `db` healthy → `migrate`
+completes successfully → `app` starts. `app` never migrates: it takes the maintenance
+barrier SHARED and answers `503` on `/health/ready` and on every `/api` route until
+the barrier, the schema and the artifact directory all agree. Repeated
+`docker compose up -d` is safe: migration is idempotent and does not consume invoice
 or proforma numbers or create business records. While the project is in development each
 cube owns one baseline migration; a database created from an older baseline is refused
 as drift and has to be recreated (README, "Schema during development"). The API reads its standalone bearer
@@ -31,7 +49,7 @@ credential from the Compose secret; the secret is never stored in the image or
 printed by the application. `ORGANIZATION_ID` selects the trusted organization for
 this initial single-organization host adapter.
 
-The standalone UI is available at `https://invoice.test/app` (also served from `/`). It is a React 19 + TypeScript application styled with Tailwind CSS 4 and built with Vite. Browser API calls, cancellation, concurrent invoice-detail loading and typed failures are Effect programs; TanStack Query bridges Effect programs into React server state. On unlock, the host exchanges the local bearer token for a revocable, opaque 30-day session persisted in `sessions.sqlite` and referenced by an HttpOnly `SameSite=Strict` cookie (`Secure` for HTTPS origins and in production). The token is never written to browser JavaScript, storage, or the URL. State-changing requests carry a per-session CSRF token held only in Effect memory; the UI restores it from the cookie-backed session after a reload or host restart.
+The standalone UI is available at `https://invoice.test/app` (also served from `/`). It is a React 19 + TypeScript application styled with Tailwind CSS 4 and built with Vite. Browser API calls, cancellation, concurrent invoice-detail loading and typed failures are Effect programs; TanStack Query bridges Effect programs into React server state. On unlock, the host exchanges the local bearer token for a revocable, opaque 30-day session persisted in the `browser_sessions` table and referenced by an HttpOnly `SameSite=Strict` cookie (`Secure` for HTTPS origins and in production). The token is never written to browser JavaScript, storage, or the URL. State-changing requests carry a per-session CSRF token held only in Effect memory; the UI restores it from the cookie-backed session after a reload or host restart.
 
 After unlocking the UI, open `https://invoice.test/api` for the authenticated Swagger page. Its OpenAPI 3.1 document is generated from the same Effect `HttpApi` contract served by `HttpApiBuilder`; it is not a separately maintained endpoint list. The page stays behind the browser session so the full contract is not exposed anonymously.
 
@@ -85,8 +103,9 @@ docker compose down
 ```
 
 Until the first real release, local development data is disposable and may be reset
-deliberately. `docker compose down -v` still must not be used as an accidental or
-routine stop command because `-v` deletes the SQLite volume.
+deliberately. The `-v` form of `down` still must not be used as an accidental or
+routine stop command: it deletes the PostgreSQL cluster volume, the artifact volume
+and the backup staging volume in one go.
 
 ## Laptop hosts and certificate trust
 
@@ -131,31 +150,98 @@ SHA-256 below `/data/artifacts`; reads verify key, digest, and byte length. The 
 DejaVu Sans font supports Romanian glyphs and its distribution license is stored next
 to the font in `standalone/documents/assets/fonts/`.
 
-`doctor` now reports `pendingMigrations`, `migrationsReady`, `organizationId`, `authTokenFile`/`authTokenReadable` and `nodeVersion` in addition to `writable`/`databaseReady`; it exits non-zero while any check fails so it can gate deployments. Liveness remains `GET /health/live` (process up); readiness is `GET /health/ready` (storage writable + migrations current, evaluated lock-free and cached for 5 seconds) and drives the Dockerfile `HEALTHCHECK` and Compose readiness.
+`doctor` reports `database` (host, port, database, user — never the password),
+`databaseReady`, `pendingMigrations`, `migrationsReady`, `schemaDrift`,
+`organizationId`, `authTokenFile`/`authTokenReadable`, `nodeVersion` and `writable`;
+it exits non-zero while any check fails so it can gate deployments. Liveness remains
+`GET /health/live` (process up, answered without touching the database, so it stays
+200 under saturation); readiness is `GET /health/ready` (maintenance barrier held,
+artifact directory writable, and the live schema matching the recorded migration
+history), single-flight and cached for 5 seconds, and drives the Dockerfile
+`HEALTHCHECK` and Compose readiness.
+
+`migrate --apply` takes the maintenance barrier EXCLUSIVE with a bounded try, so
+running it while `app` is up is refused at once instead of hanging. The dry run
+(`migrate --json`, no `--apply`) never takes the barrier and is safe at any time:
+
+```text
+the maintenance barrier is held by another session after 10 attempts (3000ms):
+the application is running, stop it before migrating
+```
+
+Stop the application first (`docker compose stop app`), migrate, then start it again.
 
 ## Backup and restore
 
-SQLite and artifacts are the durable state. The existing backup file set includes
-`invoicing.sqlite`, `documents.sqlite`, and artifact files, so proforma records,
-conversion metadata, proforma artifact metadata, and proforma PDFs are included
-without a new backup format. Operator-provided configuration (`ORGANIZATION_ID`,
-`AUTH_TOKEN_FILE`), image digests and externally stored recovery secrets are **not**
-baked into the backup; include them separately in your runbook.
+The PostgreSQL database and the artifact tree are the durable state. An archive holds
+`manifest.json`, `database.sql` (a plain `pg_dump` of the whole database) and
+`artifacts/sha256/<2 hex>/<64 hex>.pdf` — nothing else is a member — so invoices,
+proformas, conversion metadata, artifact metadata and the PDFs travel together.
+`browser_sessions` is dumped without its rows (`--exclude-table-data`): the table
+definition stays, so the restored schema does not drift, but no live session is
+carried over. Operator-provided configuration (`ORGANIZATION_ID`, `AUTH_TOKEN_FILE`,
+the two secret files), image digests and externally stored recovery secrets are
+**not** in the backup; include them separately in your runbook.
+
+Staging is a volume, not RAM: `TMPDIR` is `/var/backups/staging` inside the container
+and `/tmp` is a bounded tmpfs, because the archive bounds allow a 1 GiB expanded tree.
+
+Both commands require the application to be stopped. They take the same maintenance
+key EXCLUSIVE that `app` holds SHARED for the life of its process, as a *try*: a
+refusal is immediate, because a maintenance command that blocks behind a healthy
+application looks like a hang.
 
 ```bash
+docker compose stop app
+
 # Create a versioned archive (or directory) with manifest + SHA-256 verification
-docker compose exec app node bin/qwbe-invoicing.ts backup --output /data/backup-2026-08-31.tar.gz --json
+docker compose run --rm app node bin/qwbe-invoicing.ts backup --output /data/backup-2026-08-31.tar.gz --json
 docker compose run --rm -v $(pwd)/.local/backup:/backup app node bin/qwbe-invoicing.ts backup --output /backup/qwbe-backup.tar.gz --json
 
-# Dry-run restore — verifies manifest and lists files without writing
-docker compose exec app node bin/qwbe-invoicing.ts restore --input /data/backup-2026-08-31.tar.gz --json
+# Dry-run restore — validates the whole archive and reports the target, writing nothing
+docker compose run --rm app node bin/qwbe-invoicing.ts restore --input /data/backup-2026-08-31.tar.gz --json
 
-# Apply restore — idempotent, verifies SHA-256 before each write; outside development also requires --confirm-production
-docker compose exec app node bin/qwbe-invoicing.ts restore --input /data/backup-2026-08-31.tar.gz --apply --json
-docker compose exec app node bin/qwbe-invoicing.ts restore --input /backup/qwbe-backup.tar.gz --apply --confirm-production --json
+# Apply restore — only into a fresh, empty database and an empty artifact tree;
+# outside development it also requires --confirm-production
+docker compose run --rm app node bin/qwbe-invoicing.ts restore --input /data/backup-2026-08-31.tar.gz --apply --json
+
+docker compose start app
 ```
 
-`backup` is read-only and idempotent; repeated runs with the same `--output` overwrite atomically. `restore --apply` is idempotent — re-applying the same archive re-verifies each file via SHA-256 and is safe to retry after partial failure. In production, stop the `app` container before restore (restore refuses to overwrite a database another connection is writing) and run `doctor --json` + `migrate --json` after restore to confirm readiness. Each file is written under a temporary name and renamed into place, so a failed restore leaves the previous file intact. Databases run in write-ahead logging mode (`journal_mode=WAL`, set by `migrate`), so readers are not blocked by a writer; `backup` snapshots with `VACUUM INTO`, and the `migrate` step that runs before `app` puts a restored file back into WAL mode. Never use `docker compose down -v` as a backup strategy; it deletes the named volume.
+With `app` still running, both refuse and do nothing:
+
+```text
+backup requires the application to be stopped: the maintenance lock is held
+(2 application backends connected). Nothing was read or written.
+```
+
+`backup` is read-only with respect to the database and refuses a destination that
+already exists, so a ten-minute dump cannot half-overwrite an older backup. It
+cross-checks the archive against the database — every `invoice_artifacts` /
+`proforma_artifacts` row must have its PDF present with the digest the row claims —
+and re-reads and fsyncs the finished archive before reporting success.
+
+`restore --apply` is **not** idempotent and is not a resume: it only ever writes into
+an empty database and an empty artifact tree, and a populated target is a refusal with
+an instruction, never a deletion.
+
+```text
+restore requires an empty database; this one already holds objects (relations=27
+routines=7). Create a fresh database and restore into that; nothing is dropped here.
+```
+
+Artifacts are copied first and the SQL goes in last as one
+`psql --single-transaction` transaction, so the commit is the only point after which
+rows can reference PDFs. A failure before it leaves an empty database.
+
+`database.sql` is **executed** as the application's own database role, and the
+archive's checksums live inside the archive: they prove integrity, never authenticity.
+`restore --apply` therefore prints the trust boundary on stderr before it writes —
+`--json` consumers keep a clean stdout — and the rule is to restore only from a source
+trusted as much as the database itself. There is no signature and no key management.
+
+Afterwards run `doctor --json` and `migrate --json` to confirm readiness. Never treat
+`down` with `-v` as a backup strategy; it deletes the named volumes.
 
 ## Delivery (PDF download)
 
