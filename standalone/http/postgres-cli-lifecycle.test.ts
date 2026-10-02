@@ -1,6 +1,6 @@
 import assert from "node:assert/strict"
 import { spawn, type ChildProcessByStdio } from "node:child_process"
-import { createServer, type Server } from "node:net"
+import { connect, createServer, type Server, type Socket } from "node:net"
 import type { Readable } from "node:stream"
 import test from "node:test"
 
@@ -22,6 +22,10 @@ import { migratedFixture, type TestFixture } from "../storage/postgres-rig.test-
  *    200, `/health/ready` is 503, and SIGTERM ends it within a bound.
  * 3. On a reachable database, where the barrier really is held, SIGTERM exits
  *    **0** and gives the barrier back.
+ * 4. A request that never finishes its body does not hold the shutdown hostage:
+ *    the drain is escalated, the sockets are cut, and the sequence still ends
+ *    the query pool and releases the barrier itself, well before the deadline
+ *    that would abandon the process.
  *
  * The exit code is pinned exactly in every case, never `0 || 1`: the whole point
  * of `runShutdown` is that the status distinguishes a finished shutdown from an
@@ -230,6 +234,56 @@ void test("serve on a reachable database holds the barrier, answers ready 200, a
     assert.doesNotMatch(child.output(), /shutdown \w+:/u, "no step may report a failure on a clean shutdown")
     assert.equal(await barrierLocked(fixture), false, "the barrier must be free after shutdown")
   } finally {
+    await stopChild(child)
+    await fixture.close()
+  }
+})
+
+void test("serve cuts a request that never finishes its body and still shuts down before the deadline", async () => {
+  const fixture = await migratedFixture("cli_sigterm_escalate")
+  const port = await freePort()
+  const child = spawnServe(fixture, { PORT: String(port), NODE_ENV: "development" })
+  let socket: Socket | undefined
+  try {
+    const base = `http://127.0.0.1:${String(port)}`
+    assert.equal(await statusWithin(`${base}/health/live`, bootMillis), 200)
+    // Ready first: without it the forwarder answers 503 before reading the body
+    // and the drain has nothing to wait for. The socket is opened only now, on a
+    // port that is known to listen.
+    assert.equal(await readyWithin(`${base}/health/ready`, bootMillis), 200, child.output())
+    socket = connect(port, "127.0.0.1")
+    // The server cuts this socket on purpose; the reset must not fail the test.
+    socket.on("error", () => {})
+    const opened = socket
+    const socketClosed = new Promise<void>((resolve) => { opened.once("close", () => { resolve() }) })
+    await new Promise<void>((resolve) => { opened.once("connect", () => { resolve() }) })
+    // The body is read before authentication, so no credential is needed to
+    // leave a request waiting on it: 1000 bytes announced, one sent.
+    socket.write([
+      "POST /api/invoices HTTP/1.1",
+      "Host: 127.0.0.1",
+      "Content-Type: application/json",
+      "Content-Length: 1000",
+      "",
+      "{",
+    ].join("\r\n"))
+    await sleep(500)
+    const started = Date.now()
+    child.process.kill("SIGTERM")
+    const { code } = await exitWithin(child, exitMillis)
+    const elapsed = Date.now() - started
+    // 1: a drain that had to be forced is a failed drain, as on the reject path.
+    assert.equal(code, 1, `expected exit 1, got ${String(code)}: ${child.output()}`)
+    assert.match(child.output(), /shutdown drain: still draining after 5000ms/u)
+    // No other step failed, so the barrier was released by the sequence itself and
+    // not freed by the process dying (a failed `endQueries` abandons at once).
+    assert.doesNotMatch(child.output(), /shutdown (queries|barrier|pools|destroy):/u)
+    // The deadline abandons at 10 s; the escalation must finish before it.
+    assert.ok(elapsed < 9_500, `shutdown took ${String(elapsed)}ms: ${child.output()}`)
+    await socketClosed
+    assert.equal(await barrierLocked(fixture), false, "the barrier must be free after shutdown")
+  } finally {
+    socket?.destroy()
     await stopChild(child)
     await fixture.close()
   }

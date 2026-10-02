@@ -297,13 +297,24 @@ the drain rejected, and its deadline only called `closeAllConnections()` — the
 maintenance pool keeps a client checked out with `idleTimeoutMillis: 0`, so the
 loop never drains and the container waited for Docker's SIGKILL (137). The sequence
 moved to `standalone/http/shutdown.ts` (`runShutdown`), which keeps the order
-(drain → barrier → pools), destroys the remaining sockets when the drain is *not*
-safe before giving up the barrier, attempts every step even after a failure,
+(drain → queries → barrier → pools), destroys the remaining sockets when the drain
+rejects or is still running at `escalateMs` before giving up the barrier, attempts every step even after a failure,
 answers 1 if anything failed, and calls `abandon` — `process.exit(1)` in
 production, from an `unref`'d timer — at the deadline. It is a parameter per step,
 so `standalone/http/shutdown.test.ts` drives a rejecting drain, a rejecting
 release, a rejecting pool close and a drain that never settles without an
 environment variable or a test-only branch in production code.
+
+T-1510 closed the gap the final review found: a drain that *hangs* (a client that
+never finishes its body) was never escalated and sat idle until the 10 s deadline
+abandoned the process. `runShutdown` now takes `escalateMs` (5 s in production):
+a drain still running then has its sockets destroyed once, `server.close`
+resolves, and the sequence carries on — `endQueries` still waits for the writes
+behind the cut sockets before the barrier goes — answering 1. The real CLI case is
+`postgres-cli-lifecycle.test.ts` ("serve cuts a request that never finishes its
+body"): red before the fix (~10 s, abandon path), green after (~6.5 s, no step
+but the drain reports a failure, so the barrier is released by the sequence). `compose.preview.yaml` got `stop_grace_period: 15s` like
+the other compose files, so Docker's default 10 s no longer races the deadline.
 
 **The anti-leak assertion is no longer vacuous under the gate.**
 `standalone/http/postgres-cli-lifecycle.test.ts:142-156` read the secret off

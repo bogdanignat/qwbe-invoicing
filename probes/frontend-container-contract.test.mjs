@@ -49,6 +49,9 @@ test("preview is opt-in and isolates backend storage and credentials", () => {
     )
   }
   assert.equal((compose.match(/profiles: \[preview\]/gu) ?? []).length, services.length)
+  // Docker's default 10 s would race the application's own 10 s shutdown
+  // deadline; the other compose files give it the same margin.
+  assert.match(serviceBlock(compose, "backend-fixture"), /stop_grace_period: 15s/u)
   // The new database is a preview fixture, not a shared one: its own volume, its
   // own synthetic secret, no published port.
   const db = serviceBlock(compose, "db")

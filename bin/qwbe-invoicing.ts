@@ -5,6 +5,7 @@ import { documentsPermissions } from "../cube/invoicing/documents/index.ts"
 import { reconcileArtifacts } from "../standalone/documents/artifact-reconciliation.ts"
 import { createStandaloneArtifactService } from "../standalone/documents/artifact-runtime.ts"
 import { executeBackup, executeRestore, planRestore, restoreTrustWarning } from "../standalone/ops/postgres-backup.ts"
+import { assertDataDirectory } from "../standalone/ops/postgres-backup-destinations.ts"
 import { CliInputError, helpText, parseCommand, type Command } from "../standalone/ops/cli.ts"
 import { doctorReport } from "../standalone/ops/cli-doctor.ts"
 import { runtimeConfig } from "../standalone/config.ts"
@@ -136,6 +137,9 @@ if (command !== undefined) {
           closePools: () => runtime.close(),
           report: (step, error) => { console.error(`shutdown ${step}: ${failureMessage(redact, error)}`) },
           abandon: () => { process.exit(1) },
+          // A request still running at 5 s has its socket cut; the write behind
+          // it is still awaited by `endQueries` before the barrier goes.
+          escalateMs: 5_000,
           deadlineMs: 10_000,
         }).then((code) => { process.exitCode = code })
       }
@@ -188,6 +192,10 @@ if (command !== undefined) {
         console.error("artifacts --apply outside development requires --confirm-production")
         process.exitCode = 2
       } else {
+        // The same guard as backup/restore: a missing or misspelled DATA_DIR is
+        // refused, never created — otherwise `--apply` would render the PDFs onto
+        // whatever filesystem that path happens to land on.
+        await assertDataDirectory(config.dataDirectory)
         const runtime = createQueryRuntime(settings)
         try {
           const service = createStandaloneArtifactService(config.dataDirectory, runtime.pool, Effect.succeed({

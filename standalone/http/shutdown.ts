@@ -27,15 +27,23 @@
  *    instead. A released barrier cannot be taken back; a barrier held by a dead
  *    process is released by the server with the session.
  * 3. A failed step is reported and kept in the exit code: 1 if anything failed,
- *    0 only when every step finished.
+ *    0 only when every step finished. A drain that had to be forced counts as
+ *    failed even when `server.close` resolved afterwards.
+ *
+ * A drain that never settles (a client that never finishes its body, a slow
+ * response) is escalated at `escalateMs`: the sockets are destroyed, which lets
+ * `server.close` resolve, and the sequence carries on to `endQueries`, which
+ * still waits for the writes behind those sockets. Without it such a drain sat
+ * idle until the deadline abandoned the process.
  */
 export interface ShutdownSteps {
   /** Drains the listener and disposes the API handler. */
   readonly drain: () => Promise<void>
   /**
-   * Destroys whatever is still connected. Only ever after a drain that failed,
-   * and only to stop the socket: it does not end the work behind it, so it is
-   * best effort and never the reason the barrier may go.
+   * Destroys whatever is still connected. Only ever after a drain that failed or
+   * did not finish within `escalateMs`, at most once, and only to stop the
+   * socket: it does not end the work behind it, so it is best effort and never
+   * the reason the barrier may go.
    */
   readonly destroyConnections: () => void
   /**
@@ -58,6 +66,8 @@ export interface ShutdownSteps {
    * reporting a status.
    */
   readonly abandon: () => void
+  /** When a drain still running is forced. Must be below `deadlineMs`. */
+  readonly escalateMs: number
   readonly deadlineMs: number
 }
 
@@ -67,25 +77,39 @@ export const runShutdown = async (steps: ShutdownSteps): Promise<number> => {
   // Unref'd: a loop that empties while the release is still pending exits on its
   // own instead of waiting out the deadline.
   deadline.unref()
-  let failed = false
+  // An object, not a `let`: every write is inside a callback, which control-flow
+  // analysis does not follow, so a plain boolean reads as always `false`.
+  const outcome = { failed: false }
   const attempt = async (name: string, step: () => Promise<void>): Promise<boolean> => {
     try {
       await step()
       return true
     } catch (error) {
-      failed = true
+      outcome.failed = true
       steps.report(name, error)
       return false
     }
   }
-  if (!await attempt("drain", steps.drain)) {
+  let destroyed = false
+  const destroy = () => {
+    if (destroyed) return
+    destroyed = true
     try {
       steps.destroyConnections()
     } catch (error) {
-      failed = true
+      outcome.failed = true
       steps.report("destroy", error)
     }
   }
+  const escalation = setTimeout(() => {
+    outcome.failed = true
+    steps.report("drain", new Error(`still draining after ${String(steps.escalateMs)}ms, destroying connections`))
+    destroy()
+  }, steps.escalateMs)
+  escalation.unref()
+  const drained = await attempt("drain", steps.drain)
+  clearTimeout(escalation)
+  if (!drained) destroy()
   if (!await attempt("queries", steps.endQueries)) {
     // Fail closed. The barrier stays held and dies with the process, which is
     // the only outcome that cannot let `migrate`/`backup`/`restore` start next
@@ -98,5 +122,5 @@ export const runShutdown = async (steps: ShutdownSteps): Promise<number> => {
   await attempt("barrier", steps.releaseBarrier)
   await attempt("pools", steps.closePools)
   clearTimeout(deadline)
-  return failed ? 1 : 0
+  return outcome.failed ? 1 : 0
 }

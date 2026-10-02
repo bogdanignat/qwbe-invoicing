@@ -49,6 +49,7 @@ const steps = (overrides: Overrides = {}): ShutdownSteps & Recorder => {
     closePools: () => { order.push("pools"); return Promise.resolve() },
     report: (step) => { failures.push(step) },
     abandon: () => { abandoned += 1 },
+    escalateMs: 5_000,
     deadlineMs: 10_000,
     ...(typeof overrides === "function" ? overrides(order) : overrides),
   }
@@ -114,6 +115,7 @@ void test("a drain that never settles is abandoned at the deadline, with the bar
     // The hang itself: a socket that never closes. The promise is left pending
     // on purpose — that is the state the deadline exists for.
     drain: () => new Promise<void>(() => {}),
+    escalateMs: 10,
     deadlineMs: 50,
     abandon: () => { abandoned?.() },
   })
@@ -121,8 +123,10 @@ void test("a drain that never settles is abandoned at the deadline, with the bar
   await reached
   // The process ends here in production (`process.exit(1)`); the sequence itself
   // is still waiting on the drain, so the barrier was never released on a
-  // half-drained server — the session lock dies with the process instead.
-  assert.deepEqual(recorded.order, [])
+  // half-drained server — the session lock dies with the process instead. The
+  // escalation did run first: destroying the sockets was tried, once.
+  assert.deepEqual(recorded.order, ["destroy"])
+  assert.deepEqual(recorded.failures, ["drain"])
   // And the sequence is still pending rather than having resolved a status.
   const outcome = await Promise.race([running, Promise.resolve("pending")])
   assert.equal(outcome, "pending")
@@ -136,6 +140,7 @@ void test("a query pool that never ends is abandoned at the deadline, with the b
     // back, so `pool.end()` never resolves. It is the one hang that must not
     // turn into a release.
     endQueries: () => { order.push("queries"); return new Promise<void>(() => {}) },
+    escalateMs: 10,
     deadlineMs: 50,
     abandon: () => { abandoned?.() },
   }))
@@ -145,4 +150,45 @@ void test("a query pool that never ends is abandoned at the deadline, with the b
   assert.deepEqual(recorded.failures, [])
   const outcome = await Promise.race([running, Promise.resolve("pending")])
   assert.equal(outcome, "pending")
+})
+
+void test("a drain still running at escalateMs has its sockets destroyed once, then the sequence finishes and answers 1", async () => {
+  const recorded = steps((order) => {
+    let finish: (() => void) | undefined
+    return {
+      // The production shape: `server.close` waits on an active socket and
+      // resolves only once `closeAllConnections` has cut it.
+      drain: () => new Promise<void>((resolve) => { finish = resolve }),
+      destroyConnections: () => { order.push("destroy"); finish?.() },
+      escalateMs: 10,
+    }
+  })
+  assert.equal(await runShutdown(recorded), 1)
+  // The release still waits for `queries`: cutting a socket never earns it.
+  assert.deepEqual(recorded.order, ["destroy", "queries", "barrier", "pools"])
+  assert.deepEqual(recorded.failures, ["drain"])
+  assert.equal(recorded.abandoned(), 0)
+})
+
+void test("a drain that finishes before escalateMs is never escalated", async () => {
+  const recorded = steps({ escalateMs: 20 })
+  assert.equal(await runShutdown(recorded), 0)
+  await new Promise((resolve) => { setTimeout(resolve, 40) })
+  assert.deepEqual(recorded.order, ["drain", "queries", "barrier", "pools"])
+  assert.deepEqual(recorded.failures, [])
+})
+
+void test("a drain that rejects after the escalation destroys the sockets only once", async () => {
+  const recorded = steps((order) => {
+    let fail: ((error: Error) => void) | undefined
+    return {
+      drain: () => new Promise<void>((_resolve, reject) => { fail = reject }),
+      destroyConnections: () => { order.push("destroy"); fail?.(new Error("server.close failed")) },
+      escalateMs: 10,
+    }
+  })
+  assert.equal(await runShutdown(recorded), 1)
+  assert.deepEqual(recorded.order, ["destroy", "queries", "barrier", "pools"])
+  // Reported twice on purpose: once for the escalation, once for the rejection.
+  assert.deepEqual(recorded.failures, ["drain", "drain"])
 })

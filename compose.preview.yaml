@@ -95,6 +95,7 @@ services:
     tmpfs:
       - /tmp:size=64m
     init: true
+    stop_grace_period: 15s
     restart: "no"
 
   frontend:

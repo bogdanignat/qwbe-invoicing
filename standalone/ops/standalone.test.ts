@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { chmodSync, readFileSync, readdirSync } from "node:fs"
+import { chmodSync, existsSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { spawnSync } from "node:child_process"
 import test from "node:test"
@@ -192,6 +192,38 @@ void test("readiness fails when the schema is absent or the artifact directory l
     } finally {
       chmodSync(dataDirectory, 0o755)
     }
+  })
+})
+
+void test("readiness only observes the artifact directory: a missing one stays missing and fails", async () => {
+  await withMigrated("ops_datadir", ({ dataDirectory }) => {
+    // A misspelled DATA_DIR must answer not-ready, not be created on whatever
+    // filesystem happens to be writable there.
+    const missing = join(dataDirectory, "not-mounted")
+    assert.equal(artifactsDirectoryReady(missing), false)
+    assert.equal(existsSync(missing), false, "readiness must not create the data directory")
+    const file = join(dataDirectory, "a-file")
+    writeFileSync(file, "")
+    assert.equal(artifactsDirectoryReady(file), false)
+    // A symlink to a real directory is refused, matching backup/restore/artifacts.
+    const linked = join(dataDirectory, "linked")
+    symlinkSync(dataDirectory, linked)
+    assert.equal(artifactsDirectoryReady(linked), false)
+    return Promise.resolve()
+  })
+})
+
+void test("artifacts refuses a missing DATA_DIR instead of creating it, for the plan and the apply", async () => {
+  await withMigrated("ops_artifacts_datadir", (fixture) => {
+    const { dataDirectory } = fixture
+    const missing = join(dataDirectory, "not-mounted")
+    for (const args of [["artifacts", "--json"], ["artifacts", "--apply", "--json"]]) {
+      const result = cli(fixture, args, { DATA_DIR: missing, ORGANIZATION_ID: "org-test", NODE_ENV: "development" })
+      assert.equal(result.status, 1, `${args.join(" ")}: ${result.stdout}${result.stderr}`)
+      assert.match(result.stderr, /DATA_DIR does not exist/u)
+      assert.equal(existsSync(missing), false, `${args.join(" ")} must not create DATA_DIR`)
+    }
+    return Promise.resolve()
   })
 })
 

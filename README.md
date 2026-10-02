@@ -227,7 +227,7 @@ Everything is configured through environment variables, read once at startup.
 |---|---|---|
 | `PORT` | `3000` | HTTP port inside the container |
 | `HOST` | `0.0.0.0` | bind address |
-| `DATA_DIR` | `/data` | directory holding the `artifacts/` tree of rendered PDFs |
+| `DATA_DIR` | `/data` | directory holding the `artifacts/` tree of rendered PDFs; it must already exist as a real directory (not a symlink) and be writable — the application never creates it: readiness and `doctor` report it missing, and `artifacts`/`backup`/`restore` refuse to run |
 | `PGHOST` | `db` | PostgreSQL host |
 | `PGPORT` | `5432` | PostgreSQL port |
 | `PGDATABASE` | `qwbe_invoicing` | the one database this installation owns |

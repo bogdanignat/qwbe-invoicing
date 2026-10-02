@@ -137,6 +137,7 @@ void test("a shutdown whose drain rejects keeps the barrier until the query pool
       closePools: () => runtime.close(),
       report: (step) => { reported.push(step) },
       abandon: () => { abandoned += 1 },
+      escalateMs: 5_000,
       deadlineMs: settleMillis,
     })
     // Let the sequence reach `endQueries` and block there on the open writer.

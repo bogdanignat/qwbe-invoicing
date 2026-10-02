@@ -111,10 +111,10 @@ services:
     <<: *test-image
     user: "${HOST_UID}:${HOST_GID}"
     environment:
-      # Scratch only: tmpfs below, nothing in it survives the container. Each
-      # fixture still makes its own `mkdtemp` under TMPDIR for DATA_DIR, so two
-      # concurrent files never share an artifact tree.
-      DATA_DIR: /tmp/qwbe-test-data
+      # Scratch only: tmpfs below, nothing in it survives the container. No
+      # DATA_DIR here on purpose: each fixture makes its own `mkdtemp` under
+      # TMPDIR and hands it to its children, so two concurrent files never share
+      # an artifact tree, and nothing can fall back to a directory nobody made.
       TMPDIR: /tmp
       PGHOST: db
       PGPORT: "5432"

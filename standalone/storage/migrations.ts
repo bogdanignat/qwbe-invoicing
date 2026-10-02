@@ -1,4 +1,4 @@
-import { accessSync, constants, mkdirSync } from "node:fs"
+import { accessSync, constants, lstatSync } from "node:fs"
 
 import type { Pool } from "pg"
 
@@ -74,7 +74,11 @@ export const databaseReady = async (pool: Pool): Promise<boolean> => {
  */
 export const artifactsDirectoryReady = (dataDirectory: string): boolean => {
   try {
-    mkdirSync(dataDirectory, { recursive: true })
+    // Observed, never created: a missing DATA_DIR is a missing mount or a typo,
+    // and creating it would put the PDFs wherever that path happens to land.
+    // `lstat`, as in `assertDataDirectory`: a symlinked root is refused by
+    // backup/restore/artifacts, so readiness must not call it ready either.
+    if (!lstatSync(dataDirectory).isDirectory()) return false
     accessSync(dataDirectory, constants.R_OK | constants.W_OK)
     return true
   } catch {

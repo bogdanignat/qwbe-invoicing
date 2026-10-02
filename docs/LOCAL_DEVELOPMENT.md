@@ -156,7 +156,8 @@ to the font in `standalone/documents/assets/fonts/`.
 it exits non-zero while any check fails so it can gate deployments. Liveness remains
 `GET /health/live` (process up, answered without touching the database, so it stays
 200 under saturation); readiness is `GET /health/ready` (maintenance barrier held,
-artifact directory writable, and the live schema matching the recorded migration
+artifact directory present and writable — observed, never created, so a missing
+`DATA_DIR` keeps readiness at 503 and `doctor` at exit 1 — and the live schema matching the recorded migration
 history), single-flight and cached for 5 seconds, and drives the Dockerfile
 `HEALTHCHECK` and Compose readiness.
 
