@@ -22,6 +22,12 @@ docker compose ps
 curl --fail --cacert ~/.warden/ssl/rootca/certs/ca.cert.pem https://invoice.test/health/ready
 ```
 
+Create the two secret files once. Never regenerate `.local/pg-password` after the
+cluster exists (PostgreSQL keeps the first password and `migrate` then fails with
+`password authentication failed`), and never regenerate an existing `.local/api-token`.
+To change the password, or to start over, see README, [Database
+password](../README.md#database-password).
+
 Both secrets are files the operator creates. Nothing in this repository holds a
 credential, no default password exists, and the PostgreSQL password is never passed
 as `PGPASSWORD`: the server reads it through `POSTGRES_PASSWORD_FILE` and the

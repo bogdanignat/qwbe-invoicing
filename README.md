@@ -21,6 +21,7 @@ works, how to install and run it.
 - [How it works](#how-it-works)
 - [Requirements](#requirements)
 - [Installation](#installation)
+- [Database password](#database-password)
 - [Configuration](#configuration)
 - [Data, backup and restore](#data-backup-and-restore)
 - [Upgrading](#upgrading)
@@ -219,6 +220,92 @@ Docker: `pnpm install`, `pnpm build:ui`, then `node bin/qwbe-invoicing.ts migrat
 and `node bin/qwbe-invoicing.ts serve` with the variables below set, against a PostgreSQL 16
 database that already exists and whose role owns it.
 
+## Database password
+
+The PostgreSQL password is a file, generated once by you before the first start. The
+same file is mounted as a Docker secret into `db` (which sets the password when it
+creates the cluster) and into `migrate`/`app` (which use it to connect). It never goes
+into `.env` or into an environment variable.
+
+### Generate it (once, before the first `up`)
+
+Local development (paths used by `compose.yaml`):
+
+```bash
+cd /path/to/invoicing-qwbe
+mkdir -p .local && chmod 700 .local
+umask 077
+openssl rand -hex 32 > .local/pg-password
+chmod 600 .local/pg-password
+# the API token too, if .local/api-token does not exist yet
+# (never regenerate an existing one):
+# openssl rand -hex 32 > .local/api-token && chmod 600 .local/api-token
+pnpm local:setup --apply   # once per machine: Warden network, DNS and certificate
+docker compose up -d       # add --build after code changes
+docker compose ps
+curl --fail --cacert ~/.warden/ssl/rootca/certs/ca.cert.pem https://invoice.test/health/ready
+```
+
+The full local walkthrough is in [`docs/LOCAL_DEVELOPMENT.md`](./docs/LOCAL_DEVELOPMENT.md).
+Production: step 1 of [Installation](#installation), with the files under
+`/opt/qwbe-invoicing/secrets/`.
+
+If a secret file is missing, `docker compose up` stops with `bind source path does not
+exist: .../pg-password` (or `.../api-token`) and warns `secret file ... does not exist`:
+create the file and run `up` again. A failed `up` like this does not initialise the cluster, so nothing has to
+be removed first.
+
+### Do not regenerate it after the first start
+
+PostgreSQL reads the file only once, when the cluster is created on an empty volume.
+Writing a new value into the file later changes nothing in the database: `migrate` and
+`app` would then connect with the new value and fail with
+`password authentication failed`. To change the password, rotate it (below).
+
+### Look at the data
+
+You do not need the password for this. The port is not published and, inside the `db`
+container, `psql` connects over the local socket without a password:
+
+```bash
+docker compose exec db psql -U qwbe -d qwbe_invoicing
+```
+
+The password is needed only by a client outside the container (for example a GUI client
+through a port you publish yourself); read it with `cat .local/pg-password`.
+
+### Rotate it, keeping the data
+
+```bash
+umask 077
+openssl rand -hex 32 > .local/pg-password.new
+docker compose stop app
+docker compose exec db psql -U qwbe -d qwbe_invoicing
+#   qwbe_invoicing=# \password qwbe
+#   (paste the contents of .local/pg-password.new twice, then \q)
+mv .local/pg-password.new .local/pg-password
+docker compose up -d --force-recreate
+```
+
+`\password` hashes the new password in the client, so it never appears in a statement
+log; do not use `ALTER ROLE ... PASSWORD '...'`. `--force-recreate` is required, not a
+plain restart: the secret is a bind mount of the old file, and `mv` replaces the file.
+In production run the same steps with `-f compose.prod.yaml` (and `--profile proxy` if
+you run Caddy) and the path from `PG_PASSWORD_PATH`; the same applies to looking at the
+data above.
+
+### Start over, losing the local data
+
+Local development only, irreversible: `down -v` deletes this project's volumes (the
+cluster, the PDFs and the backup staging), whatever names `.env` gives them.
+
+```bash
+docker compose down -v
+rm .local/pg-password
+# generate the file again (above), then:
+docker compose up -d
+```
+
 ## Configuration
 
 Everything is configured through environment variables, read once at startup.
@@ -245,7 +332,7 @@ Variables used only by the Compose files, in `.env`:
 | `AUTH_TOKEN_PATH` | host path of the token file mounted as the secret |
 | `APP_DOMAIN` | domain served by the optional Caddy proxy |
 | `DATA_VOLUME_NAME` | name of the data volume, default `qwbe-invoicing-data` |
-| `PG_PASSWORD_PATH` | host path of the database password file, mounted as a secret into both `db` and the application (required, no fallback) |
+| `PG_PASSWORD_PATH` | host path of the database password file, mounted as a secret into both `db` and the application (required with no fallback in `compose.prod.yaml`; `compose.yaml` defaults to `./.local/pg-password`) |
 | `PG_VOLUME_NAME` | name of the cluster volume, default `qwbe-invoicing-postgres` |
 | `BACKUP_STAGING_VOLUME_NAME` | name of the `backup`/`restore` staging volume, default `qwbe-invoicing-backup-staging` |
 
@@ -440,8 +527,11 @@ empty target database.
 - The single API token is the shared owner/admin credential for the installation. Every
   holder receives owner access as actor `standalone-owner`; standalone mode has no users or
   separate authorization levels yet. The token is read from a file, never printed and never
-  stored in the image. Rotate it by replacing the secret file and restarting the process;
-  the changed credential hash invalidates existing browser sessions.
+  stored in the image. Rotate it by writing the new token into the secret file and
+  recreating the container (`docker compose up -d --force-recreate app`, with
+  `-f compose.prod.yaml` in production): a plain restart keeps the old file when the file
+  was replaced rather than rewritten in place (see [Database password](#database-password)).
+  The changed credential hash invalidates existing browser sessions.
 - The browser UI exchanges the token once for a revocable, opaque 30-day session held in an
   `HttpOnly`, `SameSite=Strict` cookie (`Secure` under HTTPS and in production). The token
   never reaches browser JavaScript, storage or the URL. State-changing requests carry a
