@@ -1,91 +1,87 @@
-import { accessSync, constants, existsSync, mkdirSync } from "node:fs"
-import { DatabaseSync } from "node:sqlite"
+import { accessSync, constants, lstatSync } from "node:fs"
+
+import type { Pool } from "pg"
 
 import {
-  databasePath, documentsDatabasePath, migrationPlans, pathFor, sessionsDatabasePath, type MigrationPlan,
-} from "./sqlite-migration-plans.ts"
-import { applyStatements, pendingFor, pendingPlan, schemaDrift } from "./sqlite-migration-replay.ts"
+  applyMigrations as applyPostgresMigrations,
+  applyMigrationsOnClient,
+  assertCollationC,
+  databaseReady as ledgerReady,
+  ledgerTable,
+  planMigrations as planPostgresMigrations,
+  type MigrationReport,
+  type SqlExecutor,
+} from "./postgres-migrations.ts"
+import { schemaDrift, schemaDriftOnClient } from "./postgres-schema-fingerprint.ts"
+import { ScratchNotRolledBack } from "./postgres-schema-replay.ts"
 
-export { databasePath, documentsDatabasePath, sessionsDatabasePath, schemaDrift }
+/**
+ * The host's view of the schema: one PostgreSQL database, one ledger, one
+ * fingerprint. A facade and nothing else — the executor, the barrier and the
+ * drift replay live in the `postgres-*` modules, and nothing here opens a
+ * connection of its own.
+ *
+ * Every entry point is asynchronous because the database is remote now. The
+ * callers that used to be synchronous (readiness, `doctor`, the session store)
+ * became asynchronous with it; there is no synchronous wrapper, because one
+ * would only be a blocking call pretending not to be.
+ */
 
-export interface MigrationReport {
-  readonly scanned: number
-  readonly changed: number
-  readonly skipped: number
-  readonly failed: number
-  readonly pending: ReadonlyArray<string>
-}
+export { applyMigrationsOnClient, assertCollationC, ledgerTable, schemaDrift, schemaDriftOnClient }
+/** The ledger half of readiness, for a caller that already owns a connection. */
+export { ledgerReady }
+export type { MigrationReport, SqlExecutor }
 
-export const planMigrations = (dataDirectory: string): MigrationReport => {
-  const pending = migrationPlans.flatMap((plan) => pendingPlan(dataDirectory, plan))
-  const scanned = migrationPlans.reduce((total, plan) => total + plan.migrations.length, 0)
-  return { scanned, changed: 0, skipped: scanned - pending.length, failed: 0, pending }
-}
+/** What a run would change, without changing anything. */
+export const planMigrations = (executor: SqlExecutor): Promise<MigrationReport> =>
+  planPostgresMigrations(executor)
 
-const enableWriteAheadLog = (database: DatabaseSync): void => {
-  const mode = database.prepare("PRAGMA journal_mode = WAL").get()
-  if (mode?.journal_mode !== "wal") throw new Error("could not enable write-ahead logging")
-}
+/** The write path. Takes the exclusive maintenance barrier for the whole run. */
+export const applyMigrations = (pool: Pool): Promise<MigrationReport> => applyPostgresMigrations(pool)
 
-const applyPlan = (dataDirectory: string, plan: MigrationPlan): number => {
-  const database = new DatabaseSync(pathFor(dataDirectory, plan))
-  let transactionOpen = false
+/**
+ * Ready means the ledger explains the schema: nothing pending and no drift. A
+ * drifted schema is NOT ready — no further migration reconciles it, so serving
+ * on it would serve a schema the contracts do not describe.
+ */
+export const databaseReady = async (pool: Pool): Promise<boolean> => {
+  const client = await pool.connect()
+  // A replay whose ROLLBACK failed is the one error whose own definition says the
+  // connection must be destroyed instead of recycled, and this is the call site
+  // that cannot afford to ignore it: readiness runs every five seconds on the
+  // application's pool of four, so a client given back inside an unknown
+  // transaction state would fail the next `/api*` transactions with 25P02 until
+  // `idle_in_transaction_session_timeout` killed the session. Same shape as
+  // `schemaDrift` and `doctorReport`, which already release dirty.
+  let dirty: Error | undefined
   try {
-    database.exec("PRAGMA busy_timeout = 5000")
-    database.exec("PRAGMA foreign_keys = ON")
-    enableWriteAheadLog(database)
-    database.exec("BEGIN IMMEDIATE")
-    transactionOpen = true
-    database.exec(
-      "CREATE TABLE IF NOT EXISTS schema_migrations (name TEXT PRIMARY KEY, applied_at TEXT NOT NULL) STRICT",
-    )
-    database.exec("COMMIT")
-    transactionOpen = false
-    const pending = pendingFor(database, plan)
-    for (const migration of pending) {
-      database.exec("BEGIN IMMEDIATE")
-      transactionOpen = true
-      applyStatements(database, migration)
-      database.prepare("INSERT INTO schema_migrations (name, applied_at) VALUES (?, ?)")
-        .run(migration.name, new Date().toISOString())
-      database.exec("COMMIT")
-      transactionOpen = false
-    }
-    return pending.length
+    if (!await ledgerReady(client)) return false
+    return (await schemaDriftOnClient(client)).length === 0
   } catch (error) {
-    if (transactionOpen) database.exec("ROLLBACK")
+    if (error instanceof ScratchNotRolledBack) dirty = error
     throw error
   } finally {
-    database.close()
+    if (dirty === undefined) client.release()
+    else client.release(dirty)
   }
 }
 
-export const applyMigrations = (dataDirectory: string): MigrationReport => {
-  mkdirSync(dataDirectory, { recursive: true })
-  const changed = migrationPlans.reduce((total, plan) => total + applyPlan(dataDirectory, plan), 0)
-  const scanned = migrationPlans.reduce((total, plan) => total + plan.migrations.length, 0)
-  return { scanned, changed, skipped: scanned - changed, failed: 0, pending: [] }
-}
-
-const planReady = (dataDirectory: string, plan: MigrationPlan): boolean => {
-  const path = pathFor(dataDirectory, plan)
-  if (!existsSync(path)) return false
+/**
+ * The filesystem half of readiness, which PostgreSQL did not take away: PDFs are
+ * content-addressed files under `DATA_DIR`, so an unwritable data directory is
+ * still a reason to refuse traffic. This is what is left of the old
+ * `accessSync` pair — the one on the database file is gone with the file.
+ */
+export const artifactsDirectoryReady = (dataDirectory: string): boolean => {
   try {
-    accessSync(path, constants.W_OK)
-    accessSync(dataDirectory, constants.W_OK)
+    // Observed, never created: a missing DATA_DIR is a missing mount or a typo,
+    // and creating it would put the PDFs wherever that path happens to land.
+    // `lstat`, as in `assertDataDirectory`: a symlinked root is refused by
+    // backup/restore/artifacts, so readiness must not call it ready either.
+    if (!lstatSync(dataDirectory).isDirectory()) return false
+    accessSync(dataDirectory, constants.R_OK | constants.W_OK)
+    return true
   } catch {
     return false
   }
-  const database = new DatabaseSync(path, { readOnly: true })
-  try {
-    database.exec("PRAGMA busy_timeout = 5000")
-    return pendingFor(database, plan).length === 0
-  } catch {
-    return false
-  } finally {
-    database.close()
-  }
 }
-
-export const databaseReady = (dataDirectory: string): boolean =>
-  migrationPlans.every((plan) => planReady(dataDirectory, plan)) && schemaDrift(dataDirectory).length === 0

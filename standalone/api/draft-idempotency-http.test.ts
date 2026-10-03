@@ -1,11 +1,10 @@
 import assert from "node:assert/strict"
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
-import { tmpdir } from "node:os"
+import { writeFileSync } from "node:fs"
 import { join } from "node:path"
 import test from "node:test"
 
 import { createRequestAuthenticator } from "../auth/auth.ts"
-import { applyMigrations } from "../storage/migrations.ts"
+import { migratedFixture } from "../storage/postgres-rig.test-support.ts"
 import { handleApiRequest } from "./api.test-support.ts"
 
 const each = { code: "C62", name: "unitate" } as const
@@ -16,18 +15,15 @@ const customer = {
 const line = { description: "Servicii", quantity: "2", unitPrice: "100", unitOfMeasure: each, vatRateCode: "RO_STANDARD" }
 const draftBody = { customer, series: "QWBE", issueDate: "2026-09-05", dueDate: "2026-09-20", lines: [line, line] }
 
-const fixture = async () => {
-  const directory = mkdtempSync(join(tmpdir(), "qwbe-draft-idempotency-http-"))
+const fixture = async (label: string) => {
+  const rig = await migratedFixture(`idem_${label}`)
   const token = "c".repeat(64)
-  const tokenFile = join(directory, "api-token")
+  const tokenFile = join(rig.dataDirectory, "api-token")
   writeFileSync(tokenFile, token, { mode: 0o600 })
-  applyMigrations(directory)
   const runtime = {
-    authenticate: createRequestAuthenticator({
-      host: "127.0.0.1", port: 3000, dataDirectory: directory, nodeEnvironment: "test",
-      authTokenFile: tokenFile, organizationId: "org-1",
-    }),
-    dataDirectory: directory,
+    authenticate: createRequestAuthenticator(rig.config({ authTokenFile: tokenFile })),
+    pool: rig.pool,
+    dataDirectory: rig.dataDirectory,
     now: () => new Date("2026-09-05T10:00:00.000Z"),
   }
   const call = (method: string, url: string, body?: unknown, idempotencyKey?: string) =>
@@ -41,14 +37,14 @@ const fixture = async () => {
     vatChange: { registered: true, effectiveFrom: "2025-08-01" }, branding: null,
   })
   await call("POST", "/api/document-series", { documentType: "invoice", series: "QWBE" })
-  return { call, close: () => { rmSync(directory, { recursive: true, force: true }) } }
+  return { call, close: () => rig.close() }
 }
 
 const idOf = (response: { readonly body: unknown }): string => (response.body as { id: string }).id
 const codeOf = (response: { readonly body: unknown }): unknown => (response.body as { code: unknown }).code
 
 void test("POST /api/drafts requires an Idempotency-Key and refuses a malformed one", async () => {
-  const value = await fixture()
+  const value = await fixture("key")
   try {
     const missing = await value.call("POST", "/api/drafts", draftBody)
     assert.equal(missing.status, 400)
@@ -58,11 +54,11 @@ void test("POST /api/drafts requires an Idempotency-Key and refuses a malformed 
     }
     const listed = await value.call("GET", "/api/drafts")
     assert.deepEqual((listed.body as { items: ReadonlyArray<unknown> }).items, [])
-  } finally { value.close() }
+  } finally { await value.close() }
 })
 
 void test("POST /api/drafts carries the lines in the create request and replays the same draft", async () => {
-  const value = await fixture()
+  const value = await fixture("replay")
   try {
     const created = await value.call("POST", "/api/drafts", draftBody, "http-create")
     assert.equal(created.status, 200)
@@ -80,11 +76,11 @@ void test("POST /api/drafts carries the lines in the create request and replays 
     assert.deepEqual((empty.body as { lines: ReadonlyArray<unknown> }).lines, [])
     const issued = await value.call("POST", `/api/drafts/${idOf(empty)}/issue`, {}, "http-issue-empty")
     assert.equal(issued.status, 400)
-  } finally { value.close() }
+  } finally { await value.close() }
 })
 
 void test("a conflicting creation key answers 409 with its code, never a 500", async () => {
-  const value = await fixture()
+  const value = await fixture("conflict")
   try {
     const created = await value.call("POST", "/api/drafts", draftBody, "http-conflict")
     const reused = await value.call("POST", "/api/drafts", { ...draftBody, notes: "Alt" }, "http-conflict")
@@ -96,5 +92,5 @@ void test("a conflicting creation key answers 409 with its code, never a 500", a
     assert.equal(deleted.status, 409)
     assert.equal(codeOf(deleted), "draft_creation_result_deleted")
     assert.equal(((await value.call("GET", "/api/drafts")).body as { items: ReadonlyArray<unknown> }).items.length, 0)
-  } finally { value.close() }
+  } finally { await value.close() }
 })

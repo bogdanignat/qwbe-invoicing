@@ -1,0 +1,51 @@
+# Throwaway PostgreSQL 16 probe rig for T-1480 step 0b. Nothing here ships and
+# nothing here persists: the cluster lives on tmpfs, no port is published, no
+# existing volume is referenced and the project name is its own.
+# Run: docker compose --file compose.pg-probe.yaml run --rm probe
+name: qwbe-invoicing-pg-probe
+
+services:
+  db:
+    image: postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
+    environment:
+      POSTGRES_DB: probe
+      POSTGRES_USER: probe
+      # Probe-only: the cluster is reachable exclusively from this compose
+      # project's network, holds synthetic rows and dies with the container.
+      # The shipped stack uses POSTGRES_PASSWORD_FILE instead (plan step 1).
+      POSTGRES_HOST_AUTH_METHOD: trust
+      POSTGRES_INITDB_ARGS: --locale=C --encoding=UTF8
+      PGDATA: /var/lib/postgresql/data/pgdata
+    tmpfs:
+      - /var/lib/postgresql/data:size=512m,uid=70,gid=70
+      - /tmp
+      - /run/postgresql:uid=70,gid=70
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U probe -d probe"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 5s
+    restart: "no"
+
+  probe:
+    # The image the application is built from, so "is the client available" is
+    # answered for the real base layer and not for a convenience image.
+    image: node:24.19.0-alpine@sha256:d32cdf619f63fe0471182d08996dd516c6275bb5fd31ae06e55a570bd9e1ad43
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGHOST: db
+      PGPORT: "5432"
+      PGDATABASE: probe
+      PGUSER: probe
+      POSTGRESQL_CLIENT_PACKAGE: postgresql16-client=16.15-r0
+    volumes:
+      - .:/app:ro
+    tmpfs:
+      - /tmp
+    working_dir: /app
+    entrypoint: ["/bin/sh", "/app/scripts/pg16-probe.sh"]
+    init: true
+    restart: "no"

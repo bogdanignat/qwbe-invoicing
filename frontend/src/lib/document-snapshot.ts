@@ -71,7 +71,17 @@ export interface VatBreakdownEntry {
   readonly vatAmount: string
 }
 
-interface DocumentBody {
+/**
+ * The whole sealed body, named because a third document shares it.
+ *
+ * A proforma is not a fiscal document, but the backend seals the same body into
+ * it — the two parties, the lines, the VAT breakdown and the totals are copies
+ * taken at issuance there too. Modelling it over this interface is what lets one
+ * decoder and one projection serve all three; what a proforma does *not* share
+ * is the head (no e-Factura status, and the conversion ids instead), which is
+ * exactly why it is not modelled as an `IssuedInvoice`.
+ */
+export interface DocumentBody {
   readonly issuer: IssuerSnapshot
   readonly customer: BuyerSnapshot
   readonly lines: ReadonlyArray<DocumentLine>

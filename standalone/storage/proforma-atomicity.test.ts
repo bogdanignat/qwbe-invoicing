@@ -1,9 +1,5 @@
 import assert from "node:assert/strict"
 import { createHash } from "node:crypto"
-import { mkdtempSync, rmSync } from "node:fs"
-import { tmpdir } from "node:os"
-import { join } from "node:path"
-import { DatabaseSync } from "node:sqlite"
 import test from "node:test"
 
 import { Effect } from "effect"
@@ -15,8 +11,16 @@ import {
   createInvoicingService,
   type InvoicingDependencies,
 } from "../../cube/invoicing/index.ts"
-import { applyMigrations, databasePath } from "./migrations.ts"
-import { createSqliteStore } from "./sqlite-store.ts"
+import { migratedFixture, type RawSql, type TestFixture } from "./postgres-rig.test-support.ts"
+import { createPostgresStore } from "./postgres-store.ts"
+
+/**
+ * Proforma conversion atomicity on PostgreSQL 16: one database per case instead
+ * of one directory, `count(*)` read through `Number` because it is `bigint`, and
+ * the two racers now serialise on the exclusive business advisory lock rather
+ * than on SQLite's write lock. The invariant is unchanged: one proforma, one
+ * conversion branch, whichever wins.
+ */
 
 const each = { code: "C62", name: "unitate" } as const
 const customer = {
@@ -54,10 +58,14 @@ const idempotent = <Input>(operation: string, key: string, request: Input) => ({
   idempotency: { key, fingerprint: `sha256:${createHash("sha256").update(canonicalJson({ operation, input: request })).digest("hex")}` },
 })
 
-type Fixture = ReturnType<typeof fixture>
-const fixture = (label: string, initialDate = "2026-09-05T10:00:00.000Z") => {
-  const directory = mkdtempSync(join(tmpdir(), `qwbe-proforma-atomicity-${label}-`))
-  applyMigrations(directory)
+interface Fixture {
+  readonly database: TestFixture
+  readonly service: (store?: InvoicingDependencies["store"]) => ReturnType<typeof createInvoicingService>
+  readonly setDate: (value: string) => void
+  readonly close: () => Promise<void>
+}
+const fixture = async (label: string, initialDate = "2026-09-05T10:00:00.000Z"): Promise<Fixture> => {
+  const database = await migratedFixture(`pfa_${label}`)
   let now = new Date(initialDate)
   let nextId = 0
   const dependencies = {
@@ -74,11 +82,11 @@ const fixture = (label: string, initialDate = "2026-09-05T10:00:00.000Z") => {
     cubeIdentity: "invoicing",
   } as const
   return {
-    directory,
-    service: (store: InvoicingDependencies["store"] = createSqliteStore(directory)) =>
+    database,
+    service: (store: InvoicingDependencies["store"] = createPostgresStore(database.pool)) =>
       createInvoicingService({ ...dependencies, store }),
     setDate: (value: string) => { now = new Date(value) },
-    close: () => { rmSync(directory, { recursive: true, force: true }) },
+    close: () => database.close(),
   }
 }
 
@@ -110,31 +118,24 @@ const conflict = (failure: unknown, code: string) => {
   assert.ok(failure instanceof DomainConflict)
   assert.equal(failure.code, code)
 }
-const scalar = (database: DatabaseSync, sql: string, ...params: ReadonlyArray<string>): number => {
-  const row = database.prepare(sql).get(...params)
-  assert.ok(row)
-  const value = Object.values(row)[0]
-  if (typeof value !== "number") throw new Error("scalar query did not return a number")
+const scalar = async (sql: RawSql, statement: string, ...params: ReadonlyArray<string>): Promise<number> => {
+  const value = Number(await sql.scalar(statement, params))
+  if (!Number.isInteger(value)) throw new Error(`scalar query did not return a count: ${statement}`)
   return value
 }
-const databaseCounts = (directory: string) => {
-  const database = new DatabaseSync(databasePath(directory), { readOnly: true })
-  try {
-    return {
-      drafts: scalar(database, "SELECT COUNT(*) FROM invoice_drafts"),
-      invoices: scalar(database, "SELECT COUNT(*) FROM issued_invoices"),
-      draftConversions: scalar(database, "SELECT COUNT(*) FROM proforma_conversions"),
-      invoiceConversions: scalar(database, "SELECT COUNT(*) FROM proforma_invoice_conversions"),
-      idempotency: scalar(database, "SELECT COUNT(*) FROM idempotency_records"),
-      audits: scalar(database, "SELECT COUNT(*) FROM audit_events"),
-      invoiceSequences: scalar(database, "SELECT COUNT(*) FROM invoice_sequences WHERE document_type='invoice'"),
-    }
-  } finally { database.close() }
-}
+const databaseCounts = async (sql: RawSql) => ({
+  drafts: await scalar(sql, "SELECT COUNT(*) FROM invoice_drafts"),
+  invoices: await scalar(sql, "SELECT COUNT(*) FROM issued_invoices"),
+  draftConversions: await scalar(sql, "SELECT COUNT(*) FROM proforma_conversions"),
+  invoiceConversions: await scalar(sql, "SELECT COUNT(*) FROM proforma_invoice_conversions"),
+  idempotency: await scalar(sql, "SELECT COUNT(*) FROM idempotency_records"),
+  audits: await scalar(sql, "SELECT COUNT(*) FROM audit_events"),
+  invoiceSequences: await scalar(sql, "SELECT COUNT(*) FROM invoice_sequences WHERE document_type='invoice'"),
+})
 
-void test("two SQLite stores atomically choose one conversion branch and preserve idempotency", { timeout: 60_000 }, async () => {
+void test("two stores atomically choose one conversion branch and preserve idempotency", { timeout: 60_000 }, async () => {
   for (let index = 0; index < 4; index += 1) {
-    const value = fixture(`race-${String(index)}`)
+    const value = await fixture(`race_${String(index)}`)
     try {
       const setup = await configure(value)
       const proforma = await issueProforma(setup, `source-${String(index)}`)
@@ -142,8 +143,8 @@ void test("two SQLite stores atomically choose one conversion branch and preserv
       const draftRequest = { proformaId: proforma.id, invoiceSeries: "INV" }
       const directAttempt = idempotent("issue_invoice_from_proforma", `direct-${String(index)}`, directRequest)
       const draftAttempt = idempotent("create_draft_invoice_from_proforma", `draft-${String(index)}`, draftRequest)
-      const first = value.service(createSqliteStore(value.directory))
-      const second = value.service(createSqliteStore(value.directory))
+      const first = value.service(createPostgresStore(value.database.pool))
+      const second = value.service(createPostgresStore(value.database.pool))
       const directEffect = Effect.map(first.issueInvoiceFromProforma(directAttempt), ({ id }) => ({ id }))
       const draftEffect = Effect.map(second.createDraftInvoiceFromProforma(draftAttempt), ({ id }) => ({ id }))
       const reverseDraftEffect = Effect.map(first.createDraftInvoiceFromProforma(draftAttempt), ({ id }) => ({ id }))
@@ -156,18 +157,16 @@ void test("two SQLite stores atomically choose one conversion branch and preserv
       assert.ok(failed && failed._tag === "Left")
       conflict(failed.left, "proforma_already_converted")
 
-      const database = new DatabaseSync(databasePath(value.directory), { readOnly: true })
-      try {
-        const draftConversions = scalar(database, "SELECT COUNT(*) FROM proforma_conversions WHERE proforma_id=?", proforma.id)
-        const invoiceConversions = scalar(database, "SELECT COUNT(*) FROM proforma_invoice_conversions WHERE proforma_id=?", proforma.id)
-        const derivedDrafts = scalar(database, `SELECT COUNT(*) FROM invoice_drafts d JOIN proforma_conversions c
-          ON c.resulting_draft_id=d.id WHERE c.proforma_id=?`, proforma.id)
-        const directInvoices = scalar(database, `SELECT COUNT(*) FROM issued_invoices i JOIN proforma_invoice_conversions c
-          ON c.resulting_invoice_id=i.id WHERE c.proforma_id=?`, proforma.id)
-        assert.equal(draftConversions + invoiceConversions, 1)
-        assert.equal(derivedDrafts, draftConversions)
-        assert.equal(directInvoices, invoiceConversions)
-      } finally { database.close() }
+      const sql = value.database.sql
+      const draftConversions = await scalar(sql, "SELECT COUNT(*) FROM proforma_conversions WHERE proforma_id=$1", proforma.id)
+      const invoiceConversions = await scalar(sql, "SELECT COUNT(*) FROM proforma_invoice_conversions WHERE proforma_id=$1", proforma.id)
+      const derivedDrafts = await scalar(sql, `SELECT COUNT(*) FROM invoice_drafts d JOIN proforma_conversions c
+        ON c.resulting_draft_id=d.id WHERE c.proforma_id=$1`, proforma.id)
+      const directInvoices = await scalar(sql, `SELECT COUNT(*) FROM issued_invoices i JOIN proforma_invoice_conversions c
+        ON c.resulting_invoice_id=i.id WHERE c.proforma_id=$1`, proforma.id)
+      assert.equal(draftConversions + invoiceConversions, 1)
+      assert.equal(derivedDrafts, draftConversions)
+      assert.equal(directInvoices, invoiceConversions)
 
       const directWon = outcomes[index % 2 === 0 ? 0 : 1]?._tag === "Right"
       const winner = value.service()
@@ -181,7 +180,7 @@ void test("two SQLite stores atomically choose one conversion branch and preserv
         ? await failureOf(winner.issueInvoiceFromProforma(idempotent("issue_invoice_from_proforma", `direct-new-${String(index)}`, directRequest)))
         : await failureOf(winner.createDraftInvoiceFromProforma(idempotent("create_draft_invoice_from_proforma", `draft-new-${String(index)}`, draftRequest)))
       conflict(differentKeyFailure, "proforma_already_converted")
-    } finally { value.close() }
+    } finally { await value.close() }
   }
 })
 
@@ -195,23 +194,23 @@ const failingStore = (
   })),
 })
 
-void test("real SQLite transactions roll back late conversion failures without number gaps", { timeout: 60_000 }, async () => {
+void test("real transactions roll back late conversion failures without number gaps", { timeout: 60_000 }, async () => {
   for (const mode of ["invoice", "draft"] as const) {
-    const value = fixture(`rollback-${mode}`)
+    const value = await fixture(`rollback_${mode}`)
     try {
       const setup = await configure(value)
       const proforma = await issueProforma(setup, `source-${mode}`)
-      const before = databaseCounts(value.directory)
+      const before = await databaseCounts(value.database.sql)
       const request = { proformaId: proforma.id, invoiceSeries: "INV" }
       const key = `fault-${mode}`
       const operation = mode === "invoice" ? "issue_invoice_from_proforma" : "create_draft_invoice_from_proforma"
       const attempt = idempotent(operation, key, request)
-      const faulty = value.service(failingStore(createSqliteStore(value.directory), mode === "invoice" ? "saveIdempotencyRecord" : "appendAuditEvent"))
+      const faulty = value.service(failingStore(createPostgresStore(value.database.pool), mode === "invoice" ? "saveIdempotencyRecord" : "appendAuditEvent"))
       const failure = mode === "invoice"
         ? await failureOf(faulty.issueInvoiceFromProforma(attempt))
         : await failureOf(faulty.createDraftInvoiceFromProforma(attempt))
       assert.ok(failure instanceof PersistenceFailure)
-      assert.deepEqual(databaseCounts(value.directory), before)
+      assert.deepEqual(await databaseCounts(value.database.sql), before)
 
       const clean = value.service()
       if (mode === "invoice") {
@@ -223,28 +222,28 @@ void test("real SQLite transactions roll back late conversion failures without n
         const invoice = await Effect.runPromise(clean.issueInvoice(invoiceAttempt))
         assert.equal(invoice.number, 1)
       }
-      const after = databaseCounts(value.directory)
+      const after = await databaseCounts(value.database.sql)
       assert.equal(after.invoices, before.invoices + 1)
       assert.equal(after.invoiceSequences, before.invoiceSequences + 1)
       assert.equal(after.draftConversions + after.invoiceConversions, before.draftConversions + before.invoiceConversions + 1)
-    } finally { value.close() }
+    } finally { await value.close() }
   }
 })
 
-void test("derived draft lineage, guards, replay, dates, and frozen copies survive SQLite round trips", async () => {
-  const value = fixture("lineage", "2026-09-10T10:00:00.000Z")
+void test("derived draft lineage, guards, replay, dates, and frozen copies survive storage round trips", async () => {
+  const value = await fixture("lineage", "2026-09-10T10:00:00.000Z")
   try {
     const service = await configure(value)
     const proforma = await issueProforma(service, "lineage-source", "RO_STANDARD", "2026-09-05", "2026-09-20")
     assert.equal(Object.hasOwn(proforma, "invoiceSeries"), false)
     const original = structuredClone(proforma)
 
-    const unknownBefore = databaseCounts(value.directory)
+    const unknownBefore = await databaseCounts(value.database.sql)
     const unknown = await failureOf(service.createDraftInvoiceFromProforma(idempotent(
       "create_draft_invoice_from_proforma", "unknown-series", { proformaId: proforma.id, invoiceSeries: "UNKNOWN" },
     )))
     assert.equal(unknown._tag, "ResourceNotFound")
-    assert.deepEqual(databaseCounts(value.directory), unknownBefore)
+    assert.deepEqual(await databaseCounts(value.database.sql), unknownBefore)
 
     const request = { proformaId: proforma.id, invoiceSeries: "INV" }
     const attempt = idempotent("create_draft_invoice_from_proforma", "derived-draft", request)
@@ -258,12 +257,12 @@ void test("derived draft lineage, guards, replay, dates, and frozen copies survi
       proforma.lines.map((line) => ({ ...line, id: "copied" })))
     assert.equal((await Effect.runPromise(service.createDraftInvoiceFromProforma(attempt))).id, draft.id)
 
-    const guardBefore = databaseCounts(value.directory)
+    const guardBefore = await databaseCounts(value.database.sql)
     conflict(await failureOf(service.deleteDraft(draft.id)), "derived_draft_cannot_be_deleted")
     conflict(await failureOf(service.issueProforma(idempotent(
       "issue_proforma_from_draft", "derived-to-proforma", { draftId: draft.id, series: "PRO" },
     ))), "derived_draft_cannot_issue_proforma")
-    assert.deepEqual(databaseCounts(value.directory), guardBefore)
+    assert.deepEqual(await databaseCounts(value.database.sql), guardBefore)
 
     const ordinary = await Effect.runPromise(service.createDraft(idempotent("create_draft", "ordinary-draft-1", {
       customer, series: "INV", issueDate: "2026-09-10", dueDate: "2026-09-25",
@@ -285,16 +284,13 @@ void test("derived draft lineage, guards, replay, dates, and frozen copies survi
     assert.equal(finished.convertedInvoiceId, invoice.id)
     assert.deepEqual({ ...finished, convertedDraftId: null, convertedInvoiceId: null }, original)
 
-    const database = new DatabaseSync(databasePath(value.directory), { readOnly: true })
-    try {
-      assert.equal(scalar(database, "SELECT COUNT(*) FROM proforma_conversions WHERE proforma_id=?", proforma.id), 1)
-      assert.equal(scalar(database, "SELECT COUNT(*) FROM proforma_invoice_conversions WHERE proforma_id=?", proforma.id), 0)
-    } finally { database.close() }
-  } finally { value.close() }
+    assert.equal(await scalar(value.database.sql, "SELECT COUNT(*) FROM proforma_conversions WHERE proforma_id=$1", proforma.id), 1)
+    assert.equal(await scalar(value.database.sql, "SELECT COUNT(*) FROM proforma_invoice_conversions WHERE proforma_id=$1", proforma.id), 0)
+  } finally { await value.close() }
 })
 
 void test("VAT regime changes do not silently recompute a derived draft", async () => {
-  const value = fixture("vat")
+  const value = await fixture("vat")
   try {
     const service = await configure(value, false, "2025-08-01")
     const proforma = await issueProforma(service, "non-vat-source", "RO_NON_VAT")
@@ -314,12 +310,12 @@ void test("VAT regime changes do not silently recompute a derived draft", async 
     assert.ok(copiedLine)
     assert.equal(copiedLine.vatRateCode, "RO_NON_VAT")
     assert.equal(copiedLine.vatRate, "0.00")
-    assert.equal(databaseCounts(value.directory).invoices, 0)
+    assert.equal((await databaseCounts(value.database.sql)).invoices, 0)
 
     const stale = await failureOf(service.issueInvoice(idempotent("issue_invoice_from_draft", "stale-derived", { draftId: draft.id })))
     assert.ok(stale instanceof ValidationFailure)
     assert.ok(stale.issues.some((issue) => issue.includes("requires a non-VAT issuer")))
-    assert.equal(databaseCounts(value.directory).invoices, 0)
+    assert.equal((await databaseCounts(value.database.sql)).invoices, 0)
 
     const line = draft.lines[0]
     assert.ok(line)
@@ -332,5 +328,5 @@ void test("VAT regime changes do not silently recompute a derived draft", async 
     assert.equal(invoice.sourceProformaId, proforma.id)
     assert.deepEqual(await Effect.runPromise(service.getProforma(proforma.id)), { ...original,
       convertedDraftId: draft.id, convertedInvoiceId: invoice.id })
-  } finally { value.close() }
+  } finally { await value.close() }
 })

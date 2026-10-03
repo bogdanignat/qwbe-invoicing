@@ -4,9 +4,13 @@ import test from "node:test"
 import { ApiFailure } from "./api-errors.ts"
 import type { DraftInvoice } from "./draft-models.ts"
 import type { IssuedInvoice } from "./document-snapshot.ts"
-import { createOperationReplay, REPLAY_SETTLED, type ReplayClient } from "./operation-replay.ts"
+import { createOperationReplay, REPLAY_SETTLED } from "./operation-replay.ts"
+import type { ReplayClient } from "./operation-replay-requests.ts"
+import type { ProformaIdentity } from "./proforma-replay-client.ts"
 import type { RecoveryPort } from "./operation-recovery-port.ts"
-import { RECOVERY_VERSION, type RecoveryRecord, type RecoveryRequest } from "./operation-recovery-types.ts"
+import {
+  RECOVERY_VERSION, type RecoveryOperation, type RecoveryRecord, type RecoveryRequest,
+} from "./operation-recovery-types.ts"
 
 /**
  * The explicit retry, after a reload or a lost answer: it sends the request that
@@ -45,9 +49,15 @@ const issuedInvoice: IssuedInvoice = {
   totalExcludingVat: "0.00", vatTotal: "0.00", totalIncludingVat: "0.00",
 }
 
+const proforma: ProformaIdentity = { id: "prf-1" }
+
+/** Issuing a stored draft is still the "issue-invoice" operation: the request kind names the call, not the family. */
+const operationOf = (kind: RecoveryRequest["kind"]): RecoveryOperation =>
+  kind === "issue-draft" ? "issue-invoice" : kind
+
 const storedRecord = (request: RecoveryRequest, state: RecoveryRecord["state"] = "pending"): RecoveryRecord => ({
   version: RECOVERY_VERSION,
-  operation: request.kind === "create-draft" ? "create-draft" : "issue-invoice",
+  operation: operationOf(request.kind),
   key: "key-1", request, fingerprint: "fingerprint:1", createdAt: "2026-01-01T00:00:00.000Z",
   summary: { buyerName: "Alfa", series: "FCT", issueDate: "2026-01-01", lineCount: 1 }, state,
 })
@@ -59,6 +69,10 @@ interface World {
   readonly effects: string[]
   readonly session: { owns: boolean; alive: boolean }
 }
+
+/** The proforma a conversion started from, as the effects see it: absent on writes authored directly. */
+const from = (sourceProformaId: string | undefined): string =>
+  sourceProformaId === undefined ? "" : `:from:${sourceProformaId}`
 
 /** `effectsFail` is the navigation that throws *after* the server confirmed the write. */
 const setup = (client: Partial<ReplayClient>, effectsFail?: Error): World => {
@@ -87,6 +101,18 @@ const setup = (client: Partial<ReplayClient>, effectsFail?: Error): World => {
         calls.push({ method: "replayInvoiceIssuance", key, body })
         return (client.replayInvoiceIssuance ?? unscripted("replayInvoiceIssuance"))(csrfToken, body, key)
       },
+      replayProformaIssuance: async (csrfToken, body, key) => {
+        calls.push({ method: "replayProformaIssuance", key, body })
+        return (client.replayProformaIssuance ?? unscripted("replayProformaIssuance"))(csrfToken, body, key)
+      },
+      replayInvoiceFromProforma: async (csrfToken, id, body, key) => {
+        calls.push({ method: `replayInvoiceFromProforma:${id}`, key, body })
+        return (client.replayInvoiceFromProforma ?? unscripted("replayInvoiceFromProforma"))(csrfToken, id, body, key)
+      },
+      replayDraftFromProforma: async (csrfToken, id, body, key) => {
+        calls.push({ method: `replayDraftFromProforma:${id}`, key, body })
+        return (client.replayDraftFromProforma ?? unscripted("replayDraftFromProforma"))(csrfToken, id, body, key)
+      },
     },
     recovery,
     csrfToken: () => "csrf-token",
@@ -94,12 +120,16 @@ const setup = (client: Partial<ReplayClient>, effectsFail?: Error): World => {
     ownsEpoch: () => session.owns,
     alive: () => session.alive,
     effects: {
-      onDraft: (draft) => {
-        effects.push(`onDraft:${draft.id}:${String(draft.lines.length)}`)
+      onDraft: (draft, sourceProformaId) => {
+        effects.push(`onDraft:${draft.id}:${String(draft.lines.length)}${from(sourceProformaId)}`)
         if (effectsFail !== undefined) throw effectsFail
       },
-      onIssued: (invoice) => {
-        effects.push(`onIssued:${invoice.id}`)
+      onIssued: (invoice, sourceProformaId) => {
+        effects.push(`onIssued:${invoice.id}${from(sourceProformaId)}`)
+        if (effectsFail !== undefined) throw effectsFail
+      },
+      onProforma: (issued) => {
+        effects.push(`onProforma:${issued.id}`)
         if (effectsFail !== undefined) throw effectsFail
       },
     },
@@ -142,6 +172,65 @@ void test("a stored direct issue replays the stored body, not a payload rebuilt 
   const outcome = await world.replay(storedRecord({ kind: "issue-invoice", body }))
   assert.equal(outcome.kind, "issued")
   assert.deepEqual(world.calls, [{ method: "replayInvoiceIssuance", key: "key-1", body }])
+})
+
+void test("a stored proforma issuance replays the stored body and is followed as a proforma", async () => {
+  const body = { series: "PRO", issueDate: "2026-01-01" }
+  const world = setup({ replayProformaIssuance: () => Promise.resolve(proforma) })
+  const outcome = await world.replay(storedRecord({ kind: "create-proforma", body }))
+  assert.equal(outcome.kind, "proforma")
+  assert.equal(outcome.proforma.id, "prf-1")
+  assert.deepEqual(world.calls, [{ method: "replayProformaIssuance", key: "key-1", body }])
+  assert.deepEqual(world.effects, ["onProforma:prf-1"])
+  assert.deepEqual(world.journal, ["resolve:key-1"])
+})
+
+void test("a conversion to an invoice sends the proforma id from the path and is followed as an invoice", async () => {
+  const body = { invoiceSeries: "FCT" }
+  const world = setup({ replayInvoiceFromProforma: () => Promise.resolve(issuedInvoice) })
+  const outcome = await world.replay(storedRecord({
+    kind: "convert-proforma-invoice", proformaId: "prf-1", body,
+  }))
+  // The produced document is an invoice: a conversion is not its own family.
+  assert.equal(outcome.kind, "issued")
+  assert.deepEqual(world.calls, [{ method: "replayInvoiceFromProforma:prf-1", key: "key-1", body }])
+  // The source proforma travels with the result: it is no longer convertible,
+  // and the invoice the server returns carries no trace of it.
+  assert.deepEqual(world.effects, ["onIssued:inv-1:from:prf-1"])
+})
+
+void test("a conversion to a draft is followed as a draft, under the same stored key", async () => {
+  const body = { invoiceSeries: "FCT" }
+  const world = setup({ replayDraftFromProforma: () => Promise.resolve(serverDraft) })
+  const outcome = await world.replay(storedRecord({
+    kind: "convert-proforma-draft", proformaId: "prf-1", body,
+  }))
+  assert.equal(outcome.kind, "draft")
+  assert.deepEqual(world.calls, [{ method: "replayDraftFromProforma:prf-1", key: "key-1", body }])
+  assert.deepEqual(world.effects, ["onDraft:draft-1:1:from:prf-1"])
+  assert.deepEqual(world.journal, ["resolve:key-1"])
+})
+
+void test("a proforma replay whose navigation throws is still a confirmed proforma", async () => {
+  const navigation = new Error("router.push a eșuat")
+  const world = setup({ replayProformaIssuance: () => Promise.resolve(proforma) }, navigation)
+  const outcome = await world.replay(storedRecord({ kind: "create-proforma", body: {} }))
+  assert.equal(outcome.kind, "proforma")
+  assert.equal(outcome.effectsError, navigation)
+  assert.deepEqual(world.journal, ["resolve:key-1"])
+})
+
+void test("a spent key on a conversion is evidence, not a reason to convert again", async () => {
+  const world = setup({
+    replayInvoiceFromProforma: () => Promise.reject(new ApiFailure({
+      message: "cheie refolosită", status: 409, code: "idempotency_key_reused",
+    })),
+  })
+  const outcome = await world.replay(storedRecord({
+    kind: "convert-proforma-invoice", proformaId: "prf-1", body: {},
+  }))
+  assert.equal(outcome.kind, "conflict")
+  assert.deepEqual(world.journal, ["conflict:key-1:idempotency_key_reused"])
 })
 
 void test("a replay whose answer is lost again keeps the attempt exactly where it was", async () => {

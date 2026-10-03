@@ -23,7 +23,13 @@ const scaledVatRate = (rate: string): bigint | undefined => {
 export const sameVatRate = (left: string, right: string): boolean =>
   scaledVatRate(left) !== undefined && scaledVatRate(left) === scaledVatRate(right)
 
-const configurationRegistration = (
+/**
+ * Which regime a set of configurations describes, or `undefined` when they do not
+ * form one this app can name. Exported because the settings screen asks the same
+ * question of a period that is not "now": a scheduled change, an expired regime,
+ * every row of the history (`issuer-vat-regime.ts`).
+ */
+export const configurationRegistration = (
   configurations: ReadonlyArray<VatConfiguration>,
 ): boolean | undefined => {
   if (configurations.length === 0) return undefined

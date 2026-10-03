@@ -1,14 +1,12 @@
 import assert from "node:assert/strict"
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
-import { tmpdir } from "node:os"
+import { writeFileSync } from "node:fs"
 import { join } from "node:path"
-import { DatabaseSync } from "node:sqlite"
 import test from "node:test"
 import { Schema } from "effect"
 
 import { handleApiRequest } from "../api/api.test-support.ts"
 import { createRequestAuthenticator } from "../auth/auth.ts"
-import { applyMigrations, databasePath } from "../storage/migrations.ts"
+import { migratedFixture } from "../storage/postgres-rig.test-support.ts"
 import * as S from "../api/http-schemas.ts"
 import { decodeInvoice, decodeIssuer, decodeVatCatalogue } from "../../web/src/lib/models.ts"
 import { issuerForIssueDate, vatRatesForIssuer, vatRegistrationHistory } from "../../web/src/lib/vat-defaults.ts"
@@ -25,35 +23,31 @@ const buyer = {
   name: "Client Test", partyType: "individual", fiscalIdentifier: "", vatRegistered: false,
   address: { countryCode: "RO", city: "Iași", street: "Strada Test 2", county: "RO-IS" },
 }
-const fixture = () => {
-  const directory = mkdtempSync(join(tmpdir(), "qwbe-vat-treatment-http-"))
+const fixture = async (label: string) => {
+  const rig = await migratedFixture(`vth_${label}`)
   const token = "v".repeat(64)
-  const tokenFile = join(directory, "api-token")
+  const tokenFile = join(rig.dataDirectory, "api-token")
   writeFileSync(tokenFile, token, { mode: 0o600 })
-  applyMigrations(directory)
   let date = "2026-09-16"
   const runtime = {
-    dataDirectory: directory, now: () => new Date(`${date}T10:00:00.000Z`),
-    authenticate: createRequestAuthenticator({ host: "127.0.0.1", port: 3000, dataDirectory: directory,
-      nodeEnvironment: "test", authTokenFile: tokenFile, organizationId: "org-1" }),
+    pool: rig.pool,
+    dataDirectory: rig.dataDirectory, now: () => new Date(`${date}T10:00:00.000Z`),
+    authenticate: createRequestAuthenticator(rig.config({ authTokenFile: tokenFile })),
   }
   const call = (method: string, url: string, body?: unknown, idempotencyKey?: string) => handleApiRequest({
     method, url, authorization: `Bearer ${token}`, body, ...(idempotencyKey === undefined ? {} : { idempotencyKey }),
   }, runtime)
-  const state = () => {
-    const database = new DatabaseSync(databasePath(directory), { readOnly: true })
-    try {
-      return ["issuers", "issuer_tax_configurations", "audit_events"].map((table) =>
-        database.prepare(`SELECT * FROM ${table}`).all())
-    } finally { database.close() }
-  }
-  return { call, state, advance: () => { date = "2026-09-17" }, close: () => { rmSync(directory, { recursive: true, force: true }) } }
+  // Each row as its own JSON, ordered by that JSON: a total order over three
+  // tables with different keys, where SQLite leaned on `rowid`.
+  const state = () => Promise.all(["issuers", "issuer_tax_configurations", "audit_events"].map((table) =>
+    rig.sql.query(`SELECT to_jsonb(t) AS row FROM ${table} t ORDER BY to_jsonb(t)::text`)))
+  return { call, state, advance: () => { date = "2026-09-17" }, close: () => rig.close() }
 }
 
 void test("HTTP rejects incompatible VAT basis before stripping fields, without writes or audit", async () => {
-  const value = fixture()
+  const value = await fixture("basis")
   try {
-    const before = value.state()
+    const before = await value.state()
     for (const vatChange of [
       { registered: true, nonVatBasis: "article_310" },
       { registered: true, nonVatBasis: null },
@@ -63,7 +57,7 @@ void test("HTTP rejects incompatible VAT basis before stripping fields, without 
     ]) {
       const response = await value.call("PUT", "/api/issuer", { ...issuer, vatChange: { ...vatChange, effectiveFrom: "2025-08-01" } })
       assert.equal(response.status, 400, JSON.stringify(vatChange))
-      assert.deepEqual(value.state(), before)
+      assert.deepEqual(await value.state(), before)
     }
     const valid = await value.call("PUT", "/api/issuer", {
       ...issuer, vatChange: { registered: true, effectiveFrom: "2025-08-01", extra: "ignored" },
@@ -73,11 +67,11 @@ void test("HTTP rejects incompatible VAT basis before stripping fields, without 
     assert.equal(saved.currentVat?.registered, true)
     assert.equal(Object.hasOwn(saved.currentVat, "nonVatBasis"), false)
     assert.ok(saved.vatConfigurations.every((vat) => vat.vatCategoryCode === "S" && vat.vatExemptionReason === null))
-  } finally { value.close() }
+  } finally { await value.close() }
 })
 
 void test("HTTP preserves explicit article310 facts through query, proforma conversion, profile changes and storno", async () => {
-  const value = fixture()
+  const value = await fixture("history")
   try {
     const configured = await value.call("PUT", "/api/issuer", {
       ...issuer, vatChange: vatChangeFromSelection({ registered: false, effectiveFrom: "2025-08-01" }),
@@ -122,11 +116,11 @@ void test("HTTP preserves explicit article310 facts through query, proforma conv
     assert.equal(correction.vatBreakdown[0].vatCategoryCode, "O")
     assert.equal(correction.vatTotal, "0.00")
     assert.equal(correction.totalIncludingVat, "-200.00")
-  } finally { value.close() }
+  } finally { await value.close() }
 })
 
 void test("complete historical server schedule stays registered in settings and dated authoring", async () => {
-  const value = fixture()
+  const value = await fixture("issue")
   try {
     const saved = await value.call("PUT", "/api/issuer", {
       ...issuer, vatChange: { registered: true, effectiveFrom: "2025-01-01" },
@@ -140,5 +134,5 @@ void test("complete historical server schedule stays registered in settings and 
     assert.deepEqual(vatRatesForIssuer(catalogue, profile, "2025-06-01").map(({ rate }) => rate), ["19.00", "9.00", "5.00"])
     assert.equal(issuerForIssueDate(profile, "2025-06-01").vatRegistered, true)
     assert.equal(issuerForIssueDate(profile, "2026-09-16").vatRegistered, true)
-  } finally { value.close() }
+  } finally { await value.close() }
 })

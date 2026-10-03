@@ -1,174 +1,230 @@
 import assert from "node:assert/strict"
-import { chmodSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs"
-import { tmpdir } from "node:os"
+import { chmodSync, existsSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { spawnSync } from "node:child_process"
 import test from "node:test"
-import { DatabaseSync } from "node:sqlite"
 
 import { parseCommand } from "./cli.ts"
 import { route } from "../http/http.ts"
-import { applyMigrations, databaseReady, planMigrations } from "../storage/migrations.ts"
+import { applyMigrations, artifactsDirectoryReady, databaseReady, planMigrations } from "../storage/migrations.ts"
+import { withEmpty, withMigrated, type RawSql, type TestFixture } from "../storage/postgres-rig.test-support.ts"
 import { staticUiResponse } from "../http/static-ui.ts"
 
-function assertSourceIndexes(directory: string): void {
-  const database = new DatabaseSync(join(directory, "invoicing.sqlite"), { readOnly: true })
-  try {
-    for (const [table, index] of [["issued_invoices", "issued_invoices_source"], ["proformas", "proformas_source"]] as const) {
-      const indexes = new Set(database.prepare(`PRAGMA index_list(${table})`).all().map((row) => String(row.name)))
-      assert.ok(indexes.has(index), `${index} must belong to ${table}`)
-      assert.deepEqual(database.prepare(`PRAGMA index_info(${index})`).all().map((row) => String(row.name)),
-        ["organization_id", "source_app", "source_kind", "source_id"], index)
-    }
-  } finally {
-    database.close()
+/**
+ * The host's operational surface on PostgreSQL.
+ *
+ * Two premises are gone with SQLite and were replaced rather than dropped:
+ *
+ * - `PRAGMA journal_mode = wal` has no counterpart. Durability is a cluster
+ *   setting now, not something a migration can leave behind, so that test keeps
+ *   the half that is still the migrations' job — the triggers, the typed columns
+ *   and the named CHECKs — read from the catalogue.
+ * - `migrate` no longer touches `DATA_DIR`, so an unusable data directory can no
+ *   longer be the CLI's execution failure. The failure mode that exists now is a
+ *   database that cannot be reached, which is what that case uses.
+ */
+
+const sourceIndexColumns = async (sql: RawSql, index: string): Promise<ReadonlyArray<string>> =>
+  (await sql.query<{ readonly attname: string }>(
+    `SELECT a.attname FROM pg_index x
+     JOIN pg_class i ON i.oid = x.indexrelid
+     JOIN pg_attribute a ON a.attrelid = x.indrelid AND a.attnum = ANY(x.indkey)
+     JOIN unnest(x.indkey) WITH ORDINALITY AS k(attnum, position) ON k.attnum = a.attnum
+     WHERE i.relname = $1 ORDER BY k.position`,
+    [index],
+  )).map(({ attname }) => attname)
+
+const assertSourceIndexes = async (sql: RawSql): Promise<void> => {
+  for (const [table, index] of [["issued_invoices", "issued_invoices_source"], ["proformas", "proformas_source"]] as const) {
+    assert.equal(await sql.scalar(
+      `SELECT tablename FROM pg_indexes WHERE schemaname = 'public' AND indexname = $1`, [index],
+    ), table, `${index} must belong to ${table}`)
+    assert.deepEqual(await sourceIndexColumns(sql, index),
+      ["organization_id", "source_app", "source_kind", "source_id"], index)
   }
 }
 
-void test("migration apply is idempotent", () => {
-  const directory = mkdtempSync(join(tmpdir(), "qwbe-migrations-"))
-  try {
-    assert.deepEqual(planMigrations(directory).pending, [
-      "000-foundation",
-      "customers-001-baseline",
-      "catalog-001-baseline",
-      "issuer-001-baseline",
-      "invoicing-001-baseline",
-      "payments-001-baseline",
-      "documents/000-foundation",
+const cli = (fixture: TestFixture, args: ReadonlyArray<string>, overrides: Readonly<Record<string, string>> = {}) =>
+  spawnSync(process.execPath, [join(process.cwd(), "bin", "qwbe-invoicing.ts"), ...args],
+    { encoding: "utf8", env: fixture.childEnv(overrides) })
+
+void test("migration apply is idempotent", async () => {
+  await withEmpty("ops_idempotent", async ({ pool, sql }) => {
+    // One database, one ledger: the keys are `scope/name`, in application order.
+    assert.deepEqual((await planMigrations(pool)).pending, [
+      "foundation/000-foundation",
+      "customers/customers-001-baseline",
+      "catalog/catalog-001-baseline",
+      "issuer/issuer-001-baseline",
+      "invoicing/invoicing-001-baseline",
+      "payments/payments-001-baseline",
       "documents/documents-001-baseline",
-      "sessions/000-browser-sessions",
+      "standalone/000-browser-sessions",
     ])
-    assert.equal(applyMigrations(directory).changed, 9)
-    assertSourceIndexes(directory)
-    assert.equal(applyMigrations(directory).changed, 0)
-    assertSourceIndexes(directory)
-    assert.equal(databaseReady(directory), true)
-  } finally {
-    rmSync(directory, { recursive: true, force: true })
-  }
+    assert.equal((await applyMigrations(pool)).changed, 8)
+    await assertSourceIndexes(sql)
+    assert.equal((await applyMigrations(pool)).changed, 0)
+    await assertSourceIndexes(sql)
+    assert.equal(await databaseReady(pool), true)
+  })
 })
 
-void test("migrate CLI reapplies the complete schema with zero changes", () => {
-  const directory = mkdtempSync(join(tmpdir(), "qwbe-migrations-cli-"))
-  const executable = join(process.cwd(), "bin", "qwbe-invoicing.ts")
-  const env = { ...process.env, DATA_DIR: directory, NODE_ENV: "development" }
-  try {
-    const first = spawnSync(process.execPath, [executable, "migrate", "--apply", "--json"], { encoding: "utf8", env })
+void test("migrate CLI reapplies the complete schema with zero changes", async () => {
+  await withEmpty("ops_migrate_cli", (fixture) => {
+    const first = cli(fixture, ["migrate", "--apply", "--json"])
     assert.equal(first.status, 0, first.stderr)
     const firstReport: unknown = JSON.parse(first.stdout)
     assert.ok(typeof firstReport === "object" && firstReport !== null && "changed" in firstReport)
-    assert.equal(firstReport.changed, 9)
-    const second = spawnSync(process.execPath, [executable, "migrate", "--apply", "--json"], { encoding: "utf8", env })
+    assert.equal(firstReport.changed, 8)
+    const second = cli(fixture, ["migrate", "--apply", "--json"])
     assert.equal(second.status, 0, second.stderr)
     const secondReport: unknown = JSON.parse(second.stdout)
-    assert.deepEqual(secondReport, { scanned: 9, changed: 0, skipped: 9, failed: 0, pending: [], schemaDrift: [] })
-  } finally {
-    rmSync(directory, { recursive: true, force: true })
-  }
+    assert.deepEqual(secondReport, { scanned: 8, changed: 0, skipped: 8, failed: 0, pending: [], schemaDrift: [] })
+    return Promise.resolve()
+  })
 })
 
-void test("migrations leave every database in write-ahead logging mode with the immutability triggers in place", () => {
-  const directory = mkdtempSync(join(tmpdir(), "qwbe-wal-"))
-  try {
-    applyMigrations(directory)
-    for (const file of ["invoicing.sqlite", "documents.sqlite", "sessions.sqlite"]) {
-      const database = new DatabaseSync(join(directory, file), { readOnly: true })
-      try {
-        assert.equal(database.prepare("PRAGMA journal_mode").get()?.journal_mode, "wal", file)
-      } finally {
-        database.close()
+void test("migrations leave the immutability triggers, typed columns and named checks in place", async () => {
+  await withMigrated("ops_schema", async ({ sql }) => {
+    const triggers = new Set((await sql.query<{ readonly tgname: string }>(
+      "SELECT tgname FROM pg_trigger WHERE NOT tgisinternal",
+    )).map(({ tgname }) => tgname))
+    for (const expected of ["issued_invoices_no_update", "issued_invoices_no_delete", "issued_lines_no_update", "issued_lines_no_delete",
+      "issued_tax_breakdown_no_update", "issued_tax_breakdown_no_delete", "correction_documents_no_update", "correction_documents_no_delete",
+      "proformas_no_delete", "proformas_no_content_update", "idempotency_records_no_update", "idempotency_records_no_delete",
+      "issued_invoices_actor_no_update", "proformas_actor_no_update", "correction_documents_actor_no_update",
+      "audit_events_no_update", "audit_events_no_delete"]) {
+      assert.ok(triggers.has(expected), `${expected} must exist after all migrations`)
+    }
+    const column = (table: string, name: string) => sql.one(
+      `SELECT data_type, is_nullable, column_default FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = $1 AND column_name = $2`, [table, name],
+    )
+    const checks = async (table: string) => (await sql.query<{ readonly conname: string; readonly definition: string }>(
+      `SELECT conname, pg_get_constraintdef(oid) AS definition FROM pg_constraint
+       WHERE contype = 'c' AND conrelid = $1::regclass`, [table],
+    ))
+    for (const table of ["issued_invoices", "proformas", "correction_documents"]) {
+      assert.deepEqual(await column(table, "actor_id"),
+        { data_type: "text", is_nullable: "NO", column_default: null }, table)
+      assert.deepEqual(await column(table, "issuer_vat_registered"),
+        { data_type: "integer", is_nullable: "NO", column_default: null }, table)
+      // The flag is a named CHECK now, so the guarantee is read by name.
+      const flag = (await checks(table)).find(({ conname }) => conname.endsWith("issuer_vat_registered_flag"))
+      assert.ok(flag, `${table} issuer_vat_registered CHECK`)
+      assert.match(flag.definition, /issuer_vat_registered = ANY \(ARRAY\[0, 1\]\)/u, table)
+    }
+    // What `STRICT` stood for on `audit_events`: every column is typed, and the
+    // engine enforces it unconditionally.
+    assert.deepEqual(await sql.query(
+      `SELECT column_name FROM information_schema.columns
+       WHERE table_schema = 'public' AND table_name = 'audit_events' AND data_type NOT IN ('text','integer','bigint')`,
+    ), [])
+    assert.equal((await sql.rejects(
+      "INSERT INTO invoice_sequences(organization_id,fiscal_year,document_type,series,last_number)"
+      + " VALUES('org-typed','not-a-year','invoice','INV',1)",
+    )).code, "22P02")
+    for (const [table, brandingColumn] of [["issuers", "branding"], ["issued_invoices", "issuer_branding"], ["proformas", "issuer_branding"]] as const) {
+      assert.ok(await column(table, brandingColumn), `${table}.${brandingColumn}`)
+    }
+    for (const table of ["issuers", "issued_invoices", "proformas", "correction_documents"]) {
+      const prefix = table === "issuers" ? "" : "issuer_"
+      for (const name of ["legal_form", "trade_registry_number", "iban", "bank_name", "social_capital"]) {
+        assert.ok(await column(table, `${prefix}${name}`), `${table}.${prefix}${name}`)
+      }
+      const legalForm = (await checks(table)).find(({ conname }) => conname.endsWith("legal_form_valid"))
+      assert.ok(legalForm, `${table} legal_form CHECK`)
+      assert.match(legalForm.definition, /legal_form = ANY \(ARRAY\['srl'::text, 'pfa'::text\]\)/u, table)
+    }
+    // `UPDATE OF <column>` is in the trigger definition, where the SQLite
+    // trigger body used to name the columns it protected.
+    for (const trigger of ["issued_invoices_no_update", "proformas_no_content_update"]) {
+      const definition = String(await sql.scalar(
+        "SELECT pg_get_triggerdef(oid) FROM pg_trigger WHERE tgname = $1", [trigger],
+      ))
+      for (const name of ["issuer_branding", "issuer_legal_form", "issuer_vat_registered"]) {
+        assert.ok(definition.includes(name), `${trigger}.${name}`)
       }
     }
-    const database = new DatabaseSync(join(directory, "invoicing.sqlite"))
-    try {
-      const triggers = new Set(database.prepare("SELECT name FROM sqlite_master WHERE type = 'trigger'").all().map((row) => String(row.name)))
-      for (const expected of ["issued_invoices_no_update", "issued_invoices_no_delete", "issued_lines_no_update", "issued_lines_no_delete",
-        "issued_tax_breakdown_no_update", "issued_tax_breakdown_no_delete", "correction_documents_no_update", "correction_documents_no_delete",
-        "proformas_no_delete", "proformas_no_content_update", "idempotency_records_no_update", "idempotency_records_no_delete",
-        "issued_invoices_actor_no_update", "proformas_actor_no_update", "correction_documents_actor_no_update",
-        "audit_events_no_update", "audit_events_no_delete"]) {
-        assert.ok(triggers.has(expected), `${expected} must exist after all migrations`)
-      }
-      for (const table of ["issued_invoices", "proformas", "correction_documents"]) {
-        const actor = database.prepare("SELECT type,\"notnull\" AS required,dflt_value FROM pragma_table_info(?) WHERE name='actor_id'").get(table)
-        assert.deepEqual(actor === undefined ? undefined : { ...actor }, { type: "TEXT", required: 1, dflt_value: null }, table)
-        const vatRegistered = database.prepare("SELECT type,\"notnull\" AS required,dflt_value FROM pragma_table_info(?) WHERE name='issuer_vat_registered'").get(table)
-        assert.deepEqual(vatRegistered === undefined ? undefined : { ...vatRegistered }, { type: "INTEGER", required: 1, dflt_value: null }, table)
-        assert.match(String(database.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name=?").get(table)?.sql),
-          /issuer_vat_registered INTEGER NOT NULL CHECK\(issuer_vat_registered IN\(0,1\)\)/)
-      }
-      assert.match(String(database.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='audit_events'").get()?.sql), /STRICT$/)
-      for (const [table, column] of [["issuers", "branding"], ["issued_invoices", "issuer_branding"], ["proformas", "issuer_branding"]] as const) {
-        assert.ok(database.prepare("SELECT 1 FROM pragma_table_info(?) WHERE name=?").get(table, column), `${table}.${column}`)
-      }
-      for (const table of ["issuers", "issued_invoices", "proformas", "correction_documents"]) {
-        const columns = new Set(database.prepare("SELECT name FROM pragma_table_info(?)").all(table).map((row) => String(row.name)))
-        const prefix = table === "issuers" ? "" : "issuer_"
-        for (const column of ["legal_form", "trade_registry_number", "iban", "bank_name", "social_capital"]) {
-          assert.ok(columns.has(`${prefix}${column}`), `${table}.${prefix}${column}`)
-        }
-      }
-      for (const table of ["issuers", "issued_invoices", "proformas", "correction_documents"]) {
-        assert.match(String(database.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name=?").get(table)?.sql),
-          /legal_form TEXT NOT NULL CHECK\(.*legal_form IN\('srl','pfa'\)\)/)
-      }
-      for (const trigger of ["issued_invoices_no_update", "proformas_no_content_update"]) {
-        const sql = String(database.prepare("SELECT sql FROM sqlite_master WHERE type='trigger' AND name=?").get(trigger)?.sql)
-        assert.ok(sql.includes("issuer_branding"), trigger)
-        assert.ok(sql.includes("issuer_legal_form"), trigger)
-        assert.ok(sql.includes("issuer_vat_registered"), trigger)
-      }
-      assert.equal(database.prepare("SELECT 1 FROM pragma_table_info('proformas') WHERE name='invoice_series'").get(), undefined)
-      assert.ok(database.prepare("SELECT 1 FROM sqlite_master WHERE type='trigger' AND name='issued_invoices_lineage_insert'").get())
-      database.prepare(`INSERT INTO issuers(organization_id,legal_name,tax_identifier,country_code,city,street,county,
+    assert.equal(await column("proformas", "invoice_series"), undefined)
+    assert.ok(triggers.has("issued_invoices_lineage_insert"))
+    await sql.exec(`INSERT INTO issuers(organization_id,legal_name,tax_identifier,country_code,city,street,county,
+      default_currency,default_payment_term_days,legal_form,trade_registry_number,iban,bank_name,social_capital)
+      VALUES('org-idempotency','Furnizor SRL','12345674','RO','Iași','Strada 1','RO-IS','RON',15,'srl','J22/123/2020','','','1000.00')`)
+    await sql.query(`INSERT INTO idempotency_records(
+      organization_id,idempotency_key,operation,fingerprint,result_kind,result_id,created_at)
+      VALUES('org-idempotency','draft-from-proforma','create_draft_invoice_from_proforma',$1,'draft','draft-1','2026-09-01T10:00:00.000Z')`,
+      [`sha256:${"0".repeat(64)}`])
+    assert.equal(await sql.scalar("SELECT result_kind FROM idempotency_records WHERE idempotency_key='draft-from-proforma'"), "draft")
+  })
+})
+
+void test("readiness stays true while another connection holds a write lock", async () => {
+  await withMigrated("ops_lock", async ({ pool, sql }) => {
+    // The exclusive business lock plus an uncommitted write: what every writer
+    // holds, and what `BEGIN IMMEDIATE` used to mean.
+    await sql.transaction(async (writer) => {
+      await writer.exec("SELECT pg_advisory_xact_lock(1480, 2)")
+      await writer.exec(`INSERT INTO issuers(organization_id,legal_name,tax_identifier,country_code,city,street,county,
         default_currency,default_payment_term_days,legal_form,trade_registry_number,iban,bank_name,social_capital)
-        VALUES('org-idempotency','Furnizor SRL','12345674','RO','Iași','Strada 1','RO-IS','RON',15,'srl','J22/123/2020','','','1000.00')`).run()
-      database.prepare(`INSERT INTO idempotency_records(
-        organization_id,idempotency_key,operation,fingerprint,result_kind,result_id,created_at)
-        VALUES('org-idempotency','draft-from-proforma','create_draft_invoice_from_proforma',?,'draft','draft-1','2026-09-01T10:00:00.000Z')`)
-        .run(`sha256:${"0".repeat(64)}`)
-      assert.equal(database.prepare("SELECT result_kind FROM idempotency_records WHERE idempotency_key='draft-from-proforma'").get()?.result_kind, "draft")
-    } finally {
-      database.close()
-    }
-  } finally {
-    rmSync(directory, { recursive: true, force: true })
-  }
-})
-
-void test("readiness stays true while another connection holds a write lock", () => {
-  const directory = mkdtempSync(join(tmpdir(), "qwbe-readiness-lock-"))
-  try {
-    applyMigrations(directory)
-    const writer = new DatabaseSync(join(directory, "invoicing.sqlite"))
-    try {
-      writer.exec("BEGIN IMMEDIATE")
+        VALUES('org-writer','Furnizor SRL','12345674','RO','Iași','Strada 1','RO-IS','RON',15,'srl','J22/123/2020','','','1000.00')`)
       const started = performance.now()
-      assert.equal(databaseReady(directory), true)
+      assert.equal(await databaseReady(pool), true)
       assert.ok(performance.now() - started < 1_000, "readiness must not wait on the writer")
-    } finally {
-      writer.exec("ROLLBACK")
-      writer.close()
-    }
-  } finally {
-    rmSync(directory, { recursive: true, force: true })
-  }
+    })
+  })
 })
 
-void test("readiness fails when migrated storage loses write access", () => {
-  const directory = mkdtempSync(join(tmpdir(), "qwbe-readiness-"))
-  const database = join(directory, "invoicing.sqlite")
-  try {
-    applyMigrations(directory)
-    chmodSync(database, 0o444)
-    chmodSync(directory, 0o555)
-    assert.equal(databaseReady(directory), false)
-  } finally {
-    chmodSync(directory, 0o755)
-    chmodSync(database, 0o644)
-    rmSync(directory, { recursive: true, force: true })
-  }
+void test("readiness fails when the schema is absent or the artifact directory loses write access", async () => {
+  // The database half: a reachable database whose ledger describes nothing is
+  // not ready, and no further migration is implied by this answer.
+  await withEmpty("ops_unready", async ({ pool }) => {
+    assert.equal(await databaseReady(pool), false)
+  })
+  // The filesystem half, which PostgreSQL did not take away: PDFs are still
+  // content-addressed files under `DATA_DIR`.
+  await withMigrated("ops_readonly", async ({ pool, dataDirectory }) => {
+    assert.equal(await databaseReady(pool), true)
+    assert.equal(artifactsDirectoryReady(dataDirectory), true)
+    chmodSync(dataDirectory, 0o555)
+    try {
+      assert.equal(artifactsDirectoryReady(dataDirectory), false)
+    } finally {
+      chmodSync(dataDirectory, 0o755)
+    }
+  })
+})
+
+void test("readiness only observes the artifact directory: a missing one stays missing and fails", async () => {
+  await withMigrated("ops_datadir", ({ dataDirectory }) => {
+    // A misspelled DATA_DIR must answer not-ready, not be created on whatever
+    // filesystem happens to be writable there.
+    const missing = join(dataDirectory, "not-mounted")
+    assert.equal(artifactsDirectoryReady(missing), false)
+    assert.equal(existsSync(missing), false, "readiness must not create the data directory")
+    const file = join(dataDirectory, "a-file")
+    writeFileSync(file, "")
+    assert.equal(artifactsDirectoryReady(file), false)
+    // A symlink to a real directory is refused, matching backup/restore/artifacts.
+    const linked = join(dataDirectory, "linked")
+    symlinkSync(dataDirectory, linked)
+    assert.equal(artifactsDirectoryReady(linked), false)
+    return Promise.resolve()
+  })
+})
+
+void test("artifacts refuses a missing DATA_DIR instead of creating it, for the plan and the apply", async () => {
+  await withMigrated("ops_artifacts_datadir", (fixture) => {
+    const { dataDirectory } = fixture
+    const missing = join(dataDirectory, "not-mounted")
+    for (const args of [["artifacts", "--json"], ["artifacts", "--apply", "--json"]]) {
+      const result = cli(fixture, args, { DATA_DIR: missing, ORGANIZATION_ID: "org-test", NODE_ENV: "development" })
+      assert.equal(result.status, 1, `${args.join(" ")}: ${result.stdout}${result.stderr}`)
+      assert.match(result.stderr, /DATA_DIR does not exist/u)
+      assert.equal(existsSync(missing), false, `${args.join(" ")} must not create DATA_DIR`)
+    }
+    return Promise.resolve()
+  })
 })
 
 void test("migrate remains dry-run unless apply is explicit", () => {
@@ -191,29 +247,21 @@ void test("artifact reconciliation is bounded and dry-run unless apply is explic
   assert.throws(() => parseCommand(["artifacts", "--limit", "101"]))
 })
 
-void test("CLI distinguishes invalid input, guard refusal, and execution failure", () => {
-  const executable = join(process.cwd(), "bin", "qwbe-invoicing.ts")
-  const directory = mkdtempSync(join(tmpdir(), "qwbe-cli-"))
-  const invalidDataPath = join(directory, "not-a-directory")
-  writeFileSync(invalidDataPath, "occupied")
-  try {
-    const invalid = spawnSync(process.execPath, [executable, "unknown"], { encoding: "utf8" })
+void test("CLI distinguishes invalid input, guard refusal, and execution failure", async () => {
+  await withEmpty("ops_exit_codes", (fixture) => {
+    const invalid = cli(fixture, ["unknown"])
     assert.equal(invalid.status, 2)
 
-    const refused = spawnSync(process.execPath, [executable, "migrate", "--apply"], {
-      encoding: "utf8",
-      env: { ...process.env, DATA_DIR: directory, NODE_ENV: "production" },
-    })
+    const refused = cli(fixture, ["migrate", "--apply"], { NODE_ENV: "production" })
     assert.equal(refused.status, 2)
 
-    const failed = spawnSync(process.execPath, [executable, "migrate", "--apply"], {
-      encoding: "utf8",
-      env: { ...process.env, DATA_DIR: invalidDataPath, NODE_ENV: "development" },
-    })
+    // Execution failure, PostgreSQL flavoured: the target database does not
+    // exist, so the command cannot connect. `DATA_DIR` is no longer involved —
+    // `migrate` does not touch the filesystem.
+    const failed = cli(fixture, ["migrate", "--apply"], { PGDATABASE: "t_absent_database" })
     assert.equal(failed.status, 1)
-  } finally {
-    rmSync(directory, { recursive: true, force: true })
-  }
+    return Promise.resolve()
+  })
 })
 
 void test("readiness is observable over the HTTP contract", () => {

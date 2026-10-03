@@ -8,7 +8,7 @@ import type { BackgroundError } from "./invoice-authoring-session-types.ts"
 import type { Customer, ProductPreset } from "../lib/draft-models.ts"
 import { draftQueryKey } from "./use-drafts.ts"
 import { authoringAccess } from "../lib/invoice-authoring-readiness.ts"
-import { authoringSeriesOptions } from "../lib/invoice-authoring-options.ts"
+import { authoringSeriesOptions } from "../lib/document-authoring-options.ts"
 
 /**
  * A rejection turned into something the screen can show. Query rejections are
@@ -117,7 +117,7 @@ export const useInvoiceAuthoringPage = (id: string | undefined): InvoiceAuthorin
   }
   if (issuerData == null) return { kind: "issuer-required" }
   if (catalogueData === undefined) return { kind: "vat-catalogue-empty" }
-  const seriesOptions = authoringSeriesOptions(seriesData ?? [])
+  const seriesOptions = authoringSeriesOptions(seriesData ?? [], "invoice")
   if (seriesOptions.length === 0) return { kind: "invoice-series-required" }
   if ((unitsData ?? []).length === 0) return { kind: "unit-catalogue-empty" }
   if (id !== undefined && draft.data === undefined) return { kind: "draft-missing" }

@@ -1,6 +1,5 @@
 import assert from "node:assert/strict"
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
-import { tmpdir } from "node:os"
+import { writeFileSync } from "node:fs"
 import { join } from "node:path"
 import test from "node:test"
 
@@ -13,7 +12,7 @@ import { handleApiRequest } from "../api/api.test-support.ts"
 import { createRequestAuthenticator } from "../auth/auth.ts"
 import { applicationHttpApi } from "../api/http-api.ts"
 import * as S from "../api/http-schemas.ts"
-import { applyMigrations } from "../storage/migrations.ts"
+import { withMigrated } from "../storage/postgres-rig.test-support.ts"
 
 const customer = { partyType: "company", name: "Client", fiscalIdentifier: " 87654329 ", vatRegistered: true,
   address: { countryCode: "RO", city: "Iași", street: "Strada 1", county: "RO-IS" } }
@@ -231,15 +230,18 @@ void test("Swagger exposes one buyer object plus notes and limit constraints", (
   assert.match(JSON.stringify(limit), /\\d\{1,6\}/)
 })
 
+// The schema layer answers before any domain operation, so the database is only
+// here to prove the request never reached it: every assertion is a 400.
 void test("HTTP maps schema failures to the existing 400 envelope before domain operations", async () => {
-  const directory = mkdtempSync(join(tmpdir(), "qwbe-http-input-"))
-  const token = "a".repeat(64)
-  const tokenFile = join(directory, "api-token")
-  writeFileSync(tokenFile, token, { mode: 0o600 })
-  try {
-    applyMigrations(directory)
-    const runtime = { dataDirectory: directory, authenticate: createRequestAuthenticator({ host: "127.0.0.1", port: 3000,
-      dataDirectory: directory, nodeEnvironment: "test", authTokenFile: tokenFile, organizationId: "org-1" }) }
+  await withMigrated("http_input", async (fixture) => {
+    const token = "a".repeat(64)
+    const tokenFile = join(fixture.dataDirectory, "api-token")
+    writeFileSync(tokenFile, token, { mode: 0o600 })
+    const runtime = {
+      pool: fixture.pool,
+      dataDirectory: fixture.dataDirectory,
+      authenticate: createRequestAuthenticator(fixture.config({ authTokenFile: tokenFile })),
+    }
     const raw = { ...customer, name: 1, address: { ...customer.address, city: null } }
     const response = await handleApiRequest({ method: "POST", url: "/api/customers", authorization: `Bearer ${token}`, body: raw }, runtime)
     assert.deepEqual(response, { status: 400, body: { error: "ValidationFailure", issues: schemaIssues(S.CustomerInput, raw) } })
@@ -250,5 +252,5 @@ void test("HTTP maps schema failures to the existing 400 envelope before domain 
       assert.equal(body.error, "ValidationFailure")
       assert.ok(body.issues.length > 0 && body.issues.every((issue) => typeof issue === "string"))
     }
-  } finally { rmSync(directory, { recursive: true, force: true }) }
+  })
 })

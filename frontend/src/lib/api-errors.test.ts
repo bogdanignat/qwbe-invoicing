@@ -57,6 +57,15 @@ void test("a domain conflict is read as Romanian, not as the bare `DomainConflic
   const conflicts = [
     "idempotency_key_reused", "draft_creation_result_deleted",
     "invoice_already_issued", "derived_draft_cannot_be_deleted",
+    // The conversion answer carries an English `message` as well, so this one
+    // also proves the code wins over it (cube/invoicing/issuance/application/
+    // proforma-conversion-context.ts:13).
+    "proforma_already_converted",
+    // Every conflict the master-data writes can answer with: the business one
+    // on a customer delete, and the store conflicts behind the six writes
+    // (standalone/storage/sqlite-customers.ts, sqlite-catalog.ts, sqlite-rows.ts).
+    "customer_has_open_drafts", "customer_not_found", "customer_id_taken",
+    "product_preset_id_taken", "persistence_conflict",
   ]
   for (const code of conflicts) {
     const failure = parseApiFailure({ error: "DomainConflict", code }, 409)
@@ -71,4 +80,13 @@ void test("a domain conflict is read as Romanian, not as the bare `DomainConflic
 void test("a spent idempotency key names the registry as the next step", () => {
   const failure = parseApiFailure({ error: "DomainConflict", code: "idempotency_key_reused" }, 409)
   assert.match(failure.message, /registrul de facturi/)
+})
+
+// The only conflict a user can reach by ordinary use of the customer registry:
+// deleting a party an unsent draft still refers to. It names the draft as the
+// thing to deal with, since no repeat of the delete can succeed on its own.
+void test("a customer held by an open draft says what blocks the deletion", () => {
+  const failure = parseApiFailure({ error: "DomainConflict", code: "customer_has_open_drafts" }, 409)
+  assert.match(failure.message, /draft/)
+  assert.equal(isTransientFailure(failure), false)
 })

@@ -1,0 +1,1156 @@
+{
+  "total": 60,
+  "raiseOnly": 60,
+  "withSubqueryInWhen": [
+    "invoice_drafts_series_insert",
+    "issued_invoices_lineage_insert",
+    "proforma_conversions_require_lineage",
+    "proforma_invoice_conversions_match",
+    "proforma_lines_no_late_insert",
+    "proforma_tax_no_late_insert"
+  ],
+  "withUpdateOf": [
+    "correction_documents_actor_no_update",
+    "invoice_drafts_bucharest_sector_update",
+    "invoice_drafts_series_update",
+    "invoice_drafts_source_update",
+    "issued_invoices_actor_no_update",
+    "issued_invoices_no_update",
+    "issued_invoices_source_no_update",
+    "proformas_actor_no_update",
+    "proformas_no_content_update",
+    "proformas_seal_only",
+    "proformas_source_no_update"
+  ],
+  "triggers": [
+    {
+      "file": "invoicing.sqlite",
+      "name": "audit_events_no_delete",
+      "table": "audit_events",
+      "timing": "BEFORE",
+      "event": "DELETE",
+      "updateOf": [],
+      "when": null,
+      "whenUsesSubquery": false,
+      "statementCount": 1,
+      "raiseOnly": true,
+      "raiseMessages": [
+        "audit events are append-only"
+      ],
+      "body": "SELECT RAISE(ABORT,'audit events are append-only');",
+      "definition": "CREATE TRIGGER audit_events_no_delete BEFORE DELETE ON audit_events BEGIN SELECT RAISE(ABORT,'audit events are append-only');END"
+    },
+    {
+      "file": "invoicing.sqlite",
+      "name": "audit_events_no_update",
+      "table": "audit_events",
+      "timing": "BEFORE",
+      "event": "UPDATE",
+      "updateOf": [],
+      "when": null,
+      "whenUsesSubquery": false,
+      "statementCount": 1,
+      "raiseOnly": true,
+      "raiseMessages": [
+        "audit events are append-only"
+      ],
+      "body": "SELECT RAISE(ABORT,'audit events are append-only');",
+      "definition": "CREATE TRIGGER audit_events_no_update BEFORE UPDATE ON audit_events BEGIN SELECT RAISE(ABORT,'audit events are append-only');END"
+    },
+    {
+      "file": "invoicing.sqlite",
+      "name": "correction_documents_actor_no_update",
+      "table": "correction_documents",
+      "timing": "BEFORE",
+      "event": "UPDATE",
+      "updateOf": [
+        "actor_id"
+      ],
+      "when": null,
+      "whenUsesSubquery": false,
+      "statementCount": 1,
+      "raiseOnly": true,
+      "raiseMessages": [
+        "correction actor is immutable"
+      ],
+      "body": "SELECT RAISE(ABORT,'correction actor is immutable');",
+      "definition": "CREATE TRIGGER correction_documents_actor_no_update BEFORE UPDATE OF actor_id ON correction_documents BEGIN SELECT RAISE(ABORT,'correction actor is immutable');END"
+    },
+    {
+      "file": "invoicing.sqlite",
+      "name": "correction_documents_bucharest_sector_insert",
+      "table": "correction_documents",
+      "timing": "BEFORE",
+      "event": "INSERT",
+      "updateOf": [],
+      "when": "(NEW.issuer_county='RO-B' AND NEW.issuer_sector IS NULL)OR(NEW.customer_county='RO-B' AND NEW.customer_sector IS NULL)",
+      "whenUsesSubquery": false,
+      "statementCount": 1,
+      "raiseOnly": true,
+      "raiseMessages": [
+        "Bucharest sector is required"
+      ],
+      "body": "SELECT RAISE(ABORT,'Bucharest sector is required');",
+      "definition": "CREATE TRIGGER correction_documents_bucharest_sector_insert BEFORE INSERT ON correction_documents WHEN(NEW.issuer_county='RO-B' AND NEW.issuer_sector IS NULL)OR(NEW.customer_county='RO-B' AND NEW.customer_sector IS NULL)BEGIN SELECT RAISE(ABORT,'Bucharest sector is required');END"
+    },
+    {
+      "file": "invoicing.sqlite",
+      "name": "correction_documents_no_delete",
+      "table": "correction_documents",
+      "timing": "BEFORE",
+      "event": "DELETE",
+      "updateOf": [],
+      "when": null,
+      "whenUsesSubquery": false,
+      "statementCount": 1,
+      "raiseOnly": true,
+      "raiseMessages": [
+        "correction documents are immutable"
+      ],
+      "body": "SELECT RAISE(ABORT,'correction documents are immutable');",
+      "definition": "CREATE TRIGGER correction_documents_no_delete BEFORE DELETE ON correction_documents BEGIN SELECT RAISE(ABORT,'correction documents are immutable');END"
+    },
+    {
+      "file": "invoicing.sqlite",
+      "name": "correction_documents_no_update",
+      "table": "correction_documents",
+      "timing": "BEFORE",
+      "event": "UPDATE",
+      "updateOf": [],
+      "when": null,
+      "whenUsesSubquery": false,
+      "statementCount": 1,
+      "raiseOnly": true,
+      "raiseMessages": [
+        "correction documents are immutable"
+      ],
+      "body": "SELECT RAISE(ABORT,'correction documents are immutable');",
+      "definition": "CREATE TRIGGER correction_documents_no_update BEFORE UPDATE ON correction_documents BEGIN SELECT RAISE(ABORT,'correction documents are immutable');END"
+    },
+    {
+      "file": "invoicing.sqlite",
+      "name": "correction_documents_source_insert",
+      "table": "correction_documents",
+      "timing": "BEFORE",
+      "event": "INSERT",
+      "updateOf": [],
+      "when": "NOT((NEW.source_app IS NULL AND NEW.source_kind IS NULL AND NEW.source_id IS NULL)OR(NEW.source_app IS NOT NULL AND NEW.source_kind IS NOT NULL AND NEW.source_id IS NOT NULL AND length(NEW.source_app) BETWEEN 1 AND 100 AND length(NEW.source_kind) BETWEEN 1 AND 100 AND length(NEW.source_id) BETWEEN 1 AND 255))",
+      "whenUsesSubquery": false,
+      "statementCount": 1,
+      "raiseOnly": true,
+      "raiseMessages": [
+        "invalid correction source"
+      ],
+      "body": "SELECT RAISE(ABORT,'invalid correction source');",
+      "definition": "CREATE TRIGGER correction_documents_source_insert BEFORE INSERT ON correction_documents WHEN NOT((NEW.source_app IS NULL AND NEW.source_kind IS NULL AND NEW.source_id IS NULL)OR(NEW.source_app IS NOT NULL AND NEW.source_kind IS NOT NULL AND NEW.source_id IS NOT NULL AND length(NEW.source_app) BETWEEN 1 AND 100 AND length(NEW.source_kind) BETWEEN 1 AND 100 AND length(NEW.source_id) BETWEEN 1 AND 255))BEGIN SELECT RAISE(ABORT,'invalid correction source');END"
+    },
+    {
+      "file": "invoicing.sqlite",
+      "name": "correction_lines_no_delete",
+      "table": "correction_lines",
+      "timing": "BEFORE",
+      "event": "DELETE",
+      "updateOf": [],
+      "when": null,
+      "whenUsesSubquery": false,
+      "statementCount": 1,
+      "raiseOnly": true,
+      "raiseMessages": [
+        "correction lines are immutable"
+      ],
+      "body": "SELECT RAISE(ABORT,'correction lines are immutable');",
+      "definition": "CREATE TRIGGER correction_lines_no_delete BEFORE DELETE ON correction_lines BEGIN SELECT RAISE(ABORT,'correction lines are immutable');END"
+    },
+    {
+      "file": "invoicing.sqlite",
+      "name": "correction_lines_no_update",
+      "table": "correction_lines",
+      "timing": "BEFORE",
+      "event": "UPDATE",
+      "updateOf": [],
+      "when": null,
+      "whenUsesSubquery": false,
+      "statementCount": 1,
+      "raiseOnly": true,
+      "raiseMessages": [
+        "correction lines are immutable"
+      ],
+      "body": "SELECT RAISE(ABORT,'correction lines are immutable');",
+      "definition": "CREATE TRIGGER correction_lines_no_update BEFORE UPDATE ON correction_lines BEGIN SELECT RAISE(ABORT,'correction lines are immutable');END"
+    },
+    {
+      "file": "invoicing.sqlite",
+      "name": "correction_tax_breakdown_no_delete",
+      "table": "correction_tax_breakdown",
+      "timing": "BEFORE",
+      "event": "DELETE",
+      "updateOf": [],
+      "when": null,
+      "whenUsesSubquery": false,
+      "statementCount": 1,
+      "raiseOnly": true,
+      "raiseMessages": [
+        "correction tax breakdown is immutable"
+      ],
+      "body": "SELECT RAISE(ABORT,'correction tax breakdown is immutable');",
+      "definition": "CREATE TRIGGER correction_tax_breakdown_no_delete BEFORE DELETE ON correction_tax_breakdown BEGIN SELECT RAISE(ABORT,'correction tax breakdown is immutable');END"
+    },
+    {
+      "file": "invoicing.sqlite",
+      "name": "correction_tax_breakdown_no_update",
+      "table": "correction_tax_breakdown",
+      "timing": "BEFORE",
+      "event": "UPDATE",
+      "updateOf": [],
+      "when": null,
+      "whenUsesSubquery": false,
+      "statementCount": 1,
+      "raiseOnly": true,
+      "raiseMessages": [
+        "correction tax breakdown is immutable"
+      ],
+      "body": "SELECT RAISE(ABORT,'correction tax breakdown is immutable');",
+      "definition": "CREATE TRIGGER correction_tax_breakdown_no_update BEFORE UPDATE ON correction_tax_breakdown BEGIN SELECT RAISE(ABORT,'correction tax breakdown is immutable');END"
+    },
+    {
+      "file": "invoicing.sqlite",
+      "name": "idempotency_records_no_delete",
+      "table": "idempotency_records",
+      "timing": "BEFORE",
+      "event": "DELETE",
+      "updateOf": [],
+      "when": null,
+      "whenUsesSubquery": false,
+      "statementCount": 1,
+      "raiseOnly": true,
+      "raiseMessages": [
+        "idempotency record is immutable"
+      ],
+      "body": "SELECT RAISE(ABORT,'idempotency record is immutable');",
+      "definition": "CREATE TRIGGER idempotency_records_no_delete BEFORE DELETE ON idempotency_records BEGIN SELECT RAISE(ABORT,'idempotency record is immutable');END"
+    },
+    {
+      "file": "invoicing.sqlite",
+      "name": "idempotency_records_no_update",
+      "table": "idempotency_records",
+      "timing": "BEFORE",
+      "event": "UPDATE",
+      "updateOf": [],
+      "when": null,
+      "whenUsesSubquery": false,
+      "statementCount": 1,
+      "raiseOnly": true,
+      "raiseMessages": [
+        "idempotency record is immutable"
+      ],
+      "body": "SELECT RAISE(ABORT,'idempotency record is immutable');",
+      "definition": "CREATE TRIGGER idempotency_records_no_update BEFORE UPDATE ON idempotency_records BEGIN SELECT RAISE(ABORT,'idempotency record is immutable');END"
+    },
+    {
+      "file": "invoicing.sqlite",
+      "name": "invoice_drafts_bucharest_sector_insert",
+      "table": "invoice_drafts",
+      "timing": "BEFORE",
+      "event": "INSERT",
+      "updateOf": [],
+      "when": "NEW.customer_county='RO-B' AND NEW.customer_sector IS NULL",
+      "whenUsesSubquery": false,
+      "statementCount": 1,
+      "raiseOnly": true,
+      "raiseMessages": [
+        "Bucharest sector is required"
+      ],
+      "body": "SELECT RAISE(ABORT,'Bucharest sector is required');",
+      "definition": "CREATE TRIGGER invoice_drafts_bucharest_sector_insert BEFORE INSERT ON invoice_drafts WHEN NEW.customer_county='RO-B' AND NEW.customer_sector IS NULL BEGIN SELECT RAISE(ABORT,'Bucharest sector is required');END"
+    },
+    {
+      "file": "invoicing.sqlite",
+      "name": "invoice_drafts_bucharest_sector_update",
+      "table": "invoice_drafts",
+      "timing": "BEFORE",
+      "event": "UPDATE",
+      "updateOf": [
+        "customer_county",
+        "customer_sector"
+      ],
+      "when": "NEW.customer_county='RO-B' AND NEW.customer_sector IS NULL",
+      "whenUsesSubquery": false,
+      "statementCount": 1,
+      "raiseOnly": true,
+      "raiseMessages": [
+        "Bucharest sector is required"
+      ],
+      "body": "SELECT RAISE(ABORT,'Bucharest sector is required');",
+      "definition": "CREATE TRIGGER invoice_drafts_bucharest_sector_update BEFORE UPDATE OF customer_county,customer_sector ON invoice_drafts WHEN NEW.customer_county='RO-B' AND NEW.customer_sector IS NULL BEGIN SELECT RAISE(ABORT,'Bucharest sector is required');END"
+    },
+    {
+      "file": "invoicing.sqlite",
+      "name": "invoice_drafts_no_issued_delete",
+      "table": "invoice_drafts",
+      "timing": "BEFORE",
+      "event": "DELETE",
+      "updateOf": [],
+      "when": "OLD.status!='draft'",
+      "whenUsesSubquery": false,
+      "statementCount": 1,
+      "raiseOnly": true,
+      "raiseMessages": [
+        "issued drafts are immutable"
+      ],
+      "body": "SELECT RAISE(ABORT,'issued drafts are immutable');",
+      "definition": "CREATE TRIGGER invoice_drafts_no_issued_delete BEFORE DELETE ON invoice_drafts WHEN OLD.status!='draft' BEGIN SELECT RAISE(ABORT,'issued drafts are immutable');END"
+    },
+    {
+      "file": "invoicing.sqlite",
+      "name": "invoice_drafts_no_issued_update",
+      "table": "invoice_drafts",
+      "timing": "BEFORE",
+      "event": "UPDATE",
+      "updateOf": [],
+      "when": "OLD.status!='draft'",
+      "whenUsesSubquery": false,
+      "statementCount": 1,
+      "raiseOnly": true,
+      "raiseMessages": [
+        "issued drafts are immutable"
+      ],
+      "body": "SELECT RAISE(ABORT,'issued drafts are immutable');",
+      "definition": "CREATE TRIGGER invoice_drafts_no_issued_update BEFORE UPDATE ON invoice_drafts WHEN OLD.status!='draft' BEGIN SELECT RAISE(ABORT,'issued drafts are immutable');END"
+    },
+    {
+      "file": "invoicing.sqlite",
+      "name": "invoice_drafts_series_insert",
+      "table": "invoice_drafts",
+      "timing": "BEFORE",
+      "event": "INSERT",
+      "updateOf": [],
+      "when": "NOT EXISTS(SELECT 1 FROM document_series WHERE organization_id=NEW.organization_id AND document_type='invoice' AND series=NEW.series)",
+      "whenUsesSubquery": true,
+      "statementCount": 1,
+      "raiseOnly": true,
+      "raiseMessages": [
+        "invoice document series is not configured"
+      ],
+      "body": "SELECT RAISE(ABORT,'invoice document series is not configured');",
+      "definition": "CREATE TRIGGER invoice_drafts_series_insert BEFORE INSERT ON invoice_drafts WHEN NOT EXISTS(SELECT 1 FROM document_series WHERE organization_id=NEW.organization_id AND document_type='invoice' AND series=NEW.series)BEGIN SELECT RAISE(ABORT,'invoice document series is not configured');END"
+    },
+    {
+      "file": "invoicing.sqlite",
+      "name": "invoice_drafts_series_update",
+      "table": "invoice_drafts",
+      "timing": "BEFORE",
+      "event": "UPDATE",
+      "updateOf": [
+        "organization_id",
+        "series"
+      ],
+      "when": "OLD.organization_id IS NOT NEW.organization_id OR OLD.series IS NOT NEW.series",
+      "whenUsesSubquery": false,
+      "statementCount": 1,
+      "raiseOnly": true,
+      "raiseMessages": [
+        "invoice draft series is immutable"
+      ],
+      "body": "SELECT RAISE(ABORT,'invoice draft series is immutable');",
+      "definition": "CREATE TRIGGER invoice_drafts_series_update BEFORE UPDATE OF organization_id,series ON invoice_drafts WHEN OLD.organization_id IS NOT NEW.organization_id OR OLD.series IS NOT NEW.series BEGIN SELECT RAISE(ABORT,'invoice draft series is immutable');END"
+    },
+    {
+      "file": "invoicing.sqlite",
+      "name": "invoice_drafts_source_insert",
+      "table": "invoice_drafts",
+      "timing": "BEFORE",
+      "event": "INSERT",
+      "updateOf": [],
+      "when": "NOT((NEW.source_app IS NULL AND NEW.source_kind IS NULL AND NEW.source_id IS NULL)OR(NEW.source_app IS NOT NULL AND NEW.source_kind IS NOT NULL AND NEW.source_id IS NOT NULL AND length(NEW.source_app) BETWEEN 1 AND 100 AND length(NEW.source_kind) BETWEEN 1 AND 100 AND length(NEW.source_id) BETWEEN 1 AND 255))",
+      "whenUsesSubquery": false,
+      "statementCount": 1,
+      "raiseOnly": true,
+      "raiseMessages": [
+        "invalid draft source"
+      ],
+      "body": "SELECT RAISE(ABORT,'invalid draft source');",
+      "definition": "CREATE TRIGGER invoice_drafts_source_insert BEFORE INSERT ON invoice_drafts WHEN NOT((NEW.source_app IS NULL AND NEW.source_kind IS NULL AND NEW.source_id IS NULL)OR(NEW.source_app IS NOT NULL AND NEW.source_kind IS NOT NULL AND NEW.source_id IS NOT NULL AND length(NEW.source_app) BETWEEN 1 AND 100 AND length(NEW.source_kind) BETWEEN 1 AND 100 AND length(NEW.source_id) BETWEEN 1 AND 255))BEGIN SELECT RAISE(ABORT,'invalid draft source');END"
+    },
+    {
+      "file": "invoicing.sqlite",
+      "name": "invoice_drafts_source_update",
+      "table": "invoice_drafts",
+      "timing": "BEFORE",
+      "event": "UPDATE",
+      "updateOf": [
+        "source_app",
+        "source_kind",
+        "source_id"
+      ],
+      "when": "NOT((NEW.source_app IS NULL AND NEW.source_kind IS NULL AND NEW.source_id IS NULL)OR(NEW.source_app IS NOT NULL AND NEW.source_kind IS NOT NULL AND NEW.source_id IS NOT NULL AND length(NEW.source_app) BETWEEN 1 AND 100 AND length(NEW.source_kind) BETWEEN 1 AND 100 AND length(NEW.source_id) BETWEEN 1 AND 255))",
+      "whenUsesSubquery": false,
+      "statementCount": 1,
+      "raiseOnly": true,
+      "raiseMessages": [
+        "invalid draft source"
+      ],
+      "body": "SELECT RAISE(ABORT,'invalid draft source');",
+      "definition": "CREATE TRIGGER invoice_drafts_source_update BEFORE UPDATE OF source_app,source_kind,source_id ON invoice_drafts WHEN NOT((NEW.source_app IS NULL AND NEW.source_kind IS NULL AND NEW.source_id IS NULL)OR(NEW.source_app IS NOT NULL AND NEW.source_kind IS NOT NULL AND NEW.source_id IS NOT NULL AND length(NEW.source_app) BETWEEN 1 AND 100 AND length(NEW.source_kind) BETWEEN 1 AND 100 AND length(NEW.source_id) BETWEEN 1 AND 255))BEGIN SELECT RAISE(ABORT,'invalid draft source');END"
+    },
+    {
+      "file": "invoicing.sqlite",
+      "name": "invoice_payments_no_delete",
+      "table": "invoice_payments",
+      "timing": "BEFORE",
+      "event": "DELETE",
+      "updateOf": [],
+      "when": null,
+      "whenUsesSubquery": false,
+      "statementCount": 1,
+      "raiseOnly": true,
+      "raiseMessages": [
+        "payments are immutable"
+      ],
+      "body": "SELECT RAISE(ABORT,'payments are immutable');",
+      "definition": "CREATE TRIGGER invoice_payments_no_delete BEFORE DELETE ON invoice_payments BEGIN SELECT RAISE(ABORT,'payments are immutable');END"
+    },
+    {
+      "file": "invoicing.sqlite",
+      "name": "invoice_payments_no_update",
+      "table": "invoice_payments",
+      "timing": "BEFORE",
+      "event": "UPDATE",
+      "updateOf": [],
+      "when": null,
+      "whenUsesSubquery": false,
+      "statementCount": 1,
+      "raiseOnly": true,
+      "raiseMessages": [
+        "payments are immutable"
+      ],
+      "body": "SELECT RAISE(ABORT,'payments are immutable');",
+      "definition": "CREATE TRIGGER invoice_payments_no_update BEFORE UPDATE ON invoice_payments BEGIN SELECT RAISE(ABORT,'payments are immutable');END"
+    },
+    {
+      "file": "invoicing.sqlite",
+      "name": "invoice_payments_reversal_shape",
+      "table": "invoice_payments",
+      "timing": "BEFORE",
+      "event": "INSERT",
+      "updateOf": [],
+      "when": "(NEW.kind='reversal') != (NEW.reverses_payment_id IS NOT NULL)",
+      "whenUsesSubquery": false,
+      "statementCount": 1,
+      "raiseOnly": true,
+      "raiseMessages": [
+        "a reversal references exactly one payment"
+      ],
+      "body": "SELECT RAISE(ABORT,'a reversal references exactly one payment');",
+      "definition": "CREATE TRIGGER invoice_payments_reversal_shape BEFORE INSERT ON invoice_payments WHEN (NEW.kind='reversal') != (NEW.reverses_payment_id IS NOT NULL) BEGIN SELECT RAISE(ABORT,'a reversal references exactly one payment');END"
+    },
+    {
+      "file": "invoicing.sqlite",
+      "name": "issued_invoices_actor_no_update",
+      "table": "issued_invoices",
+      "timing": "BEFORE",
+      "event": "UPDATE",
+      "updateOf": [
+        "actor_id"
+      ],
+      "when": null,
+      "whenUsesSubquery": false,
+      "statementCount": 1,
+      "raiseOnly": true,
+      "raiseMessages": [
+        "issued invoice actor is immutable"
+      ],
+      "body": "SELECT RAISE(ABORT,'issued invoice actor is immutable');",
+      "definition": "CREATE TRIGGER issued_invoices_actor_no_update BEFORE UPDATE OF actor_id ON issued_invoices BEGIN SELECT RAISE(ABORT,'issued invoice actor is immutable');END"
+    },
+    {
+      "file": "invoicing.sqlite",
+      "name": "issued_invoices_bucharest_sector_insert",
+      "table": "issued_invoices",
+      "timing": "BEFORE",
+      "event": "INSERT",
+      "updateOf": [],
+      "when": "(NEW.issuer_county='RO-B' AND NEW.issuer_sector IS NULL)OR(NEW.customer_county='RO-B' AND NEW.customer_sector IS NULL)",
+      "whenUsesSubquery": false,
+      "statementCount": 1,
+      "raiseOnly": true,
+      "raiseMessages": [
+        "Bucharest sector is required"
+      ],
+      "body": "SELECT RAISE(ABORT,'Bucharest sector is required');",
+      "definition": "CREATE TRIGGER issued_invoices_bucharest_sector_insert BEFORE INSERT ON issued_invoices WHEN(NEW.issuer_county='RO-B' AND NEW.issuer_sector IS NULL)OR(NEW.customer_county='RO-B' AND NEW.customer_sector IS NULL)BEGIN SELECT RAISE(ABORT,'Bucharest sector is required');END"
+    },
+    {
+      "file": "invoicing.sqlite",
+      "name": "issued_invoices_lineage_insert",
+      "table": "issued_invoices",
+      "timing": "BEFORE",
+      "event": "INSERT",
+      "updateOf": [],
+      "when": "(NEW.draft_id IS NULL AND NEW.source_proforma_id IS NOT NULL AND(EXISTS(SELECT 1 FROM proforma_conversions c WHERE c.organization_id=NEW.organization_id AND c.proforma_id=NEW.source_proforma_id)OR NOT EXISTS(SELECT 1 FROM proformas p WHERE p.organization_id=NEW.organization_id AND p.id=NEW.source_proforma_id AND p.sealed=1)))OR(NEW.draft_id IS NOT NULL AND NEW.source_proforma_id IS NULL AND EXISTS(SELECT 1 FROM proforma_conversions c WHERE c.organization_id=NEW.organization_id AND c.resulting_draft_id=NEW.draft_id))OR(NEW.draft_id IS NOT NULL AND NEW.source_proforma_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM proforma_conversions c WHERE c.organization_id=NEW.organization_id AND c.proforma_id=NEW.source_proforma_id AND c.resulting_draft_id=NEW.draft_id))",
+      "whenUsesSubquery": true,
+      "statementCount": 1,
+      "raiseOnly": true,
+      "raiseMessages": [
+        "invalid invoice proforma lineage"
+      ],
+      "body": "SELECT RAISE(ABORT,'invalid invoice proforma lineage');",
+      "definition": "CREATE TRIGGER issued_invoices_lineage_insert BEFORE INSERT ON issued_invoices WHEN(NEW.draft_id IS NULL AND NEW.source_proforma_id IS NOT NULL AND(EXISTS(SELECT 1 FROM proforma_conversions c WHERE c.organization_id=NEW.organization_id AND c.proforma_id=NEW.source_proforma_id)OR NOT EXISTS(SELECT 1 FROM proformas p WHERE p.organization_id=NEW.organization_id AND p.id=NEW.source_proforma_id AND p.sealed=1)))OR(NEW.draft_id IS NOT NULL AND NEW.source_proforma_id IS NULL AND EXISTS(SELECT 1 FROM proforma_conversions c WHERE c.organization_id=NEW.organization_id AND c.resulting_draft_id=NEW.draft_id))OR(NEW.draft_id IS NOT NULL AND NEW.source_proforma_id IS NOT NULL AND NOT EXISTS(SELECT 1 FROM proforma_conversions c WHERE c.organization_id=NEW.organization_id AND c.proforma_id=NEW.source_proforma_id AND c.resulting_draft_id=NEW.draft_id))BEGIN SELECT RAISE(ABORT,'invalid invoice proforma lineage');END"
+    },
+    {
+      "file": "invoicing.sqlite",
+      "name": "issued_invoices_no_delete",
+      "table": "issued_invoices",
+      "timing": "BEFORE",
+      "event": "DELETE",
+      "updateOf": [],
+      "when": null,
+      "whenUsesSubquery": false,
+      "statementCount": 1,
+      "raiseOnly": true,
+      "raiseMessages": [
+        "issued invoices are immutable"
+      ],
+      "body": "SELECT RAISE(ABORT,'issued invoices are immutable');",
+      "definition": "CREATE TRIGGER issued_invoices_no_delete BEFORE DELETE ON issued_invoices BEGIN SELECT RAISE(ABORT,'issued invoices are immutable');END"
+    },
+    {
+      "file": "invoicing.sqlite",
+      "name": "issued_invoices_no_update",
+      "table": "issued_invoices",
+      "timing": "BEFORE",
+      "event": "UPDATE",
+      "updateOf": [
+        "id",
+        "draft_id",
+        "source_proforma_id",
+        "organization_id",
+        "fiscal_year",
+        "document_type",
+        "series",
+        "number",
+        "issue_date",
+        "due_date",
+        "issued_at",
+        "currency",
+        "issuer_legal_name",
+        "issuer_tax_identifier",
+        "issuer_country_code",
+        "issuer_city",
+        "issuer_street",
+        "issuer_county",
+        "issuer_sector",
+        "issuer_postal_code",
+        "issuer_legal_form",
+        "issuer_trade_registry_number",
+        "issuer_iban",
+        "issuer_bank_name",
+        "issuer_social_capital",
+        "issuer_vat_registered",
+        "issuer_branding",
+        "customer_party_type",
+        "customer_legal_name",
+        "customer_tax_identifier",
+        "customer_country_code",
+        "customer_city",
+        "customer_street",
+        "customer_county",
+        "customer_sector",
+        "customer_postal_code",
+        "customer_vat_registered",
+        "total_excluding_tax",
+        "tax_total",
+        "total_including_tax",
+        "notes"
+      ],
+      "when": null,
+      "whenUsesSubquery": false,
+      "statementCount": 1,
+      "raiseOnly": true,
+      "raiseMessages": [
+        "issued invoices are immutable except e_factura_status"
+      ],
+      "body": "SELECT RAISE(ABORT,'issued invoices are immutable except e_factura_status');",
+      "definition": "CREATE TRIGGER issued_invoices_no_update BEFORE UPDATE OF id,draft_id,source_proforma_id,organization_id,fiscal_year,document_type,series,number,issue_date,due_date,issued_at,currency,issuer_legal_name,issuer_tax_identifier,issuer_country_code,issuer_city,issuer_street,issuer_county,issuer_sector,issuer_postal_code,issuer_legal_form,issuer_trade_registry_number,issuer_iban,issuer_bank_name,issuer_social_capital,issuer_vat_registered,issuer_branding,customer_party_type,customer_legal_name,customer_tax_identifier,customer_country_code,customer_city,customer_street,customer_county,customer_sector,customer_postal_code,customer_vat_registered,total_excluding_tax,tax_total,total_including_tax,notes ON issued_invoices BEGIN SELECT RAISE(ABORT,'issued invoices are immutable except e_factura_status');END"
+    },
+    {
+      "file": "invoicing.sqlite",
+      "name": "issued_invoices_source_insert",
+      "table": "issued_invoices",
+      "timing": "BEFORE",
+      "event": "INSERT",
+      "updateOf": [],
+      "when": "NOT((NEW.source_app IS NULL AND NEW.source_kind IS NULL AND NEW.source_id IS NULL)OR(NEW.source_app IS NOT NULL AND NEW.source_kind IS NOT NULL AND NEW.source_id IS NOT NULL AND length(NEW.source_app) BETWEEN 1 AND 100 AND length(NEW.source_kind) BETWEEN 1 AND 100 AND length(NEW.source_id) BETWEEN 1 AND 255))",
+      "whenUsesSubquery": false,
+      "statementCount": 1,
+      "raiseOnly": true,
+      "raiseMessages": [
+        "invalid invoice source"
+      ],
+      "body": "SELECT RAISE(ABORT,'invalid invoice source');",
+      "definition": "CREATE TRIGGER issued_invoices_source_insert BEFORE INSERT ON issued_invoices WHEN NOT((NEW.source_app IS NULL AND NEW.source_kind IS NULL AND NEW.source_id IS NULL)OR(NEW.source_app IS NOT NULL AND NEW.source_kind IS NOT NULL AND NEW.source_id IS NOT NULL AND length(NEW.source_app) BETWEEN 1 AND 100 AND length(NEW.source_kind) BETWEEN 1 AND 100 AND length(NEW.source_id) BETWEEN 1 AND 255))BEGIN SELECT RAISE(ABORT,'invalid invoice source');END"
+    },
+    {
+      "file": "invoicing.sqlite",
+      "name": "issued_invoices_source_no_update",
+      "table": "issued_invoices",
+      "timing": "BEFORE",
+      "event": "UPDATE",
+      "updateOf": [
+        "source_app",
+        "source_kind",
+        "source_id"
+      ],
+      "when": null,
+      "whenUsesSubquery": false,
+      "statementCount": 1,
+      "raiseOnly": true,
+      "raiseMessages": [
+        "issued invoice source is immutable"
+      ],
+      "body": "SELECT RAISE(ABORT,'issued invoice source is immutable');",
+      "definition": "CREATE TRIGGER issued_invoices_source_no_update BEFORE UPDATE OF source_app,source_kind,source_id ON issued_invoices BEGIN SELECT RAISE(ABORT,'issued invoice source is immutable');END"
+    },
+    {
+      "file": "invoicing.sqlite",
+      "name": "issued_lines_no_delete",
+      "table": "issued_lines",
+      "timing": "BEFORE",
+      "event": "DELETE",
+      "updateOf": [],
+      "when": null,
+      "whenUsesSubquery": false,
+      "statementCount": 1,
+      "raiseOnly": true,
+      "raiseMessages": [
+        "issued invoice lines are immutable"
+      ],
+      "body": "SELECT RAISE(ABORT,'issued invoice lines are immutable');",
+      "definition": "CREATE TRIGGER issued_lines_no_delete BEFORE DELETE ON issued_lines BEGIN SELECT RAISE(ABORT,'issued invoice lines are immutable');END"
+    },
+    {
+      "file": "invoicing.sqlite",
+      "name": "issued_lines_no_update",
+      "table": "issued_lines",
+      "timing": "BEFORE",
+      "event": "UPDATE",
+      "updateOf": [],
+      "when": null,
+      "whenUsesSubquery": false,
+      "statementCount": 1,
+      "raiseOnly": true,
+      "raiseMessages": [
+        "issued invoice lines are immutable"
+      ],
+      "body": "SELECT RAISE(ABORT,'issued invoice lines are immutable');",
+      "definition": "CREATE TRIGGER issued_lines_no_update BEFORE UPDATE ON issued_lines BEGIN SELECT RAISE(ABORT,'issued invoice lines are immutable');END"
+    },
+    {
+      "file": "invoicing.sqlite",
+      "name": "issued_tax_breakdown_no_delete",
+      "table": "issued_tax_breakdown",
+      "timing": "BEFORE",
+      "event": "DELETE",
+      "updateOf": [],
+      "when": null,
+      "whenUsesSubquery": false,
+      "statementCount": 1,
+      "raiseOnly": true,
+      "raiseMessages": [
+        "issued tax breakdown is immutable"
+      ],
+      "body": "SELECT RAISE(ABORT,'issued tax breakdown is immutable');",
+      "definition": "CREATE TRIGGER issued_tax_breakdown_no_delete BEFORE DELETE ON issued_tax_breakdown BEGIN SELECT RAISE(ABORT,'issued tax breakdown is immutable');END"
+    },
+    {
+      "file": "invoicing.sqlite",
+      "name": "issued_tax_breakdown_no_update",
+      "table": "issued_tax_breakdown",
+      "timing": "BEFORE",
+      "event": "UPDATE",
+      "updateOf": [],
+      "when": null,
+      "whenUsesSubquery": false,
+      "statementCount": 1,
+      "raiseOnly": true,
+      "raiseMessages": [
+        "issued tax breakdown is immutable"
+      ],
+      "body": "SELECT RAISE(ABORT,'issued tax breakdown is immutable');",
+      "definition": "CREATE TRIGGER issued_tax_breakdown_no_update BEFORE UPDATE ON issued_tax_breakdown BEGIN SELECT RAISE(ABORT,'issued tax breakdown is immutable');END"
+    },
+    {
+      "file": "invoicing.sqlite",
+      "name": "payment_idempotency_records_no_delete",
+      "table": "payment_idempotency_records",
+      "timing": "BEFORE",
+      "event": "DELETE",
+      "updateOf": [],
+      "when": null,
+      "whenUsesSubquery": false,
+      "statementCount": 1,
+      "raiseOnly": true,
+      "raiseMessages": [
+        "payment idempotency record is immutable"
+      ],
+      "body": "SELECT RAISE(ABORT,'payment idempotency record is immutable');",
+      "definition": "CREATE TRIGGER payment_idempotency_records_no_delete BEFORE DELETE ON payment_idempotency_records BEGIN SELECT RAISE(ABORT,'payment idempotency record is immutable');END"
+    },
+    {
+      "file": "invoicing.sqlite",
+      "name": "payment_idempotency_records_no_update",
+      "table": "payment_idempotency_records",
+      "timing": "BEFORE",
+      "event": "UPDATE",
+      "updateOf": [],
+      "when": null,
+      "whenUsesSubquery": false,
+      "statementCount": 1,
+      "raiseOnly": true,
+      "raiseMessages": [
+        "payment idempotency record is immutable"
+      ],
+      "body": "SELECT RAISE(ABORT,'payment idempotency record is immutable');",
+      "definition": "CREATE TRIGGER payment_idempotency_records_no_update BEFORE UPDATE ON payment_idempotency_records BEGIN SELECT RAISE(ABORT,'payment idempotency record is immutable');END"
+    },
+    {
+      "file": "invoicing.sqlite",
+      "name": "proforma_conversions_no_delete",
+      "table": "proforma_conversions",
+      "timing": "BEFORE",
+      "event": "DELETE",
+      "updateOf": [],
+      "when": null,
+      "whenUsesSubquery": false,
+      "statementCount": 1,
+      "raiseOnly": true,
+      "raiseMessages": [
+        "proforma conversions are immutable"
+      ],
+      "body": "SELECT RAISE(ABORT,'proforma conversions are immutable');",
+      "definition": "CREATE TRIGGER proforma_conversions_no_delete BEFORE DELETE ON proforma_conversions BEGIN SELECT RAISE(ABORT,'proforma conversions are immutable');END"
+    },
+    {
+      "file": "invoicing.sqlite",
+      "name": "proforma_conversions_no_update",
+      "table": "proforma_conversions",
+      "timing": "BEFORE",
+      "event": "UPDATE",
+      "updateOf": [],
+      "when": null,
+      "whenUsesSubquery": false,
+      "statementCount": 1,
+      "raiseOnly": true,
+      "raiseMessages": [
+        "proforma conversions are immutable"
+      ],
+      "body": "SELECT RAISE(ABORT,'proforma conversions are immutable');",
+      "definition": "CREATE TRIGGER proforma_conversions_no_update BEFORE UPDATE ON proforma_conversions BEGIN SELECT RAISE(ABORT,'proforma conversions are immutable');END"
+    },
+    {
+      "file": "invoicing.sqlite",
+      "name": "proforma_conversions_require_lineage",
+      "table": "proforma_conversions",
+      "timing": "BEFORE",
+      "event": "INSERT",
+      "updateOf": [],
+      "when": "NOT EXISTS(SELECT 1 FROM proformas p WHERE p.id=NEW.proforma_id AND p.organization_id=NEW.organization_id AND p.sealed=1)OR NOT EXISTS(SELECT 1 FROM invoice_drafts d WHERE d.id=NEW.resulting_draft_id AND d.organization_id=NEW.organization_id AND d.status='draft')OR EXISTS(SELECT 1 FROM proforma_invoice_conversions i WHERE i.organization_id=NEW.organization_id AND i.proforma_id=NEW.proforma_id)OR EXISTS(SELECT 1 FROM issued_invoices i WHERE i.organization_id=NEW.organization_id AND i.source_proforma_id=NEW.proforma_id)",
+      "whenUsesSubquery": true,
+      "statementCount": 1,
+      "raiseOnly": true,
+      "raiseMessages": [
+        "invalid proforma draft conversion lineage"
+      ],
+      "body": "SELECT RAISE(ABORT,'invalid proforma draft conversion lineage');",
+      "definition": "CREATE TRIGGER proforma_conversions_require_lineage BEFORE INSERT ON proforma_conversions WHEN NOT EXISTS(SELECT 1 FROM proformas p WHERE p.id=NEW.proforma_id AND p.organization_id=NEW.organization_id AND p.sealed=1)OR NOT EXISTS(SELECT 1 FROM invoice_drafts d WHERE d.id=NEW.resulting_draft_id AND d.organization_id=NEW.organization_id AND d.status='draft')OR EXISTS(SELECT 1 FROM proforma_invoice_conversions i WHERE i.organization_id=NEW.organization_id AND i.proforma_id=NEW.proforma_id)OR EXISTS(SELECT 1 FROM issued_invoices i WHERE i.organization_id=NEW.organization_id AND i.source_proforma_id=NEW.proforma_id)BEGIN SELECT RAISE(ABORT,'invalid proforma draft conversion lineage');END"
+    },
+    {
+      "file": "invoicing.sqlite",
+      "name": "proforma_invoice_conversions_match",
+      "table": "proforma_invoice_conversions",
+      "timing": "BEFORE",
+      "event": "INSERT",
+      "updateOf": [],
+      "when": "EXISTS(SELECT 1 FROM proforma_conversions c WHERE c.organization_id=NEW.organization_id AND c.proforma_id=NEW.proforma_id)OR NOT EXISTS(SELECT 1 FROM issued_invoices i WHERE i.id=NEW.resulting_invoice_id AND i.organization_id=NEW.organization_id AND i.draft_id IS NULL AND i.source_proforma_id=NEW.proforma_id)",
+      "whenUsesSubquery": true,
+      "statementCount": 1,
+      "raiseOnly": true,
+      "raiseMessages": [
+        "proforma invoice conversion does not match"
+      ],
+      "body": "SELECT RAISE(ABORT,'proforma invoice conversion does not match');",
+      "definition": "CREATE TRIGGER proforma_invoice_conversions_match BEFORE INSERT ON proforma_invoice_conversions WHEN EXISTS(SELECT 1 FROM proforma_conversions c WHERE c.organization_id=NEW.organization_id AND c.proforma_id=NEW.proforma_id)OR NOT EXISTS(SELECT 1 FROM issued_invoices i WHERE i.id=NEW.resulting_invoice_id AND i.organization_id=NEW.organization_id AND i.draft_id IS NULL AND i.source_proforma_id=NEW.proforma_id)BEGIN SELECT RAISE(ABORT,'proforma invoice conversion does not match');END"
+    },
+    {
+      "file": "invoicing.sqlite",
+      "name": "proforma_invoice_conversions_no_delete",
+      "table": "proforma_invoice_conversions",
+      "timing": "BEFORE",
+      "event": "DELETE",
+      "updateOf": [],
+      "when": null,
+      "whenUsesSubquery": false,
+      "statementCount": 1,
+      "raiseOnly": true,
+      "raiseMessages": [
+        "proforma invoice conversions are immutable"
+      ],
+      "body": "SELECT RAISE(ABORT,'proforma invoice conversions are immutable');",
+      "definition": "CREATE TRIGGER proforma_invoice_conversions_no_delete BEFORE DELETE ON proforma_invoice_conversions BEGIN SELECT RAISE(ABORT,'proforma invoice conversions are immutable');END"
+    },
+    {
+      "file": "invoicing.sqlite",
+      "name": "proforma_invoice_conversions_no_update",
+      "table": "proforma_invoice_conversions",
+      "timing": "BEFORE",
+      "event": "UPDATE",
+      "updateOf": [],
+      "when": null,
+      "whenUsesSubquery": false,
+      "statementCount": 1,
+      "raiseOnly": true,
+      "raiseMessages": [
+        "proforma invoice conversions are immutable"
+      ],
+      "body": "SELECT RAISE(ABORT,'proforma invoice conversions are immutable');",
+      "definition": "CREATE TRIGGER proforma_invoice_conversions_no_update BEFORE UPDATE ON proforma_invoice_conversions BEGIN SELECT RAISE(ABORT,'proforma invoice conversions are immutable');END"
+    },
+    {
+      "file": "invoicing.sqlite",
+      "name": "proforma_lines_no_delete",
+      "table": "proforma_lines",
+      "timing": "BEFORE",
+      "event": "DELETE",
+      "updateOf": [],
+      "when": null,
+      "whenUsesSubquery": false,
+      "statementCount": 1,
+      "raiseOnly": true,
+      "raiseMessages": [
+        "proforma lines are immutable"
+      ],
+      "body": "SELECT RAISE(ABORT,'proforma lines are immutable');",
+      "definition": "CREATE TRIGGER proforma_lines_no_delete BEFORE DELETE ON proforma_lines BEGIN SELECT RAISE(ABORT,'proforma lines are immutable');END"
+    },
+    {
+      "file": "invoicing.sqlite",
+      "name": "proforma_lines_no_late_insert",
+      "table": "proforma_lines",
+      "timing": "BEFORE",
+      "event": "INSERT",
+      "updateOf": [],
+      "when": "(SELECT sealed FROM proformas WHERE id=NEW.proforma_id)!=0",
+      "whenUsesSubquery": true,
+      "statementCount": 1,
+      "raiseOnly": true,
+      "raiseMessages": [
+        "proforma lines are sealed"
+      ],
+      "body": "SELECT RAISE(ABORT,'proforma lines are sealed');",
+      "definition": "CREATE TRIGGER proforma_lines_no_late_insert BEFORE INSERT ON proforma_lines WHEN(SELECT sealed FROM proformas WHERE id=NEW.proforma_id)!=0 BEGIN SELECT RAISE(ABORT,'proforma lines are sealed');END"
+    },
+    {
+      "file": "invoicing.sqlite",
+      "name": "proforma_lines_no_update",
+      "table": "proforma_lines",
+      "timing": "BEFORE",
+      "event": "UPDATE",
+      "updateOf": [],
+      "when": null,
+      "whenUsesSubquery": false,
+      "statementCount": 1,
+      "raiseOnly": true,
+      "raiseMessages": [
+        "proforma lines are immutable"
+      ],
+      "body": "SELECT RAISE(ABORT,'proforma lines are immutable');",
+      "definition": "CREATE TRIGGER proforma_lines_no_update BEFORE UPDATE ON proforma_lines BEGIN SELECT RAISE(ABORT,'proforma lines are immutable');END"
+    },
+    {
+      "file": "invoicing.sqlite",
+      "name": "proforma_tax_breakdown_no_delete",
+      "table": "proforma_tax_breakdown",
+      "timing": "BEFORE",
+      "event": "DELETE",
+      "updateOf": [],
+      "when": null,
+      "whenUsesSubquery": false,
+      "statementCount": 1,
+      "raiseOnly": true,
+      "raiseMessages": [
+        "proforma tax breakdown is immutable"
+      ],
+      "body": "SELECT RAISE(ABORT,'proforma tax breakdown is immutable');",
+      "definition": "CREATE TRIGGER proforma_tax_breakdown_no_delete BEFORE DELETE ON proforma_tax_breakdown BEGIN SELECT RAISE(ABORT,'proforma tax breakdown is immutable');END"
+    },
+    {
+      "file": "invoicing.sqlite",
+      "name": "proforma_tax_breakdown_no_update",
+      "table": "proforma_tax_breakdown",
+      "timing": "BEFORE",
+      "event": "UPDATE",
+      "updateOf": [],
+      "when": null,
+      "whenUsesSubquery": false,
+      "statementCount": 1,
+      "raiseOnly": true,
+      "raiseMessages": [
+        "proforma tax breakdown is immutable"
+      ],
+      "body": "SELECT RAISE(ABORT,'proforma tax breakdown is immutable');",
+      "definition": "CREATE TRIGGER proforma_tax_breakdown_no_update BEFORE UPDATE ON proforma_tax_breakdown BEGIN SELECT RAISE(ABORT,'proforma tax breakdown is immutable');END"
+    },
+    {
+      "file": "invoicing.sqlite",
+      "name": "proforma_tax_no_late_insert",
+      "table": "proforma_tax_breakdown",
+      "timing": "BEFORE",
+      "event": "INSERT",
+      "updateOf": [],
+      "when": "(SELECT sealed FROM proformas WHERE id=NEW.proforma_id)!=0",
+      "whenUsesSubquery": true,
+      "statementCount": 1,
+      "raiseOnly": true,
+      "raiseMessages": [
+        "proforma tax breakdown is sealed"
+      ],
+      "body": "SELECT RAISE(ABORT,'proforma tax breakdown is sealed');",
+      "definition": "CREATE TRIGGER proforma_tax_no_late_insert BEFORE INSERT ON proforma_tax_breakdown WHEN(SELECT sealed FROM proformas WHERE id=NEW.proforma_id)!=0 BEGIN SELECT RAISE(ABORT,'proforma tax breakdown is sealed');END"
+    },
+    {
+      "file": "invoicing.sqlite",
+      "name": "proformas_actor_no_update",
+      "table": "proformas",
+      "timing": "BEFORE",
+      "event": "UPDATE",
+      "updateOf": [
+        "actor_id"
+      ],
+      "when": null,
+      "whenUsesSubquery": false,
+      "statementCount": 1,
+      "raiseOnly": true,
+      "raiseMessages": [
+        "proforma actor is immutable"
+      ],
+      "body": "SELECT RAISE(ABORT,'proforma actor is immutable');",
+      "definition": "CREATE TRIGGER proformas_actor_no_update BEFORE UPDATE OF actor_id ON proformas BEGIN SELECT RAISE(ABORT,'proforma actor is immutable');END"
+    },
+    {
+      "file": "invoicing.sqlite",
+      "name": "proformas_bucharest_sector_insert",
+      "table": "proformas",
+      "timing": "BEFORE",
+      "event": "INSERT",
+      "updateOf": [],
+      "when": "(NEW.issuer_county='RO-B' AND NEW.issuer_sector IS NULL)OR(NEW.customer_county='RO-B' AND NEW.customer_sector IS NULL)",
+      "whenUsesSubquery": false,
+      "statementCount": 1,
+      "raiseOnly": true,
+      "raiseMessages": [
+        "Bucharest sector is required"
+      ],
+      "body": "SELECT RAISE(ABORT,'Bucharest sector is required');",
+      "definition": "CREATE TRIGGER proformas_bucharest_sector_insert BEFORE INSERT ON proformas WHEN(NEW.issuer_county='RO-B' AND NEW.issuer_sector IS NULL)OR(NEW.customer_county='RO-B' AND NEW.customer_sector IS NULL)BEGIN SELECT RAISE(ABORT,'Bucharest sector is required');END"
+    },
+    {
+      "file": "invoicing.sqlite",
+      "name": "proformas_no_content_update",
+      "table": "proformas",
+      "timing": "BEFORE",
+      "event": "UPDATE",
+      "updateOf": [
+        "id",
+        "source_draft_id",
+        "organization_id",
+        "fiscal_year",
+        "document_type",
+        "series",
+        "number",
+        "issue_date",
+        "due_date",
+        "issued_at",
+        "currency",
+        "issuer_legal_name",
+        "issuer_tax_identifier",
+        "issuer_country_code",
+        "issuer_city",
+        "issuer_street",
+        "issuer_county",
+        "issuer_sector",
+        "issuer_postal_code",
+        "issuer_legal_form",
+        "issuer_trade_registry_number",
+        "issuer_iban",
+        "issuer_bank_name",
+        "issuer_social_capital",
+        "issuer_vat_registered",
+        "issuer_branding",
+        "customer_party_type",
+        "customer_legal_name",
+        "customer_tax_identifier",
+        "customer_country_code",
+        "customer_city",
+        "customer_street",
+        "customer_county",
+        "customer_sector",
+        "customer_postal_code",
+        "customer_vat_registered",
+        "total_excluding_tax",
+        "tax_total",
+        "total_including_tax",
+        "notes"
+      ],
+      "when": null,
+      "whenUsesSubquery": false,
+      "statementCount": 1,
+      "raiseOnly": true,
+      "raiseMessages": [
+        "proformas are immutable"
+      ],
+      "body": "SELECT RAISE(ABORT,'proformas are immutable');",
+      "definition": "CREATE TRIGGER proformas_no_content_update BEFORE UPDATE OF id,source_draft_id,organization_id,fiscal_year,document_type,series,number,issue_date,due_date,issued_at,currency,issuer_legal_name,issuer_tax_identifier,issuer_country_code,issuer_city,issuer_street,issuer_county,issuer_sector,issuer_postal_code,issuer_legal_form,issuer_trade_registry_number,issuer_iban,issuer_bank_name,issuer_social_capital,issuer_vat_registered,issuer_branding,customer_party_type,customer_legal_name,customer_tax_identifier,customer_country_code,customer_city,customer_street,customer_county,customer_sector,customer_postal_code,customer_vat_registered,total_excluding_tax,tax_total,total_including_tax,notes ON proformas BEGIN SELECT RAISE(ABORT,'proformas are immutable');END"
+    },
+    {
+      "file": "invoicing.sqlite",
+      "name": "proformas_no_delete",
+      "table": "proformas",
+      "timing": "BEFORE",
+      "event": "DELETE",
+      "updateOf": [],
+      "when": null,
+      "whenUsesSubquery": false,
+      "statementCount": 1,
+      "raiseOnly": true,
+      "raiseMessages": [
+        "proformas are immutable"
+      ],
+      "body": "SELECT RAISE(ABORT,'proformas are immutable');",
+      "definition": "CREATE TRIGGER proformas_no_delete BEFORE DELETE ON proformas BEGIN SELECT RAISE(ABORT,'proformas are immutable');END"
+    },
+    {
+      "file": "invoicing.sqlite",
+      "name": "proformas_seal_only",
+      "table": "proformas",
+      "timing": "BEFORE",
+      "event": "UPDATE",
+      "updateOf": [
+        "sealed"
+      ],
+      "when": "OLD.sealed=1 OR NEW.sealed!=1",
+      "whenUsesSubquery": false,
+      "statementCount": 1,
+      "raiseOnly": true,
+      "raiseMessages": [
+        "proformas are immutable"
+      ],
+      "body": "SELECT RAISE(ABORT,'proformas are immutable');",
+      "definition": "CREATE TRIGGER proformas_seal_only BEFORE UPDATE OF sealed ON proformas WHEN OLD.sealed=1 OR NEW.sealed!=1 BEGIN SELECT RAISE(ABORT,'proformas are immutable');END"
+    },
+    {
+      "file": "invoicing.sqlite",
+      "name": "proformas_source_insert",
+      "table": "proformas",
+      "timing": "BEFORE",
+      "event": "INSERT",
+      "updateOf": [],
+      "when": "NOT((NEW.source_app IS NULL AND NEW.source_kind IS NULL AND NEW.source_id IS NULL)OR(NEW.source_app IS NOT NULL AND NEW.source_kind IS NOT NULL AND NEW.source_id IS NOT NULL AND length(NEW.source_app) BETWEEN 1 AND 100 AND length(NEW.source_kind) BETWEEN 1 AND 100 AND length(NEW.source_id) BETWEEN 1 AND 255))",
+      "whenUsesSubquery": false,
+      "statementCount": 1,
+      "raiseOnly": true,
+      "raiseMessages": [
+        "invalid proforma source"
+      ],
+      "body": "SELECT RAISE(ABORT,'invalid proforma source');",
+      "definition": "CREATE TRIGGER proformas_source_insert BEFORE INSERT ON proformas WHEN NOT((NEW.source_app IS NULL AND NEW.source_kind IS NULL AND NEW.source_id IS NULL)OR(NEW.source_app IS NOT NULL AND NEW.source_kind IS NOT NULL AND NEW.source_id IS NOT NULL AND length(NEW.source_app) BETWEEN 1 AND 100 AND length(NEW.source_kind) BETWEEN 1 AND 100 AND length(NEW.source_id) BETWEEN 1 AND 255))BEGIN SELECT RAISE(ABORT,'invalid proforma source');END"
+    },
+    {
+      "file": "invoicing.sqlite",
+      "name": "proformas_source_no_update",
+      "table": "proformas",
+      "timing": "BEFORE",
+      "event": "UPDATE",
+      "updateOf": [
+        "source_app",
+        "source_kind",
+        "source_id"
+      ],
+      "when": null,
+      "whenUsesSubquery": false,
+      "statementCount": 1,
+      "raiseOnly": true,
+      "raiseMessages": [
+        "proforma source is immutable"
+      ],
+      "body": "SELECT RAISE(ABORT,'proforma source is immutable');",
+      "definition": "CREATE TRIGGER proformas_source_no_update BEFORE UPDATE OF source_app,source_kind,source_id ON proformas BEGIN SELECT RAISE(ABORT,'proforma source is immutable');END"
+    },
+    {
+      "file": "documents.sqlite",
+      "name": "invoice_artifacts_no_delete",
+      "table": "invoice_artifacts",
+      "timing": "BEFORE",
+      "event": "DELETE",
+      "updateOf": [],
+      "when": null,
+      "whenUsesSubquery": false,
+      "statementCount": 1,
+      "raiseOnly": true,
+      "raiseMessages": [
+        "invoice artifacts are immutable"
+      ],
+      "body": "SELECT RAISE(ABORT, 'invoice artifacts are immutable');",
+      "definition": "CREATE TRIGGER invoice_artifacts_no_delete BEFORE DELETE ON invoice_artifacts\n      BEGIN SELECT RAISE(ABORT, 'invoice artifacts are immutable'); END"
+    },
+    {
+      "file": "documents.sqlite",
+      "name": "invoice_artifacts_no_update",
+      "table": "invoice_artifacts",
+      "timing": "BEFORE",
+      "event": "UPDATE",
+      "updateOf": [],
+      "when": null,
+      "whenUsesSubquery": false,
+      "statementCount": 1,
+      "raiseOnly": true,
+      "raiseMessages": [
+        "invoice artifacts are immutable"
+      ],
+      "body": "SELECT RAISE(ABORT, 'invoice artifacts are immutable');",
+      "definition": "CREATE TRIGGER invoice_artifacts_no_update BEFORE UPDATE ON invoice_artifacts\n      BEGIN SELECT RAISE(ABORT, 'invoice artifacts are immutable'); END"
+    },
+    {
+      "file": "documents.sqlite",
+      "name": "proforma_artifacts_no_delete",
+      "table": "proforma_artifacts",
+      "timing": "BEFORE",
+      "event": "DELETE",
+      "updateOf": [],
+      "when": null,
+      "whenUsesSubquery": false,
+      "statementCount": 1,
+      "raiseOnly": true,
+      "raiseMessages": [
+        "proforma artifacts are immutable"
+      ],
+      "body": "SELECT RAISE(ABORT, 'proforma artifacts are immutable');",
+      "definition": "CREATE TRIGGER proforma_artifacts_no_delete BEFORE DELETE ON proforma_artifacts\n      BEGIN SELECT RAISE(ABORT, 'proforma artifacts are immutable'); END"
+    },
+    {
+      "file": "documents.sqlite",
+      "name": "proforma_artifacts_no_update",
+      "table": "proforma_artifacts",
+      "timing": "BEFORE",
+      "event": "UPDATE",
+      "updateOf": [],
+      "when": null,
+      "whenUsesSubquery": false,
+      "statementCount": 1,
+      "raiseOnly": true,
+      "raiseMessages": [
+        "proforma artifacts are immutable"
+      ],
+      "body": "SELECT RAISE(ABORT, 'proforma artifacts are immutable');",
+      "definition": "CREATE TRIGGER proforma_artifacts_no_update BEFORE UPDATE ON proforma_artifacts\n      BEGIN SELECT RAISE(ABORT, 'proforma artifacts are immutable'); END"
+    }
+  ]
+}

@@ -25,7 +25,7 @@ export interface DocumentDetailModel {
  * at a document that does not exist, which is why the classification lives with
  * the model and the component only renders what it is handed.
  */
-const retryAction = (error: unknown, refetch: () => void): (() => void) | undefined =>
+export const retryAction = (error: unknown, refetch: () => void): (() => void) | undefined =>
   isTransientFailure(error) ? refetch : undefined
 
 export const useInvoiceDetail = (id: string): DocumentDetailModel => {

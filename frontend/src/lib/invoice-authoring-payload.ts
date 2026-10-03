@@ -4,7 +4,7 @@ import type {
 import type { BuyerSnapshot } from "./document-snapshot.ts"
 import { normalizeRomanianCui } from "./vat-defaults.ts"
 import type { EditableInvoiceLine, InvoiceAuthoringForm } from "./invoice-authoring-model.ts"
-import { selectedTaxIdentifier } from "./invoice-authoring-transitions.ts"
+import { selectedTaxIdentifier } from "./document-authoring-transitions.ts"
 
 const buyerPayload = (
   form: InvoiceAuthoringForm,

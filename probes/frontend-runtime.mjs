@@ -22,6 +22,14 @@ void test("standalone runtime preserves backend auth, request guards, methods, a
     assert.deepEqual(Object.keys(json(login)).sort(), ["authenticated", "csrfToken"])
     const cookieHeader = login.headers["set-cookie"]
     assert.ok(Array.isArray(cookieHeader) && cookieHeader.length === 1)
+    // The shipped attributes, as they arrive through the deployed BFF. The probe
+    // is plain HTTP, so the backend behind it runs as `development` and the
+    // cookie must NOT be Secure — a Secure cookie on this origin would never be
+    // sent back by a browser. The production answer (always Secure) is pinned on
+    // the backend's own HTTP surface in `standalone/http/http-session.test.ts`.
+    assert.match(cookieHeader[0], /; HttpOnly/u)
+    assert.match(cookieHeader[0], /; SameSite=Strict/u)
+    assert.doesNotMatch(cookieHeader[0], /; Secure/u)
     const cookie = cookieHeader[0].split(";", 1)[0]
     const csrfToken = json(login).csrfToken
 

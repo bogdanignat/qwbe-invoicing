@@ -6,8 +6,8 @@ import type { BuyerMode, EditableInvoiceLine, InvoiceAuthoringForm, PartyType } 
 import {
   editBuyerFiscalIdentifier, editDueDate, selectBuyerCounty, selectBuyerMode, selectBuyerSector,
   selectIssueDate, selectSavedCustomer, selectedSavedCustomer, switchPartyType,
-} from "../lib/invoice-authoring-transitions.ts"
-import { choosePresetForLine } from "../lib/invoice-authoring-options.ts"
+} from "../lib/document-authoring-transitions.ts"
+import { choosePresetForLine } from "../lib/document-authoring-options.ts"
 import { defaultVatCode, presetVatCode } from "../lib/vat-defaults.ts"
 
 export interface EditorActionsInput {

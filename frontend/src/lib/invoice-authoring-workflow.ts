@@ -1,27 +1,41 @@
 import type { DraftInvoice, Issuer } from "./draft-models.ts"
 
 /**
+ * What a derived draft says instead of a delete button: which proforma owns it
+ * and where that proforma can be opened. The link is derived from the draft's
+ * own `sourceProformaId`, so the notice names a document rather than another
+ * application.
+ */
+export interface DerivedDraftNotice {
+  readonly message: string
+  readonly proformaHref: string
+  readonly proformaLabel: string
+}
+
+export const derivedDraftNotice = (sourceProformaId: string): DerivedDraftNotice => ({
+  message: "Draft creat dintr-o proformă emisă. Nu poate fi șters — proforma sursă îl controlează; poate fi editat, salvat și emis normal.",
+  proformaHref: `/proformas/${encodeURIComponent(sourceProformaId)}`,
+  proformaLabel: "Deschide proforma sursă",
+})
+
+/**
  * A draft created from a proforma cannot be deleted — the proforma owns it —
- * but it stays editable and issuable as an invoice. The legacy client linked
- * back to the proforma; this frontend has no proforma screens, so the state
- * names the situation and points only at the invoice registry.
+ * but it stays editable and issuable as an invoice.
  */
 export type DraftDeletionState =
   | { readonly kind: "hidden" }
   | { readonly kind: "available" }
-  | { readonly kind: "derived" }
+  | { readonly kind: "derived"; readonly notice: DerivedDraftNotice }
   /** Already sealed as a fiscal document: the delete button has no business being offered. */
   | { readonly kind: "issued" }
 
 export const draftDeletionState = (draft: DraftInvoice | undefined): DraftDeletionState => {
   if (draft === undefined) return { kind: "hidden" }
   if (draft.status !== "draft") return { kind: "issued" }
-  if (draft.sourceProformaId === null) return { kind: "available" }
-  return { kind: "derived" }
+  const source = draft.sourceProformaId
+  if (source === null) return { kind: "available" }
+  return { kind: "derived", notice: derivedDraftNotice(source) }
 }
-
-export const derivedDraftNotice =
-  "Draft creat dintr-o proformă emisă în aplicația existentă. Nu poate fi șters; poate fi editat, salvat și emis normal."
 
 export const invoiceDueDateIssue = (required: boolean): string | null => required
   ? "Data scadenței este obligatorie pentru o factură cu total pozitiv."

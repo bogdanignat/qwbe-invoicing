@@ -1,9 +1,9 @@
 import assert from "node:assert/strict"
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
-import { tmpdir } from "node:os"
+import { writeFileSync } from "node:fs"
 import { join } from "node:path"
-import { DatabaseSync } from "node:sqlite"
 import test from "node:test"
+
+import type { Pool } from "pg"
 
 import { Effect } from "effect"
 
@@ -11,14 +11,22 @@ import { createInvoicingService } from "../../cube/invoicing/index.ts"
 import { createArtifactService } from "../../cube/invoicing/documents/index.ts"
 import { reconcileArtifacts } from "./artifact-reconciliation.ts"
 import { createPdfObjectStore } from "./artifact-store.ts"
-import { applyMigrations, documentsDatabasePath } from "../storage/migrations.ts"
 import { createPdfRenderer, proformaTemplateVersion } from "./pdf-renderer.ts"
-import { createArtifactRepository, createInvoiceSource } from "../storage/sqlite-artifacts.ts"
-import { createSqliteStore } from "../storage/sqlite-store.ts"
+import { createPostgresArtifactRepository, createPostgresInvoiceSource } from "../storage/postgres-artifacts.ts"
+import { withMigrated, type RawSql } from "../storage/postgres-rig.test-support.ts"
+import { createPostgresStore } from "../storage/postgres-store.ts"
+
+/**
+ * Artifacts on PostgreSQL. The PDFs themselves never moved: they are still
+ * content-addressed files under `DATA_DIR`, so the object store, the tamper and
+ * the reconciliation are unchanged. What moved is the artifact rows, so the two
+ * immutability probes are `await`ed refusals with the trigger's SQLSTATE instead
+ * of a synchronous `assert.throws` on a second database file.
+ */
 const each = { code: "C62", name: "unitate" } as const
 const idempotent = <Input>(key: string, request: Input) => ({ request, idempotency: { key, fingerprint: `sha256:${"0".repeat(64)}` } })
 
-const issueFixture = async (directory: string): Promise<{ readonly invoiceId: string; readonly proformaId: string }> => {
+const issueFixture = async (pool: Pool): Promise<{ readonly invoiceId: string; readonly proformaId: string }> => {
   let nextId = 0
   const service = createInvoicingService({
     context: { current: Effect.succeed({
@@ -32,7 +40,7 @@ const issueFixture = async (directory: string): Promise<{ readonly invoiceId: st
     }) },
     clock: { now: Effect.succeed(new Date("2026-09-01T10:00:00.000Z")) },
     ids: { next: Effect.sync(() => `id-${String(++nextId)}`) },
-    store: createSqliteStore(directory),
+    store: createPostgresStore(pool),
     branding: { normalize: () => Effect.die("branding normalization is not expected") },
     cubeIdentity: "invoicing",
   })
@@ -82,18 +90,16 @@ const issueFixture = async (directory: string): Promise<{ readonly invoiceId: st
 }
 
 void test("persists, reloads, and integrity-checks immutable PDF artifacts", async () => {
-  const directory = mkdtempSync(join(tmpdir(), "qwbe-artifacts-"))
-  try {
-    applyMigrations(directory)
-    const { invoiceId, proformaId } = await issueFixture(directory)
+  await withMigrated("artifacts", async ({ pool, sql, dataDirectory: directory }) => {
+    const { invoiceId, proformaId } = await issueFixture(pool)
     const service = createArtifactService({
       context: Effect.succeed({
         identity: { id: "user-1", permissions: ["documents:read", "documents:render"] },
         organization: { id: "org-1" },
       }),
       clock: Effect.succeed(new Date("2026-09-01T10:05:00.000Z")),
-      repository: createArtifactRepository(directory),
-      source: createInvoiceSource(directory),
+      repository: createPostgresArtifactRepository(pool),
+      source: createPostgresInvoiceSource(pool),
       renderer: createPdfRenderer(),
       objects: createPdfObjectStore(directory),
       cubeIdentity: "documents",
@@ -124,15 +130,13 @@ void test("persists, reloads, and integrity-checks immutable PDF artifacts", asy
     assert.equal(firstProforma.templateVersion, proformaTemplateVersion)
     assert.equal((await Effect.runPromise(service.downloadProforma(proformaId))).bytes.length, firstProforma.byteLength)
 
-    const database = new DatabaseSync(documentsDatabasePath(directory))
-    try {
-      assert.throws(() => database.prepare("UPDATE invoice_artifacts SET byte_length = 1 WHERE invoice_id = ?").run(invoiceId))
-      assert.throws(() => database.prepare("DELETE FROM invoice_artifacts WHERE invoice_id = ?").run(invoiceId))
-      assert.throws(() => database.prepare("UPDATE proforma_artifacts SET byte_length = 1 WHERE proforma_id = ?").run(proformaId))
-      assert.throws(() => database.prepare("DELETE FROM proforma_artifacts WHERE proforma_id = ?").run(proformaId))
-    } finally {
-      database.close()
+    const refuses = async (client: RawSql, statement: string, values: ReadonlyArray<unknown>) => {
+      assert.equal((await client.rejects(statement, values)).code, "23514", statement)
     }
+    await refuses(sql, "UPDATE invoice_artifacts SET byte_length = 1 WHERE invoice_id = $1", [invoiceId])
+    await refuses(sql, "DELETE FROM invoice_artifacts WHERE invoice_id = $1", [invoiceId])
+    await refuses(sql, "UPDATE proforma_artifacts SET byte_length = 1 WHERE proforma_id = $1", [proformaId])
+    await refuses(sql, "DELETE FROM proforma_artifacts WHERE proforma_id = $1", [proformaId])
 
     writeFileSync(join(directory, "artifacts", first.objectKey), "tampered")
     await assert.rejects(Effect.runPromise(service.downloadInvoice(invoiceId)))
@@ -141,27 +145,23 @@ void test("persists, reloads, and integrity-checks immutable PDF artifacts", asy
     assert.equal((await Effect.runPromise(service.downloadInvoice(invoiceId))).bytes.length, first.byteLength)
     const restarted = createArtifactService({
       context: Effect.succeed({ identity: { id: "user-1", permissions: ["documents:read", "documents:render"] }, organization: { id: "org-1" } }),
-      clock: Effect.succeed(new Date("2026-09-02T00:00:00.000Z")), repository: createArtifactRepository(directory),
-      source: createInvoiceSource(directory), renderer: createPdfRenderer(), objects: createPdfObjectStore(directory), cubeIdentity: "documents",
+      clock: Effect.succeed(new Date("2026-09-02T00:00:00.000Z")), repository: createPostgresArtifactRepository(pool),
+      source: createPostgresInvoiceSource(pool), renderer: createPdfRenderer(), objects: createPdfObjectStore(directory), cubeIdentity: "documents",
     })
     assert.deepEqual(await Effect.runPromise(restarted.renderProforma(proformaId)), firstProforma)
     const isolated = createArtifactService({
       context: Effect.succeed({ identity: { id: "user-2", permissions: ["documents:read", "documents:render"] }, organization: { id: "org-2" } }),
-      clock: Effect.succeed(new Date()), repository: createArtifactRepository(directory), source: createInvoiceSource(directory),
+      clock: Effect.succeed(new Date()), repository: createPostgresArtifactRepository(pool), source: createPostgresInvoiceSource(pool),
       renderer: createPdfRenderer(), objects: createPdfObjectStore(directory), cubeIdentity: "documents",
     })
     await assert.rejects(Effect.runPromise(isolated.downloadProforma(proformaId)))
     await assert.rejects(Effect.runPromise(isolated.renderProforma(proformaId)))
-  } finally {
-    rmSync(directory, { recursive: true, force: true })
-  }
+  })
 })
 
 void test("allows distinct invoices to reference identical content-addressed bytes", async () => {
-  const directory = mkdtempSync(join(tmpdir(), "qwbe-artifact-deduplication-"))
-  try {
-    applyMigrations(directory)
-    const repository = createArtifactRepository(directory)
+  await withMigrated("artifact_dedup", async ({ pool }) => {
+    const repository = createPostgresArtifactRepository(pool)
     const common = {
       objectKey: `sha256/${"a".repeat(2)}/${"a".repeat(64)}.pdf`,
       sha256: "a".repeat(64),
@@ -174,7 +174,5 @@ void test("allows distinct invoices to reference identical content-addressed byt
     await Effect.runPromise(repository.saveArtifact({ ...common, invoiceId: "invoice-2", organizationId: "org-2" }))
     assert.equal((await Effect.runPromise(repository.findArtifact("org-1", "invoice-1")))?.sha256, common.sha256)
     assert.equal((await Effect.runPromise(repository.findArtifact("org-2", "invoice-2")))?.sha256, common.sha256)
-  } finally {
-    rmSync(directory, { recursive: true, force: true })
-  }
+  })
 })

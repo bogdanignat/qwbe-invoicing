@@ -4,14 +4,72 @@ name: qwbe-invoicing
 # No Warden network, no published app port by default. Put Caddy (profile `proxy`) in front for TLS.
 # Image is pinned by tag; for strict production also pin by digest from image-digests.txt:
 #   IMAGE_TAG=0.3.0@sha256:<digest> docker compose -f compose.prod.yaml --profile proxy up -d
+#
+# Before the first `up`, the operator creates the two secret files. They are never in
+# this file, never in the image and never in an environment variable:
+#   install -d -m 700 /opt/qwbe-invoicing/secrets
+#   openssl rand -hex 32 > /opt/qwbe-invoicing/secrets/api-token
+#   openssl rand -hex 32 > /opt/qwbe-invoicing/secrets/pg-password
+#   chmod 600 /opt/qwbe-invoicing/secrets/*
+#   AUTH_TOKEN_PATH=/opt/qwbe-invoicing/secrets/api-token \
+#   PG_PASSWORD_PATH=/opt/qwbe-invoicing/secrets/pg-password docker compose -f compose.prod.yaml up -d
+# Both paths are required (`:?`) rather than defaulted: a production stack that starts
+# with a guessable fallback credential is worse than one that refuses to start.
+
+x-postgres-environment: &postgres-environment
+  PGHOST: db
+  PGPORT: "5432"
+  PGDATABASE: qwbe_invoicing
+  PGUSER: qwbe
+  # The application reads the password from this file, never from PGPASSWORD: an
+  # environment variable travels into every child process and into `docker inspect`.
+  # Outside development `standalone/config.ts` refuses to boot when the file is
+  # missing or empty, so this is fail-closed rather than best effort.
+  PGPASSWORD_FILE: /run/secrets/pg_password
 
 services:
+  db:
+    image: postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
+    environment:
+      POSTGRES_DB: qwbe_invoicing
+      POSTGRES_USER: qwbe
+      POSTGRES_PASSWORD_FILE: /run/secrets/pg_password
+      # C collation for the whole cluster. The schema's indexes, keyset cursors and
+      # the folded case-insensitive expressions were all written against binary text
+      # ordering; any other collation silently changes paging order.
+      POSTGRES_INITDB_ARGS: --locale=C --encoding=UTF8
+      PGDATA: /var/lib/postgresql/data/pgdata
+    secrets:
+      - pg_password
+    volumes:
+      - invoicing-postgres:/var/lib/postgresql/data
+    # Not published. Only the application network reaches the database.
+    expose:
+      - "5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U qwbe -d qwbe_invoicing"]
+      interval: 10s
+      timeout: 3s
+      retries: 20
+      start_period: 15s
+    stop_grace_period: 30s
+    restart: unless-stopped
+
   migrate:
     image: ghcr.io/bogdanignat/qwbe-invoicing:${IMAGE_TAG:-0.1.0}
     command: ["node", "bin/qwbe-invoicing.ts", "migrate", "--apply", "--confirm-production", "--json"]
     environment:
+      <<: *postgres-environment
       NODE_ENV: production
       DATA_DIR: /data
+    secrets:
+      - pg_password
+    # Without this the migration runs against a server that is not accepting
+    # connections yet and `app` comes up on an empty schema. There is no fallback
+    # path in which `migrate` runs without the database or without the secret.
+    depends_on:
+      db:
+        condition: service_healthy
     volumes:
       - invoicing-data:/data
     read_only: true
@@ -22,19 +80,28 @@ services:
   app:
     image: ghcr.io/bogdanignat/qwbe-invoicing:${IMAGE_TAG:-0.1.0}
     environment:
+      <<: *postgres-environment
       NODE_ENV: production
       HOST: 0.0.0.0
       PORT: 3000
       DATA_DIR: /data
       ORGANIZATION_ID: ${ORGANIZATION_ID:-local-organization}
       AUTH_TOKEN_FILE: /run/secrets/api_token
+      # `backup` and `restore` stage into a `mkdtemp` under TMPDIR and the archive
+      # bounds allow 1 GiB expanded, so staging is a disk volume and not the small
+      # tmpfs below: a 1 GiB staging tree in `/tmp` would be 1 GiB of RAM.
+      TMPDIR: /var/backups/staging
     secrets:
       - api_token
+      - pg_password
     depends_on:
+      db:
+        condition: service_healthy
       migrate:
         condition: service_completed_successfully
     volumes:
       - invoicing-data:/data
+      - invoicing-backup-staging:/var/backups/staging
     expose:
       - "3000"
     restart: unless-stopped
@@ -42,7 +109,9 @@ services:
     init: true
     read_only: true
     tmpfs:
-      - /tmp
+      # Bounded on purpose: with TMPDIR pointed at the staging volume nothing large
+      # lands here, and an unbounded tmpfs is a way to consume the host's memory.
+      - /tmp:size=64m
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/health/ready"]
       interval: 15s
@@ -53,6 +122,9 @@ services:
   caddy:
     image: caddy:2-alpine
     profiles: ["proxy"]
+    # `app` is healthy only once it holds the SHARED maintenance barrier and the
+    # schema matches the ledger, so Caddy deliberately does not come up in front of
+    # an application that would answer 503 to every `/api` request.
     depends_on:
       app:
         condition: service_healthy
@@ -67,11 +139,21 @@ services:
 
 secrets:
   api_token:
-    file: ${AUTH_TOKEN_PATH:-./.local/api-token}
+    file: ${AUTH_TOKEN_PATH:?Set AUTH_TOKEN_PATH to the operator-created API token file}
+  pg_password:
+    file: ${PG_PASSWORD_PATH:?Set PG_PASSWORD_PATH to the operator-created PostgreSQL password file}
 
 volumes:
   invoicing-data:
     name: qwbe-invoicing-data
+  # The cluster volume, named separately and created fresh at first start. Nothing
+  # here reuses or resets an older volume.
+  invoicing-postgres:
+    name: qwbe-invoicing-postgres
+  # Backup/restore staging. Separate from the data volume so a staging tree that
+  # fills up cannot take the artifact store with it.
+  invoicing-backup-staging:
+    name: qwbe-invoicing-backup-staging
   caddy-data:
     name: caddy-data
   caddy-config:

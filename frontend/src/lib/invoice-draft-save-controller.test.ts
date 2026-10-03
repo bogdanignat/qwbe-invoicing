@@ -395,7 +395,12 @@ void test("an issuance intent in the slot blocks a create, and a create intent b
   assert.equal(stored["operation"], "create-draft")
   // Cross-operation: the slot is one per tab, so the other write is refused by
   // the same rule that refuses a different document.
-  storage.slots.set(RECOVERY_SLOT, JSON.stringify({ ...stored, operation: "issue-invoice" }))
+  // A whole record of the other operation, request included: the decoder now
+  // refuses a pair whose two halves disagree, and this must be refused by the
+  // slot rule, not by decoding.
+  storage.slots.set(RECOVERY_SLOT, JSON.stringify({
+    ...stored, operation: "issue-invoice", request: { kind: "issue-draft", draftId: "draft-1" },
+  }))
   const second = harness({ createDraft: () => draftWith("draft-2", []) }, { storage })
   const outcome = await second.controller.save(createRequest())
   assert.equal(outcome.kind, "error")

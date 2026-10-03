@@ -1,34 +1,35 @@
 import assert from "node:assert/strict"
 import { once } from "node:events"
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { writeFileSync } from "node:fs"
 import type { AddressInfo } from "node:net"
-import { tmpdir } from "node:os"
 import { join } from "node:path"
 import test from "node:test"
 
 import { apiDocsResponse } from "./api-docs.ts"
 import { startServer } from "./http.ts"
-import { applyMigrations } from "../storage/migrations.ts"
+import { withMigrated, type TestFixture } from "../storage/postgres-rig.test-support.ts"
 
+/**
+ * The session exchange end to end. Two ports: the server takes the application
+ * pool, and the readiness gate it is handed is a promise — the real gate opens a
+ * transaction now, so `() => true` became `() => Promise.resolve(true)`.
+ */
 void test("the HTTP host exchanges the API token for a cookie session", async () => {
-  const directory = mkdtempSync(join(tmpdir(), "qwbe-http-session-"))
+  await withMigrated("http_session", async (fixture) => {
   const token = "b".repeat(64)
-  const tokenFile = join(directory, "api-token")
+  const tokenFile = join(fixture.dataDirectory, "api-token")
   writeFileSync(tokenFile, token, { mode: 0o600 })
-  applyMigrations(directory)
   let docsAttempts = 0
-  const running = await startServer({
-    host: "127.0.0.1",
-    port: 0,
-    dataDirectory: directory,
-    nodeEnvironment: "test",
-    authTokenFile: tokenFile,
-    organizationId: "org-1",
-  }, () => true, async () => {
-    docsAttempts += 1
-    if (docsAttempts === 1) throw new Error("simulated docs render failure")
-    return apiDocsResponse()
-  })
+  const running = await startServer(
+    fixture.config({ port: 0, authTokenFile: tokenFile }),
+    fixture.pool,
+    () => Promise.resolve(true),
+    async () => {
+      docsAttempts += 1
+      if (docsAttempts === 1) throw new Error("simulated docs render failure")
+      return apiDocsResponse()
+    },
+  )
   const { server } = running
 
   try {
@@ -83,6 +84,58 @@ void test("the HTTP host exchanges the API token for a cookie session", async ()
     assert.equal(replay.status, 401)
   } finally {
     await running.close()
-    rmSync(directory, { recursive: true, force: true })
   }
+  })
+})
+
+/**
+ * The shipped cookie policy, at the port, on a real database.
+ *
+ * `nodeEnvironment` is what decides the `Secure` attribute
+ * (`standalone/auth/browser-session.ts`), and the only probe that drives a real
+ * backend end to end speaks plain HTTP, so it has to run that backend as
+ * `development`. Above the session unit the production attribute was therefore
+ * asserted nowhere. Both answers are pinned here over the same plain-HTTP
+ * transport, so the only thing that differs between them is the configuration.
+ */
+const issuedSessionCookie = async (fixture: TestFixture, nodeEnvironment: string, token: string): Promise<string> => {
+  const tokenFile = join(fixture.dataDirectory, "api-token")
+  writeFileSync(tokenFile, token, { mode: 0o600 })
+  const running = await startServer(
+    fixture.config({ port: 0, authTokenFile: tokenFile, nodeEnvironment }),
+    fixture.pool,
+    () => Promise.resolve(true),
+  )
+  try {
+    if (!running.server.listening) await once(running.server, "listening")
+    const address = running.server.address() as AddressInfo
+    const origin = `http://127.0.0.1:${String(address.port)}`
+    const login = await fetch(`${origin}/api/session`, {
+      method: "POST",
+      headers: { "content-type": "application/json", origin },
+      body: JSON.stringify({ token }),
+    })
+    assert.equal(login.status, 200)
+    const setCookie = login.headers.get("set-cookie")
+    assert.ok(setCookie, "a successful login must issue the session cookie")
+    return setCookie
+  } finally {
+    await running.close()
+  }
+}
+
+void test("a production host marks the session cookie Secure, a development host does not", async () => {
+  await withMigrated("http_cookie_policy", async (fixture) => {
+    const token = "c".repeat(64)
+    const production = await issuedSessionCookie(fixture, "production", token)
+    assert.match(production, /; Secure/u)
+    assert.match(production, /; HttpOnly/u)
+    assert.match(production, /; SameSite=Strict/u)
+    // Same transport, same database, same token: only the environment changed,
+    // so the missing attribute is the policy and not the plain-HTTP origin.
+    const development = await issuedSessionCookie(fixture, "development", token)
+    assert.doesNotMatch(development, /; Secure/u)
+    assert.match(development, /; HttpOnly/u)
+    assert.match(development, /; SameSite=Strict/u)
+  })
 })

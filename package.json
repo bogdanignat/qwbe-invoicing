@@ -16,7 +16,7 @@
     "test:frontend:runtime": "node --test probes/frontend-runtime.mjs",
     "local:setup": "node scripts/local-warden.mjs",
     "pretest": "pnpm build:ui",
-    "test": "node --test \"cube/**/*.test.ts\" \"standalone/**/*.test.ts\" \"web/**/*.test.ts\" \"frontend/src/**/*.test.ts\" \"probes/**/*.test.mjs\"",
+    "test": "node --test --test-concurrency=4 --test-timeout=120000 \"cube/**/*.test.ts\" \"standalone/**/*.test.ts\" \"web/**/*.test.ts\" \"frontend/src/**/*.test.ts\" \"probes/**/*.test.mjs\"",
     "typecheck": "tsc -p tsconfig.json && tsc -p web/tsconfig.json && pnpm --filter @qwbe/invoicing-frontend typecheck",
     "lint": "pnpm --filter @qwbe/invoicing-frontend typegen && eslint .",
     "gate:runtime": "node probes/runtime-version.mjs",
@@ -32,6 +32,7 @@
     "@pdf-lib/fontkit": "1.1.1",
     "effect": "3.21.2",
     "pdf-lib": "1.17.1",
+    "pg": "8.23.0",
     "sharp": "0.35.4"
   },
   "devDependencies": {
@@ -39,6 +40,7 @@
     "@tailwindcss/vite": "4.3.3",
     "@tanstack/react-query": "5.102.8",
     "@types/node": "24.10.13",
+    "@types/pg": "8.23.1",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.5",
     "@vitejs/plugin-react": "6.1.1",

@@ -4,7 +4,7 @@ import type { InvoiceAuthoringForm, PartyType } from "../../lib/invoice-authorin
 import { Field } from "../ui/Field.tsx"
 import { Input } from "../ui/Input.tsx"
 import { Select } from "../ui/Select.tsx"
-import { identifierLabel } from "../../lib/invoice-authoring-transitions.ts"
+import { identifierLabel } from "../../lib/document-authoring-transitions.ts"
 import { ROMANIAN_COUNTIES } from "../../lib/romanian-counties.ts"
 import { romanianCuiPattern } from "../../lib/vat-defaults.ts"
 

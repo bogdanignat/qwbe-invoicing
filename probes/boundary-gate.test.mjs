@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
@@ -93,6 +93,61 @@ const withFixture = (build) => {
     rmSync(root, { recursive: true, force: true })
   }
 }
+
+// The PostgreSQL driver is infrastructure, so the same rule that keeps `node:fs`
+// out of a cube keeps `pg` out. Three install shapes are asserted because the
+// rule matches the path dependency-cruiser resolved to, not the specifier the
+// source wrote: a bare name (nothing resolved it), a flat `node_modules/pg`, and
+// the `.pnpm` store this repository actually produces — pnpm links
+// `node_modules/pg` at the store and the cruiser follows the symlink, so a rule
+// written only for the flat form would pass while the import was real.
+const installFlat = (root, name, main = "index.js") => {
+  write(root, `node_modules/${name}/package.json`, `{"name":"${name}","version":"1.0.0","main":"${main}"}\n`)
+  write(root, `node_modules/${name}/${main}`, "module.exports = {}\n")
+}
+const installThroughStore = (root, name, version) => {
+  const inner = `node_modules/.pnpm/${name}@${version}/node_modules/${name}`
+  write(root, `${inner}/package.json`, `{"name":"${name}","version":"${version}","main":"lib/index.js"}\n`)
+  write(root, `${inner}/lib/index.js`, "module.exports = {}\n")
+  mkdirSync(join(root, "node_modules"), { recursive: true })
+  symlinkSync(`.pnpm/${name}@${version}/node_modules/${name}`, join(root, "node_modules", name))
+}
+
+test("rejects the PostgreSQL driver from cube code in every install shape", () => {
+  for (const specifier of ["pg", "pg-pool", "pg-native", "pg-cursor"]) {
+    const unresolved = withFixture((root) => {
+      makeUnit(root, "cube/invoicing", `import "${specifier}"\nexport const cube = {}\n`)
+    })
+    assert.notEqual(unresolved.status, 0, specifier)
+    assert.match(output(unresolved), /cube-does-not-touch-runtime-infrastructure/)
+  }
+  const flat = withFixture((root) => {
+    installFlat(root, "pg")
+    makeUnit(root, "cube/invoicing", 'import "pg"\nexport const cube = {}\n')
+  })
+  assert.notEqual(flat.status, 0, output(flat))
+  assert.match(output(flat), /cube-does-not-touch-runtime-infrastructure/)
+  assert.match(output(flat), /node_modules\/pg\//)
+  const throughStore = withFixture((root) => {
+    installThroughStore(root, "pg", "8.23.0")
+    makeUnit(root, "cube/invoicing", 'import "pg"\nexport const cube = {}\n')
+  })
+  assert.notEqual(throughStore.status, 0, output(throughStore))
+  assert.match(output(throughStore), /node_modules\/[.]pnpm\/pg@8[.]23[.]0\/node_modules\/pg\//)
+})
+
+test("still lets cube code import an unrelated npm package", () => {
+  const flat = withFixture((root) => {
+    installFlat(root, "effect")
+    makeUnit(root, "cube/invoicing", 'import "effect"\nexport const cube = {}\n')
+  })
+  assert.equal(flat.status, 0, output(flat))
+  const throughStore = withFixture((root) => {
+    installThroughStore(root, "effect", "3.21.2")
+    makeUnit(root, "cube/invoicing", 'import "effect"\nexport const cube = {}\n')
+  })
+  assert.equal(throughStore.status, 0, output(throughStore))
+})
 
 test("lets a parent reach a child only through the child's exact index, types included", () => {
   const base = (root, parentSource) => {

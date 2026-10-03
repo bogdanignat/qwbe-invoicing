@@ -1,0 +1,158 @@
+# The permanent test rig: `pnpm test` on a throwaway PostgreSQL 16 cluster.
+#
+# This is where the suite lives now. The storage, API, HTTP, auth, e-Factura,
+# documents, ops and frontend-proxy tests all talk to a real server, so there is no
+# longer a configuration in which `node --test` means anything on the host alone.
+# Permanent, not a step rig: the five `compose.pg-*.yaml` files were written to
+# carry one unit each while it was being built; this one carries the suite.
+#
+# Nothing here ships and nothing here persists: the cluster lives on tmpfs inside
+# its own compose project, no port is published, no application volume is
+# referenced and `down` is never given `-v`. The dependency volumes are the
+# verifier's, read-write because `pretest` builds the UI into the working tree.
+#
+# Run:   scripts/verify-docker.sh test
+#        scripts/verify-docker.sh test "node --test standalone/storage/pagination.test.ts"
+# Down:  docker compose --file compose.test.yaml down    (no volume, no -v)
+name: qwbe-invoicing-test
+
+x-test-image: &test-image
+  image: qwbe-invoicing-verify:${VERIFY_IMAGE_TAG:-local}
+  build:
+    context: .
+    dockerfile: Dockerfile.verify
+    args:
+      HOST_UID: ${HOST_UID:?run through scripts/verify-docker.sh}
+      HOST_GID: ${HOST_GID:?run through scripts/verify-docker.sh}
+
+x-test-volumes: &test-volumes
+  - .:/app
+  - verify-node-modules:/app/node_modules
+  - verify-frontend-node-modules:/app/frontend/node_modules
+  - verify-pnpm-store:/pnpm-store
+  - verify-home:/home/verifier
+  - test-secrets:/run/qwbe-test
+
+services:
+  # The same definition `compose.verify.yaml` carries, in its own project: each rig
+  # in this repository owns its cluster, so one project's `down` cannot take
+  # another's server with it.
+  #
+  # `scram-sha-256` and not `trust`: `standalone/config.ts` reads the password from
+  # PGPASSWORD_FILE and the backup services hand a real credential to `pg_dump`, so
+  # a trusting cluster would let both paths pass while broken. The literal below is
+  # a rig fixture, is never read by the shipped stack and reaches no network — the
+  # cluster is unpublished.
+  db:
+    image: postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
+    environment:
+      POSTGRES_DB: qwbe_test
+      POSTGRES_USER: qwbe_test
+      POSTGRES_PASSWORD: rig-only-test-password
+      POSTGRES_HOST_AUTH_METHOD: scram-sha-256
+      # The target cluster's locale: every database the rig creates is made with
+      # TEMPLATE template0 LC_COLLATE 'C' LC_CTYPE 'C' ENCODING 'UTF8'.
+      POSTGRES_INITDB_ARGS: --locale=C --encoding=UTF8 --auth-host=scram-sha-256
+      PGDATA: /var/lib/postgresql/data/pgdata
+    # Four test files in flight, each with an application pool of 4, a raw-SQL pool
+    # of 2, a maintenance connection (`max: 1`, held for the life of a runtime) and
+    # a short-lived creation connection: 8 per file, ~32 at the peak, plus the
+    # `pg_dump`/`psql` children of the ops suites. 64 leaves room for the
+    # session-lock cases without raising the budget to a number nothing explains.
+    command: ["postgres", "-c", "max_connections=64"]
+    tmpfs:
+      # 6g, not 3g, and measured rather than guessed: the suite creates one
+      # database per test file plus one per case that needs an empty cluster —
+      # about ninety from `template0` at ~7.5 MiB each, most of them carrying the
+      # migrated schema, and each one is written twice over while it is in use. A
+      # full `pnpm test` filled a 3g cluster and the server answered
+      # `could not write init file` for the rest of the run.
+      #
+      # Each fixture reclaims its own database when it closes (see
+      # `postgres-rig.test-support.ts`), so the cluster no longer grows across
+      # runs; the headroom here is for the databases alive at the same time, the
+      # `freshRuntime`/`emptyRuntime` databases, which live until the container
+      # dies, and anything a crashed run left behind. `run --rm test` leaves `db` up, so
+      # `down` between sessions still starts from an empty cluster.
+      - /var/lib/postgresql/data:size=6g,uid=70,gid=70
+      - /tmp
+      - /run/postgresql:uid=70,gid=70
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U qwbe_test -d qwbe_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 5s
+    restart: "no"
+
+  # Ownership of the fresh named volumes, and the rig password where the suite
+  # reads it: a file, not an environment variable, because that is how the shipped
+  # runtime reads it — the ported CLI tests spawn `bin/qwbe-invoicing.ts` and it
+  # only ever looks at PGPASSWORD_FILE. Mode 0600 and the host UID, so the
+  # unprivileged test user can read it and nothing else in the container can.
+  # Idempotent: it may run before every invocation.
+  test-init:
+    <<: *test-image
+    user: "0:0"
+    environment:
+      QWBE_RIG_PGPASSWORD: rig-only-test-password
+    command:
+      - |
+        set -eu
+        chown ${HOST_UID}:${HOST_GID} /app/node_modules /app/frontend/node_modules /pnpm-store /pnpm-store/store /home/verifier /run/qwbe-test
+        umask 077
+        printf '%s' "$${QWBE_RIG_PGPASSWORD}" > /run/qwbe-test/pgpassword
+        chown ${HOST_UID}:${HOST_GID} /run/qwbe-test/pgpassword
+        chmod 600 /run/qwbe-test/pgpassword
+    volumes: *test-volumes
+    restart: "no"
+
+  test:
+    <<: *test-image
+    user: "${HOST_UID}:${HOST_GID}"
+    environment:
+      # Scratch only: tmpfs below, nothing in it survives the container. No
+      # DATA_DIR here on purpose: each fixture makes its own `mkdtemp` under
+      # TMPDIR and hands it to its children, so two concurrent files never share
+      # an artifact tree, and nothing can fall back to a directory nobody made.
+      TMPDIR: /tmp
+      PGHOST: db
+      PGPORT: "5432"
+      # The cluster's own database. The suite never uses it for data: it is where
+      # `CREATE DATABASE` is issued from, serialised by a session advisory lock.
+      PGDATABASE: qwbe_test
+      PGUSER: qwbe_test
+      PGPASSWORD_FILE: /run/qwbe-test/pgpassword
+      # `standalone/ops/postgres-backup.test.ts` builds the subprocess credential
+      # from PGPASSWORD. It is set for that suite only and never reaches a child of
+      # the CLI: the fixture's `childEnv` strips it, so the ported CLI tests prove
+      # the shipped path works from the secret file alone.
+      PGPASSWORD: rig-only-test-password
+    depends_on:
+      test-init:
+        condition: service_completed_successfully
+      db:
+        condition: service_healthy
+    volumes: *test-volumes
+    tmpfs:
+      - /tmp:size=2g,mode=1777,uid=${HOST_UID},gid=${HOST_GID}
+    init: true
+    restart: "no"
+    command: ["pnpm test"]
+
+volumes:
+  # Produced by the `qwbe-invoicing-verify` compose project: one dependency tree
+  # for both rigs, so a test run never installs a second copy.
+  verify-node-modules:
+    external: true
+    name: qwbe-invoicing-verify_verify-node-modules
+  verify-frontend-node-modules:
+    external: true
+    name: qwbe-invoicing-verify_verify-frontend-node-modules
+  verify-pnpm-store:
+    external: true
+    name: qwbe-invoicing-verify_verify-pnpm-store
+  verify-home:
+    external: true
+    name: qwbe-invoicing-verify_verify-home
+  test-secrets: {}

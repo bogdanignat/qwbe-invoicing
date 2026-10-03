@@ -1,14 +1,19 @@
 import assert from "node:assert/strict"
 import { once } from "node:events"
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
+import { writeFileSync } from "node:fs"
 import { request as httpRequest, IncomingMessage, ServerResponse, type ClientRequest, type Server } from "node:http"
 import { Socket, type AddressInfo } from "node:net"
-import { tmpdir } from "node:os"
 import { join } from "node:path"
 import test from "node:test"
 
 import { startServer } from "./http.ts"
-import { applyMigrations } from "../storage/migrations.ts"
+import { withMigrated } from "../storage/postgres-rig.test-support.ts"
+
+/**
+ * The throttle is in-process state; what the port changes is only its host: the
+ * server takes the application pool and an asynchronous readiness gate. Each
+ * case still gets its own fixture, which here also means its own database.
+ */
 
 const token = "http-throttle-secret-canary-".repeat(3)
 const wrongToken = "wrong-token-body-canary"
@@ -30,11 +35,11 @@ interface FixtureOptions {
   readonly onPeerKey?: (request: IncomingMessage) => void
 }
 
+let fixtures = 0
 const withFixture = async (run: (fixture: Fixture) => Promise<void>, options: FixtureOptions = {}): Promise<void> => {
-  const directory = mkdtempSync(join(tmpdir(), "qwbe-http-throttle-"))
-  const tokenFile = join(directory, "api-token")
+  await withMigrated(`throttle_${String(++fixtures)}`, async (rig) => {
+  const tokenFile = join(rig.dataDirectory, "api-token")
   writeFileSync(tokenFile, token, { mode: 0o600 })
-  applyMigrations(directory)
   let currentTime = 1_800_000_000_000
   let peer: string | undefined = rawPeer
   const events: unknown[] = []
@@ -50,10 +55,13 @@ const withFixture = async (run: (fixture: Fixture) => Promise<void>, options: Fi
       return peer
     } }),
   }
-  const running = await startServer({
-    host: "127.0.0.1", port: 0, dataDirectory: directory,
-    nodeEnvironment: "test", authTokenFile: tokenFile, organizationId: "org-1",
-  }, () => true, undefined, deps)
+  const running = await startServer(
+    rig.config({ port: 0, authTokenFile: tokenFile }),
+    rig.pool,
+    () => Promise.resolve(true),
+    undefined,
+    deps,
+  )
   const { server } = running
   try {
     if (!server.listening) await once(server, "listening")
@@ -68,8 +76,8 @@ const withFixture = async (run: (fixture: Fixture) => Promise<void>, options: Fi
   } finally {
     server.closeAllConnections()
     await running.close()
-    rmSync(directory, { recursive: true, force: true })
   }
+  })
 }
 
 const drain = async (response: Response): Promise<number> => {

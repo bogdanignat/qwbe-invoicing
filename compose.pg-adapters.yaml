@@ -1,0 +1,88 @@
+# The adapter suite, on a throwaway PostgreSQL 16 cluster.
+#
+# A fourth rig, added rather than folded into the three that exist: the verifier
+# (compose.verify.yaml), the driver probe and the schema gate are untouched, and
+# this one is the only place the adapters meet a real server.
+#
+# Nothing here ships and nothing here persists: the cluster lives on tmpfs, no
+# port is published, no application volume is referenced and the project name is
+# its own. `trust` authentication exists only inside this rig and is never copied
+# into the runtime stack, which uses POSTGRES_PASSWORD_FILE.
+#
+# It is NOT part of `pnpm test`: the legacy SQLite suite still owns that command,
+# so this rig runs the PostgreSQL tests explicitly, by path.
+#
+# Run:  docker compose --file compose.pg-adapters.yaml run --rm adapters
+# Down: docker compose --file compose.pg-adapters.yaml down   (no volume, no -v)
+name: qwbe-invoicing-pg-adapters
+
+services:
+  db:
+    image: postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
+    environment:
+      POSTGRES_DB: adapters
+      POSTGRES_USER: adapters
+      POSTGRES_HOST_AUTH_METHOD: trust
+      # The target cluster's locale: every database the rig creates is made with
+      # TEMPLATE template0 LC_COLLATE 'C' LC_CTYPE 'C' ENCODING 'UTF8'.
+      POSTGRES_INITDB_ARGS: --locale=C --encoding=UTF8
+      PGDATA: /var/lib/postgresql/data/pgdata
+    # One database per test file plus the pools of four, so the budget is raised
+    # above the default 100 only by what the suite actually opens.
+    command: ["postgres", "-c", "max_connections=64"]
+    tmpfs:
+      # 1g, not 512m: `run --rm` removes the test container and leaves `db`
+      # running, so repeated runs accumulate one database per test file in the
+      # same cluster. At 512m the fifth consecutive run filled the tmpfs and the
+      # postmaster went into recovery mid-suite. Bring the rig `down` between
+      # sessions and the cluster starts empty again.
+      - /var/lib/postgresql/data:size=1g,uid=70,gid=70
+      - /tmp
+      - /run/postgresql:uid=70,gid=70
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U adapters -d adapters"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+      start_period: 5s
+    restart: "no"
+
+  adapters:
+    # The image the application is built from, so the adapters run on the real
+    # base layer and not on a convenience image.
+    image: node:24.19.0-alpine@sha256:d32cdf619f63fe0471182d08996dd516c6275bb5fd31ae06e55a570bd9e1ad43
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PGHOST: db
+      PGPORT: "5432"
+      PGDATABASE: adapters
+      PGUSER: adapters
+    volumes:
+      # The cubes, the adapters and their tests. Read-only: the suite writes
+      # nothing to the tree.
+      - ./cube:/app/cube:ro
+      - ./standalone:/app/standalone:ro
+      - ./package.json:/app/package.json:ro
+      - ./tsconfig.json:/app/tsconfig.json:ro
+      - verify-node-modules:/app/node_modules:ro
+    tmpfs:
+      - /tmp
+    working_dir: /app
+    # Named by path on purpose: the legacy SQLite suite is still red until the
+    # integration step ports it, and it must not gate these tests.
+    command:
+      - node
+      - --test
+      - standalone/storage/postgres-sql.test.ts
+      - standalone/storage/postgres-adapters.test.ts
+      - standalone/storage/postgres-runtime.test.ts
+    init: true
+    restart: "no"
+
+volumes:
+  # Produced by the `qwbe-invoicing-verify` compose project; read-only here.
+  verify-node-modules:
+    external: true
+    name: qwbe-invoicing-verify_verify-node-modules

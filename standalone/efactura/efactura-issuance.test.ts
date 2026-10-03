@@ -1,16 +1,25 @@
 import assert from "node:assert/strict"
 import { createHash } from "node:crypto"
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs"
-import { tmpdir } from "node:os"
+import { writeFileSync } from "node:fs"
 import { join } from "node:path"
-import { DatabaseSync } from "node:sqlite"
 import test from "node:test"
 
 import type { ApiResponse } from "../api/api.test-support.ts"
 import { handleApiRequest } from "../api/api.test-support.ts"
 import { createRequestAuthenticator } from "../auth/auth.ts"
-import { applyMigrations, databasePath } from "../storage/migrations.ts"
+import { migratedFixture, type RawSql, type TestFixture } from "../storage/postgres-rig.test-support.ts"
 import { positiveInvoiceRequiresDueDate } from "../../web/src/lib/invoice-authoring-state.ts"
+
+/**
+ * The e-Factura routes over PostgreSQL. The API fixture now carries the pool,
+ * and the issuance-state snapshot is four awaited queries instead of a read-only
+ * `DatabaseSync`.
+ *
+ * `STRICT` has no counterpart and needs none: a PostgreSQL column has a type
+ * unconditionally. What that table assertion was really protecting — that
+ * `number`, `fiscal_year` and `last_number` are integers and the money is text,
+ * so nothing silently coerces — is asserted against the catalogue instead.
+ */
 
 const missingDueDate = {
   status: 400,
@@ -25,17 +34,16 @@ const buyer = {
   address: { countryCode: "RO", city: "Cluj-Napoca", street: "Strada Memorandumului 1", county: "RO-CJ" },
 } as const
 
-const fixture = async () => {
-  const directory = mkdtempSync(join(tmpdir(), "qwbe-efactura-issuance-"))
+const fixture = async (label: string) => {
+  const rig = await migratedFixture(`efa_${label}`)
   const token = "e".repeat(64)
-  const tokenFile = join(directory, "api-token")
+  const tokenFile = join(rig.dataDirectory, "api-token")
   writeFileSync(tokenFile, token, { mode: 0o600 })
-  applyMigrations(directory)
   const authorization = `Bearer ${token}`
   const runtime = {
-    authenticate: createRequestAuthenticator({ host: "127.0.0.1", port: 3000, dataDirectory: directory,
-      nodeEnvironment: "test", authTokenFile: tokenFile, organizationId: "org-1" }),
-    dataDirectory: directory,
+    authenticate: createRequestAuthenticator(rig.config({ authTokenFile: tokenFile })),
+    pool: rig.pool,
+    dataDirectory: rig.dataDirectory,
     now: () => new Date("2026-09-05T10:00:00.000Z"),
   }
   const call = (method: string, url: string, body: unknown, idempotencyKey?: string) =>
@@ -50,45 +58,58 @@ const fixture = async () => {
   for (const [documentType, series] of [["invoice", "INV"], ["proforma", "PRO"]] as const) {
     assert.equal((await call("POST", "/api/document-series", { documentType, series })).status, 200)
   }
-  return { directory, call, close: () => { rmSync(directory, { recursive: true, force: true }) } }
+  return { rig, call, close: () => rig.close() }
 }
 
-const scalar = (database: DatabaseSync, sql: string): number => {
-  const value = Object.values(database.prepare(sql).get() ?? {})[0]
-  assert.equal(typeof value, "number")
-  return value as number
+/** `count(*)` is `bigint`, which arrives as text; a count is a number here. */
+const counted = async (sql: RawSql, statement: string): Promise<number> => {
+  const value = await sql.scalar(statement)
+  assert.equal(typeof value, "string", statement)
+  return Number(value)
 }
 
-const issuanceState = (directory: string) => {
-  const database = new DatabaseSync(databasePath(directory), { readOnly: true })
-  try {
-    for (const table of ["issued_invoices", "audit_events", "idempotency_records", "invoice_sequences"]) {
-      assert.match(String(database.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name=?").get(table)?.sql), /STRICT$/)
-    }
-    return {
-      invoices: scalar(database, "SELECT COUNT(*) FROM issued_invoices"),
-      audits: scalar(database, "SELECT COUNT(*) FROM audit_events"),
-      idempotency: scalar(database, "SELECT COUNT(*) FROM idempotency_records"),
-      invoiceSequences: database.prepare("SELECT organization_id,fiscal_year,series,last_number FROM invoice_sequences WHERE document_type='invoice' ORDER BY organization_id,fiscal_year,series").all(),
-    }
-  } finally { database.close() }
+const issuanceState = async (rig: TestFixture) => {
+  const { sql } = rig
+  // What `STRICT` stood for: the stored types, read from the catalogue.
+  assert.deepEqual(await sql.query(
+    `SELECT table_name, column_name, data_type FROM information_schema.columns
+     WHERE table_schema = 'public'
+       AND (table_name, column_name) IN (('issued_invoices','number'), ('issued_invoices','fiscal_year'),
+         ('issued_invoices','total_including_tax'), ('invoice_sequences','last_number'),
+         ('audit_events','occurred_at'), ('idempotency_records','created_at'))
+     ORDER BY table_name, column_name`,
+  ), [
+    { table_name: "audit_events", column_name: "occurred_at", data_type: "text" },
+    { table_name: "idempotency_records", column_name: "created_at", data_type: "text" },
+    { table_name: "invoice_sequences", column_name: "last_number", data_type: "integer" },
+    { table_name: "issued_invoices", column_name: "fiscal_year", data_type: "integer" },
+    { table_name: "issued_invoices", column_name: "number", data_type: "integer" },
+    { table_name: "issued_invoices", column_name: "total_including_tax", data_type: "text" },
+  ])
+  return {
+    invoices: await counted(sql, "SELECT count(*) FROM issued_invoices"),
+    audits: await counted(sql, "SELECT count(*) FROM audit_events"),
+    idempotency: await counted(sql, "SELECT count(*) FROM idempotency_records"),
+    invoiceSequences: await sql.query(`SELECT organization_id,fiscal_year,series,last_number FROM invoice_sequences
+      WHERE document_type='invoice' ORDER BY organization_id,fiscal_year,series`),
+  }
 }
 
 void test("direct positive invoice rejects missing dueDate without consuming issuance state", async () => {
-  const value = await fixture()
+  const value = await fixture("direct_due")
   try {
     const input = { customer: buyer, series: "INV", issueDate: "2026-09-05", currency: "RON", lines: [line] }
-    const before = issuanceState(value.directory)
+    const before = await issuanceState(value.rig)
     assert.deepEqual(await value.call("POST", "/api/invoices", input, "missing-direct-due-date"), missingDueDate)
-    assert.deepEqual(issuanceState(value.directory), before)
+    assert.deepEqual(await issuanceState(value.rig), before)
     const issued = await value.call("POST", "/api/invoices", { ...input, dueDate: "2026-09-20" }, "valid-direct")
     assert.equal(issued.status, 200)
     assert.equal((issued.body as { number: number }).number, 1)
-  } finally { value.close() }
+  } finally { await value.close() }
 })
 
 void test("positive draft may remain undated but issuance rejects it atomically", async () => {
-  const value = await fixture()
+  const value = await fixture("draft_due")
   try {
     const draft = await value.call("POST", "/api/drafts", { customer: buyer, series: "INV", issueDate: "2026-09-05" }, "efactura-draft-1")
     assert.equal(draft.status, 200)
@@ -96,9 +117,9 @@ void test("positive draft may remain undated but issuance rejects it atomically"
     const draftId = (draft.body as { id: string }).id
     const positive = await value.call("POST", `/api/drafts/${draftId}/lines`, line)
     assert.equal((positive.body as { totalIncludingVat: string }).totalIncludingVat, "121.00")
-    const before = issuanceState(value.directory)
+    const before = await issuanceState(value.rig)
     assert.deepEqual(await value.call("POST", `/api/drafts/${draftId}/issue`, {}, "missing-draft-due-date"), missingDueDate)
-    assert.deepEqual(issuanceState(value.directory), before)
+    assert.deepEqual(await issuanceState(value.rig), before)
     assert.equal(((await value.call("GET", `/api/drafts/${draftId}`, undefined)).body as { status: string }).status, "draft")
     assert.equal((await value.call("PUT", `/api/drafts/${draftId}`, {
       customer: buyer, issueDate: "2026-09-05", dueDate: "2026-09-20",
@@ -106,11 +127,11 @@ void test("positive draft may remain undated but issuance rejects it atomically"
     const issued = await value.call("POST", `/api/drafts/${draftId}/issue`, {}, "valid-draft")
     assert.equal(issued.status, 200)
     assert.equal((issued.body as { number: number }).number, 1)
-  } finally { value.close() }
+  } finally { await value.close() }
 })
 
 void test("positive undated proforma stays intact when invoice conversion is rejected", async () => {
-  const value = await fixture()
+  const value = await fixture("proforma_due")
   try {
     const input = { customer: buyer, proformaSeries: "PRO", issueDate: "2026-09-05", currency: "RON", lines: [line] }
     const proforma = await value.call("POST", "/api/proformas", input, "undated-proforma")
@@ -118,11 +139,11 @@ void test("positive undated proforma stays intact when invoice conversion is rej
     assert.equal((proforma.body as { dueDate: string | null }).dueDate, null)
     assert.equal((proforma.body as { totalIncludingVat: string }).totalIncludingVat, "121.00")
     const proformaId = (proforma.body as { id: string }).id
-    const before = issuanceState(value.directory)
+    const before = await issuanceState(value.rig)
     assert.deepEqual(await value.call("POST", `/api/proformas/${proformaId}/invoice`, {
       invoiceSeries: "INV",
     }, "missing-conversion-due-date"), missingDueDate)
-    assert.deepEqual(issuanceState(value.directory), before)
+    assert.deepEqual(await issuanceState(value.rig), before)
     assert.deepEqual((await value.call("GET", `/api/proformas/${proformaId}`, undefined)).body, proforma.body)
 
     const dated = await value.call("POST", "/api/proformas", { ...input, dueDate: "2026-09-20" }, "dated-proforma")
@@ -133,11 +154,11 @@ void test("positive undated proforma stays intact when invoice conversion is rej
     assert.equal(issued.status, 200)
     assert.equal((issued.body as { number: number }).number, 1)
     assert.deepEqual((await value.call("GET", `/api/proformas/${proformaId}`, undefined)).body, proforma.body)
-  } finally { value.close() }
+  } finally { await value.close() }
 })
 
 void test("zero-value invoice permits an explicit null dueDate", async () => {
-  const value = await fixture()
+  const value = await fixture("zero_due")
   try {
     const issued = await value.call("POST", "/api/invoices", {
       customer: buyer, series: "INV", issueDate: "2026-09-05", dueDate: null, currency: "RON",
@@ -147,11 +168,11 @@ void test("zero-value invoice permits an explicit null dueDate", async () => {
     assert.equal((issued.body as { dueDate: string | null }).dueDate, null)
     assert.equal((issued.body as { totalIncludingVat: string }).totalIncludingVat, "0.00")
     assert.equal((issued.body as { number: number }).number, 1)
-  } finally { value.close() }
+  } finally { await value.close() }
 })
 
 void test("unsaved UI due-date gating agrees with public invoice totals at the cent boundary", async () => {
-  const value = await fixture()
+  const value = await fixture("cent_bound")
   try {
     for (const quantity of ["0.0001", "0.0049", "0.0050", "0.0051", "1.0000"]) {
       const input = { ...line, quantity, unitPrice: "1.00" }
@@ -166,7 +187,7 @@ void test("unsaved UI due-date gating agrees with public invoice totals at the c
       const issued = await value.call("POST", `/api/drafts/${draftId}/issue`, {}, `rounded-${quantity}`)
       assert.equal(issued.status, needsDate ? 400 : 200, quantity)
     }
-  } finally { value.close() }
+  } finally { await value.close() }
 })
 
 /**
@@ -196,7 +217,7 @@ const exported = async (call: (method: string, url: string, body: unknown, key?:
 }
 
 void test("an issued invoice downloads as the e-Factura document it maps to", async () => {
-  const value = await fixture()
+  const value = await fixture("export_inv")
   try {
     const issued = await value.call("POST", "/api/invoices", {
       customer: buyer, series: "INV", issueDate: "2026-09-05", dueDate: "2026-09-20", currency: "RON", lines: [line],
@@ -217,11 +238,11 @@ void test("an issued invoice downloads as the e-Factura document it maps to", as
     assert.match(xml, /<cbc:CompanyID>RO12345674<\/cbc:CompanyID>/u)
     assert.match(xml, /<cbc:CompanyID>RO87654329<\/cbc:CompanyID>/u)
     assert.match(xml, /<cbc:PayableAmount currencyID="RON">121\.00<\/cbc:PayableAmount>/u)
-  } finally { value.close() }
+  } finally { await value.close() }
 })
 
 void test("a correction downloads as the credit note that reverses its invoice", async () => {
-  const value = await fixture()
+  const value = await fixture("export_corr")
   try {
     const issued = await value.call("POST", "/api/invoices", {
       customer: buyer, series: "INV", issueDate: "2026-09-05", dueDate: "2026-09-20", currency: "RON", lines: [line],
@@ -245,11 +266,11 @@ void test("a correction downloads as the credit note that reverses its invoice",
     // with a positive credit note, and the export is where the sign is dropped.
     assert.match(xml, /<cbc:PayableAmount currencyID="RON">121\.00<\/cbc:PayableAmount>/u)
     assert.doesNotMatch(xml, /-121\.00/u)
-  } finally { value.close() }
+  } finally { await value.close() }
 })
 
 void test("the export refuses a document e-Factura cannot carry, and says why", async () => {
-  const value = await fixture()
+  const value = await fixture("export_refuse")
   try {
     // BR-RO-L100 caps a line description at 100 characters. The invoicing domain
     // caps nothing at input (T-1390), so this invoice is issued, stored and
@@ -266,19 +287,19 @@ void test("the export refuses a document e-Factura cannot carry, and says why", 
     const body = response.body as { error: string; issues: ReadonlyArray<string> }
     assert.equal(body.error, "ValidationFailure")
     assert.deepEqual(body.issues, ["lines[0].name exceeds 100 characters after normalize-space (BR-RO-L100)"])
-  } finally { value.close() }
+  } finally { await value.close() }
 })
 
 void test("the export answers for documents that do not exist and callers that do not identify themselves", async () => {
-  const value = await fixture()
+  const value = await fixture("export_missing")
   try {
     for (const url of ["/api/invoices/missing-invoice/efactura.xml", "/api/corrections/missing-correction/efactura.xml"]) {
       assert.deepEqual(await value.call("GET", url, undefined), { status: 404, body: { error: "ResourceNotFound" } }, url)
       // The same route without credentials stops before it reads anything.
       assert.equal((await handleApiRequest({ method: "GET", url, authorization: undefined, body: undefined },
-        { authenticate: createRequestAuthenticator({ host: "127.0.0.1", port: 3000, dataDirectory: value.directory,
-          nodeEnvironment: "test", authTokenFile: join(value.directory, "api-token"), organizationId: "org-1" }),
-          dataDirectory: value.directory })).status, 401, url)
+        { authenticate: createRequestAuthenticator(value.rig.config({
+          authTokenFile: join(value.rig.dataDirectory, "api-token") })),
+          pool: value.rig.pool, dataDirectory: value.rig.dataDirectory })).status, 401, url)
     }
-  } finally { value.close() }
+  } finally { await value.close() }
 })

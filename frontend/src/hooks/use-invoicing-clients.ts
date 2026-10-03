@@ -9,6 +9,14 @@ import { createDraftsClient } from "../lib/drafts-client.ts"
 import type { DraftsClient } from "../lib/drafts-client.ts"
 import { createAuthoringReferenceClient } from "../lib/authoring-reference-client.ts"
 import type { AuthoringReferenceClient } from "../lib/authoring-reference-client.ts"
+import { createProformaReplayClient } from "../lib/proforma-replay-client.ts"
+import type { ProformaReplayClient } from "../lib/proforma-replay-client.ts"
+import { createProformasClient } from "../lib/proformas-client.ts"
+import type { ProformasClient } from "../lib/proformas-client.ts"
+import { createRegistryClient } from "../lib/registry-client.ts"
+import type { RegistryClient } from "../lib/registry-client.ts"
+import { createSettingsClient } from "../lib/settings-client.ts"
+import type { SettingsClient } from "../lib/settings-client.ts"
 
 /**
  * The single place where the session's transport becomes a data client.
@@ -23,6 +31,13 @@ export interface InvoicingClients {
   readonly documents: InvoiceDocumentsClient
   readonly drafts: DraftsClient
   readonly reference: AuthoringReferenceClient
+  /** The master-data writes; `reference` stays read-only on purpose. */
+  readonly registry: RegistryClient
+  readonly proformas: ProformasClient
+  /** The same three writes with an opaque body: resending an intent written down before the first attempt. */
+  readonly proformaReplay: ProformaReplayClient
+  /** The settings screen's writes: the issuer profile and one new document series. */
+  readonly settings: SettingsClient
 }
 
 export const useInvoicingClients = (): InvoicingClients => {
@@ -32,5 +47,9 @@ export const useInvoicingClients = (): InvoicingClients => {
     documents: createInvoiceDocumentsClient(transport),
     drafts: createDraftsClient(transport),
     reference: createAuthoringReferenceClient(transport),
+    registry: createRegistryClient(transport),
+    proformas: createProformasClient(transport),
+    proformaReplay: createProformaReplayClient(transport),
+    settings: createSettingsClient(transport),
   }), [transport])
 }

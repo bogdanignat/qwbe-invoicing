@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import {
-  BLOCKED_CONFLICT, BLOCKED_CORRUPT, BLOCKED_MARKER, BLOCKED_OTHER, BLOCKED_UNAVAILABLE,
+  BLOCKED_CONFLICT, BLOCKED_CORRUPT, BLOCKED_MARKER, BLOCKED_MISMATCH, BLOCKED_OTHER, BLOCKED_UNAVAILABLE,
   createRecoveryJournal, RECOVERY_SLOT,
   type JournalStorage, type RecoveryIntent, type RecoveryJournal,
 } from "./operation-recovery-journal.ts"
@@ -80,6 +80,20 @@ const issuing: RecoveryIntent = {
   summary: { buyerName: "Alfa", series: "FCT", issueDate: "2026-01-01", lineCount: 1 },
 }
 
+const issuingProforma: RecoveryIntent = {
+  operation: "create-proforma",
+  request: { kind: "create-proforma", body: { series: "PRO", lines: [] } },
+  fingerprint: "fingerprint:proforma",
+  summary: { buyerName: "Alfa", series: "PRO", issueDate: "2026-01-01", lineCount: 1 },
+}
+
+const converting: RecoveryIntent = {
+  operation: "convert-proforma-invoice",
+  request: { kind: "convert-proforma-invoice", proformaId: "prf-1", body: { invoiceSeries: "FCT" } },
+  fingerprint: "fingerprint:convert",
+  summary: { buyerName: "Alfa", series: "FCT", issueDate: "2026-01-01", lineCount: 1 },
+}
+
 void test("an intent is on disk before the request may leave", () => {
   const backing = store()
   const { journal, keys } = journalOver(() => backing.storage)
@@ -147,6 +161,66 @@ void test("saving and issuing block each other: one slot, one unresolved write",
   const blocked = journal.claim(issuing)
   assert.equal(blocked.kind, "blocked")
   assert.equal(blocked.message, BLOCKED_OTHER)
+})
+
+void test("an unresolved proforma blocks an invoice write: the slot is one for both families", () => {
+  const backing = store()
+  const { journal, keys } = journalOver(() => backing.storage)
+  assert.equal(journal.claim(issuingProforma).kind, "claimed")
+  const blocked = journal.claim(issuing)
+  assert.equal(blocked.kind, "blocked")
+  assert.equal(blocked.message, BLOCKED_OTHER)
+  // No second key was minted: the invoice write never left.
+  assert.deepEqual(keys(), ["key-1"])
+})
+
+void test("an unresolved invoice blocks a conversion just the same", () => {
+  const backing = store()
+  const { journal } = journalOver(() => backing.storage)
+  assert.equal(journal.claim(intent()).kind, "claimed")
+  const blocked = journal.claim(converting)
+  assert.equal(blocked.kind, "blocked")
+  assert.equal(blocked.message, BLOCKED_OTHER)
+})
+
+void test("a stored conversion survives a reload as the same attempt, proforma id included", () => {
+  const backing = store()
+  journalOver(() => backing.storage).journal.claim(converting)
+  const entry = decodeJournalEntry(backing.raw())
+  assert.equal(entry.kind, "record")
+  assert.equal(entry.record.operation, "convert-proforma-invoice")
+  assert.deepEqual(entry.record.request, converting.request)
+  const reloaded = journalOver(() => backing.storage)
+  const claimed = reloaded.journal.claim(converting)
+  assert.equal(claimed.kind, "claimed")
+  assert.equal(claimed.replay, true)
+  assert.deepEqual(reloaded.keys(), [])
+})
+
+void test("an intent whose operation and request disagree is refused before anything is written", () => {
+  const backing = store()
+  const { journal, keys } = journalOver(() => backing.storage)
+  // A caller mistake, not a storage state: the card would announce a conversion
+  // and a replay would issue a proforma. It must not reach the slot at all.
+  const blocked = journal.claim({ ...issuingProforma, operation: "convert-proforma-invoice" })
+  assert.equal(blocked.kind, "blocked")
+  assert.equal(blocked.message, BLOCKED_MISMATCH)
+  assert.equal(backing.raw(), null)
+  assert.deepEqual(keys(), [])
+  assert.equal(journal.read().kind, "empty")
+})
+
+void test("a logout during a proforma write leaves a marker naming that operation", () => {
+  const backing = store()
+  const { journal } = journalOver(() => backing.storage)
+  journal.claim(issuingProforma)
+  assert.equal(journal.strip(), true)
+  const entry = decodeJournalEntry(backing.raw())
+  assert.equal(entry.kind, "marker")
+  assert.equal(entry.marker.operation, "create-proforma")
+  const blocked = journal.claim(intent())
+  assert.equal(blocked.kind, "blocked")
+  assert.equal(blocked.message, BLOCKED_MARKER)
 })
 
 void test("a storage that cannot be reached at all fails closed", () => {

@@ -37,9 +37,16 @@ export interface RecoveryNoticeModel {
   readonly dismissible: boolean
 }
 
+/**
+ * A title per operation, as a total record: adding an operation without a title
+ * is a compile error here, not a blank card in front of the user.
+ */
 const OPERATION_TITLE: Readonly<Record<RecoveryOperation, string>> = {
   "create-draft": "Salvarea draftului nu este confirmată",
   "issue-invoice": "Emiterea facturii nu este confirmată",
+  "create-proforma": "Emiterea proformei nu este confirmată",
+  "convert-proforma-invoice": "Emiterea facturii din proformă nu este confirmată",
+  "convert-proforma-draft": "Crearea draftului din proformă nu este confirmată",
 }
 
 const PENDING = "Cererea a plecat, dar răspunsul nu a ajuns. Documentul poate exista deja pe server. Retrimiterea folosește exact aceeași cerere și aceeași cheie, deci nu poate crea un al doilea document."
@@ -104,7 +111,7 @@ export const recoveryNotice = (entry: JournalEntry): RecoveryNoticeModel | undef
  * writing blocked until the user follows the link or starts a new document.
  */
 export interface KnownWrite {
-  readonly kind: "draft" | "invoice"
+  readonly kind: "draft" | "invoice" | "proforma"
   readonly id: string
   readonly effectsError: unknown
 }
@@ -112,6 +119,7 @@ export interface KnownWrite {
 const KNOWN_TITLE: Readonly<Record<KnownWrite["kind"], string>> = {
   draft: "Draftul a fost salvat, dar ecranul nu a putut fi actualizat",
   invoice: "Factura a fost emisă, dar ecranul nu a putut fi actualizat",
+  proforma: "Proforma a fost emisă, dar ecranul nu a putut fi actualizat",
 }
 
 const KNOWN_MESSAGE = "Documentul există pe server sub cheia folosită. Nu salva și nu emite din nou de pe acest ecran — ai crea un al doilea document. Deschide documentul de mai jos sau începe unul nou."
@@ -119,6 +127,7 @@ const KNOWN_MESSAGE = "Documentul există pe server sub cheia folosită. Nu salv
 const KNOWN_LINK: Readonly<Record<KnownWrite["kind"], (id: string) => RecoveryLink>> = {
   draft: (id) => ({ href: `/drafts/${encodeURIComponent(id)}`, label: "Deschide draftul salvat" }),
   invoice: (id) => ({ href: `/invoices/${encodeURIComponent(id)}`, label: "Deschide factura emisă" }),
+  proforma: (id) => ({ href: `/proformas/${encodeURIComponent(id)}`, label: "Deschide proforma emisă" }),
 }
 
 export const knownResultNotice = (result: KnownWrite | undefined): RecoveryNoticeModel | undefined => {

@@ -116,22 +116,32 @@ Never use `docker compose down -v` as an upgrade step — it deletes the named v
 
 ## Backup and restore (drill)
 
-Backup is read-only and idempotent; restore verifies `manifest.json` SHA-256 before each write and is idempotent — safe to retry after partial failure. The existing backup file set contains `invoicing.sqlite`, `documents.sqlite`, and `/data/artifacts`, therefore it includes proforma records/conversion metadata, proforma artifact metadata, and proforma PDF files without a separate backup command or format.
+Backup reads the database and writes only the archive; repeating it produces the same contents. The archive holds `manifest.json`, a plain `pg_dump` of the one database as `database.sql` and the `/data/artifacts` tree, with a SHA-256 per member — therefore it includes proforma records/conversion metadata, proforma artifact metadata and proforma PDF files without a separate backup command or format. `browser_sessions` keeps its definition and loses its rows, so no live cookie survives a restore.
+
+Both commands take the maintenance key EXCLUSIVE as a *try* and refuse immediately while `app` holds it SHARED: stop `app` first. `restore --apply` executes `database.sql` through `psql` as the application role — only an archive you trust may be applied — and requires an **empty** target database: create a fresh one and point `PGDATABASE` at it. Nothing is ever dropped.
 
 ```bash
-# Backup to a host path (recommended: host-mounted directory, not inside the volume)
-docker compose -f compose.prod.yaml exec app node bin/qwbe-invoicing.ts backup --output /data/backup-$(date +%F).tar.gz --json
-# Or to host:
+# Backup — stop app first; `run --rm app` carries the same environment and secrets
+docker compose -f compose.prod.yaml stop app
+docker compose -f compose.prod.yaml run --rm app node bin/qwbe-invoicing.ts backup --output /data/backup-$(date +%F).tar.gz --json
+# Or to a host directory (recommended: not inside the data volume):
 mkdir -p /opt/qwbe-invoicing/backups
 docker compose -f compose.prod.yaml run --rm -v /opt/qwbe-invoicing/backups:/backup app node bin/qwbe-invoicing.ts backup --output /backup/qwbe-$(date +%F).tar.gz --json
+docker compose -f compose.prod.yaml start app
 
-# Dry-run restore (verifies manifest without writing)
-docker compose -f compose.prod.yaml exec app node bin/qwbe-invoicing.ts restore --input /data/backup-2026-08-31.tar.gz --json
-
-# Restore — stop app first, then restore, then verify
+# Dry-run restore (verifies the whole archive, writes nothing)
 docker compose -f compose.prod.yaml stop app
-docker compose -f compose.prod.yaml run --rm -v /opt/qwbe-invoicing/backups:/backup -v qwbe-invoicing-data:/data \
-  ghcr.io/bogdanignat/qwbe-invoicing:${IMAGE_TAG} node bin/qwbe-invoicing.ts restore --input /backup/qwbe-2026-08-31.tar.gz --apply --confirm-production --json
+docker compose -f compose.prod.yaml run --rm -v /opt/qwbe-invoicing/backups:/backup app node bin/qwbe-invoicing.ts restore --input /backup/qwbe-2026-08-31.tar.gz --json
+
+# Restore — into a FRESH, empty database AND a fresh artifact volume: restore
+# deletes nothing, so it refuses a populated database or a non-empty /data/artifacts
+docker compose -f compose.prod.yaml exec db psql -U qwbe -d postgres \
+  -c "CREATE DATABASE qwbe_invoicing_restored TEMPLATE template0 LC_COLLATE 'C' LC_CTYPE 'C' ENCODING 'UTF8'"
+docker volume create qwbe-invoicing-data-restored
+docker compose -f compose.prod.yaml run --rm -e PGDATABASE=qwbe_invoicing_restored \
+  -v qwbe-invoicing-data-restored:/data -v /opt/qwbe-invoicing/backups:/backup app \
+  node bin/qwbe-invoicing.ts restore --input /backup/qwbe-2026-08-31.tar.gz --apply --confirm-production --json
+# Point the stack at both (PGDATABASE and the data volume in compose.prod.yaml), then verify
 docker compose -f compose.prod.yaml up -d
 docker compose -f compose.prod.yaml exec app node bin/qwbe-invoicing.ts doctor --json
 docker compose -f compose.prod.yaml exec app node bin/qwbe-invoicing.ts migrate --json

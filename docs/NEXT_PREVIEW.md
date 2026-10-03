@@ -8,8 +8,9 @@
 
 The new `frontend/` package is an opt-in application in the existing pnpm workspace.
 It provides the unlock screen, session restore/logout, and the invoice register with
-the invoice and correction document screens. **The remaining business screens — issuing,
-drafts, catalog, customers, issuer settings, payments — are not migrated yet.**
+the invoice and correction document screens. **The one remaining business screen —
+payments — is not migrated yet** (issuing, drafts, proformas, the product catalogue,
+the customer registry and the issuer settings are, in the phases described below).
 The existing Vite UI, public API, default Compose/Warden routing and release image
 remain operational. This phase does not switch traffic or remove `web/`.
 
@@ -155,8 +156,8 @@ already loaded, and **Reîncearcă** on that failure calls `fetchNextPage`, appe
 second row without duplicating or discarding anything. A `404` is not transient and offers
 no retry at all. Browser MCP verified each case through the DOM and the network log in the
 final pass, with zero unexpected JavaScript console errors. The preview stays opt-in
-because the rest of T-1400 — issuing, drafts, catalog, customers, issuer settings,
-payments — is not migrated or cut over, **not** because retry is unchecked.
+because the rest of T-1400 — payments — is not migrated or cut over,
+**not** because retry is unchecked.
 
 One honest limitation: the retry phase split is currently covered by a temporary observer
 probe plus this browser pass, not by a permanent hook regression test (non-blocking,
@@ -192,9 +193,9 @@ fixture does not go through. No change was made for it.
 - The series is chosen before the first save and read-only afterwards (`UpdateDraftInput` has
   no series). The due date is optional in a draft and required at issuance only when the
   fiscal total rounds positive. Issued invoices are immutable; a draft already issued (or
-  issued as a proforma in the legacy app) renders a notice whose only registry link is
-  `/invoices` — this frontend has no proforma screens and no dead links. A draft derived from
-  a proforma stays editable and issuable but cannot be deleted.
+  issued as a proforma in the legacy app) renders a notice pointing at the registry that
+  actually holds the document — `/invoices`, or `/proformas` since phase three. A draft derived
+  from a proforma stays editable and issuable but cannot be deleted.
 - The buyer is a saved customer or a one-time party (B2B/B2C, manual CUI/CNP validation, no
   CUI lookup), TVA rates resolve from the issuer's configurations on the document date, and
   lines saved under a rate the issuer can no longer charge are re-saved before issuance.
@@ -204,11 +205,279 @@ fixture does not go through. No change was made for it.
   the derived-draft restrictions. The BFF probe now also asserts `idempotency-key` header
   passthrough next to `x-csrf-token`.
 
-**Gaps (not migrated in this phase):** proforma screens and any proforma conversion entry,
-CUI lookup/provider integration, master-data CRUD (customers, presets, series), issuer
-settings, payments, storno authoring, CUI T-1371, and a real-browser pass over the new
-screens (supervisor delegates that separately). The register/drafts browser pass and the
-`/invoices/new` vs `/invoices/[id]` route precedence remain to be verified in a browser.
+**Gaps (not migrated in this phase):** CUI lookup/provider integration, payments, storno
+authoring, CUI T-1371, and a
+real-browser pass over the new screens (supervisor delegates that separately). The
+register/drafts browser pass and the `/invoices/new` vs `/invoices/[id]` route precedence
+remain to be verified in a browser. Proforma screens are migrated — see below.
+
+## Proformas (T-1400 phase three)
+
+Migrated routes: `/proformas` (cursor-paginated register), `/proformas/[id]` (document) and
+`/proformas/new` (authoring). The shell navigates to all three; no proforma link is dead.
+
+- A proforma is **not** a fiscal document: downloads are PDF only, there is no e-Factura
+  section anywhere on the detail screen, and the authoring screen says so next to the save.
+- Authoring is one request (`POST /api/proformas`) over the shared authoring modules
+  (issuer/VAT/units/customers/presets, buyer editor, lines editor). There is no draft and no
+  issuance step, so the whole document — series included — is chosen before the single save,
+  and the save is confirmed in a dialog because the number and the document become immutable
+  the moment the server answers. A positive proforma left without a due date is legal and
+  saveable, with a note saying it will then only convert into a *draft* invoice.
+- Blocking prerequisites are the issuer, the VAT catalogue and the unit catalogue, derived
+  purely (`lib/proforma-authoring-page.ts`). A missing proforma series is **not** blocking: the
+  form opens with a setup note beside a closed save.
+- Conversion lives on the detail screen: to an issued invoice (needs a due date) or to a draft
+  invoice, each under `ConvertProformaInput = { invoiceSeries }` with the invoice series
+  catalogue filtered to `documentType === "invoice"`, issuance explicitly confirmed. The single
+  conflict code `proforma_already_converted` is surfaced as a state, not as a failure.
+- Every write (save and both conversions) claims its idempotency key in the shared operation
+  recovery journal *before* the request, under `create-proforma` /
+  `convert-proforma-invoice` / `convert-proforma-draft`; a lost answer keeps the key for a
+  replay and, on the authoring screen, closes the form and points at `/proformas` instead of
+  offering a second save under a new key.
+- Tested with Node `--test` against the pure layers (page state, readiness, save controller,
+  conversion derivation and error classification, register projection and decoders); no DOM.
+
+## Master data — products and customers (T-1400 phase four)
+
+Migrated routes: `/products` (the product catalogue, canonical in
+`standalone/http/ui-routes.ts` — not `/product-presets`) and `/customers` (the customer
+registry). Both shell links are now live; `/settings` followed in phase five, below.
+
+- Master-data writes live in their own client (`lib/registry-client.ts`), separate from the
+  read-only reference client. They carry **CSRF only**: the backend requires no idempotency
+  key for them (`standalone/api/http-endpoints-master-data.ts`), there is nothing to replay,
+  and a duplicate created by a repeated request is deletable — unlike an issued number. So
+  none of the operation-recovery machinery is wired to them, deliberately.
+- Each screen is a registry on the left and an editor on the right. What may be saved and
+  which single field refuses it are pure modules (`lib/product-preset-form.ts`,
+  `lib/customer-form.ts`, `lib/customer-payload.ts`), so the rules are tested without a DOM
+  and the components only place the message the model named.
+- The preset VAT rules are ported as functions (`lib/product-preset-vat.ts`): only taxable
+  rates in force may be preferred (article 310 is a status of the issuer, never of a
+  product), a preference that has expired keeps an option of its own labelled `(expirată)`
+  and blocks the save until it is replaced. The legacy assertions that went through markup
+  are now assertions on those functions.
+- Customer validation reuses the modules the authoring buyer already goes through
+  (`normalizeRomanianCui`, `romanianCuiPattern`, `countyRequiresSector`,
+  `isRomanianCountyCode`): a CUI keeps its digits without the `RO` prefix, a CNP is 13
+  digits or empty, and a sector exists for Bucharest alone — switching the county drops it
+  so a stale sector is never sent with another county's address.
+- There is no global toast in this frontend: each screen keeps its own notice
+  (`lib/registry-feedback.ts`) next to the panel that changed, and a deletion is confirmed
+  with the sentence that states the fact — documents already issued keep their own copy and
+  do not change.
+- The rates are resolved on the browser's own date (`lib/format.ts` `today()`), which is
+  what authoring already does, rather than on a second notion of "today"; the legacy screen
+  used `todayIn("Europe/Bucharest")`.
+- Focus follows the record that opens: the editor owns the ref and moves the keyboard to its
+  heading through `hooks/use-editor-heading-focus.ts`. That effect is the only one on either
+  screen, and it does what an effect is for — a DOM action after a render.
+
+## Issuer settings and document series (T-1400 phase five)
+
+Migrated route: `/settings` — the issuer profile (identity, address, legal and fiscal
+fields, branding, VAT regime) and the document-series card. The shell link is now live,
+so no navigation entry is dead.
+
+- The profile is one `PUT /api/issuer` that replaces it whole, and one
+  `POST /api/document-series` that adds a series. Both carry **CSRF only**, like the rest
+  of the master data: the issuer is a profile, and a repeated series `POST` answers
+  `document_series_exists` rather than creating a duplicate. They live in
+  `lib/settings-client.ts`, apart from the read-only reference client an authoring session
+  goes through — that client must not be able to rewrite the issuer.
+- The form is held as data (`lib/issuer-form.ts`) and validated as a value
+  (`lib/issuer-payload.ts`, `lib/issuer-legal.ts`): the legacy screen was an uncontrolled
+  `<form>` read at submit and remounted by a changing `key` after each save, with the DOM
+  as arbiter between the typed fields and the saved answer. Each rule now answers with the
+  single field that refuses the save, in the reading order of the form, and the screen's
+  only job is to move the keyboard there.
+- The VAT regime is the only part of the history that may be edited: `vatConfigurations`
+  and `currentVat` are answers, `vatChange` is the only way to move the regime, and the
+  screen shows the periods read-only (`lib/issuer-vat-regime.ts`). Which regime the form
+  opens on is projected from the stored configurations against one single day
+  (`lib/issuer-vat-baseline.ts`), never from the server's cached `currentVat` snapshot,
+  which can be a day older than the screen's own `today`. A regime that is merely scheduled
+  or already expired is named as such instead of being reported as the current one, one
+  that cannot be read at all is declared unreadable and blocks the save until the checkbox
+  is answered, and an unsaved choice says it was chosen manually rather than describing the
+  profile. There is no non-VAT basis field: article 310 is the one basis the schema accepts.
+- Branding is validated in the browser before it is sent — PNG/JPEG by signature and not
+  only by declared type, at most 256 KiB, at most 2048 px per axis and 4 megapixels, which
+  are the backend's own limits — and the backend answers the re-encoded PNG with its
+  dimensions (`lib/branding-decoder.ts`, `lib/branding-image-file.ts`,
+  `lib/issuer-branding.ts`). An object carrying neither text nor image is not sent: "no
+  branding" is `null`.
+- The two slow answers on this screen are filtered by a revision guard
+  (`lib/revision-guard.ts`, `lib/settings-revisions.ts`): a logo that finishes decoding
+  after a second file was chosen, or after the form was edited, is dropped instead of
+  replacing the preview; a save answer replaces the form only if nothing was typed while it
+  was in flight, and otherwise keeps the edits and says so. The rules are values over the
+  guard, so both races are tested without a component, a DOM or a timer.
+- The two help texts are a native `<dialog>` opened with `showModal()` — the focus trap and
+  the `Escape` behaviour are the platform's — and the keyboard returns to the button that
+  opened it on close (`hooks/use-help-dialog.ts`).
+- Tested with Node `--test` over the pure layers: branding decoding and image validation,
+  payload preservation and the refusal order, the legal-field rules (trade registry, IBAN
+  mod-97, social capital, bank name), the VAT baseline/selection/status/history, the races,
+  and the series validations including the duplicate per document type. No DOM.
+
+### What the stage review changed (2026-09-25)
+
+The screen was reviewed after it was built and came back `changes_requested`. What the
+review found, and what was done about it:
+
+- **The form edit read the rendered form, not the queued one.** `edit()` called
+  `setOverride(next(form))` with the `form` captured while rendering, so two `onChange`
+  in one React batch — which is what a browser autofill of an address is — both started
+  from the same saved profile and the last one silently overwrote the first: city, street
+  and postal code filled in one gesture, only one of them kept. The base is now the queued
+  state (`lib/issuer-form.ts`, `editedIssuerForm`), as the series card already did. The
+  fold is a pure function, so the batch is a test rather than a thing to try in a browser:
+  three patches applied as React applies them, all three survive.
+- **A refused logo did not mark the control.** `role="alert"` announces the sentence once,
+  when it appears, and says nothing to someone who tabs back to the input afterwards. The
+  file input is now `aria-invalid` and describes itself by that message for as long as it
+  stands, next to the hint — which is what the legacy screen did.
+- **The VAT history heading was rendered over an empty table.** A profile with no regime
+  yet showed "Istoric regim TVA" and nothing under it; the heading now belongs to
+  `IssuerVatHistory`, which renders nothing at all when there is no history.
+- **The file revision guard was rebuilt on every render.** `useRef(createRevisionGuard())`
+  keeps the first guard and throws away one per render; it is now
+  `useState(createRevisionGuard)`, the same single instance the edit guard already used.
+- **`dismissNotice` was a public method nobody called**, and the "saved" notice outlived
+  the edits that followed it. It is now called from `edit()`, so the notice goes with the
+  next keystroke, as on the series card.
+- **"Elimină tot brandingul" was missing.** The legacy screen dropped text and logo in
+  one action; the new one only removed the logo and left the text to be cleared by hand.
+  Restored as a single model action (`clearBranding`), with "Elimină sigla" kept.
+
+### What the second review changed (2026-09-25)
+
+- **The VAT regime was read from two different days at once.** The first round rejected
+  the unrecognized-regime finding by enumeration: every sequence of up to three VAT
+  changes — 4369 states, 258 with `currentVat` null and configurations present — produced
+  a recognized regime or fallback, none undefined. That enumeration held one date constant
+  on both ends, and that is exactly the assumption that fails. `currentVat` is a snapshot
+  the server computes when it builds the answer
+  (`cube/invoicing/issuer/application/issuer-view.ts:14`), the query client keeps it with
+  no `staleTime` and no refetch on focus (`hooks/use-app-query-client.ts:7`), while the
+  form's `today` is recomputed on every render. A tab left open across midnight holds
+  yesterday's regime and today's date — and with a registration that was scheduled for
+  today, the screen said "neplătitoare" over a VAT-registered issuer, so a save about any
+  other field would have written an article 310 exemption nobody asked for.
+  The snapshot is no longer read by this screen. The regime in force is projected from the
+  stored configurations against the same `today` as the fallback and the change date
+  (`lib/issuer-vat-baseline.ts`, `currentVatRegistration`) — the same projection the
+  backend performs (`cube/invoicing/issuer/domain/vat-regime.ts:18`) — so both ends answer
+  about the same day by construction. That covers the cached-null regime that came into
+  force overnight and the cached regime that expired overnight, in one rule rather than in
+  a branch per case.
+- **And what cannot be read is no longer guessed.** A saved profile whose configurations
+  name no regime today and no scheduled or expired neighbour is `kind: "unknown"`: the
+  status line says the regime cannot be determined and that nothing is assumed, and the
+  save is refused on the checkbox until it is actually answered. Nothing is auto-corrected
+  and no tax is changed by the screen. An issuer that has never been saved is unaffected —
+  `GET /api/issuer` answers `404`, and an unticked checkbox there is the default offered to
+  a new profile, not a regime imposed over stored ones.
+- **Branding actions left stale notices and a stale refusal behind.** The first round
+  cleared the "saved" notice from `edit()`, which the typed fields go through; choosing a
+  logo, "Elimină sigla" and "Renunță la fișierul respins" do not. The branding hook now
+  reports every one of those as an action (`hooks/use-issuer-branding.ts`), and the settings
+  model answers all three the same way: the notice and the refusal that described the
+  previous state are dropped with them.
+- **The keyboard was dropped by the destructive branding controls.** "Elimină sigla",
+  "Elimină tot brandingul" and "Renunță la fișierul respins" unmount as the effect of
+  their own click, leaving focus on `document.body`. The same two non-select actions move
+  it to the file input, through the helper the refusal focus already uses
+  (`lib/focus.ts`, `focusRegistryField`).
+- **`branding` was optional on the model and tolerated as missing by the decoder.** The
+  contract sends it on every answer (`standalone/api/schema-issuer.ts:51`), only nullable.
+  It is now `readonly branding: IssuerBranding | null` and an absent field throws at the
+  boundary like every other required one; the fixtures that relied on the tolerance supply
+  `branding: null`.
+
+One finding was investigated and **not** changed:
+
+- **The save-while-editing branch.** Every control is `disabled` while the save is in
+  flight — the file input included — and the submit is blocked while an image is being
+  decoded, both by the button and by the model. So `ISSUER_SAVED_WHILE_EDITING`
+  (`lib/settings-revisions.ts:45`) cannot be reached from the UI at all: not by typing, and
+  not by the logo either, which the first round claimed. It is covered as a value
+  (`settings-revisions.test.ts:52`). That is a real limit of the coverage, not a defect,
+  and it is left as it is.
+
+### Browser evidence
+
+Two passes exist, and they describe two different screens. The **final** one below is the
+evidence for this phase; the earlier one is kept as history.
+
+**Final pass — post-fix, 2026-09-25, PASS (14/14).** `/settings` was re-driven in a real
+browser on the isolated preview fixture (`compose.preview.yaml`,
+`http://invoicing-next.localhost:3181`) after both rounds of fixes above, on this branch.
+Report and screenshots: `.playwright-mcp/t1400-stage-c-final-browser.md`,
+`.playwright-mcp/t1400-stage-c-final-refused.png`, `t1400-stage-c-final-320.png`,
+`t1400-stage-c-final-390.png`, `t1400-stage-c-final-desktop.png`. What it covered, step by
+step, is the hunks those rounds added:
+
+- **The batched address.** Locality, street, county, postal code and bank name filled in one
+  gesture, saved, reloaded: every value persisted — the queued-state fold read in a browser,
+  not only as a value.
+- **Branding, refusal to removal.** A text file named `.png` refused by signature leaves the
+  file input `aria-invalid="true"` and `aria-describedby` pointing at the refusal for as long
+  as it stands; a valid retry clears both the refusal and the stale "saved" notice; a new
+  logo chosen after a save drops that notice too. "Elimină sigla", "Elimină tot brandingul"
+  and "Renunță la fișierul respins" each returned the keyboard to the file input
+  (`document.activeElement` asserted), and the first two survived save and reload — logo
+  gone with the brand text kept, then both gone.
+- **The help dialog.** `showModal()` (`:modal` matched), focus on the close control, `Escape`
+  closes, focus returns to the "ⓘ Ajutor pentru câmpuri" button that opened it.
+- **Mobile.** 320 and 390: `scrollWidth === innerWidth`, no horizontal overflow.
+- **The two VAT regressions, as mocks rather than as a clock.** `GET /api/qwbe/issuer`
+  answered with `currentVat: null` and configurations active today — the cached-null
+  snapshot over a registration that came into force overnight — and the screen projected the
+  regime correctly: checkbox ticked, "plătitoare de TVA", one history row. With
+  `currentVat: null` and no configurations at all, the unknown-regime guard held: the status
+  says the regime cannot be determined and nothing is assumed, and the save produced **zero
+  `PUT` requests**, with `aria-invalid` and the issue message on the checkbox. Mocks were
+  unrouted and the real fixture state read back afterwards.
+
+Console: the only error is the expected `401` on `/api/qwbe/session` during pre-login
+probing. Zero uncaught JS.
+
+**Still untested either way** (unchanged, and none of it is covered by the final pass): a
+JPEG upload, the 2048 px / 4 MP rejections (only invalid content and the byte limit were
+exercised), a native file chooser (files were injected as `input.files` via `DataTransfer`),
+and a real crossing of midnight (the host date was never moved — the projection is covered as
+a value in `issuer-vat-baseline`). The series card was not re-driven in the final pass; it
+stands on the earlier one.
+
+**Earlier pass — pre-fix, historical.** Before either round of fixes, `/settings` was driven
+on the same fixture: login, identity/address save and reload, an invalid CUI refused by the
+backend and shown, the VAT regime saved and read back in the history, a valid logo uploaded
+and persisted, a file refused by signature and one refused by size, a series added and its
+duplicate refused inline, the help dialog's focus trap and focus restoration, a mocked `500`
+on `PUT /api/issuer` surfaced as an error, and 320/390/1280 without horizontal overflow.
+Pass, no blocking defect (`.playwright-mcp/t1400-stage-c-browser.md`). It describes the
+pre-fix source, and its screenshot is of that source; it is the only evidence for the series
+card and for the mocked `500`. Not covered by it either: a save with a logo and no brand
+text, and a `4xx` on `POST /api/document-series`.
+
+**Gates and re-review.** The supervisor ran the full `pnpm verify` chain over the current
+tree: 1107 tests pass and 8 standalone-runtime tests pass, `fail 0`, `skipped 0`, `todo 0`,
+boundaries clean (753 modules), `EXIT=0`. The stage re-review came back **pass** with no
+blocking finding and no new fix applied: three `low` and one `info` are recorded as
+follow-ups — a backdated `vatEffectiveFrom` silently replacing later stored VAT periods
+(no confirmation guard on the front end), the art. 310 sentence on `IssuerVatFields` that
+contradicts the new guard's copy for a new profile, `brandingActions` untested because it
+lives in a `"use client"` hook rather than in `lib/`, and the unknown-regime checkbox
+rendering unticked instead of indeterminate.
+
+**Gaps:** payments, the CUI lookup (T-1371 — the CUI is typed and validated, never fetched),
+series deletion/renaming (add-only by design: a series that has numbered a document cannot
+be renamed without breaking its numbering), and the four follow-ups above. The browser pass
+and the re-review have both landed; this phase is built, verified and accepted.
 
 ## Isolated container preview
 

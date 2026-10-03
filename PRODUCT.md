@@ -343,18 +343,29 @@ The standalone product is installed through a versioned Docker Compose bundle:
 ```text
 Docker Compose
 ├── app       versioned multi-architecture QWBE Invoicing image
-├── migrate   one-shot command from the same image
-├── data      persistent SQLite and document volume (standalone host only, see below)
+├── db        PostgreSQL 16, pinned by digest, cluster initialised with the C locale
+├── migrate   one-shot command from the same image, gated on `db` being healthy
+├── data      persistent document (PDF) volume, plus a separate cluster volume
+│             and a separate backup staging volume
 └── proxy     optional Caddy profile for TLS
 ```
 
-SQLite is the standalone host's persistence. This remains an intentional deployment
-choice even though the QWBE mother runs Postgres. The confirmed future integration
-direction is an external application/sidecar: the mother may provide installation
-and authentication integration, while invoicing data remains owned by this
-application in SQLite. This repository does not require a Postgres persistence
-adapter and does not store invoicing data in the mother's Postgres database. Mother
+PostgreSQL 16 is the standalone host's persistence, in a container this bundle runs
+and on a volume it owns. It is still an intentional deployment choice rather than
+convergence on the mother: the confirmed future integration direction is an external
+application/sidecar, where the mother may provide installation and authentication
+integration while invoicing data stays owned by this application. The same engine on
+both sides is not the same database — this bundle does not adopt the mother's
+schema-per-cube layout or its NOLOGIN role per cube, does not require a shared
+database topology, and does not store invoicing data in the mother's Postgres. Mother
 integration itself is not implemented.
+
+The database port is never published; the application role owns the one `public`
+schema it migrates; and both credentials are files the operator creates, read through
+`POSTGRES_PASSWORD_FILE` and `PGPASSWORD_FILE`. `PGPASSWORD` is never set, so the
+password reaches no child process and no `docker inspect` output. In `compose.prod.yaml`
+neither secret has a default: the stack refuses to start rather than come up on a
+guessable credential.
 
 Deployment requirements:
 
@@ -366,9 +377,14 @@ Deployment requirements:
 - secrets are mounted from files and never baked into the image;
 - versioned images are pinned by release and, for production, digest;
 - releases target `linux/amd64` and `linux/arm64`;
-- backup and restore include the SQLite databases plus invoice and proforma artifact
-  metadata and files; the operator runbook separately protects configuration, exact
-  image digests, and recovery secrets;
+- backup and restore cover the whole database plus invoice and proforma artifact
+  metadata and files, as one archive with a manifest and SHA-256 digests; live browser
+  sessions are deliberately excluded (the table is dumped without its rows, so the
+  restored schema does not drift); the operator runbook separately protects
+  configuration, exact image digests, and recovery secrets;
+- backup and restore require the application to be stopped, and enforce it with a
+  maintenance lock rather than with documentation; restore only ever writes into a
+  fresh, empty database and an empty artifact tree, and never deletes anything;
 - normal upgrade documentation never uses `docker compose down -v`.
 
 Recommended image location:
@@ -467,7 +483,7 @@ durable workflow seam are stable.
 - invoice draft aggregate, saved-customer or one-time-buyer authoring, and deterministic totals;
 - numbering sequence;
 - atomic issuance use case as `Effect`;
-- SQLite schema and migrations;
+- relational schema and migrations;
 - authenticated `Effect`-based HTTP API for the first vertical slice (every operation has `GET`/`POST`/`PUT` endpoint).
 
 ### Phase 2 — usable standalone product
@@ -512,9 +528,10 @@ The following decisions must be explicit before their relevant implementation:
 5. What retention policy and backup targets are promised to operators?
 6. Which public, versioned QWBE contracts replace the current private `0.0.0`
    compatibility snapshot?
-7. Resolved: standalone remains SQLite. Intended future mother integration is an
-   external application/sidecar for installation and authentication; invoicing data
-   does not move into the mother's Postgres database. The integration contract and
+7. Resolved: standalone owns its own database — PostgreSQL 16 since T-1480, SQLite
+   before it. Intended future mother integration is an external application/sidecar
+   for installation and authentication; invoicing data does not move into the mother's
+   Postgres database, and no shared topology is adopted. The integration contract and
    packaging are still unimplemented.
 8. Package shape: keep the `kind: "cube"` package or reshape into a plugin pack
    (`cubes: ["invoicing", "invoicing/documents"]`) so the mother's shared checker and

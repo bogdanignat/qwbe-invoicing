@@ -7,7 +7,7 @@ import type {
 import type { DraftInvoice } from "./draft-models.ts"
 import type { EditableInvoiceLine } from "./invoice-authoring-model.ts"
 import { headerMatchesDraft, pendingLineOperations } from "./invoice-authoring-readiness.ts"
-import { draftLinesForEditing } from "./invoice-authoring-options.ts"
+import { draftLinesForEditing } from "./document-authoring-options.ts"
 import { requireCsrf } from "./require-csrf.ts"
 
 /**

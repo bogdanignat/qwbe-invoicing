@@ -25,7 +25,28 @@ module.exports = {
       name: "cube-does-not-touch-runtime-infrastructure",
       severity: "error",
       from: { path: "^cube/" },
-      to: { path: "^(node:)?(sqlite|fs|fs/promises|child_process|worker_threads|module|vm|process)$" },
+      // One rule, four alternatives, because `to.path` is OR'd: the core modules,
+      // then the PostgreSQL driver in each of the three shapes dependency-cruiser
+      // 18.0.0 actually reports. A bare specifier is what an unresolved import
+      // looks like; `node_modules/<pkg>` is a flat install; the `.pnpm` form is
+      // what this repository resolves to, because `enhancedResolveOptions`
+      // defaults to following symlinks and the 18.0.0 schema has no `symlinks`
+      // property to turn that off (probed: the key is rejected as an additional
+      // property). `dependencyTypes` is deliberately absent — adding it would
+      // exclude the `core` edges this rule already catches.
+      //
+      // The `.pnpm` clause is its own string rather than an optional group inside
+      // the previous one: `([.]pnpm/[^/]+/node_modules/)?` is rejected by the
+      // cruiser's own "unsafe regular expression" check (a quantifier nested in an
+      // optional group), and bailing out is not a passing gate.
+      to: {
+        path: [
+          "^(node:)?(sqlite|fs|fs/promises|child_process|worker_threads|module|vm|process)$",
+          "^(pg|pg-pool|pg-native|pg-cursor)$",
+          "(^|/)node_modules/(pg|pg-pool|pg-native|pg-cursor)(/|$)",
+          "/node_modules/[.]pnpm/[^/]+/node_modules/(pg|pg-pool|pg-native|pg-cursor)(/|$)",
+        ],
+      },
     },
     {
       name: "standalone-uses-only-public-cube-surface",

@@ -5,7 +5,7 @@ import {
   UNCONFIRMED_CREATE,
   type DraftSaveClient, type DraftSaveEffects, type SaveOutcome, type SaveRequest,
 } from "./draft-save-types.ts"
-import { draftLinesForEditing } from "./invoice-authoring-options.ts"
+import { draftLinesForEditing } from "./document-authoring-options.ts"
 import { createDraftPayload, draftLinePayload } from "./invoice-authoring-payload.ts"
 import { createDraftIntent } from "./operation-recovery-intent.ts"
 import {
