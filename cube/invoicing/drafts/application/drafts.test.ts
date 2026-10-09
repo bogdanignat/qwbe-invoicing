@@ -122,3 +122,44 @@ void test("captures, replaces and clears free-form remarks on a draft", async ()
     assert.equal(updated instanceof ValidationFailure, true, notes)
   }
 })
+
+void test("bounds a new line description at 100 characters, but keeps a longer stored one workable", async () => {
+  const state = emptyState()
+  const service = createInvoicingService({
+    context: contextProvider({ identity, organization: { id: "org-1" } }), clock: fixedClock,
+    ids: sequentialIds(), store: memoryStore(state), branding: brandingNormalizer, cubeIdentity: "invoicing",
+  })
+  await Effect.runPromise(service.configureIssuer({
+    name: "Exemplu SRL", fiscalIdentifier: "12345674",
+    address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1", county: "RO-BT" },
+    legalForm: "srl", tradeRegistryNumber: "J40/123/2020", socialCapital: "200.00", iban: "", bankName: "",
+    defaultCurrency: "RON", defaultPaymentTermDays: 15, branding: null, vatChange: { registered: true, effectiveFrom: "2025-01-01" },
+  }))
+  await Effect.runPromise(service.addDocumentSeries({ documentType: "invoice", series: "QWBE" }))
+  const header = {
+    customer: { partyType: "individual" as const, name: "Ion Popescu", fiscalIdentifier: "", vatRegistered: false,
+      address: { countryCode: "RO", city: "Iași", street: "Strada Mică 2", county: "RO-IS" } },
+    series: "QWBE", issueDate: "2025-07-31",
+  }
+  const line = { quantity: "1", unitPrice: "100", unitOfMeasure: each, vatRateCode: "RO_STANDARD" }
+  const tooLong = "a".repeat(101)
+  const isLimit = (failure: unknown): boolean =>
+    failure instanceof ValidationFailure && failure.issues.includes("description must be at most 100 characters")
+  assert.equal(isLimit(await Effect.runPromise(Effect.flip(service.createDraft(idempotent({ ...header, lines: [{ ...line, description: tooLong }] }))))), true)
+  const draft = await Effect.runPromise(service.createDraft(idempotent({ ...header, lines: [{ ...line, description: `  ${"a".repeat(100)}  ` }] })))
+  assert.equal(isLimit(await Effect.runPromise(Effect.flip(service.addDraftLine({ draftId: draft.id, ...line, description: tooLong })))), true)
+  const [first] = draft.lines
+  assert.ok(first !== undefined)
+  assert.equal(isLimit(await Effect.runPromise(Effect.flip(service.updateDraftLine({ draftId: draft.id, lineId: first.id, ...line, description: tooLong })))), true)
+
+  // A description stored before the limit existed: reading, adding a line and deleting stay possible.
+  const stored = state.drafts.get(draft.id)
+  assert.ok(stored !== undefined)
+  state.drafts.set(draft.id, { ...stored, lines: stored.lines.map((value) => ({ ...value, description: tooLong })) })
+  assert.equal((await Effect.runPromise(service.getDraft(draft.id))).lines[0]?.description, tooLong)
+  const header2 = await Effect.runPromise(service.updateDraft({ customer: header.customer, draftId: draft.id, issueDate: "2025-08-01" }))
+  assert.equal(header2.lines[0]?.description, tooLong)
+  const added = await Effect.runPromise(service.addDraftLine({ draftId: draft.id, ...line, description: "Scurt" }))
+  assert.equal(added.lines.length, 2)
+  assert.equal((await Effect.runPromise(service.deleteDraftLine(draft.id, first.id))).lines.length, 1)
+})

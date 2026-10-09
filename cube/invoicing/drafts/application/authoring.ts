@@ -8,7 +8,7 @@ import { calculateLine, calculateTotals } from "../../domain/calculation.ts"
 import type { BuyerSnapshot, DocumentSource, DocumentType, DraftInvoice } from "../../domain/invoice.ts"
 import type { AuthoringDocumentInput, CreateDraftInput, UpdateDraftInput } from "../../domain/inputs.ts"
 import type { CustomersTransaction } from "../../customers/index.ts"
-import { validateDate, validateDocumentNotes, validateDocumentSeries, validateDocumentSource } from "../../domain/validation.ts"
+import { validateDate, validateDocumentNotes, validateDocumentSeries, validateDocumentSource, validateLineDescription } from "../../domain/validation.ts"
 import { validateBuyer } from "../../parties/index.ts"
 import { resolveVatConfiguration, type IssuerTransaction } from "../../issuer/index.ts"
 
@@ -94,7 +94,10 @@ export const authorDocument = (
   // Authoring accepts a document without lines: a draft is allowed to stay
   // incomplete. Issuance is what requires at least one line (see issuanceSource).
   const lines = yield* Effect.forEach(input.lines ?? [], (line) => Effect.flatMap(ids.next, (id) =>
-    checked(() => calculateLine({ ...line, id, vat: resolveVatConfiguration(issuer, line.vatRateCode, input.issueDate) }))))
+    checked(() => {
+      validateLineDescription(line.description)
+      return calculateLine({ ...line, id, vat: resolveVatConfiguration(issuer, line.vatRateCode, input.issueDate) })
+    })))
   return { issuer, document: { organizationId, ...customer, ...(source === undefined ? {} : { source }), series: series.series, ...header, currency: "RON" as const,
     notes: input.notes ?? null, lines, ...calculateTotals(lines) } }
 })

@@ -4,6 +4,7 @@ import type { EditableInvoiceLine } from "../../lib/invoice-authoring-model.ts"
 import type { ProductPreset, UnitOfMeasure, VatCatalogue } from "../../lib/draft-models.ts"
 import { Field } from "../ui/Field.tsx"
 import { Input } from "../ui/Input.tsx"
+import { CIUS_TEXT_LIMITS } from "../../lib/cius-text-limits.ts"
 import { Select } from "../ui/Select.tsx"
 import { Button } from "../Button.tsx"
 import { vatTreatmentLabel } from "../../lib/vat-snapshots.ts"
@@ -33,7 +34,7 @@ export const InvoiceLineRow = (props: InvoiceLineRowProps) => {
     </Field>}
     <div className="line-fields">
       <Field label="Descriere" required>
-        <Input required disabled={pending} value={line.description} onChange={(event) => { props.onChange(line.key, { description: event.currentTarget.value }) }} />
+        <Input required disabled={pending} value={line.description} maxLength={CIUS_TEXT_LIMITS.lineDescription} onChange={(event) => { props.onChange(line.key, { description: event.currentTarget.value }) }} />
       </Field>
       <Field label="Cantitate" required>
         <Input required disabled={pending} inputMode="decimal" value={line.quantity} onChange={(event) => { props.onChange(line.key, { quantity: event.currentTarget.value }) }} />

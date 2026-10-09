@@ -1,6 +1,7 @@
 import { ValidationFailure } from "../../contracts/failures.ts"
 import { normalizeMoney } from "../../domain/calculation.ts"
 import { normalizeUnitOfMeasure, type UnitOfMeasure } from "../../domain/unit-of-measures.ts"
+import { validateLineDescription } from "../../domain/validation.ts"
 import { isTaxableVatRateOn } from "../../issuer/index.ts"
 
 // A saved product or service. A document line copies its values when it is chosen,
@@ -25,6 +26,7 @@ export type UpdateProductPresetInput = ProductPresetInput & { readonly id: strin
 export const normalizeProductPreset = (input: ProductPresetInput, today: string): ProductPresetInput => {
   const description = input.description.trim()
   if (description.length === 0) throw new ValidationFailure({ issues: ["description is required"] })
+  validateLineDescription(description)
   const preferred = input.preferredVatRateCode
   if (preferred !== undefined && !isTaxableVatRateOn(preferred, today)) {
     throw new ValidationFailure({ issues: [`preferredVatRateCode must be a taxable VAT rate in force on ${today}`] })

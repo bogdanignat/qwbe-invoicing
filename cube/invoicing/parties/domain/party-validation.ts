@@ -1,5 +1,6 @@
 import { ValidationFailure } from "../../contracts/failures.ts"
 import type { BuyerSnapshot, PartySnapshot } from "../../domain/invoice.ts"
+import { CIUS_TEXT_LIMITS, textLimit } from "../../domain/validation.ts"
 import { isRomanianCountyCode } from "./romanian-counties.ts"
 
 const required = (value: string | undefined, field: string, issues: Array<string>) => {
@@ -29,6 +30,10 @@ export const validateParty = (party: PartySnapshot): void => {
   required(party.address.city, "address.city", issues)
   required(party.address.street, "address.street", issues)
   required(county, "address.county", issues)
+  textLimit("name", party.name, CIUS_TEXT_LIMITS.partyName, issues)
+  textLimit("address.street", party.address.street, CIUS_TEXT_LIMITS.street, issues)
+  textLimit("address.city", party.address.city, CIUS_TEXT_LIMITS.city, issues)
+  textLimit("address.postalCode", party.address.postalCode, CIUS_TEXT_LIMITS.postalCode, issues)
   if (party.fiscalIdentifier.trim() !== "" && !isValidRomanianCui(party.fiscalIdentifier)) issues.push("fiscalIdentifier must be a valid Romanian CUI")
   if (party.address.countryCode !== "RO") issues.push("address.countryCode must be RO")
   if (county !== undefined && county !== "" && !isRomanianCountyCode(county)) {

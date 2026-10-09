@@ -3,6 +3,7 @@
 import { Field } from "../ui/Field.tsx"
 import { FieldIssue } from "../registry/FieldIssue.tsx"
 import { Input } from "../ui/Input.tsx"
+import { CIUS_TEXT_LIMITS } from "../../lib/cius-text-limits.ts"
 import { Select } from "../ui/Select.tsx"
 import { ISSUER_FORM, type RegistryFieldAria } from "../../lib/registry-fields.ts"
 import { FISCAL_IDENTIFIER_MAX_LENGTH, type IssuerField } from "../../lib/issuer-payload.ts"
@@ -26,7 +27,7 @@ export const IssuerIdentityFields = (props: IssuerIdentityFieldsProps) => {
   const { form, disabled, issue, aria } = props
   return <div className="form-grid">
     <Field label="Denumire legală" required>
-      <Input required disabled={disabled} value={form.name} {...aria("name")}
+      <Input required disabled={disabled} value={form.name} maxLength={CIUS_TEXT_LIMITS.partyName} {...aria("name")}
         onChange={(event) => { props.onChange({ name: event.currentTarget.value }) }} />
       <FieldIssue issue={issue} field="name" form={ISSUER_FORM} />
     </Field>

@@ -33,3 +33,9 @@ void test("refuses Article 310, a retired rate and an unknown code as a product'
     assert.throws(() => normalizeProductPreset({ ...base, preferredVatRateCode: code }, date), ValidationFailure, `${code} on ${date}`)
   }
 })
+
+void test("bounds the description to the 100 characters an e-Factura item name may carry", () => {
+  assert.equal(normalizeProductPreset({ description: ` ${"a".repeat(100)} `, unitPrice: "1", unitOfMeasure: each }, today).description, "a".repeat(100))
+  assert.throws(() => normalizeProductPreset({ description: "a".repeat(101), unitPrice: "1", unitOfMeasure: each }, today),
+    (error: unknown) => error instanceof ValidationFailure && error.issues.includes("description must be at most 100 characters"))
+})

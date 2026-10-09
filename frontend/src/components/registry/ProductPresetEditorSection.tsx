@@ -4,6 +4,7 @@ import { Button } from "../Button.tsx"
 import { ErrorAlert } from "../AsyncState.tsx"
 import { Field } from "../ui/Field.tsx"
 import { Input } from "../ui/Input.tsx"
+import { CIUS_TEXT_LIMITS } from "../../lib/cius-text-limits.ts"
 import { Select } from "../ui/Select.tsx"
 import { FieldIssue } from "./FieldIssue.tsx"
 import { useEditorHeadingFocus } from "../../hooks/use-editor-heading-focus.ts"
@@ -44,7 +45,7 @@ export const ProductPresetEditorSection = (props: ProductPresetEditorSectionProp
     <form className="authoring-section" onSubmit={(event) => { event.preventDefault(); props.onSubmit() }}>
       <div className="form-grid">
         <Field label="Descriere" required className="span-two">
-          <Input required disabled={pending} value={form.description} {...aria("description")}
+          <Input required disabled={pending} value={form.description} maxLength={CIUS_TEXT_LIMITS.lineDescription} {...aria("description")}
             onChange={(event) => { props.onChange({ description: event.currentTarget.value }) }} />
           {refusal("description")}
         </Field>

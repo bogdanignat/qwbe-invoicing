@@ -3,6 +3,7 @@
 import { Field } from "../ui/Field.tsx"
 import { FieldIssue } from "../registry/FieldIssue.tsx"
 import { Input } from "../ui/Input.tsx"
+import { CIUS_TEXT_LIMITS } from "../../lib/cius-text-limits.ts"
 import { Select } from "../ui/Select.tsx"
 import { ROMANIAN_COUNTIES } from "../../lib/romanian-counties.ts"
 import { ISSUER_FORM, type RegistryFieldAria } from "../../lib/registry-fields.ts"
@@ -30,12 +31,12 @@ export const IssuerAddressFields = (props: IssuerAddressFieldsProps) => {
   return <div className="form-grid">
     <Field label="Țară"><Select value="RO" disabled><option value="RO">România (RO)</option></Select></Field>
     <Field label="Localitate" required>
-      <Input required disabled={disabled} value={form.city} {...aria("city")}
+      <Input required disabled={disabled} value={form.city} maxLength={CIUS_TEXT_LIMITS.city} {...aria("city")}
         onChange={(event) => { props.onChange({ city: event.currentTarget.value }) }} />
       <FieldIssue issue={issue} field="city" form={ISSUER_FORM} />
     </Field>
     <Field label="Stradă și număr" required className="span-two">
-      <Input required disabled={disabled} value={form.street} {...aria("street")}
+      <Input required disabled={disabled} value={form.street} maxLength={CIUS_TEXT_LIMITS.street} {...aria("street")}
         onChange={(event) => { props.onChange({ street: event.currentTarget.value }) }} />
       <FieldIssue issue={issue} field="street" form={ISSUER_FORM} />
     </Field>
@@ -58,7 +59,7 @@ export const IssuerAddressFields = (props: IssuerAddressFieldsProps) => {
       </Field>
       : null}
     <Field label="Cod poștal" optional>
-      <Input disabled={disabled} value={form.postalCode}
+      <Input disabled={disabled} value={form.postalCode} maxLength={CIUS_TEXT_LIMITS.postalCode}
         onChange={(event) => { props.onChange({ postalCode: event.currentTarget.value }) }} />
     </Field>
   </div>
