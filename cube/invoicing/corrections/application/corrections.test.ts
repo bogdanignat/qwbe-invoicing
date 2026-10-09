@@ -58,6 +58,9 @@ void test("corrects an issued invoice exactly once with a negated immutable snap
   assert.equal(correction.vatTotal, "-26.25")
   assert.equal(correction.totalIncludingVat, "-151.25")
   assert.equal(correction.lines[0]?.totalIncludingVat, "-151.25")
+  // A storno reverses the quantity; the unit price stays positive (EN 16931 BR-27).
+  assert.equal(correction.lines[0].quantity, "-1.2500")
+  assert.equal(correction.lines[0].unitPrice, "100.00")
   assert.deepEqual(correction.vatBreakdown, [{ code: "RO_STANDARD", rate: "21.00", vatCategoryCode: "S",
     vatExemptionReason: null, vatBaseAmount: "-125.00", vatAmount: "-26.25" }])
   assert.deepEqual(correction.issuer, { name: invoice.issuer.name, fiscalIdentifier: invoice.issuer.fiscalIdentifier,
@@ -140,6 +143,7 @@ void test("storno preserves article 310 facts and canonicalizes signed zero", as
   assert.ok(line)
   assert.ok(tax)
   assert.equal(line.vatCategoryCode, "O")
+  assert.equal(line.quantity, "-1.0000")
   assert.equal(line.vatExemptionReason, article310VatExemptionReason)
   assert.deepEqual([line.totalExcludingVat, line.vatAmount, tax.vatBaseAmount, correction.vatTotal, correction.totalIncludingVat],
   ["0.00", "0.00", "0.00", "0.00", "0.00"])

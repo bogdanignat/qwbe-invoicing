@@ -250,6 +250,7 @@ void test("a correction downloads as the credit note that reverses its invoice",
       { reason: "Storno integral", issueDate: "2026-09-05" }, "efactura-correction")
     assert.equal(correction.status, 200, JSON.stringify(correction.body))
     assert.equal((correction.body as { totalIncludingVat: string }).totalIncludingVat, "-121.00")
+    assert.equal((correction.body as { lines: ReadonlyArray<{ quantity: string }> }).lines[0]?.quantity, "-1.0000")
     const exportedCorrection = await exported(value.call, `/api/corrections/${(correction.body as { id: string }).id}/efactura.xml`)
     const xml = exportedCorrection.xml
     // A correction carries its own number in the same series as the invoice it
@@ -264,6 +265,7 @@ void test("a correction downloads as the credit note that reverses its invoice",
     // with a positive credit note, and the export is where the sign is dropped.
     assert.match(xml, /<cbc:PayableAmount currencyID="RON">121\.00<\/cbc:PayableAmount>/u)
     assert.doesNotMatch(xml, /-121\.00/u)
+    assert.match(xml, /<cbc:CreditedQuantity unitCode="[A-Z0-9]+">1\.0000<\/cbc:CreditedQuantity>/u)
   } finally { await value.close() }
 })
 

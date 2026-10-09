@@ -24,6 +24,7 @@ const creditLine = (line: DraftLine, index: number, issues: Array<string>): Draf
   const where = `lines[${String(index)}]`
   return {
     ...line,
+    quantity: unnegate(line.quantity, `${where}.quantity`, issues),
     totalExcludingVat: unnegate(line.totalExcludingVat, `${where}.totalExcludingVat`, issues),
     vatAmount: unnegate(line.vatAmount, `${where}.vatAmount`, issues),
     totalIncludingVat: unnegate(line.totalIncludingVat, `${where}.totalIncludingVat`, issues),

@@ -2,13 +2,15 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import { ValidationFailure } from "../../contracts/failures.ts"
-import { negateMoney, validateCreateCorrectionInput } from "./corrections.ts"
+import { negateDecimal, validateCreateCorrectionInput } from "./corrections.ts"
 
-void test("negates money amounts symmetrically", () => {
-  assert.equal(negateMoney("151.25"), "-151.25")
-  assert.equal(negateMoney("-151.25"), "151.25")
-  assert.equal(negateMoney("0.00"), "0.00")
-  assert.equal(negateMoney("-0.00"), "0.00")
+void test("negates decimals symmetrically and keeps their scale", () => {
+  assert.equal(negateDecimal("151.25"), "-151.25")
+  assert.equal(negateDecimal("-151.25"), "151.25")
+  assert.equal(negateDecimal("0.00"), "0.00")
+  assert.equal(negateDecimal("-0.00"), "0.00")
+  assert.equal(negateDecimal("1.2500"), "-1.2500")
+  assert.equal(negateDecimal("-0.0000"), "0.0000")
 })
 
 void test("validates correction input: original invoice, reason length and calendar date", () => {
