@@ -1,5 +1,5 @@
 import type { PDFImage } from "pdf-lib"
-import type { RenderableParty } from "../../cube/invoicing/documents/index.ts"
+import type { DocumentKind, RenderableParty } from "../../cube/invoicing/documents/index.ts"
 
 import { issuerLegalLines, partyAddressLines, partyIdentifierLine, type RenderableDocument } from "./pdf-format.ts"
 import { accent, contentRight, contentTop, horizontalRule, ink, margin, muted, putLines, putText, warning, wrapText } from "./pdf-layout.ts"
@@ -60,12 +60,15 @@ const drawPartyColumn = (
   })
 }
 
-const drawDocumentColumn = (sheet: Sheet, document: RenderableDocument, isProforma: boolean): number => {
+const titles: Readonly<Record<DocumentKind, string>> = { invoice: "FACTURĂ", proforma: "PROFORMĂ", correction: "FACTURĂ STORNO" }
+
+const drawDocumentColumn = (sheet: Sheet, document: RenderableDocument, kind: DocumentKind): number => {
   const shared = { x: headerMidX, width: headerMidWidth, align: "center" as const }
-  let cursor = putLines(sheet.page, [isProforma ? "PROFORMĂ" : "FACTURĂ"], {
-    ...shared, top: contentTop - 14, size: 19, font: sheet.fonts.bold, leading: 20,
+  const titleSize = kind === "correction" ? 14 : 19
+  let cursor = putLines(sheet.page, wrapText(sheet.fonts.bold, titleSize, headerMidWidth, titles[kind]), {
+    ...shared, top: contentTop - 14, size: titleSize, font: sheet.fonts.bold, leading: 20,
   })
-  if (isProforma) {
+  if (kind === "proforma") {
     cursor = putLines(sheet.page, ["DOCUMENT NEFISCAL"], {
       ...shared, top: cursor + 4, size: 7.5, font: sheet.fonts.bold, color: warning, leading: 12,
     })
@@ -73,8 +76,11 @@ const drawDocumentColumn = (sheet: Sheet, document: RenderableDocument, isProfor
   cursor = putLines(sheet.page, [`${document.series} ${String(document.number)}`], {
     ...shared, top: cursor + 2, size: 10.5, font: sheet.fonts.bold, color: accent, leading: 18,
   })
+  const reversed = "original" in document ? document.original : undefined
   const rows: ReadonlyArray<readonly [string, string, boolean]> = [
     ["Data emiterii", document.issueDate, false],
+    ...(reversed === undefined ? []
+      : [["Stornează", `${reversed.series} ${String(reversed.number)} · ${reversed.issueDate}`, true] as const]),
     ...(document.dueDate === null ? [] : [["Scadență", document.dueDate, true] as const]),
     ["Monedă", document.currency, false],
   ]
@@ -88,11 +94,11 @@ const drawDocumentColumn = (sheet: Sheet, document: RenderableDocument, isProfor
   return cursor
 }
 
-export const drawHeader = (sheet: Sheet, document: RenderableDocument, isProforma: boolean, image: PDFImage | null): void => {
+export const drawHeader = (sheet: Sheet, document: RenderableDocument, kind: DocumentKind, image: PDFImage | null): void => {
   const afterLogo = drawBrand(sheet, document.issuer.branding, image)
   const leftBottom = drawPartyColumn(sheet, document.issuer, { label: "FURNIZOR", x: headerLeftX,
     width: headerLeftWidth, top: afterLogo, align: "left", details: issuerLegalLines(document.issuer) })
-  const midBottom = drawDocumentColumn(sheet, document, isProforma)
+  const midBottom = drawDocumentColumn(sheet, document, kind)
   const rightBottom = drawPartyColumn(sheet, document.customer, { label: "CLIENT", x: headerRightX,
     width: headerRightWidth, top: afterLogo, align: "right" })
   const bottom = Math.min(leftBottom, midBottom, rightBottom) - 6

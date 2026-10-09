@@ -1,7 +1,7 @@
 import { HttpApiEndpoint, OpenApi } from "@effect/platform"
 
 import {
-  addRetryAfterHeader, body, documentsBase, invoiceId, proformaId, requiredCsrfHeaders, SessionAuthentication,
+  addRetryAfterHeader, body, documentsBase, id, invoiceId, proformaId, requiredCsrfHeaders, SessionAuthentication,
 } from "./http-api-shared.ts"
 import * as D from "./schema-documents.ts"
 import * as E from "./schema-errors-session.ts"
@@ -14,6 +14,8 @@ export const documentEndpoints = {
   renderProformaPdf: documentsBase(body(HttpApiEndpoint.post("renderProformaPdf")`/proformas/${proformaId}/pdf`.setPayload(D.EmptyInput)
     .addSuccess(D.ProformaArtifact).addError(E.DocumentNotFoundError).addError(E.ArtifactConflictError))),
   downloadProformaPdf: documentsBase(HttpApiEndpoint.get("downloadProformaPdf")`/proformas/${proformaId}/pdf`.addSuccess(D.Pdf)
+    .addError(E.DocumentNotFoundError)),
+  downloadCorrectionPdf: documentsBase(HttpApiEndpoint.get("downloadCorrectionPdf")`/corrections/${id}/pdf`.addSuccess(D.Pdf)
     .addError(E.DocumentNotFoundError)),
 } as const
 

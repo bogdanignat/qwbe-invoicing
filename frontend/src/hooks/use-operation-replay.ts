@@ -50,6 +50,7 @@ export const useOperationReplay = (recovery: RecoveryPort): OperationReplayModel
       replayProformaIssuance: (csrfToken, body, key) => clients.proformaReplay.replayProformaIssuance(csrfToken, body, key),
       replayInvoiceFromProforma: (csrfToken, id, body, key) => clients.proformaReplay.replayInvoiceFromProforma(csrfToken, id, body, key),
       replayDraftFromProforma: (csrfToken, id, body, key) => clients.proformaReplay.replayDraftFromProforma(csrfToken, id, body, key),
+      replayCorrection: (csrfToken, id, body, key) => clients.documents.replayCorrection(csrfToken, id, body, key),
     },
     recovery,
     csrfToken: () => requireCsrf(auth.csrfToken()),
@@ -73,6 +74,13 @@ export const useOperationReplay = (recovery: RecoveryPort): OperationReplayModel
         staleProformas(undefined)
         router.push(`/proformas/${encodeURIComponent(proforma.id)}`)
       },
+      onCorrection: (correction, invoiceId) => {
+        queryClient.setQueryData(["correction", correction.id], correction)
+        // The invoice prefix covers its payments and its corrections as well.
+        void queryClient.invalidateQueries({ queryKey: ["invoice", invoiceId] })
+        void queryClient.invalidateQueries({ queryKey: invoiceRegisterQueryKey })
+        router.push(`/corrections/${encodeURIComponent(correction.id)}`)
+      },
     },
   }))
 
@@ -81,7 +89,7 @@ export const useOperationReplay = (recovery: RecoveryPort): OperationReplayModel
   })
   const outcome = mutation.data
   const failure = outcome === undefined || outcome.kind === "draft" || outcome.kind === "issued"
-    || outcome.kind === "proforma" || outcome.kind === "aborted"
+    || outcome.kind === "proforma" || outcome.kind === "correction" || outcome.kind === "aborted"
     ? null
     : outcome.kind === "unknown" ? new Error(UNKNOWN_AGAIN) : outcome.error
   return {

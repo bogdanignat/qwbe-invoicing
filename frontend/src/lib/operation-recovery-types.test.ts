@@ -101,3 +101,25 @@ void test("a marker for an unknown operation is corrupt", () => {
   }))
   assert.equal(entry.kind, "corrupt")
 })
+
+void test("a stored storno keeps the invoice it reverses and its body", () => {
+  const request = { kind: "create-correction", invoiceId: "inv-1", body: { reason: "Anulare", issueDate: "2026-10-09" } }
+  const entry = decodeJournalEntry(stored("create-correction", request))
+  assert.equal(entry.kind, "record")
+  assert.equal(entry.record.operation, "create-correction")
+  assert.deepEqual(entry.record.request, request)
+})
+
+void test("a storno without the invoice id, or without a body, is corrupt", () => {
+  const withoutInvoice = decodeJournalEntry(stored("create-correction", {
+    kind: "create-correction", body: { reason: "Anulare" },
+  }))
+  assert.equal(withoutInvoice.kind, "corrupt")
+  const withoutBody = decodeJournalEntry(stored("create-correction", { kind: "create-correction", invoiceId: "inv-1" }))
+  assert.equal(withoutBody.kind, "corrupt")
+  // Filed under another operation, the same request would title one write and send another.
+  const mismatched = decodeJournalEntry(stored("issue-invoice", {
+    kind: "create-correction", invoiceId: "inv-1", body: {},
+  }))
+  assert.equal(mismatched.kind, "corrupt")
+})

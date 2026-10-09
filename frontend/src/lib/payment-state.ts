@@ -1,3 +1,4 @@
+import type { CorrectionRef } from "./correction-state.ts"
 import { money } from "./format.ts"
 import type { PaymentInput, PaymentStatus, PaymentSummary } from "./payment-models.ts"
 
@@ -119,10 +120,25 @@ export interface PaymentsView extends PaymentActionState {
   /** Changes with every recorded payment, so the form remounts with fresh defaults. */
   readonly formKey: string
   readonly rows: ReadonlyArray<PaymentRow>
+  /** Shown instead of the form on an invoice a storno reversed: no new payment, and why. */
+  readonly closedNote: string | undefined
 }
 
-export const paymentsView = (summary: PaymentSummary, currency: string): PaymentsView => ({
+/**
+ * A reversed invoice takes no new payments. The ledger is not told about the
+ * storno — refunds are outside this application — so what was already collected
+ * stays recorded and the note says so rather than pretending it was returned.
+ */
+const stornoNote = (correctedBy: CorrectionRef, summary: PaymentSummary, currency: string): string => {
+  const head = `Factura a fost stornată prin ${correctedBy.series} ${String(correctedBy.number)} din ${correctedBy.issueDate}.`
+  return hasPositiveBalance(summary.paidAmount)
+    ? `${head} Încasările de ${money(summary.paidAmount, currency)} rămân înregistrate; restituirea sau compensarea lor nu se urmărește aici.`
+    : `${head} Nu se mai înregistrează plăți.`
+}
+
+export const paymentsView = (summary: PaymentSummary, currency: string, correctedBy?: CorrectionRef): PaymentsView => ({
   ...paymentActionState(summary),
+  ...(correctedBy === undefined ? {} : { canRecordPayment: false }),
   statusLabel: paymentStatusLabel(summary.status),
   statusTone: paymentStatusTone(summary.status),
   paid: money(summary.paidAmount, currency),
@@ -130,6 +146,7 @@ export const paymentsView = (summary: PaymentSummary, currency: string): Payment
   remainingAmount: summary.remainingAmount,
   formKey: summary.paidAmount,
   rows: paymentRows(summary),
+  closedNote: correctedBy === undefined ? undefined : stornoNote(correctedBy, summary, currency),
 })
 
 export const REVERSAL_CONFIRM = "Anulezi această plată? Se înregistrează o stornare a plății; înregistrarea inițială rămâne în istoric."

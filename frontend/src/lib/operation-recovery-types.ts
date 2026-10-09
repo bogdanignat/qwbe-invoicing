@@ -7,70 +7,15 @@
  * trusted as typed. Anything that does not decode exactly is `corrupt`, which
  * fails writes closed rather than letting a half-read intent through.
  */
-/**
- * Every write that must survive a lost answer, invoices and proformas alike.
- *
- * The union is closed and the stored text is matched against it exactly:
- * an operation this build does not know is `corrupt`, never "probably fine".
- */
-export type RecoveryOperation =
-  | "create-draft"
-  | "issue-invoice"
-  | "create-proforma"
-  | "convert-proforma-invoice"
-  | "convert-proforma-draft"
+import {
+  RECOVERY_VERSION, type JournalEntry, type RecoveryOperation, type RecoveryRequest, type RecoveryRecord,
+  type RecoverySummary,
+} from "./operation-recovery-shapes.ts"
 
-/** What the recovery card shows: enough to recognise the document, never enough to rebuild it. */
-export interface RecoverySummary {
-  readonly buyerName: string
-  readonly series: string
-  readonly issueDate: string
-  readonly lineCount: number
-}
-
-/**
- * The request exactly as it was sent, kept opaque on purpose: a replay resends
- * these bytes, not a payload re-derived from a form the user may have edited
- * since. No token and no CSRF value ever enters it — those belong to the
- * session, and the session is not what is being recovered.
- */
-export type RecoveryRequest =
-  | { readonly kind: "create-draft"; readonly body: unknown }
-  | { readonly kind: "issue-draft"; readonly draftId: string }
-  | { readonly kind: "issue-invoice"; readonly body: unknown }
-  | { readonly kind: "create-proforma"; readonly body: unknown }
-  /** A conversion names the proforma it starts from: the id is part of the path, not of the body. */
-  | { readonly kind: "convert-proforma-invoice"; readonly proformaId: string; readonly body: unknown }
-  | { readonly kind: "convert-proforma-draft"; readonly proformaId: string; readonly body: unknown }
-
-export interface RecoveryRecord {
-  readonly version: 1
-  readonly operation: RecoveryOperation
-  readonly key: string
-  readonly request: RecoveryRequest
-  readonly fingerprint: string
-  readonly createdAt: string
-  readonly summary: RecoverySummary
-  /** `conflict` preserves a refusal the server settled: evidence to read, never a key to rotate. */
-  readonly state: "pending" | "conflict"
-  readonly conflict?: string
-}
-
-/** What survives an auth expiry: that something is unresolved, and nothing else. */
-export interface RecoveryMarker {
-  readonly version: 1
-  readonly operation: RecoveryOperation
-  readonly createdAt: string
-}
-
-export type JournalEntry =
-  | { readonly kind: "empty" }
-  | { readonly kind: "record"; readonly record: RecoveryRecord }
-  | { readonly kind: "marker"; readonly marker: RecoveryMarker }
-  | { readonly kind: "corrupt" }
-  | { readonly kind: "unavailable" }
-
-export const RECOVERY_VERSION = 1
+export {
+  RECOVERY_VERSION, type JournalEntry, type RecoveryMarker, type RecoveryOperation, type RecoveryRecord,
+  type RecoveryRequest, type RecoverySummary,
+} from "./operation-recovery-shapes.ts"
 
 const fields = (input: unknown): Readonly<Record<string, unknown>> | undefined =>
   typeof input === "object" && input !== null && !Array.isArray(input)
@@ -90,7 +35,7 @@ const string = (input: unknown): string | undefined => typeof input === "string"
  */
 const OPERATIONS = {
   "create-draft": true, "issue-invoice": true, "create-proforma": true,
-  "convert-proforma-invoice": true, "convert-proforma-draft": true,
+  "convert-proforma-invoice": true, "convert-proforma-draft": true, "create-correction": true,
 } satisfies Readonly<Record<RecoveryOperation, true>>
 
 const isOperation = (value: string): value is RecoveryOperation => Object.hasOwn(OPERATIONS, value)
@@ -112,7 +57,7 @@ const operation = (input: unknown): RecoveryOperation | undefined => {
 const REQUEST_OPERATION: Readonly<Record<RecoveryRequest["kind"], RecoveryOperation>> = {
   "create-draft": "create-draft", "issue-draft": "issue-invoice", "issue-invoice": "issue-invoice",
   "create-proforma": "create-proforma", "convert-proforma-invoice": "convert-proforma-invoice",
-  "convert-proforma-draft": "convert-proforma-draft",
+  "convert-proforma-draft": "convert-proforma-draft", "create-correction": "create-correction",
 }
 
 const isRequestKind = (value: string): value is RecoveryRequest["kind"] =>
@@ -154,6 +99,10 @@ const request = (input: unknown): RecoveryRequest | undefined => {
   if (kind === "convert-proforma-invoice" || kind === "convert-proforma-draft") {
     const proformaId = string(value.proformaId)
     return proformaId === undefined ? undefined : { kind, proformaId, body: value.body }
+  }
+  if (kind === "create-correction") {
+    const invoiceId = string(value.invoiceId)
+    return invoiceId === undefined ? undefined : { kind, invoiceId, body: value.body }
   }
   return { kind, body: value.body }
 }

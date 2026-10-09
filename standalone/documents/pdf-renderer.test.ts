@@ -4,8 +4,11 @@ import test from "node:test"
 import { Effect } from "effect"
 import { PDFDocument } from "pdf-lib"
 
-import type { RenderableInvoice, RenderableProforma } from "../../cube/invoicing/documents/index.ts"
-import { createPdfRenderer, documentDateLine, formatAmount, formatRate, invoiceTemplateVersion, issuerLegalLines, partyIdentifierLine, proformaTemplateVersion } from "./pdf-renderer.ts"
+import type { RenderableCorrection, RenderableInvoice, RenderableProforma } from "../../cube/invoicing/documents/index.ts"
+import {
+  correctionTemplateVersion, createPdfRenderer, documentDateLine, formatAmount, formatRate, invoiceTemplateVersion,
+  issuerLegalLines, partyIdentifierLine, proformaTemplateVersion,
+} from "./pdf-renderer.ts"
 
 const article310VatExemptionReason = "Regim special de scutire conform art. 310 din Codul fiscal"
 const invoice: RenderableInvoice = {
@@ -264,4 +267,33 @@ void test("renders document remarks without truncation and keeps the proforma le
   const withoutNotes = await Effect.runPromise(renderer.renderProforma({ ...proforma, notes: null }))
   assert.ok(rendered.bytes.length > withoutNotes.bytes.length)
   assert.equal((await PDFDocument.load(rendered.bytes, { updateMetadata: false })).getPageCount(), 1)
+})
+
+void test("renders a deterministic storno with negated totals, the reversed invoice and the reason", async () => {
+  const negate = (value: string): string => value.startsWith("-") ? value.slice(1) : `-${value}`
+  const correction: RenderableCorrection = {
+    ...invoice, id: "correction-1", series: "STORNO", number: 3, issueDate: "2026-09-05", dueDate: null, notes: null,
+    issuedAt: "2026-09-05T09:00:00.000Z", reason: "Client a returnat integral serviciul facturat.",
+    original: { series: invoice.series, number: invoice.number, issueDate: invoice.issueDate },
+    lines: invoice.lines.map((line) => ({ ...line, quantity: negate(line.quantity), totalExcludingVat: negate(line.totalExcludingVat),
+      vatAmount: negate(line.vatAmount), totalIncludingVat: negate(line.totalIncludingVat) })),
+    vatBreakdown: invoice.vatBreakdown.map((vat) => ({ ...vat, vatBaseAmount: negate(vat.vatBaseAmount), vatAmount: negate(vat.vatAmount) })),
+    totalExcludingVat: "-100.00", vatTotal: "-21.00", totalIncludingVat: "-121.00",
+  }
+  const renderer = createPdfRenderer()
+  const first = await Effect.runPromise(renderer.renderCorrection(correction))
+  const second = await Effect.runPromise(renderer.renderCorrection(correction))
+  assert.equal(first.templateVersion, correctionTemplateVersion)
+  assert.equal(first.templateVersion, "storno-v1")
+  assert.equal(Buffer.from(first.bytes.subarray(0, 5)).toString("ascii"), "%PDF-")
+  assert.deepEqual(first.bytes, second.bytes)
+  const parsed = await PDFDocument.load(first.bytes, { updateMetadata: false })
+  assert.equal(parsed.getPageCount(), 1)
+  assert.equal(parsed.getTitle(), "Storno STORNO 3")
+  assert.equal(parsed.getSubject(), "Factură storno")
+  assert.equal(parsed.getProducer(), `QWBE Invoicing ${correctionTemplateVersion}`)
+  assert.equal(formatAmount(correction.totalIncludingVat), "-121,00")
+  // The reason block is the only content a storno adds beyond the reversed lines.
+  const withoutReason = await Effect.runPromise(renderer.renderCorrection({ ...correction, reason: "" }))
+  assert.ok(first.bytes.length > withoutReason.bytes.length)
 })

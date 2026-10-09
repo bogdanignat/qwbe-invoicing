@@ -64,11 +64,9 @@ export const useInvoiceDetail = (id: string): DocumentDetailModel => {
 }
 
 /**
- * A correction offers only its XML.
- *
- * The backend renders no PDF for one — `/api/corrections/{id}` and
- * `/api/corrections/{id}/efactura.xml` are the whole surface — so the screen
- * offers nothing that would 404.
+ * A correction offers its PDF and its XML, both plain reads: the backend renders
+ * the storno PDF on request from the immutable correction, so unlike an
+ * invoice's there is no render step and no CSRF token.
  */
 export const useCorrectionDetail = (id: string): DocumentDetailModel => {
   const { status } = useAuth()
@@ -79,6 +77,13 @@ export const useCorrectionDetail = (id: string): DocumentDetailModel => {
     queryFn: ({ signal }) => clients.documents.getCorrection(id, signal),
   })
   const correction = query.data
+  const pdf = useDocumentDownload({
+    key: "pdf",
+    label: "Descarcă PDF",
+    pendingLabel: "Se generează…",
+    request: () => clients.documents.downloadCorrectionPdf(id),
+    filename: correction === undefined ? undefined : documentFilename("storno", correction, "pdf"),
+  })
   const efactura = useDocumentDownload({
     key: "efactura",
     label: "Descarcă XML e-Factura",
@@ -91,6 +96,6 @@ export const useCorrectionDetail = (id: string): DocumentDetailModel => {
     isPending: query.isPending,
     error: query.error,
     retry: retryAction(query.error, () => { void query.refetch() }),
-    downloads: [efactura],
+    downloads: [pdf, efactura],
   }
 }

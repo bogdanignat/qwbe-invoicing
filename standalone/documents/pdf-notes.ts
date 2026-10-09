@@ -1,8 +1,10 @@
+import type { DocumentKind } from "../../cube/invoicing/documents/index.ts"
+
 import { accent, contentTop, contentWidth, horizontalRule, margin, muted, noteFill, putLines, putText, warning, wrapText } from "./pdf-layout.ts"
 import { addPage, bottomLimit, type Sheet } from "./pdf-document-layout.ts"
 
-export const drawProformaNotice = (sheet: Sheet, top: number, isProforma: boolean): number => {
-  if (!isProforma) return top
+export const drawProformaNotice = (sheet: Sheet, top: number, kind: DocumentKind): number => {
+  if (kind !== "proforma") return top
   const width = contentWidth - 202
   const lines = wrapText(sheet.fonts.regular, 8, width - 16,
     "Document nefiscal. Proforma nu generează obligații de plată a TVA și nu înlocuiește factura fiscală.")
@@ -42,12 +44,12 @@ export const drawDocumentNotes = (sheet: Sheet, notes: string | null, top: numbe
   }
 }
 
-export const drawFooters = (sheet: Sheet, isProforma: boolean): void => {
+export const drawFooters = (sheet: Sheet, kind: DocumentKind): void => {
   const pages = sheet.document.getPages()
   const total = pages.length
   pages.forEach((page, index) => {
     horizontalRule(page, margin + 30)
-    putText(page, isProforma ? "Proformă — document nefiscal, generat electronic."
+    putText(page, kind === "proforma" ? "Proformă — document nefiscal, generat electronic."
       : "Document generat electronic, valabil fără semnătură și ștampilă.", {
       x: margin, y: margin + 18, size: 7, font: sheet.fonts.regular, color: muted,
     })

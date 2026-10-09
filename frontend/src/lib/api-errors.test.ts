@@ -68,6 +68,8 @@ void test("a domain conflict is read as Romanian, not as the bare `DomainConflic
     "product_preset_id_taken", "persistence_conflict",
     // A reversal of a payment another session already reversed.
     "payment_already_reversed",
+    // A second full storno: the answer carries an English `message` the code must win over.
+    "invoice_already_corrected",
   ]
   for (const code of conflicts) {
     const failure = parseApiFailure({ error: "DomainConflict", code }, 409)
@@ -91,4 +93,11 @@ void test("a customer held by an open draft says what blocks the deletion", () =
   const failure = parseApiFailure({ error: "DomainConflict", code: "customer_has_open_drafts" }, 409)
   assert.match(failure.message, /draft/)
   assert.equal(isTransientFailure(failure), false)
+})
+
+void test("a second storno reads as the Vite screen reads it", () => {
+  const failure = parseApiFailure({
+    error: "DomainConflict", code: "invoice_already_corrected", message: "An invoice can have only one full correction document",
+  }, 409)
+  assert.equal(failure.message, "Factura are deja un document storno integral.")
 })

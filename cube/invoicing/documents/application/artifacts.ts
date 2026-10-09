@@ -2,10 +2,12 @@ import { Effect } from "effect"
 
 import { createArtifactOperations, type ArtifactServiceDependencies } from "./artifact-operations.ts"
 import {
+  DocumentNotFound,
   DocumentsPermissionDenied,
   type DocumentsFailure,
   type InvoiceArtifact,
   type ProformaArtifact,
+  type RenderedDocument,
   type RequestContext,
 } from "./artifact-ports.ts"
 
@@ -22,6 +24,8 @@ export interface ArtifactService {
     readonly bytes: Uint8Array
   }, DocumentsFailure>
   readonly listMissingProformaIds: () => Effect.Effect<ReadonlyArray<string>, DocumentsFailure>
+  /** Corrections are immutable rows, so their PDF is rendered on every request instead of stored. */
+  readonly renderCorrection: (correctionId: string) => Effect.Effect<RenderedDocument, DocumentsFailure>
 }
 
 export const createArtifactService = (dependencies: ArtifactServiceDependencies): ArtifactService => {
@@ -66,7 +70,17 @@ export const createArtifactService = (dependencies: ArtifactServiceDependencies)
     listIds: dependencies.source.listProformaIds, findArtifact: dependencies.repository.findProformaArtifact,
   })
 
-  return { renderInvoice, downloadInvoice, listMissingInvoiceIds, renderProforma, downloadProforma, listMissingProformaIds }
+  const renderCorrection = (correctionId: string) => Effect.gen(function*() {
+    const context = yield* authorized(readPermission)
+    const correction = yield* dependencies.source.findCorrection(context.organization.id, correctionId)
+    if (correction === undefined) return yield* Effect.fail(new DocumentNotFound({ resource: "correction", id: correctionId }))
+    return yield* dependencies.renderer.renderCorrection(correction)
+  })
+
+  return {
+    renderInvoice, downloadInvoice, listMissingInvoiceIds, renderProforma, downloadProforma, listMissingProformaIds,
+    renderCorrection,
+  }
 }
 
 export type { ArtifactServiceDependencies } from "./artifact-operations.ts"
@@ -77,6 +91,7 @@ export type {
   InvoiceSource,
   PdfObjectStore,
   ProformaArtifact,
+  RenderableCorrection,
   RenderableInvoice,
   RenderableProforma,
 } from "./artifact-ports.ts"

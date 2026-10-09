@@ -64,6 +64,7 @@ export const PaymentsSection = ({ payments }: { readonly payments: InvoicePaymen
         {view.isOverpaid
           ? <p className="status-note warning">Încasările înregistrate depășesc totalul facturii. Nu mai pot fi adăugate plăți.</p>
           : null}
+        {view.closedNote === undefined ? null : <p className="status-note">{view.closedNote}</p>}
         {view.canRecordPayment
           ? <details>
             <summary>Înregistrează o plată</summary>
@@ -92,7 +93,9 @@ export const PaymentsSection = ({ payments }: { readonly payments: InvoicePaymen
               </div>
             </form>
           </details>
-          : view.isOverpaid ? null : <p className="status-note">Soldul facturii este închis; nu mai sunt necesare plăți.</p>}
+          : view.isOverpaid || view.closedNote !== undefined
+            ? null
+            : <p className="status-note">Soldul facturii este închis; nu mai sunt necesare plăți.</p>}
       </>}
   </section>
 }

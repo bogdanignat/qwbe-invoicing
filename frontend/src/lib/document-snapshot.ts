@@ -107,3 +107,13 @@ export interface CorrectionDocument extends DocumentBody {
   readonly originalInvoiceId: string
   readonly reason: string
 }
+
+/**
+ * The body of a full storno. The backend negates the whole invoice itself, so
+ * the request names only why and when; `source` exists on the schema but is
+ * never sent from this screen.
+ */
+export interface CorrectionInput {
+  readonly reason: string
+  readonly issueDate: string
+}

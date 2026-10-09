@@ -74,6 +74,8 @@ const failureMessages: Readonly<Record<string, string>> = {
   product_preset_id_taken: "Produsul nu a putut fi salvat: identificatorul este deja folosit. Reîncarcă lista de produse și încearcă din nou.",
   persistence_conflict: "Datele s-au schimbat în paralel. Reîncarcă pagina și încearcă din nou.",
   payment_already_reversed: "Plata a fost deja anulată.",
+  // A second full storno of the same invoice (cube/invoicing/corrections/application/corrections.ts:37).
+  invoice_already_corrected: "Factura are deja un document storno integral.",
 }
 
 /**

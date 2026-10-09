@@ -142,3 +142,58 @@ void test("a failed render is not followed by a fetch of stale bytes", async () 
   )
   assert.deepEqual(calls, ["/api/invoices/inv-1/pdf"])
 })
+
+const address = { countryCode: "RO", city: "B", street: "s", county: "RO-B" }
+const correctionJson = {
+  id: "cor-1", originalInvoiceId: "inv-1", reason: "Anulare", currency: "RON", series: "FCT", number: 13,
+  issueDate: "2026-10-09",
+  issuer: {
+    name: "Beta", fiscalIdentifier: "321", address, legalForm: "srl", tradeRegistryNumber: "J40/1/2020",
+    iban: "RO00XXXX0000000000", bankName: "Banca", socialCapital: "100.00", vatRegistered: true,
+  },
+  customer: { name: "Alfa", fiscalIdentifier: "123", address, partyType: "company", vatRegistered: false },
+  lines: [], vatBreakdown: [], totalExcludingVat: "-100.00", vatTotal: "-21.00", totalIncludingVat: "-121.00",
+}
+
+void test("the corrections of an invoice are one read of a flat array, each item decoded", async () => {
+  const { calls, transport } = recorder({ json: [correctionJson] })
+  const corrections = await createInvoiceDocumentsClient(transport).listCorrections("a/b", AbortSignal.abort())
+  assert.equal(corrections[0]?.id, "cor-1")
+  assert.deepEqual(calls.map((call) => [call.kind, call.path, call.options?.method]), [
+    ["json", "/api/invoices/a%2Fb/corrections", undefined],
+  ])
+})
+
+void test("a corrections answer that is not an array fails the read", async () => {
+  const { transport } = recorder({ json: { items: [] } })
+  await assert.rejects(
+    () => createInvoiceDocumentsClient(transport).listCorrections("inv-1", AbortSignal.abort()),
+    /invalid corrections/u,
+  )
+})
+
+// Issuing a storno is a fiscal write: CSRF and the idempotency key on the POST,
+// and a replay that sends a missing stored body as `{}` rather than `null`.
+void test("issuing a storno posts the body with the CSRF token and the idempotency key", async () => {
+  const { calls, transport } = recorder({ json: correctionJson })
+  const client = createInvoiceDocumentsClient(transport)
+  const body = { reason: "Anulare", issueDate: "2026-10-09" }
+  const issued = await client.createCorrection("csrf-token", "inv-1", body, "key-1")
+  await client.replayCorrection("csrf-token", "inv-1", null, "key-1")
+  assert.equal(issued.totalIncludingVat, "-121.00")
+  assert.deepEqual(calls.map((call) => [
+    call.path, call.options?.method, call.options?.csrfToken, call.options?.idempotencyKey, call.options?.body,
+  ]), [
+    ["/api/invoices/inv-1/corrections", "POST", "csrf-token", "key-1", body],
+    ["/api/invoices/inv-1/corrections", "POST", "csrf-token", "key-1", {}],
+  ])
+})
+
+// The storno PDF is rendered on request by a GET: no render step, no CSRF.
+void test("a storno PDF is a single read asking for PDF", async () => {
+  const { calls, transport } = recorder()
+  await createInvoiceDocumentsClient(transport).downloadCorrectionPdf("cor-1")
+  assert.deepEqual(calls.map((call) => [call.kind, call.path, call.options?.accept, call.options?.method, call.options?.csrfToken]), [
+    ["binary", "/api/corrections/cor-1/pdf", "application/pdf", undefined, undefined],
+  ])
+})

@@ -110,3 +110,26 @@ void test("the panel view formats totals in the invoice currency and keys the fo
   assert.equal(view.canRecordPayment, true)
   assert.equal(view.rows.length, 1)
 })
+
+const correctedBy = { id: "cor-1", series: "FCT", number: 13, issueDate: "2026-10-09" }
+
+void test("a reversed invoice with collected payments closes the form and says the payments stay recorded", () => {
+  const view = paymentsView(summary("partially_paid", "100.00", [payment("p1", { amount: "21.00" })]), "RON", correctedBy)
+  assert.equal(view.canRecordPayment, false)
+  assert.equal(
+    view.closedNote,
+    "Factura a fost stornată prin FCT 13 din 2026-10-09. Încasările de 121.00 RON rămân înregistrate; restituirea sau compensarea lor nu se urmărește aici.",
+  )
+  // The ledger itself is untouched: rows stay reversible.
+  assert.equal(view.rows[0]?.canReverse, true)
+})
+
+void test("a reversed invoice with nothing collected only closes the form", () => {
+  const view = paymentsView(summary("unpaid", "121.00"), "RON", correctedBy)
+  assert.equal(view.canRecordPayment, false)
+  assert.equal(view.closedNote, "Factura a fost stornată prin FCT 13 din 2026-10-09. Nu se mai înregistrează plăți.")
+})
+
+void test("an invoice no storno reversed carries no note", () => {
+  assert.equal(paymentsView(summary("unpaid", "121.00"), "RON").closedNote, undefined)
+})

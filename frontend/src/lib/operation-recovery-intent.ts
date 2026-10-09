@@ -1,3 +1,4 @@
+import type { CorrectionInput } from "./document-snapshot.ts"
 import type { AuthoringDocumentInput, CreateDraftInput } from "./draft-models.ts"
 import { operationFingerprint } from "./operation-idempotency.ts"
 import type { RecoveryIntent } from "./operation-recovery-journal.ts"
@@ -97,3 +98,22 @@ export const convertProformaIntent = (input: ConvertProformaIntentInput): Recove
     summary: input.summary,
   }
 }
+
+export interface CreateCorrectionIntentInput {
+  readonly invoiceId: string
+  readonly body: CorrectionInput
+  /** Built from the invoice by the screen: the journal never reads a document itself. */
+  readonly summary: RecoverySummary
+}
+
+/**
+ * Issuing a full storno. The invoice's id enters the fingerprint although it
+ * travels in the path: the same reason and date on two invoices are two
+ * different stornos, and the second must never be sent under the first's key.
+ */
+export const createCorrectionIntent = (input: CreateCorrectionIntentInput): RecoveryIntent => ({
+  operation: "create-correction",
+  request: { kind: "create-correction", invoiceId: input.invoiceId, body: input.body },
+  fingerprint: operationFingerprint({ invoiceId: input.invoiceId, ...input.body }),
+  summary: input.summary,
+})

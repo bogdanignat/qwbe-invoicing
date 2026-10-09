@@ -551,6 +551,18 @@ void test("requires host authentication and serves the complete invoice-core rou
       status: 409,
       body: { error: "DomainConflict", code: "invoice_already_corrected" },
     })
+    const correctionId = (correction.body as { id: string }).id
+    const correctionPdf = await handleApiRequest({
+      method: "GET", url: `/api/corrections/${correctionId}/pdf`, authorization, body: undefined,
+    }, runtime)
+    assert.equal(correctionPdf.status, 200)
+    assert.equal(correctionPdf.headers?.["content-type"], "application/pdf")
+    assert.equal(correctionPdf.headers["x-content-type-options"], "nosniff")
+    assert.equal(correctionPdf.headers["content-disposition"], `attachment; filename="correction-${correctionId}.pdf"`)
+    assert.equal(Buffer.from((correctionPdf.body as Uint8Array).subarray(0, 5)).toString("ascii"), "%PDF-")
+    assert.deepEqual(await handleApiRequest({
+      method: "GET", url: "/api/corrections/missing/pdf", authorization, body: undefined,
+    }, runtime), { status: 404, body: { error: "DocumentNotFound" } })
     const customers = await handleApiRequest({
       method: "GET",
       url: "/api/customers",
@@ -625,6 +637,7 @@ void test("authenticates before parsing protected request bodies", async () => {
       ["POST", "/api/proformas/proforma-1/invoice", {}],
       ["POST", "/api/proformas/proforma-1/pdf", {}],
       ["GET", "/api/proformas/proforma-1/pdf", undefined],
+      ["GET", "/api/corrections/corr-1/pdf", undefined],
     ] as const) {
       assert.equal((await handleApiRequest({ method, url, authorization: undefined, body }, runtime)).status, 401)
     }

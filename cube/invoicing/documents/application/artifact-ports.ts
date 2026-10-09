@@ -1,7 +1,10 @@
 import type { Effect } from "effect"
-import type { ArtifactConflict, DocumentPersistenceFailure, DocumentRenderingFailure } from "../contracts/failures.ts"
+import type { DocumentPersistenceFailure, DocumentRenderingFailure } from "../contracts/failures.ts"
 export { ArtifactConflict, DocumentNotFound, DocumentPersistenceFailure, DocumentRenderingFailure, DocumentsPermissionDenied } from "../contracts/failures.ts"
 export type { DocumentKind, DocumentsFailure } from "../contracts/failures.ts"
+export type {
+  ArtifactRepository, InvoiceArtifact, PdfArtifact, PdfObjectStore, ProformaArtifact, StoredPdf,
+} from "./artifact-records.ts"
 
 export interface RequestContext {
   readonly identity: { readonly id: string; readonly permissions: ReadonlyArray<string> }
@@ -87,6 +90,13 @@ export interface RenderableProforma extends RenderableNumberedDocument {
   readonly convertedInvoiceId: string | null
 }
 
+export interface RenderableCorrection extends RenderableNumberedDocument {
+  readonly dueDate: null
+  readonly notes: null
+  readonly reason: string
+  readonly original: { readonly series: string; readonly number: number; readonly issueDate: string }
+}
+
 export interface InvoiceSource {
   readonly findInvoice: (
     organizationId: string,
@@ -102,6 +112,10 @@ export interface InvoiceSource {
   readonly listProformaIds: (
     organizationId: string,
   ) => Effect.Effect<ReadonlyArray<string>, DocumentPersistenceFailure>
+  readonly findCorrection: (
+    organizationId: string,
+    correctionId: string,
+  ) => Effect.Effect<RenderableCorrection | undefined, DocumentPersistenceFailure>
 }
 
 export interface RenderedDocument {
@@ -113,56 +127,5 @@ export interface RenderedDocument {
 export interface InvoiceRenderer {
   readonly render: (invoice: RenderableInvoice) => Effect.Effect<RenderedDocument, DocumentRenderingFailure>
   readonly renderProforma: (proforma: RenderableProforma) => Effect.Effect<RenderedDocument, DocumentRenderingFailure>
-}
-
-export interface InvoiceArtifact {
-  readonly invoiceId: string
-  readonly organizationId: string
-  readonly objectKey: string
-  readonly sha256: string
-  readonly byteLength: number
-  readonly mediaType: "application/pdf"
-  readonly templateVersion: string
-  readonly generatedAt: string
-}
-
-export interface ProformaArtifact {
-  readonly proformaId: string
-  readonly organizationId: string
-  readonly objectKey: string
-  readonly sha256: string
-  readonly byteLength: number
-  readonly mediaType: "application/pdf"
-  readonly templateVersion: string
-  readonly generatedAt: string
-}
-
-export type PdfArtifact = InvoiceArtifact | ProformaArtifact
-
-export interface StoredPdf {
-  readonly objectKey: string
-  readonly sha256: string
-  readonly byteLength: number
-}
-
-export interface PdfObjectStore {
-  readonly putPdf: (bytes: Uint8Array) => Effect.Effect<StoredPdf, DocumentPersistenceFailure>
-  readonly readPdf: (artifact: PdfArtifact) => Effect.Effect<Uint8Array, DocumentPersistenceFailure>
-}
-
-export interface ArtifactRepository {
-  readonly findArtifact: (
-    organizationId: string,
-    invoiceId: string,
-  ) => Effect.Effect<InvoiceArtifact | undefined, DocumentPersistenceFailure>
-  readonly saveArtifact: (
-    artifact: InvoiceArtifact,
-  ) => Effect.Effect<InvoiceArtifact, DocumentPersistenceFailure | ArtifactConflict>
-  readonly findProformaArtifact: (
-    organizationId: string,
-    proformaId: string,
-  ) => Effect.Effect<ProformaArtifact | undefined, DocumentPersistenceFailure>
-  readonly saveProformaArtifact: (
-    artifact: ProformaArtifact,
-  ) => Effect.Effect<ProformaArtifact, DocumentPersistenceFailure | ArtifactConflict>
+  readonly renderCorrection: (correction: RenderableCorrection) => Effect.Effect<RenderedDocument, DocumentRenderingFailure>
 }

@@ -9,6 +9,6 @@ export const CorrectionDetailView = ({ id }: { readonly id: string }) => {
   const shell = useAuthenticatedShell()
   const model = useCorrectionDetail(id)
   return <PrivateScreen shell={shell}>
-    <DocumentDetail title="Storno" eyebrow="Document emis" model={model} />
+    <DocumentDetail title="Factură storno" eyebrow="Document emis" model={model} />
   </PrivateScreen>
 }

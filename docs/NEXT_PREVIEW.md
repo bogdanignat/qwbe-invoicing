@@ -10,10 +10,10 @@ The new `frontend/` package is an opt-in application in the existing pnpm worksp
 It provides the unlock screen, session restore/logout, and the invoice register with
 the invoice and correction document screens. Payments are migrated too (T-1640, verified in the browser): the
 invoice screen shows the payment ledger, records a payment and reverses one, under an
-idempotency key and the session epoch guard. **What remains is storno** — issuing a
-correction and listing an invoice's corrections on its screen (T-1642) — plus the CUI
-lookup and the cutover (issuing, drafts, proformas, the product catalogue, the customer
-registry and the issuer settings are migrated, in the phases described below).
+idempotency key and the session epoch guard. Storno is migrated as well (T-1642, see
+**Storno** below). **What remains** is the CUI lookup (T-1371) and the cutover (issuing,
+drafts, proformas, the product catalogue, the customer registry and the issuer settings
+are migrated, in the phases described below).
 The existing Vite UI, public API, default Compose/Warden routing and release image
 remain operational. This phase does not switch traffic or remove `web/`.
 
@@ -159,7 +159,7 @@ already loaded, and **Reîncearcă** on that failure calls `fetchNextPage`, appe
 second row without duplicating or discarding anything. A `404` is not transient and offers
 no retry at all. Browser MCP verified each case through the DOM and the network log in the
 final pass, with zero unexpected JavaScript console errors. The preview stays opt-in
-because the rest of T-1400 — storno authoring and the cutover — is not done yet,
+because the rest of T-1400 — the CUI lookup and the cutover — is not done yet,
 **not** because retry is unchecked.
 
 One honest limitation: the retry phase split is currently covered by a temporary observer
@@ -208,8 +208,8 @@ fixture does not go through. No change was made for it.
   the derived-draft restrictions. The BFF probe now also asserts `idempotency-key` header
   passthrough next to `x-csrf-token`.
 
-**Gaps (not migrated in this phase):** CUI lookup/provider integration, storno
-authoring (payments landed in T-1640), CUI T-1371, and a
+**Gaps (not migrated in this phase):** CUI lookup/provider integration (T-1371;
+payments landed in T-1640, storno in T-1642), and a
 real-browser pass over the new screens (supervisor delegates that separately). The
 register/drafts browser pass and the `/invoices/new` vs `/invoices/[id]` route precedence
 remain to be verified in a browser. Proforma screens are migrated — see below.
@@ -481,6 +481,20 @@ rendering unticked instead of indeterminate.
 series deletion/renaming (add-only by design: a series that has numbered a document cannot
 be renamed without breaking its numbering), and the four follow-ups above. The browser pass
 and the re-review have both landed; this phase is built, verified and accepted.
+
+## Storno (T-1642)
+
+The invoice screen lists the invoice's stornos (`GET /api/invoices/{id}/corrections`) and,
+while it has none, offers **Emite storno integral**: reason (max. 300) and date, a confirm
+dialog, then `POST /api/invoices/{id}/corrections` with CSRF and an idempotency key. The
+write goes through the same recovery journal as issuance and conversions (operation
+`create-correction`): a lost answer keeps the key and the replay card on the invoice screen
+resends the stored body; `invoice_already_corrected` settles the key and re-reads the list.
+On success the screen opens the storno detail (`/corrections/{id}`), which shows the negated
+values and offers **Descarcă PDF** (`GET /api/corrections/{id}/pdf`, rendered on request,
+not persisted) and **Descarcă XML e-Factura**. On a reversed invoice the payment form is
+replaced by a note naming the storno and what was already collected; reversing a payment
+stays available. Refunds, partial stornos and the Vite screen are out of scope.
 
 ## Isolated container preview
 

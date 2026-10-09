@@ -22,19 +22,19 @@ const inventory = [
   "POST /api/invoices",
   "POST /api/drafts/:draftId/proformas", "GET /api/proformas", "GET /api/proformas/:id",
   "POST /api/proformas", "POST /api/proformas/:id/invoice", "POST /api/proformas/:id/draft-invoice",
-  "POST /api/proformas/:proformaId/pdf", "GET /api/proformas/:proformaId/pdf",
+  "POST /api/proformas/:proformaId/pdf", "GET /api/proformas/:proformaId/pdf", "GET /api/corrections/:id/pdf",
   "GET /api/session", "POST /api/session", "DELETE /api/session",
 ].sort()
 
-void test("the contract exposes exactly the current 49 operations", () => {
+void test("the contract exposes exactly the current 50 operations", () => {
   const applicationRoutes: Array<{ readonly method: string, readonly operationId: string, readonly path: string }> = []
   HttpApi.reflect(applicationHttpApi, { onGroup() {}, onEndpoint({ endpoint }) {
     applicationRoutes.push({ method: endpoint.method, operationId: endpoint.name, path: endpoint.path })
   } })
-  assert.equal(operationNames.length, 49)
-  assert.equal(new Set(operationNames).size, 49)
-  assert.equal(applicationRoutes.length, 49)
-  assert.equal(new Set(applicationRoutes.map((route) => route.operationId)).size, 49)
+  assert.equal(operationNames.length, 50)
+  assert.equal(new Set(operationNames).size, 50)
+  assert.equal(applicationRoutes.length, 50)
+  assert.equal(new Set(applicationRoutes.map((route) => route.operationId)).size, 50)
   assert.ok(operationNames.includes("listVatRegimes"))
   assert.deepEqual(applicationRoutes.map((route) => `${route.method} ${route.path}`).sort(), inventory)
   assert.equal(applicationRoutes.some((route) => route.path === "/api"), false)
@@ -184,7 +184,7 @@ void test("OpenAPI 3.1 mirrors paths, PDF encoding, and authentication metadata"
     expectStatuses("get", path, ["400"])
   }
   for (const path of ["/api/issuer", "/api/customers/{id}", "/api/drafts/{id}", "/api/invoices/{invoiceId}/payments", "/api/corrections/{id}", "/api/invoices/{id}", "/api/invoices/{invoiceId}/pdf", "/api/proformas/{id}", "/api/proformas/{proformaId}/pdf",
-    "/api/invoices/{id}/efactura.xml", "/api/corrections/{id}/efactura.xml"]) {
+    "/api/invoices/{id}/efactura.xml", "/api/corrections/{id}/efactura.xml", "/api/corrections/{id}/pdf"]) {
     expectStatuses("get", path, ["404"])
   }
   for (const [method, path] of [["put", "/api/issuer"], ["post", "/api/customers"], ["post", "/api/product-presets"]] as const) {

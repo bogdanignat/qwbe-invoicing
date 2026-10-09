@@ -5,9 +5,11 @@ import { useRef, useState } from "react"
 
 import { useAuth } from "./auth-context.ts"
 import { invoiceQueryOptions, retryAction } from "./use-document-detail.ts"
+import { correctionsQueryOptions } from "./use-invoice-corrections.ts"
 import { useInvoicingClients } from "./use-invoicing-clients.ts"
 import { SESSION_CLOSED } from "./use-registry-writes.ts"
 import { isTransientFailure } from "../lib/api-errors.ts"
+import { correctionsView } from "../lib/correction-state.ts"
 import { createOperationIdempotency, operationFingerprint } from "../lib/operation-idempotency.ts"
 import {
   PAYMENT_RECORDED, PAYMENT_REVERSED, REVERSAL_CONFIRM, paymentInputFrom, paymentsView, type PaymentsView,
@@ -15,7 +17,7 @@ import {
 import { registryWriteOutcome } from "../lib/registry-write-outcome.ts"
 
 export interface InvoicePaymentsModel {
-  /** Absent until both the ledger and the invoice it is priced in have answered. */
+  /** Absent until the ledger, the invoice it is priced in and the invoice's corrections have answered. */
   readonly view: PaymentsView | undefined
   readonly isPending: boolean
   /** The ledger read first, then the last write: one alert, the most fundamental failure. */
@@ -61,6 +63,11 @@ export const useInvoicePayments = (invoiceId: string): InvoicePaymentsModel => {
     queryKey, enabled, queryFn: ({ signal }) => clients.payments.summary(invoiceId, signal),
   })
   const currency = useQuery(invoiceQueryOptions(clients, invoiceId, enabled)).data?.currency
+  // The same key as the storno section: one fetch, one cache. A reversed invoice takes no new payment.
+  const corrections = useQuery(correctionsQueryOptions(clients, invoiceId, enabled))
+  const view = ledger.data === undefined || currency === undefined || corrections.data === undefined
+    ? undefined
+    : paymentsView(ledger.data, currency, correctionsView(corrections.data).correctedBy)
   const [idempotency] = useState(() => createOperationIdempotency())
   const [notice, setNotice] = useState<string | undefined>(undefined)
   const inFlight = useRef(false)
@@ -91,14 +98,14 @@ export const useInvoicePayments = (invoiceId: string): InvoicePaymentsModel => {
     mutation.mutate(write)
   }
   return {
-    view: ledger.data === undefined || currency === undefined ? undefined : paymentsView(ledger.data, currency),
-    isPending: ledger.isPending || (ledger.data !== undefined && currency === undefined),
-    error: ledger.error ?? mutation.error,
-    retry: retryAction(ledger.error, () => { void ledger.refetch() }),
+    view,
+    isPending: ledger.isPending || corrections.isPending || (ledger.data !== undefined && currency === undefined),
+    error: ledger.error ?? corrections.error ?? mutation.error,
+    retry: retryAction(ledger.error ?? corrections.error, () => { void ledger.refetch(); void corrections.refetch() }),
     notice,
     pending: mutation.isPending,
     record: (form) => {
-      if (inFlight.current || currency === undefined) return
+      if (inFlight.current || view === undefined || currency === undefined || !view.canRecordPayment) return
       const body = paymentInputFrom(form, currency)
       submit({
         operation: "record", fingerprint: operationFingerprint(body), notice: PAYMENT_RECORDED,

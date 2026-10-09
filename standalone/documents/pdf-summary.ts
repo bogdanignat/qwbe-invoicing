@@ -1,3 +1,5 @@
+import type { DocumentKind } from "../../cube/invoicing/documents/index.ts"
+
 import { formatAmount, formatRate, type RenderableDocument } from "./pdf-format.ts"
 import { contentRight, horizontalRule, ink, muted, paper, putText, rule, type Fonts } from "./pdf-layout.ts"
 import type { Sheet } from "./pdf-document-layout.ts"
@@ -9,7 +11,11 @@ const fittingSize = (font: Fonts["bold"], text: string, available: number): numb
   return 8
 }
 
-export const drawTotals = (sheet: Sheet, document: RenderableDocument, isProforma: boolean): void => {
+const grandLabels: Readonly<Record<DocumentKind, string>> = {
+  invoice: "TOTAL DE PLATĂ", proforma: "TOTAL PROFORMĂ", correction: "TOTAL STORNO",
+}
+
+export const drawTotals = (sheet: Sheet, document: RenderableDocument, kind: DocumentKind): void => {
   const width = 190
   const x = contentRight - width
   const money = (value: string): string => `${formatAmount(value)} ${document.currency}`
@@ -33,7 +39,7 @@ export const drawTotals = (sheet: Sheet, document: RenderableDocument, isProform
   const boxTop = cursor - 2
   const boxHeight = 26
   sheet.page.drawRectangle({ x, y: boxTop - boxHeight, width, height: boxHeight, color: ink })
-  const grandLabel = isProforma ? "TOTAL PROFORMĂ" : "TOTAL DE PLATĂ"
+  const grandLabel = grandLabels[kind]
   const grandValue = money(document.totalIncludingVat)
   const available = width - sheet.fonts.bold.widthOfTextAtSize(grandLabel, 7.5) - 28
   putText(sheet.page, grandLabel, { x: x + 10, y: boxTop - 17, size: 7.5, font: sheet.fonts.bold, color: paper })

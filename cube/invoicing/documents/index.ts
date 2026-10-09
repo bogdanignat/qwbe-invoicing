@@ -32,6 +32,7 @@ export {
 } from "./application/artifact-ports.ts"
 export type {
   ArtifactRepository,
+  DocumentKind,
   DocumentsFailure,
   InvoiceArtifact,
   InvoiceRenderer,
@@ -39,6 +40,7 @@ export type {
   PdfArtifact,
   PdfObjectStore,
   ProformaArtifact,
+  RenderableCorrection,
   RenderableInvoice,
   RenderableProforma,
   RenderableBuyer,

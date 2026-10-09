@@ -1,6 +1,6 @@
 import { Data } from "effect"
 
-export type DocumentKind = "invoice" | "proforma"
+export type DocumentKind = "invoice" | "proforma" | "correction"
 
 export class DocumentsPermissionDenied extends Data.TaggedError("DocumentsPermissionDenied")<{
   readonly permission: string

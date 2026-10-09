@@ -19,7 +19,7 @@ export const operationNames = [
   "listInvoiceRegister", "listIssuedInvoices", "getIssuedInvoice", "renderInvoicePdf", "downloadInvoicePdf",
   "downloadInvoiceEFactura", "downloadCorrectionEFactura",
   "issueDraftProforma", "issueProforma", "listProformas", "getProforma", "issueInvoiceFromProforma", "createDraftInvoiceFromProforma",
-  "renderProformaPdf", "downloadProformaPdf", "getSession", "createSession", "deleteSession",
+  "renderProformaPdf", "downloadProformaPdf", "downloadCorrectionPdf", "getSession", "createSession", "deleteSession",
 ] as const
 export type OperationName = typeof operationNames[number]
 
@@ -37,6 +37,7 @@ const invoicing = HttpApiGroup.make("invoicing")
   .add(f.issueInvoiceFromProforma).add(f.createDraftInvoiceFromProforma)
 const documents = HttpApiGroup.make("documents")
   .add(x.renderInvoicePdf).add(x.downloadInvoicePdf).add(x.renderProformaPdf).add(x.downloadProformaPdf)
+  .add(x.downloadCorrectionPdf)
 const sessions = HttpApiGroup.make("sessions").add(s.getSession).add(s.createSession).add(s.deleteSession)
 
 export const applicationHttpApi = HttpApi.make("application")
