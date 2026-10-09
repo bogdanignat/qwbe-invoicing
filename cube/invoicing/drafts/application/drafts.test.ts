@@ -157,6 +157,8 @@ void test("bounds a new line description at 100 characters, but keeps a longer s
   assert.ok(stored !== undefined)
   state.drafts.set(draft.id, { ...stored, lines: stored.lines.map((value) => ({ ...value, description: tooLong })) })
   assert.equal((await Effect.runPromise(service.getDraft(draft.id))).lines[0]?.description, tooLong)
+  const header2 = await Effect.runPromise(service.updateDraft({ customer: header.customer, draftId: draft.id, issueDate: "2025-08-01" }))
+  assert.equal(header2.lines[0]?.description, tooLong)
   const added = await Effect.runPromise(service.addDraftLine({ draftId: draft.id, ...line, description: "Scurt" }))
   assert.equal(added.lines.length, 2)
   assert.equal((await Effect.runPromise(service.deleteDraftLine(draft.id, first.id))).lines.length, 1)
