@@ -128,10 +128,8 @@ const upstreamRequest = (
   outgoing.end()
 })
 
-export const handleProxyRequest = async (request: Request, config: ProxyConfig): Promise<Response> => {
+export const forwardToUpstream = async (request: Request, config: ProxyConfig, path: string): Promise<Response> => {
   const deadlineAt = Date.now() + config.timeoutMs
-  const path = mapProxyPath(request.url, config.upstreamBase)
-  if (path === undefined) return errorResponse(404, "not_found", request.method)
   const checkedHeaders = proxyRequestHeaders(request, config)
   if (!checkedHeaders.ok) return errorResponse(checkedHeaders.status, checkedHeaders.error, request.method)
   try {
@@ -145,6 +143,11 @@ export const handleProxyRequest = async (request: Request, config: ProxyConfig):
     }
     return errorResponse(502, "upstream_unavailable", request.method)
   }
+}
+
+export const handleProxyRequest = (request: Request, config: ProxyConfig): Promise<Response> => {
+  const path = mapProxyPath(request.url, config.upstreamBase)
+  return path === undefined ? Promise.resolve(errorResponse(404, "not_found", request.method)) : forwardToUpstream(request, config, path)
 }
 
 export const proxyNotFound = (request: Request): Response => errorResponse(404, "not_found", request.method)

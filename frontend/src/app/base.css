@@ -94,7 +94,7 @@ form { display: grid; gap: 1.1rem; }
 label { display: grid; gap: .42rem; color: var(--color-invoice-label); font-size: .76rem; font-weight: 750; }
 input { width: 100%; min-height: 2.65rem; padding: .65rem .75rem; border: 1px solid var(--color-invoice-control-border); border-radius: var(--radius-invoice-control); color: var(--color-invoice-ink); background: var(--color-invoice-surface); }
 input:hover { border-color: var(--color-invoice-control-border-hover); }
-.button { min-height: 2.55rem; padding: .65rem 1rem; border: 1px solid transparent; border-radius: var(--radius-invoice-control); color: var(--color-invoice-on-primary); background: var(--color-invoice-primary); cursor: pointer; font-weight: 750; }
+.button { min-height: 2.55rem; padding: .65rem 1rem; border: 1px solid transparent; border-radius: var(--radius-invoice-control); color: var(--color-invoice-on-primary); background: var(--color-invoice-primary); cursor: pointer; font-weight: 750; text-decoration: none; }
 .button:hover { background: var(--color-invoice-primary-hover); }
 .button:disabled { cursor: wait; opacity: .45; }
 .button:focus-visible, input:focus-visible, a:focus-visible { outline: 3px solid var(--color-invoice-focus); outline-offset: 2px; box-shadow: 0 0 0 2px var(--color-invoice-primary); }
