@@ -49,7 +49,7 @@ const rejects = (result, rule) => {
 }
 
 const layers = ["lib", "hooks", "components", "views"]
-test("frontend layer matrix matches the legacy web direction", () => {
+test("frontend layer matrix only points downward", () => {
   for (const [sourceIndex, source] of layers.entries()) {
     for (const [targetIndex, target] of layers.entries()) {
       const result = cruise((root) => edge(root,
@@ -85,9 +85,9 @@ test("layer rules cover type re-exports and dynamic imports", () => {
   }
 })
 
-test("frontend cannot import backend, legacy web, tooling, or Next build output", () => {
+test("frontend cannot import backend, tooling, or Next build output", () => {
   for (const target of [
-    "cube/invoicing/index.ts", "standalone/http/runtime.ts", "web/src/lib/client.ts", "probes/helper.mjs", "bin/helper.ts",
+    "cube/invoicing/index.ts", "standalone/http/runtime.ts", "probes/helper.mjs", "bin/helper.ts",
     "frontend/.next/server/generated.js",
   ]) {
     rejects(cruise((root) => edge(root, "frontend/src/app/page.tsx", target)),
@@ -95,10 +95,9 @@ test("frontend cannot import backend, legacy web, tooling, or Next build output"
   }
 })
 
-test("backend and legacy web cannot import frontend", () => {
-  for (const source of ["cube/invoicing/leak.ts", "standalone/leak.ts", "web/src/lib/leak.ts"]) {
-    rejects(cruise((root) => edge(root, source, "frontend/src/lib/value.ts")),
-      source.startsWith("web/") ? "web-does-not-import-frontend" : "backend-does-not-import-frontend")
+test("backend cannot import frontend", () => {
+  for (const source of ["cube/invoicing/leak.ts", "standalone/leak.ts"]) {
+    rejects(cruise((root) => edge(root, source, "frontend/src/lib/value.ts")), "backend-does-not-import-frontend")
   }
 })
 

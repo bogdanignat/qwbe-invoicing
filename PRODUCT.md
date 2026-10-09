@@ -488,7 +488,7 @@ durable workflow seam are stable.
 
 ### Phase 2 — usable standalone product
 
-- React 19 + TypeScript UI styled with Tailwind CSS 4, built with Vite and served by the standalone host; browser I/O, cancellation, concurrency and typed failures run through `Effect`, with TanStack Query as the React server-state adapter;
+- React 19 + TypeScript UI styled with Tailwind CSS 4: a Next.js 16 App Router application (`frontend/`) that reaches the standalone host only through its BFF under `/api/qwbe/*`, with TanStack Query as the React server-state adapter;
 - PDF rendering and preserved artifacts;
 - payment recording and status calculation;
 - correction documents;
@@ -524,7 +524,7 @@ The following decisions must be explicit before their relevant implementation:
    domestic VAT and non-VAT-registered issuers?
 3. Resolved for the first usable release: delivery is PDF download. Email remains a
    future capability; proforma delivery specifically means download, not email.
-4. Resolved: React 19 + TypeScript + Tailwind CSS 4, Vite-built, same-origin and API-first. Effect is the browser runtime for HTTP effects and typed failures; TanStack Query bridges Effect programs into React server state. The standalone host exchanges the local API token for a revocable, opaque 30-day session persisted server-side and referenced by an HttpOnly `SameSite=Strict` cookie. The browser keeps only the per-session CSRF token in Effect memory, while direct API clients may continue to use bearer authentication.
+4. Resolved: React 19 + TypeScript + Tailwind CSS 4 in a Next.js 16 App Router application (the Vite UI was removed in T-1649), same-origin and API-first through the BFF under `/api/qwbe/*`; TanStack Query holds React server state. The standalone host exchanges the local API token for a revocable, opaque 30-day session persisted server-side and referenced by an HttpOnly `SameSite=Strict` cookie. The browser keeps only the per-session CSRF token in memory; bearer authentication remains for direct API clients on the internal network.
 5. What retention policy and backup targets are promised to operators?
 6. Which public, versioned QWBE contracts replace the current private `0.0.0`
    compatibility snapshot?

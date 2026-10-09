@@ -88,8 +88,30 @@ services:
     volumes:
       - invoicing-data:/data
       - invoicing-backup-staging:/var/backups/staging
+    # Internal since T-1649: only the Compose network reaches the backend. The browser
+    # and API callers go through the Next BFF at https://invoice.test/api/qwbe/<path>.
     expose:
       - "3000"
+    restart: unless-stopped
+    stop_grace_period: 15s
+    init: true
+    read_only: true
+    tmpfs:
+      # Bounded: with TMPDIR on the staging volume nothing large lands here, and an
+      # unbounded tmpfs is a way to consume the host's memory.
+      - /tmp:size=64m
+
+  # The Next application (frontend/) owns https://invoice.test. Its healthcheck on
+  # /healthz comes from frontend/Dockerfile.
+  frontend:
+    image: qwbe-invoicing-frontend:${IMAGE_TAG:-local}
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    environment:
+      FRONTEND_ORIGIN: https://${APP_DOMAIN:-invoice.test}
+      INVOICING_API_URL: http://app:3000
+    # No depends_on app: the UI must still boot and report an unavailable upstream.
     networks:
       - default
       - warden
@@ -101,13 +123,12 @@ services:
       traefik.http.routers.qwbe-invoicing.tls: "true"
       traefik.http.services.qwbe-invoicing.loadbalancer.server.port: "3000"
     restart: unless-stopped
-    stop_grace_period: 15s
     init: true
     read_only: true
     tmpfs:
-      # Bounded: with TMPDIR on the staging volume nothing large lands here, and an
-      # unbounded tmpfs is a way to consume the host's memory.
+      # Bounded like the backend's /tmp; uid 1000 is `node` in the image.
       - /tmp:size=64m
+      - /app/frontend/.next/cache:uid=1000,gid=1000,size=64m
 
 secrets:
   api_token:

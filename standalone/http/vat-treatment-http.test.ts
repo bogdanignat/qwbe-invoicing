@@ -8,9 +8,6 @@ import { handleApiRequest } from "../api/api.test-support.ts"
 import { createRequestAuthenticator } from "../auth/auth.ts"
 import { migratedFixture } from "../storage/postgres-rig.test-support.ts"
 import * as S from "../api/http-schemas.ts"
-import { decodeInvoice, decodeIssuer, decodeVatCatalogue } from "../../web/src/lib/models.ts"
-import { issuerForIssueDate, vatRatesForIssuer, vatRegistrationHistory } from "../../web/src/lib/vat-defaults.ts"
-import { vatChangeFromSelection } from "../../web/src/lib/issuer-settings-state.ts"
 
 const reason = "Regim special de scutire conform art. 310 din Codul fiscal"
 const issuer = {
@@ -74,14 +71,14 @@ void test("HTTP preserves explicit article310 facts through query, proforma conv
   const value = await fixture("history")
   try {
     const configured = await value.call("PUT", "/api/issuer", {
-      ...issuer, vatChange: vatChangeFromSelection({ registered: false, effectiveFrom: "2025-08-01" }),
+      ...issuer, vatChange: { registered: false, effectiveFrom: "2025-08-01", nonVatBasis: "article_310" },
     })
     assert.equal(configured.status, 200)
     const saved = Schema.decodeUnknownSync(S.Issuer)(configured.body)
     assert.equal(saved.currentVat?.nonVatBasis, "article_310")
     assert.equal(saved.vatConfigurations[0]?.vatExemptionReason, reason)
     assert.deepEqual((await value.call("GET", "/api/issuer")).body, configured.body)
-    const catalogue = decodeVatCatalogue((await value.call("GET", "/api/vat-regimes")).body)
+    const catalogue = Schema.decodeUnknownSync(S.VatCatalogue)((await value.call("GET", "/api/vat-regimes")).body)
     assert.ok(catalogue.rates.some((vat) => vat.vatCategoryCode === "O" && vat.vatExemptionReason === reason))
     for (const [documentType, series] of [["invoice", "INV"], ["proforma", "PRO"]]) {
       assert.equal((await value.call("POST", "/api/document-series", { documentType, series })).status, 200)
@@ -97,7 +94,6 @@ void test("HTTP preserves explicit article310 facts through query, proforma conv
     assert.equal(invoice.vatTotal, "0.00")
     assert.equal(invoice.totalIncludingVat, "200.00")
     assert.ok(invoice.lines.every((entry) => entry.vatCategoryCode === "O" && entry.vatRate === "0.00"))
-    assert.doesNotThrow(() => decodeInvoice(issued.body))
     const offered = await value.call("POST", "/api/proformas", { ...input, proformaSeries: "PRO" }, "article310-proforma")
     assert.equal(offered.status, 200)
     const proforma = Schema.decodeUnknownSync(S.Proforma)(offered.body)
@@ -116,23 +112,5 @@ void test("HTTP preserves explicit article310 facts through query, proforma conv
     assert.equal(correction.vatBreakdown[0].vatCategoryCode, "O")
     assert.equal(correction.vatTotal, "0.00")
     assert.equal(correction.totalIncludingVat, "-200.00")
-  } finally { await value.close() }
-})
-
-void test("complete historical server schedule stays registered in settings and dated authoring", async () => {
-  const value = await fixture("issue")
-  try {
-    const saved = await value.call("PUT", "/api/issuer", {
-      ...issuer, vatChange: { registered: true, effectiveFrom: "2025-01-01" },
-    })
-    assert.equal(saved.status, 200)
-    const profile = decodeIssuer(saved.body)
-    const catalogue = decodeVatCatalogue((await value.call("GET", "/api/vat-regimes")).body)
-    const history = vatRegistrationHistory(profile.vatConfigurations, catalogue)
-    assert.equal(history.length, 2)
-    assert.ok(history.every((entry) => entry.registered))
-    assert.deepEqual(vatRatesForIssuer(catalogue, profile, "2025-06-01").map(({ rate }) => rate), ["19.00", "9.00", "5.00"])
-    assert.equal(issuerForIssueDate(profile, "2025-06-01").vatRegistered, true)
-    assert.equal(issuerForIssueDate(profile, "2026-09-16").vatRegistered, true)
   } finally { await value.close() }
 })

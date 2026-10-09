@@ -2,8 +2,10 @@ name: qwbe-invoicing
 
 # Production bundle — copy as compose.yaml on the host or include via `docker compose -f compose.prod.yaml up -d`.
 # No Warden network, no published app port by default. Put Caddy (profile `proxy`) in front for TLS.
-# Image is pinned by tag; for strict production also pin by digest from image-digests.txt:
-#   IMAGE_TAG=0.3.0@sha256:<digest> docker compose -f compose.prod.yaml --profile proxy up -d
+# Two images, one version: `app` (backend, internal) and `frontend` (Next, the public
+# UI and the only route to the API). Each is pinned by its own digest from image-digests.txt:
+#   IMAGE_TAG=0.3.0@sha256:<app-digest> FRONTEND_IMAGE_TAG=0.3.0@sha256:<frontend-digest> \
+#   FRONTEND_ORIGIN=https://invoice.example.com docker compose -f compose.prod.yaml --profile proxy up -d
 #
 # Before the first `up`, the operator creates the two secret files. They are never in
 # this file, never in the image and never in an environment variable:
@@ -119,6 +121,32 @@ services:
       retries: 5
       start_period: 10s
 
+  # The public application. The backend stays internal; the browser reaches the API only
+  # through this BFF at /api/qwbe/<path>.
+  frontend:
+    image: ghcr.io/bogdanignat/qwbe-invoicing-frontend:${FRONTEND_IMAGE_TAG:-0.1.0}
+    environment:
+      # No default: the public origin is the operator's, and Next refuses to start on a
+      # value that is not one canonical origin.
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:?Set FRONTEND_ORIGIN to the public https origin, e.g. https://invoice.example.com}
+      INVOICING_API_URL: http://app:3000
+    # No depends_on app: the UI must still boot and report an unavailable upstream.
+    expose:
+      - "3000"
+    restart: unless-stopped
+    init: true
+    read_only: true
+    tmpfs:
+      # Bounded like the backend's /tmp; uid 1000 is `node` in the image.
+      - /tmp:size=64m
+      - /app/frontend/.next/cache:uid=1000,gid=1000,size=64m
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/healthz"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+
   caddy:
     image: caddy:2-alpine
     profiles: ["proxy"]
@@ -127,6 +155,8 @@ services:
     # an application that would answer 503 to every `/api` request.
     depends_on:
       app:
+        condition: service_healthy
+      frontend:
         condition: service_healthy
     ports:
       - "80:80"

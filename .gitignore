@@ -2,7 +2,6 @@ node_modules/
 coverage/
 dist/
 build/
-standalone/ui-dist/
 data/
 .local/
 .playwright-mcp/

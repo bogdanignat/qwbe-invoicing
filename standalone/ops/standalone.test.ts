@@ -1,5 +1,5 @@
 import assert from "node:assert/strict"
-import { chmodSync, existsSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from "node:fs"
+import { chmodSync, existsSync, readFileSync, symlinkSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { spawnSync } from "node:child_process"
 import test from "node:test"
@@ -8,7 +8,6 @@ import { parseCommand } from "./cli.ts"
 import { route } from "../http/http.ts"
 import { applyMigrations, artifactsDirectoryReady, databaseReady, planMigrations } from "../storage/migrations.ts"
 import { withEmpty, withMigrated, type RawSql, type TestFixture } from "../storage/postgres-rig.test-support.ts"
-import { staticUiResponse } from "../http/static-ui.ts"
 
 /**
  * The host's operational surface on PostgreSQL.
@@ -273,38 +272,4 @@ void test("readiness is observable over the HTTP contract", () => {
 void test("production Compose confirms the guarded migration apply", () => {
   const compose = readFileSync(join(process.cwd(), "compose.prod.yaml"), "utf8")
   assert.match(compose, /"migrate", "--apply", "--confirm-production", "--json"/)
-})
-
-void test("serves assets and clean UI routes only from an allowlist with restrictive headers", () => {
-  assert.deepEqual(readdirSync(join(process.cwd(), "standalone/ui-dist")).sort(), ["assets", "index.html"])
-  assert.deepEqual(readdirSync(join(process.cwd(), "standalone/ui-dist/assets")).sort(), ["app.css", "app.js"])
-  const page = staticUiResponse("GET", "/app")
-  assert.ok(page)
-  assert.equal(page.status, 200)
-  assert.equal(page.headers["content-type"], "text/html; charset=utf-8")
-  const contentSecurityPolicy = page.headers["content-security-policy"]
-  assert.ok(contentSecurityPolicy)
-  assert.match(contentSecurityPolicy, /default-src 'none'/)
-  assert.match(Buffer.from(page.body).toString("utf8"), /QWBE Invoicing/)
-  for (const path of ["/unlock", "/invoices", "/invoices/new", "/invoices/invoice-1", "/drafts/draft-1", "/proformas", "/proformas/proforma-1", "/customers", "/products", "/settings"]) {
-    assert.equal(staticUiResponse("GET", path)?.headers["content-type"], "text/html; charset=utf-8")
-  }
-  assert.equal(staticUiResponse("GET", "/api/invoices"), undefined)
-  assert.equal(staticUiResponse("GET", "/api/proformas"), undefined)
-  assert.equal(staticUiResponse("GET", "/health/live"), undefined)
-  assert.equal(staticUiResponse("GET", "/unknown"), undefined)
-
-  const script = staticUiResponse("HEAD", "/assets/app.js")
-  assert.ok(script)
-  assert.equal(script.status, 200)
-  assert.equal(script.body.length, 0)
-  assert.equal(script.headers["x-content-type-options"], "nosniff")
-  const scriptBody = staticUiResponse("GET", "/assets/app.js")
-  assert.ok(scriptBody)
-  assert.equal(scriptBody.body.length > 1_000, true)
-  assert.equal(staticUiResponse("GET", "/assets/app.css")?.status, 200)
-  assert.equal(staticUiResponse("GET", "/assets/api-client.js"), undefined)
-  assert.equal(staticUiResponse("GET", "/assets/../api-token"), undefined)
-  assert.equal(staticUiResponse("GET", "/assets/%2e%2e/api-token"), undefined)
-  assert.equal(staticUiResponse("POST", "/assets/app.js")?.status, 405)
 })

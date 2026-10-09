@@ -119,11 +119,17 @@ cash-register rules and sector-specific obligations must be validated with an ac
 One application process, one PostgreSQL 16 server, one data directory for the PDFs.
 
 ```text
-browser ──> /app  (React UI)  ──┐
-                                 ├──> standalone host ──> invoicing core ──> PostgreSQL 16
-API client ──> /api (Bearer) ───┘        │                                    one database, schema `public`
-                                          └──> PDF renderer ──> /data/artifacts/<sha256>
+browser ──> Next frontend ──> /api/qwbe/* (BFF) ──┐
+                                                   ├──> standalone host ──> invoicing core ──> PostgreSQL 16
+internal API client ──> /api (Bearer) ────────────┘        │                                    one database, schema `public`
+                                                            └──> PDF renderer ──> /data/artifacts/<sha256>
 ```
+
+Since T-1649 the public entry point is the Next application in `frontend/`; the backend
+is internal. `docker compose up -d --build` builds two images (`qwbe-invoicing` and
+`qwbe-invoicing-frontend`) and `invoice.test` serves Next. The API is reachable from the
+browser session through `/api/qwbe/<path>`; the BFF refuses `Authorization`, so Bearer
+clients run inside the Compose network (`docker compose exec app …`).
 
 - **The core** (`cube/invoicing`) holds the domain model, VAT arithmetic, date
   validation, the store ports and the idempotency rules, and composes the service from its
@@ -196,13 +202,13 @@ docker compose -f compose.prod.yaml up -d
 # with TLS:
 docker compose -f compose.prod.yaml --profile proxy up -d
 
-# 5. Verify
+# 5. Verify (no port is published; FRONTEND_ORIGIN and FRONTEND_IMAGE_TAG are in .env)
 docker compose -f compose.prod.yaml exec app node bin/qwbe-invoicing.ts doctor --json
-curl --fail http://127.0.0.1:3000/health/live
-curl --fail http://127.0.0.1:3000/health/ready
+docker compose -f compose.prod.yaml exec app wget -qO- http://127.0.0.1:3000/health/ready
+docker compose -f compose.prod.yaml exec frontend wget -qO- http://127.0.0.1:3000/healthz
 ```
 
-Then open `https://<your-domain>/app`, unlock the UI with the API token, and configure the
+Then open `https://<your-domain>`, unlock the UI with the API token, and configure the
 issuer and the first invoice series.
 
 What the bundle enforces: the application container runs as a non-root user with a
@@ -216,7 +222,7 @@ hits `/health/ready`.
 
 For a local development setup with Docker Compose see
 [`docs/LOCAL_DEVELOPMENT.md`](./docs/LOCAL_DEVELOPMENT.md). For a bare-metal run without
-Docker: `pnpm install`, `pnpm build:ui`, then `node bin/qwbe-invoicing.ts migrate --apply`
+Docker: `pnpm install`, then `node bin/qwbe-invoicing.ts migrate --apply`
 and `node bin/qwbe-invoicing.ts serve` with the variables below set, against a PostgreSQL 16
 database that already exists and whose role owns it.
 
@@ -243,7 +249,7 @@ chmod 600 .local/pg-password
 pnpm local:setup --apply   # once per machine: Warden network, DNS and certificate
 docker compose up -d       # add --build after code changes
 docker compose ps
-curl --fail --cacert ~/.warden/ssl/rootca/certs/ca.cert.pem https://invoice.test/health/ready
+curl --fail --cacert ~/.warden/ssl/rootca/certs/ca.cert.pem https://invoice.test/healthz
 ```
 
 The full local walkthrough is in [`docs/LOCAL_DEVELOPMENT.md`](./docs/LOCAL_DEVELOPMENT.md).
@@ -393,7 +399,10 @@ the backup taken before the upgrade, then start the previous image. The full pro
 ## API
 
 Authenticated routes live under `/api` and require `Authorization: Bearer <token>`.
-The Swagger page is at `/api` (behind the browser session) and the OpenAPI 3.1 document is
+This API is internal: it is reached through `docker compose exec app …` or the Compose
+network, not through the public origin, whose BFF only forwards the browser session.
+The authenticated Swagger page at the backend's `/api` is not reachable through the
+public origin (the BFF forwards only `/api/qwbe/<path>`); the OpenAPI 3.1 document is
 generated from the same Effect `HttpApi` contract served by `HttpApiBuilder`.
 The builder handles routing, decoding and response encoding; input errors retain
 the existing `400 ValidationFailure` envelope. The server disposes its Effect
@@ -569,21 +578,15 @@ cube/invoicing/documents/  component: rendered PDFs and artifact recovery
 cube/payments/             payment records and derived invoice payment status
 cube/efactura/             RO e-Factura: UBL builders, CIUS-RO limits, EN 16931 validation
 standalone/                host, never packaged; config.ts and failure-log.ts at its root
-standalone/http/           server, security headers, static UI, SPA route contract, readiness, API docs
+standalone/http/           server, security headers, readiness, API docs
 standalone/auth/           credentials, browser session, login throttle
 standalone/api/            authenticated endpoints: HttpApi contract, schemas, handlers, branding normalizer
 standalone/storage/        PostgreSQL store, pool and transactions, row mappers, migration runner, schema fingerprint
 standalone/documents/      PDF renderer and layout, artifact store and recovery, bundled fonts
 standalone/efactura/       host mapping from issued documents to the e-Factura cube
 standalone/ops/            CLI, backup and restore
-standalone/parity/         tests that hold host, UI and cube rules in agreement
-standalone/ui-dist/        built UI, ignored by git
-web/                       browser UI: React 19, TypeScript, Tailwind CSS 4, Vite
-web/src/lib/               API client, models, formatting, pure state and fiscal helpers
-web/src/hooks/             React hooks: queries, authoring sessions, idempotency
-web/src/components/ui/     shared primitives: buttons, load more
-web/src/components/        layout (shell, page, async states), document, authoring, invoice, settings, catalog
-web/src/views/             one component per route
+standalone/parity/         SQLite baseline fixtures read by the PostgreSQL schema gate
+frontend/                  browser UI served at invoice.test: Next App Router, BFF under /api/qwbe
 bin/qwbe-invoicing.ts      CLI entry point, also the container command
 probes/                    repository gates: runtime, package shape, tests, size, boundaries
 scripts/                   e-Factura fixtures, the local warden helper, the Docker verifier rig (verify-docker.sh)
@@ -594,7 +597,7 @@ Dockerfile                 multi-stage build, pinned Node image
 ```
 
 Stack: Node 24, TypeScript, [Effect](https://effect.website) (`effect`, `@effect/platform`),
-`pdf-lib`, PostgreSQL 16 through `pg`, React 19, Vite, pnpm.
+`pdf-lib`, PostgreSQL 16 through `pg`, React 19, Next.js 16, pnpm.
 
 ## Development
 
@@ -610,7 +613,6 @@ scripts/verify-docker.sh verify                  # pnpm verify: runtime gate, li
 scripts/verify-docker.sh test                    # pnpm test only — the fast loop
 scripts/verify-docker.sh test "node --test standalone/storage/pagination.test.ts"
 scripts/verify-docker.sh down                    # stops both rigs; removes no volume
-pnpm dev:ui                                      # Vite dev server for the browser UI
 ```
 
 The gates keep the core inside the QWBE cube contract: no host or infrastructure imports
@@ -619,25 +621,16 @@ cube. A change that breaks a gate is not mergeable.
 
 ### UI theme and dependency policy
 
-Tailwind CSS 4 is configured CSS-first in `web/src/app.css`; this setup does not use a
-`tailwind.config` file. Invoice colors, typography, shadows and border radii live in its
-top-level `@theme` block as CSS variables. They generate semantic utilities such as
-`bg-invoice-primary`, `text-invoice-ink`, `border-invoice-border`,
-`rounded-invoice-control` and `rounded-invoice-panel` whenever those classes are used, while
-the existing component classes consume the same variables directly. The explicit
-`@source ".."` boundary includes the React tree in Tailwind's class detection;
-moving UI source outside `web/` requires updating that boundary.
+Tailwind CSS 4 is configured CSS-first in `frontend/src/app/globals.css`; this setup does
+not use a `tailwind.config` file. Invoice colors, typography and border radii live in the
+`@theme` block of `frontend/src/app/theme.css` as CSS variables and generate semantic
+utilities such as `bg-invoice-primary`, `text-invoice-ink` and `rounded-invoice-panel`.
+The explicit `@source ".."` in `globals.css` limits class detection to `frontend/src`.
 
 Any third-party UI component, icon or font library added to this project must be free to use
 and MIT-licensed. Check the package's published license before adding it and record that check
 in the change or pull-request notes. This is a review requirement; commercial packages,
 non-MIT packages and packages with unclear licensing are not accepted.
-
-The shared button primitives use `tailwind-variants` 3.3.1 (MIT) for typed variants and its
-`cn()` helper for deterministic Tailwind class merging. The configured `tv()` and `cn()`
-exports in `web/src/lib/classnames.ts` are the required class-composition boundary so custom invoice
-utilities merge consistently. `class-variance-authority` is not used because its Apache-2.0
-license does not satisfy this repository's UI dependency policy.
 
 ## Relation to QWBE
 

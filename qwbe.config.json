@@ -4,11 +4,7 @@
   ],
   "sizeFileRoots": [
     "standalone",
-    "web",
     "frontend/src"
-  ],
-  "sizeExcludedDirectories": [
-    "standalone/ui-dist"
   ],
   "caps": {
     "maxCharsPerFile": 6000,

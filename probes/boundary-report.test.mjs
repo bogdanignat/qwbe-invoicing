@@ -50,19 +50,18 @@ test("reports the real repository graph as the fixed protocol, without log conta
     payload.depcruiseVersion,
     JSON.parse(readFileSync(join(repositoryRoot, "node_modules", "dependency-cruiser", "package.json"), "utf8")).version,
   )
-  assert.deepEqual(payload.roots, ["cube", "standalone", "web/src", "frontend/src"])
+  assert.deepEqual(payload.roots, ["cube", "standalone", "frontend/src"])
 })
 
 test("describes every cube unit and host root as an area with its family", () => {
   const payload = JSON.parse(run("--json").stdout)
   const { units } = boundaryGateInputs(repositoryRoot, cubeRoots)
-  const expected = [...units.map((unit) => unit.id), "standalone", "web/src", "frontend/src"].sort()
+  const expected = [...units.map((unit) => unit.id), "standalone", "frontend/src"].sort()
   assert.deepEqual(payload.areas.map((area) => area.id), expected)
   assert.deepEqual(payload.areas.map((area) => area.folder), expected)
   const group = (id) => payload.areas.find((area) => area.id === id).group
   assert.equal(group("cube/invoicing"), "cube/invoicing")
   assert.equal(group("cube/invoicing/issuance"), "cube/invoicing", "a child cube belongs to its tree root")
-  assert.equal(group("web/src"), "web")
   assert.equal(group("frontend/src"), "frontend")
   assert.equal(group("standalone"), "standalone")
 })
@@ -157,7 +156,7 @@ test("keeps failure messages short and free of the environment", () => {
 test("prints human counts without the protocol, and documents itself", () => {
   const human = run()
   assert.equal(human.status, 0, human.stderr)
-  assert.match(human.stdout, /^roots {12}cube standalone web\/src frontend\/src$/m)
+  assert.match(human.stdout, /^roots {12}cube standalone frontend\/src$/m)
   assert.match(human.stdout, /^modules {10}\d+$/m)
   assert.match(human.stdout, /^violations {7}\d+ \(error \d+, warn \d+, info \d+\)$/m)
   assert.ok(!human.stdout.includes("schemaVersion"))

@@ -16,7 +16,7 @@ const executable = join(repositoryRoot, "node_modules", ".bin", "depcruise")
 // rules add up to. The gate below runs it; read-only reporters reuse it unchanged so a
 // report can never describe a different graph than the one the gate validates.
 export const boundaryGateInputs = (root, cubeRoots) => {
-  const roots = [...cubeRoots, "standalone", "web/src", "frontend/src"].filter((path) => existsSync(join(root, path)))
+  const roots = [...cubeRoots, "standalone", "frontend/src"].filter((path) => existsSync(join(root, path)))
   const units = discoverCubeUnits(root, cubeRoots)
   const generated = {
     ...configuration,

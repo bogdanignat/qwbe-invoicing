@@ -6,7 +6,6 @@ import type { BrowserSession } from "../auth/browser-session.ts"
 import { loginPeerKey, type LoginThrottle } from "../auth/login-throttle.ts"
 import { failureReason, logInternalFailure } from "../failure-log.ts"
 import { forwardApiRequest } from "./http-api-forward.ts"
-import { staticUiResponse } from "./static-ui.ts"
 import { header, send } from "./http-request-io.ts"
 
 interface HttpResponse {
@@ -76,8 +75,6 @@ export const createRequestListener = (dependencies: ListenerDependencies): Reque
       await forwardApiRequest({ api, authenticate, browserSession, isReady, peer, rejectCooldown, throttle }, request, response, path)
       return
     }
-    const ui = staticUiResponse(request.method, path)
-    if (ui !== undefined) { send(response, ui.status, ui.body, ui.headers); return }
     // `/health/live`, `/` and the fallbacks answer without the database;
     // `/health/ready` is the only path that pays for an evaluation.
     const ready = needsReadiness(path) ? await isReady() : false

@@ -1,6 +1,6 @@
 # Release bundle — install, upgrade, backup, restore, rollback
 
-Each versioned release on GHCR (`ghcr.io/bogdanignat/qwbe-invoicing:<version>` for `linux/amd64` + `linux/arm64`) should ship:
+Each versioned release on GHCR publishes two images on the same version, for `linux/amd64` + `linux/arm64`: the backend `ghcr.io/bogdanignat/qwbe-invoicing:<version>` (internal) and the Next frontend `ghcr.io/bogdanignat/qwbe-invoicing-frontend:<version>` (the public UI and the only route to the API, through `/api/qwbe/<path>`). `image-digests.txt` lists one digest per image; pin `IMAGE_TAG` and `FRONTEND_IMAGE_TAG` to them. The release should ship:
 
 ```text
 compose.prod.yaml
@@ -13,44 +13,38 @@ docs/LOCAL_DEVELOPMENT.md
 
 ## Source verification before building a release
 
-T-1400 phase one adds an opt-in Next frontend, not a traffic cutover. See
-[`NEXT_PREVIEW.md`](NEXT_PREVIEW.md) for isolated containers and session/security
-contracts. `pnpm verify` now checks/builds both frontends; the release backend still
-serves the legacy UI until the remaining screens have been migrated.
+Since T-1649 the public traffic goes to the Next frontend (Caddy and Traefik route to
+`frontend`); the backend is internal and serves no UI. See
+[`NEXT_PREVIEW.md`](NEXT_PREVIEW.md) for the session/security contracts.
 
 Run `pnpm verify` before building the image. The size gate keeps the existing
 6,000-character file cap and the 40,000-character / 15-file cube caps; it also checks
-production source files under `standalone/`, `web/` and `frontend/src/` without treating these trees
-as a cube. Generated `standalone/ui-dist` is excluded, not runtime adapters. `bin/`
-and root tooling/config files are outside that file-only extension.
+production source files under `standalone/` and `frontend/src/` without treating these
+trees as a cube. `bin/` and root tooling/config files are outside that file-only extension.
 
 Host/UI refactors must also preserve the HTTP contract and runtime error/idempotency
 mapping, transaction behavior, session lifetime and PDF assets. Verify browser flows
 on an isolated fixture and smoke-test the built runtime, not a live data volume.
-The UI builder intentionally copies only `standalone/http/ui-routes.ts` from the
-host; browser imports must not expand that runtime dependency accidentally.
 
-`pnpm gate:boundaries` checks all of `web/src` (including files unreachable from
-`App.tsx`), alongside the cube and host trees. It runs in `pnpm verify`, also used
-by the release CI verification job. Frontend source dependencies follow this matrix:
+`pnpm gate:boundaries` checks all of `frontend/src` alongside the cube and host trees.
+It runs in `pnpm verify`, also used by the release CI verification job. Frontend source
+dependencies follow this matrix:
 
-| Source | Allowed targets within `web/src` |
+| Source | Allowed targets within `frontend/src` |
 | --- | --- |
 | `lib/` | `lib/` |
 | `hooks/` | `lib/`, `hooks/` |
 | `components/` | `lib/`, `hooks/`, `components/` |
 | `views/` | `lib/`, `hooks/`, `components/`, `views/` |
 
-`App.tsx` and `main.tsx` compose the layers, never the reverse. Components may use
-hooks and other component groups; views may compose other views. Type-only imports,
+`app/` and `proxy.ts` compose the layers, never the reverse. Type-only imports,
 re-exports and dynamic imports follow the same rules, and cycles are forbidden.
-Browser source cannot import `cube/`, `standalone/`, `probes/` or `bin/`, except for
-the exact `App.tsx` → `standalone/http/ui-routes.ts` edge. That shared routes file
-must remain dependency-free, including third-party imports. Third-party packages
-are outside the layer matrix. Direct edges into packages and `probes/fixtures`
-remain visible to the rules, but their internals are not traversed.
-The CLI fixture tests in `probes/web-boundary-gate.test.mjs` exercise both allowed
-edges and rejected violations; no size thresholds or cube rules are relaxed.
+Browser layers cannot import `lib/server/` or Node core modules; under `app/` only
+`route.ts` files may import `lib/server/`. Frontend source cannot import `cube/`,
+`standalone/`, `probes/`, `bin/`, `scripts/`, `frontend/scripts/` or the Next build
+output, and the backend cannot import `frontend/`. The CLI fixture tests in
+`probes/frontend-boundary-gate.test.mjs` exercise allowed edges and rejected violations;
+no size thresholds or cube rules are relaxed.
 
 ## Install (first time, production host)
 
@@ -63,14 +57,16 @@ openssl rand -hex 32 > /opt/qwbe-invoicing/secrets/api-token && chmod 600 /opt/q
 cp compose.prod.yaml Caddyfile.example /opt/qwbe-invoicing/
 cp .env.example /opt/qwbe-invoicing/.env
 # Edit /opt/qwbe-invoicing/.env:
-#   IMAGE_TAG=0.3.0            (or 0.3.0@sha256:<digest> for strict pin)
+#   IMAGE_TAG=0.3.0            (or 0.3.0@sha256:<app-digest> for strict pin)
+#   FRONTEND_IMAGE_TAG=0.3.0   (or 0.3.0@sha256:<frontend-digest>)
+#   FRONTEND_ORIGIN=https://invoice.example.com  (required, the public origin)
 #   ORGANIZATION_ID=...        (legal entity id for this host)
 #   AUTH_TOKEN_PATH=/opt/qwbe-invoicing/secrets/api-token
 #   APP_DOMAIN=invoice.example.com  (only if using --profile proxy)
 
-# 3. (Optional TLS) edit Caddyfile
+# 3. (Optional TLS) edit Caddyfile — it proxies to `frontend:3000`
 cp Caddyfile.example /opt/qwbe-invoicing/Caddyfile
-# set invoice.example.com
+# set invoice.example.com (the host of FRONTEND_ORIGIN)
 
 # 4. Start — migrate runs first, app starts only on success
 cd /opt/qwbe-invoicing
@@ -79,23 +75,25 @@ docker compose -f compose.prod.yaml up -d
 # or with TLS:
 docker compose -f compose.prod.yaml --profile proxy up -d
 
-# 5. Verify — no secret is printed, health is separate
+# 5. Verify — no secret is printed, health is separate; no port is published
 docker compose -f compose.prod.yaml exec app node bin/qwbe-invoicing.ts doctor --json
-curl --fail http://127.0.0.1:3000/health/live
-curl --fail http://127.0.0.1:3000/health/ready
+docker compose -f compose.prod.yaml exec app wget -qO- http://127.0.0.1:3000/health/ready
+docker compose -f compose.prod.yaml exec frontend wget -qO- http://127.0.0.1:3000/healthz
 ```
 
-Requirements enforced by the bundle: `read_only: true`, `tmpfs: /tmp`, named volume `qwbe-invoicing-data`, `depends_on: migrate: service_completed_successfully`, `HEALTHCHECK` on `/health/ready`, secrets from file.
+Requirements enforced by the bundle: `read_only: true` with bounded `tmpfs` on both services, named volume `qwbe-invoicing-data`, `depends_on: migrate: service_completed_successfully`, `HEALTHCHECK` on `/health/ready` (`app`) and `/healthz` (`frontend`), secrets from file.
 
 ## Upgrade
 
 ```bash
 cd /opt/qwbe-invoicing
-# Pin the new version (prefer digest-pinned from image-digests.txt)
-IMAGE_TAG=0.4.0@sha256:<new-digest> docker compose -f compose.prod.yaml pull
+# Pin the new version on both images: edit IMAGE_TAG and FRONTEND_IMAGE_TAG in
+# /opt/qwbe-invoicing/.env (digest-pinned from image-digests.txt), not in the shell,
+# so a later `up -d` from a fresh shell does not fall back to the previous version.
+docker compose -f compose.prod.yaml pull
 # Back up before startup applies migrations
 docker compose -f compose.prod.yaml exec app node bin/qwbe-invoicing.ts backup --output /data/backup-$(date +%F).tar.gz --json
-IMAGE_TAG=0.4.0@sha256:<new-digest> docker compose -f compose.prod.yaml up -d
+docker compose -f compose.prod.yaml up -d
 docker compose -f compose.prod.yaml exec app node bin/qwbe-invoicing.ts doctor --json
 docker compose -f compose.prod.yaml exec app node bin/qwbe-invoicing.ts artifacts --limit 50 --json
 docker compose -f compose.prod.yaml logs --tail=100 migrate app
@@ -152,9 +150,10 @@ Separately protect `ORGANIZATION_ID`, `AUTH_TOKEN_PATH` contents, `Caddyfile`/`c
 ## Rollback
 
 ```bash
-# Roll back to the previous digest-pinned version
-IMAGE_TAG=0.3.0@sha256:<previous-digest> docker compose -f compose.prod.yaml pull
-IMAGE_TAG=0.3.0@sha256:<previous-digest> docker compose -f compose.prod.yaml up -d
+# Roll back both images: set IMAGE_TAG and FRONTEND_IMAGE_TAG in .env to the
+# previous digest-pinned version (both from the previous image-digests.txt)
+docker compose -f compose.prod.yaml pull
+docker compose -f compose.prod.yaml up -d
 docker compose -f compose.prod.yaml exec app node bin/qwbe-invoicing.ts doctor --json
 ```
 
@@ -163,7 +162,7 @@ If DB migrations moved forward and the old image cannot read the new schema, res
 ## Offline image bundle (optional)
 
 ```bash
-docker save ghcr.io/bogdanignat/qwbe-invoicing:0.3.0 | gzip > qwbe-invoicing-0.3.0-images.tar.gz
+docker save ghcr.io/bogdanignat/qwbe-invoicing:0.3.0 ghcr.io/bogdanignat/qwbe-invoicing-frontend:0.3.0 | gzip > qwbe-invoicing-0.3.0-images.tar.gz
 # On the air-gapped host:
 gunzip -c qwbe-invoicing-0.3.0-images.tar.gz | docker load
 ```

@@ -10,18 +10,6 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY frontend/package.json ./frontend/package.json
 RUN pnpm --filter qwbe-invoicing install --frozen-lockfile --prod
 
-FROM node:${NODE_VERSION}-alpine@${NODE_IMAGE_DIGEST} AS ui-builder
-ARG PNPM_VERSION=11.22.0
-WORKDIR /app
-RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
-COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-COPY frontend/package.json ./frontend/package.json
-RUN pnpm --filter qwbe-invoicing install --frozen-lockfile
-COPY vite.config.ts ./
-COPY web ./web
-COPY standalone/http/ui-routes.ts ./standalone/http/ui-routes.ts
-RUN pnpm build:ui
-
 FROM node:${NODE_VERSION}-alpine@${NODE_IMAGE_DIGEST} AS runtime
 ENV NODE_ENV=production \
     HOST=0.0.0.0 \
@@ -33,7 +21,6 @@ COPY package.json ./
 COPY bin ./bin
 COPY cube ./cube
 COPY standalone ./standalone
-COPY --from=ui-builder /app/standalone/ui-dist ./standalone/ui-dist
 # `pg_dump`/`pg_restore` for the ops commands, installed in the runtime stage and
 # BEFORE `USER node`, because apk needs root. Client 16 exactly, matching the
 # server: a newer client writes an archive the older server cannot read back,

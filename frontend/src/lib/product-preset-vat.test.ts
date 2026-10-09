@@ -5,8 +5,7 @@ import { preferableVatRates, presetVatIssue, presetVatLabel, presetVatOptions } 
 import type { VatCatalogue } from "./draft-models.ts"
 
 /**
- * The legacy app asserted these rules through rendered markup
- * (`web/src/components/catalog/product-preset-vat.test.ts`). They are facts
+ * The removed Vite app asserted these rules through rendered markup. They are facts
  * about the rates, not about a `<select>`, so they are asserted on the
  * functions here and the component is left with nothing to decide.
  */
