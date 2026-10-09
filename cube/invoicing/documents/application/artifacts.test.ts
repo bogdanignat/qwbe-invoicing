@@ -1,14 +1,17 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { Effect } from "effect"
+import { Effect, Either } from "effect"
 
 import {
+  DocumentNotFound,
   DocumentPersistenceFailure,
   DocumentRenderingFailure,
+  DocumentsPermissionDenied,
   type ArtifactRepository,
   type InvoiceArtifact,
   type InvoiceSource,
+  type RenderableCorrection,
   type RenderableInvoice,
 } from "./artifact-ports.ts"
 import { createArtifactService } from "./artifacts.ts"
@@ -90,6 +93,7 @@ const memoryAdapters = (artifacts: Map<string, InvoiceArtifact>): {
     ),
     findProforma: () => Effect.succeed(undefined),
     listProformaIds: () => Effect.succeed([]),
+    findCorrection: () => Effect.succeed(undefined),
   },
 })
 
@@ -107,6 +111,7 @@ void test("renders once, persists immutable metadata, and returns verified bytes
         return { bytes, mediaType: "application/pdf" as const, templateVersion: "invoice-v1" }
       }),
       renderProforma: () => Effect.fail(new DocumentRenderingFailure({ template: "proforma-v1" })),
+      renderCorrection: () => Effect.fail(new DocumentRenderingFailure({ template: "storno-v1" })),
     },
     objects: {
       putPdf: () => Effect.succeed({ objectKey: "sha256/abc.pdf", sha256: "abc", byteLength: bytes.length }),
@@ -133,6 +138,7 @@ void test("does not persist metadata when rendering or object storage fails", as
     renderer: {
       render: () => Effect.fail(new DocumentRenderingFailure({ template: "invoice-v1" })),
       renderProforma: () => Effect.fail(new DocumentRenderingFailure({ template: "proforma-v1" })),
+      renderCorrection: () => Effect.fail(new DocumentRenderingFailure({ template: "storno-v1" })),
     },
     objects: {
       putPdf: () => Effect.fail(new DocumentPersistenceFailure({ operation: "write pdf" })),
@@ -170,10 +176,12 @@ void test("finds missing invoices after any number of healthy artifacts", async 
       listIssuedInvoiceIds: () => Effect.succeed([invoice.id, "invoice-after-healthy-page"]),
       findProforma: () => Effect.succeed(undefined),
       listProformaIds: () => Effect.succeed([]),
+      findCorrection: () => Effect.succeed(undefined),
     },
     renderer: {
       render: () => Effect.fail(new DocumentRenderingFailure({ template: "invoice-v1" })),
       renderProforma: () => Effect.fail(new DocumentRenderingFailure({ template: "proforma-v1" })),
+      renderCorrection: () => Effect.fail(new DocumentRenderingFailure({ template: "storno-v1" })),
     },
     objects: {
       putPdf: () => Effect.fail(new DocumentPersistenceFailure({ operation: "write pdf" })),
@@ -183,4 +191,48 @@ void test("finds missing invoices after any number of healthy artifacts", async 
   })
 
   assert.deepEqual(await Effect.runPromise(service.listMissingInvoiceIds()), ["invoice-after-healthy-page"])
+})
+
+void test("renders a correction on demand from its source, without storing an artifact", async () => {
+  const correction: RenderableCorrection = {
+    ...invoice, id: "correction-1", number: 2, dueDate: null, notes: null, reason: "Anulare integrală",
+    totalExcludingVat: "-100.00", vatTotal: "-21.00", totalIncludingVat: "-121.00",
+    original: { series: invoice.series, number: invoice.number, issueDate: invoice.issueDate },
+  }
+  const bytes = new TextEncoder().encode("storno-pdf")
+  const rendered: Array<RenderableCorrection> = []
+  const adapters = memoryAdapters(new Map())
+  const dependencies = {
+    context,
+    clock: Effect.succeed(new Date("2026-09-01T10:05:00.000Z")),
+    repository: adapters.repository,
+    source: { ...adapters.source, findCorrection: (organizationId: string, id: string) => Effect.succeed(
+      organizationId === correction.organizationId && id === correction.id ? correction : undefined) },
+    renderer: {
+      render: () => Effect.fail(new DocumentRenderingFailure({ template: "invoice-v1" })),
+      renderProforma: () => Effect.fail(new DocumentRenderingFailure({ template: "proforma-v1" })),
+      renderCorrection: (source: RenderableCorrection) => Effect.sync(() => {
+        rendered.push(source)
+        return { bytes, mediaType: "application/pdf" as const, templateVersion: "storno-v1" }
+      }),
+    },
+    objects: {
+      putPdf: () => Effect.fail(new DocumentPersistenceFailure({ operation: "write pdf" })),
+      readPdf: () => Effect.fail(new DocumentPersistenceFailure({ operation: "read pdf" })),
+    },
+    cubeIdentity: "documents",
+  }
+  const service = createArtifactService(dependencies)
+
+  const result = await Effect.runPromise(service.renderCorrection(correction.id))
+  assert.deepEqual(result, { bytes, mediaType: "application/pdf", templateVersion: "storno-v1" })
+  assert.deepEqual(rendered, [correction])
+  assert.deepEqual(await Effect.runPromise(Effect.either(service.renderCorrection("missing"))),
+    Either.left(new DocumentNotFound({ resource: "correction", id: "missing" })))
+
+  const renderOnly = createArtifactService({ ...dependencies, context: Effect.succeed({
+    identity: { id: "user-1", permissions: ["documents:render"] }, organization: { id: "org-1" } }) })
+  assert.deepEqual(await Effect.runPromise(Effect.either(renderOnly.renderCorrection(correction.id))),
+    Either.left(new DocumentsPermissionDenied({ permission: "documents:read" })))
+  assert.equal(rendered.length, 1)
 })

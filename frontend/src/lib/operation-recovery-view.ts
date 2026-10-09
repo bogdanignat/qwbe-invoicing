@@ -47,6 +47,7 @@ const OPERATION_TITLE: Readonly<Record<RecoveryOperation, string>> = {
   "create-proforma": "Emiterea proformei nu este confirmată",
   "convert-proforma-invoice": "Emiterea facturii din proformă nu este confirmată",
   "convert-proforma-draft": "Crearea draftului din proformă nu este confirmată",
+  "create-correction": "Emiterea documentului storno nu este confirmată",
 }
 
 const PENDING = "Cererea a plecat, dar răspunsul nu a ajuns. Documentul poate exista deja pe server. Retrimiterea folosește exact aceeași cerere și aceeași cheie, deci nu poate crea un al doilea document."
@@ -111,7 +112,7 @@ export const recoveryNotice = (entry: JournalEntry): RecoveryNoticeModel | undef
  * writing blocked until the user follows the link or starts a new document.
  */
 export interface KnownWrite {
-  readonly kind: "draft" | "invoice" | "proforma"
+  readonly kind: "draft" | "invoice" | "proforma" | "correction"
   readonly id: string
   readonly effectsError: unknown
 }
@@ -120,6 +121,7 @@ const KNOWN_TITLE: Readonly<Record<KnownWrite["kind"], string>> = {
   draft: "Draftul a fost salvat, dar ecranul nu a putut fi actualizat",
   invoice: "Factura a fost emisă, dar ecranul nu a putut fi actualizat",
   proforma: "Proforma a fost emisă, dar ecranul nu a putut fi actualizat",
+  correction: "Documentul storno a fost emis, dar ecranul nu a putut fi actualizat",
 }
 
 const KNOWN_MESSAGE = "Documentul există pe server sub cheia folosită. Nu salva și nu emite din nou de pe acest ecran — ai crea un al doilea document. Deschide documentul de mai jos sau începe unul nou."
@@ -128,6 +130,7 @@ const KNOWN_LINK: Readonly<Record<KnownWrite["kind"], (id: string) => RecoveryLi
   draft: (id) => ({ href: `/drafts/${encodeURIComponent(id)}`, label: "Deschide draftul salvat" }),
   invoice: (id) => ({ href: `/invoices/${encodeURIComponent(id)}`, label: "Deschide factura emisă" }),
   proforma: (id) => ({ href: `/proformas/${encodeURIComponent(id)}`, label: "Deschide proforma emisă" }),
+  correction: (id) => ({ href: `/corrections/${encodeURIComponent(id)}`, label: "Deschide documentul storno" }),
 }
 
 export const knownResultNotice = (result: KnownWrite | undefined): RecoveryNoticeModel | undefined => {

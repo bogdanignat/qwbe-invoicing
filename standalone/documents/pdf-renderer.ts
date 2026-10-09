@@ -10,6 +10,7 @@ export { documentDateLine, formatAmount, formatRate, issuerLegalLines, partyAddr
 
 export const invoiceTemplateVersion = "invoice-v9"
 export const proformaTemplateVersion = "proforma-v8"
+export const correctionTemplateVersion = "storno-v1"
 
 const regularFontPath = fileURLToPath(new URL("./assets/fonts/DejaVuSans.ttf", import.meta.url))
 const boldFontPath = fileURLToPath(new URL("./assets/fonts/DejaVuSans-Bold.ttf", import.meta.url))
@@ -37,6 +38,14 @@ export const createPdfRenderer = (
         templateVersion: proformaTemplateVersion,
       }),
       catch: () => new DocumentRenderingFailure({ template: proformaTemplateVersion }),
+    }),
+    renderCorrection: (correction) => Effect.tryPromise({
+      try: async () => ({
+        bytes: await renderPdf(correction, await fonts, "correction", correctionTemplateVersion),
+        mediaType: "application/pdf" as const,
+        templateVersion: correctionTemplateVersion,
+      }),
+      catch: () => new DocumentRenderingFailure({ template: correctionTemplateVersion }),
     }),
   }
 }

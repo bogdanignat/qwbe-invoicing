@@ -2,7 +2,7 @@ import { Effect } from "effect"
 import type { Pool } from "pg"
 
 import {
-  DocumentPersistenceFailure, type InvoiceSource, type RenderableInvoice, type RenderableProforma,
+  DocumentPersistenceFailure, type InvoiceSource, type RenderableCorrection, type RenderableInvoice, type RenderableProforma,
 } from "../../cube/invoicing/documents/index.ts"
 import { artifactText } from "./postgres-artifact-rows.ts"
 import { createPostgresArtifactRepository } from "./postgres-artifact-repository.ts"
@@ -52,5 +52,21 @@ export const createPostgresInvoiceSource = (pool: Pool): InvoiceSource => {
       "SELECT id FROM proformas WHERE organization_id = $1 AND sealed = 1 ORDER BY issued_at, id",
       organizationId,
     ),
+    // The correction snapshot carries no branding; the original invoice's is the one the buyer already received.
+    findCorrection: (organizationId, correctionId) => store.transaction((transaction) => Effect.gen(function*() {
+      const correction = yield* transaction.findCorrection(organizationId, correctionId)
+      if (correction === undefined) return undefined
+      const original = yield* transaction.findIssuedInvoice(organizationId, correction.originalInvoiceId)
+      if (original === undefined) return undefined
+      const renderable: RenderableCorrection = {
+        id: correction.id, organizationId: correction.organizationId, series: correction.series, number: correction.number,
+        issueDate: correction.issueDate, dueDate: null, issuedAt: correction.issuedAt, currency: correction.currency,
+        notes: null, issuer: { ...correction.issuer, branding: original.issuer.branding }, customer: correction.customer,
+        lines: correction.lines, vatBreakdown: correction.vatBreakdown, totalExcludingVat: correction.totalExcludingVat,
+        vatTotal: correction.vatTotal, totalIncludingVat: correction.totalIncludingVat, reason: correction.reason,
+        original: { series: original.series, number: original.number, issueDate: original.issueDate },
+      }
+      return renderable
+    })).pipe(Effect.mapError(() => failure("find source correction"))),
   }
 }

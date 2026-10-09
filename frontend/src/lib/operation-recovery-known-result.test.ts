@@ -41,6 +41,14 @@ void test("an issued proforma the screen could not open links to the proforma re
   assert.match(notice.title, /Proforma a fost emisă/)
 })
 
+void test("a storno issued under a lost answer links to the storno screen", () => {
+  const notice = knownResultNotice({ kind: "correction", id: "cor 1", effectsError: new Error("navigare") })
+  assert.ok(notice !== undefined)
+  assert.equal(notice.link?.href, "/corrections/cor%201")
+  assert.equal(notice.replay, undefined)
+  assert.match(notice.title, /Documentul storno a fost emis/)
+})
+
 const record = (operation: RecoveryOperation): RecoveryRecord => ({
   version: 1, operation, key: "key-1", request: { kind: "create-draft", body: {} },
   fingerprint: "fingerprint:1", createdAt: "2026-01-01T00:00:00.000Z",
@@ -51,6 +59,7 @@ const record = (operation: RecoveryOperation): RecoveryRecord => ({
 void test("every operation the journal can hold has a title of its own", () => {
   const operations: ReadonlyArray<RecoveryOperation> = [
     "create-draft", "issue-invoice", "create-proforma", "convert-proforma-invoice", "convert-proforma-draft",
+    "create-correction",
   ]
   const titles = operations.map((operation) => recoveryNotice({ kind: "record", record: record(operation) })?.title)
   // No blank card, and no two operations sharing one wording.

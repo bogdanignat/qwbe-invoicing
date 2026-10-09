@@ -52,6 +52,10 @@ input.control:hover, select.control:hover, textarea.control:hover { border-color
 .draft-item-main { display: grid; gap: .15rem; }
 .draft-item small { color: var(--color-invoice-muted); }
 .draft-item-actions { display: flex; gap: .5rem; margin-left: auto; }
+.draft-item.reversal, .draft-item.reversal strong { color: var(--color-invoice-muted); }
+.payment-totals { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .6rem 2rem; margin: 0 0 1rem; }
+.payment-totals dt { color: var(--color-invoice-muted); font-size: .72rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.payment-totals dd { margin: .15rem 0 0; font-weight: 700; font-variant-numeric: tabular-nums; }
 .setup-note { margin: 0; padding: 1.25rem; border-left: 3px solid var(--color-invoice-primary-hover); border-radius: var(--radius-invoice-control); color: var(--color-invoice-muted); background: var(--color-invoice-secondary-surface); line-height: 1.6; }
 @media (max-width: 900px) {
   .authoring-layout { grid-template-columns: 1fr; }

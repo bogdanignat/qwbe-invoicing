@@ -1,5 +1,5 @@
 import type { DraftInvoice } from "./draft-models.ts"
-import type { IssuedInvoice } from "./document-snapshot.ts"
+import type { CorrectionDocument, IssuedInvoice } from "./document-snapshot.ts"
 import type { ProformaIdentity } from "./proforma-replay-client.ts"
 import type { RecoveryRequest } from "./operation-recovery-types.ts"
 
@@ -18,6 +18,7 @@ export interface ReplayClient {
   readonly replayProformaIssuance: (csrfToken: string, body: unknown, idempotencyKey: string) => Promise<ProformaIdentity>
   readonly replayInvoiceFromProforma: (csrfToken: string, proformaId: string, body: unknown, idempotencyKey: string) => Promise<IssuedInvoice>
   readonly replayDraftFromProforma: (csrfToken: string, proformaId: string, body: unknown, idempotencyKey: string) => Promise<DraftInvoice>
+  readonly replayCorrection: (csrfToken: string, invoiceId: string, body: unknown, idempotencyKey: string) => Promise<CorrectionDocument>
 }
 
 /**
@@ -34,6 +35,8 @@ export type ReplayResult =
   | { readonly kind: "draft"; readonly draft: DraftInvoice; readonly sourceProformaId?: string }
   | { readonly kind: "issued"; readonly invoice: IssuedInvoice; readonly sourceProformaId?: string }
   | { readonly kind: "proforma"; readonly proforma: ProformaIdentity }
+  /** A storno is its own document; the invoice it reverses is named so its screen can be refreshed. */
+  | { readonly kind: "correction"; readonly correction: CorrectionDocument; readonly invoiceId: string }
 
 export const sendStoredRequest = async (
   client: ReplayClient,
@@ -61,6 +64,12 @@ export const sendStoredRequest = async (
         kind: "draft",
         draft: await client.replayDraftFromProforma(csrfToken, request.proformaId, request.body, idempotencyKey),
         sourceProformaId: request.proformaId,
+      }
+    case "create-correction":
+      return {
+        kind: "correction",
+        correction: await client.replayCorrection(csrfToken, request.invoiceId, request.body, idempotencyKey),
+        invoiceId: request.invoiceId,
       }
   }
 }

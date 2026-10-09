@@ -3,8 +3,8 @@ import test from "node:test"
 
 import { ApiFailure } from "./api-errors.ts"
 import type { DraftInvoice } from "./draft-models.ts"
-import type { IssuedInvoice } from "./document-snapshot.ts"
-import { createOperationReplay, REPLAY_SETTLED } from "./operation-replay.ts"
+import type { CorrectionDocument, IssuedInvoice } from "./document-snapshot.ts"
+import { createOperationReplay, REPLAY_SETTLED, replayKnownResult } from "./operation-replay.ts"
 import type { ReplayClient } from "./operation-replay-requests.ts"
 import type { ProformaIdentity } from "./proforma-replay-client.ts"
 import type { RecoveryPort } from "./operation-recovery-port.ts"
@@ -50,6 +50,10 @@ const issuedInvoice: IssuedInvoice = {
 }
 
 const proforma: ProformaIdentity = { id: "prf-1" }
+
+const correction: CorrectionDocument = {
+  ...issuedInvoice, id: "cor-1", number: 13, originalInvoiceId: "inv-1", reason: "Anulare",
+}
 
 /** Issuing a stored draft is still the "issue-invoice" operation: the request kind names the call, not the family. */
 const operationOf = (kind: RecoveryRequest["kind"]): RecoveryOperation =>
@@ -113,6 +117,10 @@ const setup = (client: Partial<ReplayClient>, effectsFail?: Error): World => {
         calls.push({ method: `replayDraftFromProforma:${id}`, key, body })
         return (client.replayDraftFromProforma ?? unscripted("replayDraftFromProforma"))(csrfToken, id, body, key)
       },
+      replayCorrection: async (csrfToken, id, body, key) => {
+        calls.push({ method: `replayCorrection:${id}`, key, body })
+        return (client.replayCorrection ?? unscripted("replayCorrection"))(csrfToken, id, body, key)
+      },
     },
     recovery,
     csrfToken: () => "csrf-token",
@@ -130,6 +138,10 @@ const setup = (client: Partial<ReplayClient>, effectsFail?: Error): World => {
       },
       onProforma: (issued) => {
         effects.push(`onProforma:${issued.id}`)
+        if (effectsFail !== undefined) throw effectsFail
+      },
+      onCorrection: (issued, invoiceId) => {
+        effects.push(`onCorrection:${issued.id}:of:${invoiceId}`)
         if (effectsFail !== undefined) throw effectsFail
       },
     },
@@ -218,6 +230,25 @@ void test("a proforma replay whose navigation throws is still a confirmed profor
   assert.equal(outcome.kind, "proforma")
   assert.equal(outcome.effectsError, navigation)
   assert.deepEqual(world.journal, ["resolve:key-1"])
+})
+
+void test("a stored storno replays the stored body to the invoice it names and is followed as a storno", async () => {
+  const body = { reason: "Anulare", issueDate: "2026-01-01" }
+  const world = setup({ replayCorrection: () => Promise.resolve(correction) })
+  const outcome = await world.replay(storedRecord({ kind: "create-correction", invoiceId: "inv-1", body }))
+  assert.equal(outcome.kind, "correction")
+  assert.deepEqual(world.calls, [{ method: "replayCorrection:inv-1", key: "key-1", body }])
+  assert.deepEqual(world.effects, ["onCorrection:cor-1:of:inv-1"])
+  assert.deepEqual(world.journal, ["resolve:key-1"])
+})
+
+void test("a storno replay whose navigation throws is still a confirmed storno, linked as one", async () => {
+  const navigation = new Error("router.push a eșuat")
+  const world = setup({ replayCorrection: () => Promise.resolve(correction) }, navigation)
+  const outcome = await world.replay(storedRecord({ kind: "create-correction", invoiceId: "inv-1", body: {} }))
+  assert.equal(outcome.kind, "correction")
+  assert.equal(outcome.effectsError, navigation)
+  assert.deepEqual(replayKnownResult(outcome), { kind: "correction", id: "cor-1", effectsError: navigation })
 })
 
 void test("a spent key on a conversion is evidence, not a reason to convert again", async () => {

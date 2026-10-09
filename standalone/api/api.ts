@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto"
+
 import { HttpApiBuilder, HttpServer } from "@effect/platform"
 import { Effect, Layer } from "effect"
 
@@ -26,6 +28,9 @@ const documentsGroup = (runtime: ApiRuntime) => {
     .handle("renderProformaPdf", d.renderProformaPdf)
     .handleRaw("downloadProformaPdf", ({ path }) => use((s) => s.documents.downloadProforma(path.proformaId)).pipe(
       Effect.map(({ artifact, bytes }) => pdfResponse("proforma", path.proformaId, bytes, artifact.sha256)),
+      Effect.mapError(documentErrors("DocumentNotFound"))))
+    .handleRaw("downloadCorrectionPdf", ({ path }) => use((s) => s.documents.renderCorrection(path.id)).pipe(
+      Effect.map(({ bytes }) => pdfResponse("correction", path.id, bytes, createHash("sha256").update(bytes).digest("hex"))),
       Effect.mapError(documentErrors("DocumentNotFound")))))
 }
 

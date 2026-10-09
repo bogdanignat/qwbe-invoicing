@@ -1,7 +1,9 @@
 import { romanianCountyName } from "../../cube/invoicing/index.ts"
-import type { RenderableInvoice, RenderableParty, RenderableProforma } from "../../cube/invoicing/documents/index.ts"
+import type {
+  RenderableCorrection, RenderableInvoice, RenderableParty, RenderableProforma,
+} from "../../cube/invoicing/documents/index.ts"
 
-export type RenderableDocument = RenderableInvoice | RenderableProforma
+export type RenderableDocument = RenderableInvoice | RenderableProforma | RenderableCorrection
 export type RenderableLine = RenderableInvoice["lines"][number]
 
 export const formatAmount = (value: string): string => {

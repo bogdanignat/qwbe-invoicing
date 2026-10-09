@@ -1,6 +1,6 @@
 import { ApiFailure } from "./api-errors.ts"
 import type { DraftInvoice } from "./draft-models.ts"
-import type { IssuedInvoice } from "./document-snapshot.ts"
+import type { CorrectionDocument, IssuedInvoice } from "./document-snapshot.ts"
 import { isLostResponse } from "./draft-reconciliation.ts"
 import { isRecoveryConflict, type RecoveryPort } from "./operation-recovery-port.ts"
 import { sendStoredRequest, type ReplayClient, type ReplayResult } from "./operation-replay-requests.ts"
@@ -30,6 +30,8 @@ export interface ReplayEffects {
   readonly onDraft: (draft: DraftInvoice, sourceProformaId: string | undefined) => void
   readonly onIssued: (invoice: IssuedInvoice, sourceProformaId: string | undefined) => void
   readonly onProforma: (proforma: ProformaIdentity) => void
+  /** The storno the server holds, and the invoice it reverses: both screens are now out of date. */
+  readonly onCorrection: (correction: CorrectionDocument, invoiceId: string) => void
 }
 
 export type ReplayOutcome =
@@ -42,6 +44,10 @@ export type ReplayOutcome =
   | { readonly kind: "draft"; readonly draft: DraftInvoice; readonly effectsError?: unknown }
   | { readonly kind: "issued"; readonly invoice: IssuedInvoice; readonly effectsError?: unknown }
   | { readonly kind: "proforma"; readonly proforma: ProformaIdentity; readonly effectsError?: unknown }
+  | {
+    readonly kind: "correction"; readonly correction: CorrectionDocument; readonly invoiceId: string
+    readonly effectsError?: unknown
+  }
   | { readonly kind: "unknown"; readonly error: unknown }
   | { readonly kind: "conflict"; readonly error: unknown }
   | { readonly kind: "error"; readonly error: unknown }
@@ -65,16 +71,19 @@ export const replayKnownResult = (outcome: ReplayOutcome | undefined): KnownWrit
   if (outcome.kind === "draft") return { kind: "draft", id: outcome.draft.id, effectsError: outcome.effectsError }
   if (outcome.kind === "issued") return { kind: "invoice", id: outcome.invoice.id, effectsError: outcome.effectsError }
   if (outcome.kind === "proforma") return { kind: "proforma", id: outcome.proforma.id, effectsError: outcome.effectsError }
+  if (outcome.kind === "correction") return { kind: "correction", id: outcome.correction.id, effectsError: outcome.effectsError }
   return undefined
 }
 
 /** The document is confirmed either way: the failure of the follow-up travels alongside it, never instead of it. */
-const withEffectsError = (result: ReplayResult, effectsError: unknown): ReplayOutcome =>
-  result.kind === "draft"
-    ? { kind: "draft", draft: result.draft, effectsError }
-    : result.kind === "issued"
-      ? { kind: "issued", invoice: result.invoice, effectsError }
-      : { kind: "proforma", proforma: result.proforma, effectsError }
+const withEffectsError = (result: ReplayResult, effectsError: unknown): ReplayOutcome => {
+  switch (result.kind) {
+    case "draft": return { kind: "draft", draft: result.draft, effectsError }
+    case "issued": return { kind: "issued", invoice: result.invoice, effectsError }
+    case "proforma": return { kind: "proforma", proforma: result.proforma, effectsError }
+    case "correction": return { kind: "correction", correction: result.correction, invoiceId: result.invoiceId, effectsError }
+  }
+}
 
 export const createOperationReplay = (dependencies: ReplayDependencies) => {
   let inFlight = false
@@ -82,7 +91,8 @@ export const createOperationReplay = (dependencies: ReplayDependencies) => {
   const applyEffects = (result: ReplayResult): void => {
     if (result.kind === "draft") dependencies.effects.onDraft(result.draft, result.sourceProformaId)
     else if (result.kind === "issued") dependencies.effects.onIssued(result.invoice, result.sourceProformaId)
-    else dependencies.effects.onProforma(result.proforma)
+    else if (result.kind === "proforma") dependencies.effects.onProforma(result.proforma)
+    else dependencies.effects.onCorrection(result.correction, result.invoiceId)
   }
 
   const replay = async (record: RecoveryRecord): Promise<ReplayOutcome> => {
