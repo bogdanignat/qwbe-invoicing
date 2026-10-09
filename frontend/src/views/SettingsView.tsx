@@ -24,7 +24,10 @@ export const SettingsView = () => {
   const series = useDocumentSeries()
   const { load } = issuer
   return <PrivateScreen shell={shell}>
-    <Page title="Date firmă" eyebrow="Configurare emitent" actions={<SettingsHelpDialog />}>
+    <Page title="Date firmă" eyebrow="Configurare emitent" actions={<>
+      <a className="button secondary" href="/api/qwbe/docs" target="_blank" rel="noopener noreferrer">Documentație API</a>
+      <SettingsHelpDialog />
+    </>}>
       {shell.error === undefined ? null : <ErrorAlert error={shell.error} />}
       {load.kind === "loading" ? <Loading label="Se încarcă datele firmei…" /> : null}
       {load.kind === "error" ? <ErrorAlert error={load.error} onRetry={issuer.retry} /> : null}

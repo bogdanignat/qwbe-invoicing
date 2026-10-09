@@ -29,6 +29,8 @@ stayed on the backend; T-1649 switched traffic to `frontend` and removed `web/`.
   size caps and dependency rules apply to `frontend/src` too.
 - Browser requests use `/api/qwbe/...`. A single transport mapping preserves the
   logical API paths. Next route handlers contact the fixed `INVOICING_API_URL`.
+  The one exception is `/api/qwbe/docs`: it serves the backend's Swagger page
+  (`GET /api`) as HTML under its own CSP, read-only.
 - The backend owns authentication and session storage. A token is entered only in
   the unlock form and sent in the login request; it is not stored in browser storage,
   QueryClient, a frontend environment variable, or a bearer cookie.
