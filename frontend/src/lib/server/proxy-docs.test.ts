@@ -40,7 +40,8 @@ void test("serves the page with the backend's own strict policy", async () => {
 })
 
 void test("sends a caller without a session to the login page, keeping the cookie the backend clears", async () => {
-  const cleared = "qwbe_session=; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0"
+  // The shape the backend sends and proxyResponseHeaders accepts (see proxy.test.ts).
+  const cleared = "qwbe_session=; Path=/api; HttpOnly; SameSite=Strict; Secure; Expires=Thu, 01 Jan 1970 00:00:00 GMT; Max-Age=0"
   const upstream = stub(() => new Response(JSON.stringify({ error: "AuthenticationRequired" }), {
     status: 401, headers: { "content-type": "application/json", "set-cookie": cleared },
   }))

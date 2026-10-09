@@ -42,7 +42,7 @@ export const handleApiDocsRequest = async (
     // The backend clears an invalid session cookie on 401; the redirect keeps that.
     const headers = withPolicy(new Headers({ location: "/unlock" }))
     for (const cookie of response.headers.getSetCookie()) headers.append("set-cookie", cookie)
-    await response.body?.cancel()
+    void response.body?.cancel().catch(() => {})
     return new Response(null, { status: 303, headers })
   }
   return new Response(response.body, { status: response.status, headers: withPolicy(new Headers(response.headers)) })

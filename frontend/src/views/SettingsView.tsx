@@ -25,7 +25,7 @@ export const SettingsView = () => {
   const { load } = issuer
   return <PrivateScreen shell={shell}>
     <Page title="Date firmă" eyebrow="Configurare emitent" actions={<>
-      <a className="button secondary" href="/api/qwbe/docs" target="_blank" rel="noopener noreferrer">Documentație API</a>
+      <a className="button secondary" href="/api/qwbe/docs" target="_blank" rel="noopener noreferrer">Documentație API<span className="sr-only"> (se deschide într-o fereastră nouă)</span></a>
       <SettingsHelpDialog />
     </>}>
       {shell.error === undefined ? null : <ErrorAlert error={shell.error} />}
