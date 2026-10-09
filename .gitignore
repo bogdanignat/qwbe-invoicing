@@ -12,3 +12,7 @@ data/
 frontend/.next/
 frontend/next-env.d.ts
 frontend/*.tsbuildinfo
+
+# Arhitectura (contract, analize): sursa e personal-hub (architecture-files), nu git; restore cu architecture-report restore
+/architecture/
+/.architecture/

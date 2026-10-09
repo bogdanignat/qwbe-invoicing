@@ -208,9 +208,9 @@ introspection excludes the ledger and sees triggers and constraints.
    `pg_password` secret, no `--locale=C` init, no separate preview volume.
    `compose.yaml` (dev) is wired and `config --quiet` is valid.
 2. The `pg` boundary rule is **not** written: `dependency-cruiser.config.cjs`,
-   `architecture/contract.json` and the `probes/boundary-gate.test.mjs` fixture
+   `.architecture/contract.json` and the `probes/boundary-gate.test.mjs` fixture
    are untouched. The gate passes today only because no cube imports `pg`.
-3. `architecture/contract.json` decision line for foundation-owned functions, and
+3. `.architecture/contract.json` decision line for foundation-owned functions, and
    `FOUNDATION.md` / `PRODUCT.md` / `docs/LOCAL_DEVELOPMENT.md` updates: not done.
 4. No real `docker build` of the shipped image, so `postgresql16-client=16.15-r0`
    is still only `--simulate`-verified; no boot smoke on any compose file.
