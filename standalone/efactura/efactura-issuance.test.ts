@@ -267,24 +267,20 @@ void test("a correction downloads as the credit note that reverses its invoice",
   } finally { await value.close() }
 })
 
-void test("the export refuses a document e-Factura cannot carry, and says why", async () => {
+void test("a line description e-Factura cannot carry is refused when it is entered, not at export", async () => {
   const value = await fixture("export_refuse")
   try {
-    // BR-RO-L100 caps a line description at 100 characters. The invoicing domain
-    // caps nothing at input (T-1390), so this invoice is issued, stored and
-    // immutable — and only the export can refuse it. The refusal has to arrive
-    // as the reason it is, not as an opaque failure: the caller is being told
-    // that a document already in the books cannot be sent.
+    // BR-RO-L100 caps an item name at 100 characters. The domain enforces it at input
+    // (T-1390), so an issued invoice can no longer hold a description the export
+    // would refuse; the export's own refusal stays covered in cube/efactura.
     const issued = await value.call("POST", "/api/invoices", {
       customer: buyer, series: "INV", issueDate: "2026-09-05", dueDate: "2026-09-20", currency: "RON",
       lines: [{ ...line, description: "Servicii ".repeat(20) }],
     }, "efactura-too-long")
-    assert.equal(issued.status, 200)
-    const response = await value.call("GET", `/api/invoices/${(issued.body as { id: string }).id}/efactura.xml`, undefined)
-    assert.equal(response.status, 400)
-    const body = response.body as { error: string; issues: ReadonlyArray<string> }
+    assert.equal(issued.status, 400)
+    const body = issued.body as { error: string; issues: ReadonlyArray<string> }
     assert.equal(body.error, "ValidationFailure")
-    assert.deepEqual(body.issues, ["lines[0].name exceeds 100 characters after normalize-space (BR-RO-L100)"])
+    assert.deepEqual(body.issues, ["description must be at most 100 characters"])
   } finally { await value.close() }
 })
 

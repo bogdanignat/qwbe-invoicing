@@ -6,6 +6,7 @@ import { ErrorAlert } from "../AsyncState.tsx"
 import { Field } from "../ui/Field.tsx"
 import { FieldIssue } from "./FieldIssue.tsx"
 import { Input } from "../ui/Input.tsx"
+import { CIUS_TEXT_LIMITS } from "../../lib/cius-text-limits.ts"
 import { identifierLabel } from "../../lib/document-authoring-transitions.ts"
 import { useEditorHeadingFocus } from "../../hooks/use-editor-heading-focus.ts"
 import { useRefusedFieldFocus } from "../../hooks/use-refused-field-focus.ts"
@@ -54,7 +55,7 @@ export const CustomerEditorSection = (props: CustomerEditorSectionProps) => {
             onChange={() => { props.onPartyTypeChange("individual") }} /><span>Persoană fizică (PF)</span></label>
         </div></fieldset>
         <Field label={company ? "Denumire" : "Nume complet"} required>
-          <Input required disabled={pending} value={form.name} {...aria("name")}
+          <Input required disabled={pending} value={form.name} maxLength={CIUS_TEXT_LIMITS.partyName} {...aria("name")}
             onChange={(event) => { props.onChange({ name: event.currentTarget.value }) }} />
           <FieldIssue issue={issue} field="name" form={CUSTOMER_FORM} />
         </Field>

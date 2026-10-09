@@ -3,6 +3,7 @@
 import type { InvoiceAuthoringForm, PartyType } from "../../lib/invoice-authoring-model.ts"
 import { Field } from "../ui/Field.tsx"
 import { Input } from "../ui/Input.tsx"
+import { CIUS_TEXT_LIMITS } from "../../lib/cius-text-limits.ts"
 import { Select } from "../ui/Select.tsx"
 import { identifierLabel } from "../../lib/document-authoring-transitions.ts"
 import { ROMANIAN_COUNTIES } from "../../lib/romanian-counties.ts"
@@ -29,7 +30,7 @@ export const BuyerOneTimeFields = (props: BuyerOneTimeFieldsProps) => {
       <label><input type="radio" name="partyType" value="individual" checked={form.partyType === "individual"} disabled={disabled} onChange={() => { props.onPartyTypeChange("individual") }} /><span>Persoană fizică (PF)</span></label>
     </div></fieldset>
     <Field label={form.partyType === "company" ? "Denumire" : "Nume complet"} required>
-      <Input required disabled={disabled} value={form.name} onChange={(event) => { props.onChange({ name: event.currentTarget.value }) }} />
+      <Input required disabled={disabled} value={form.name} maxLength={CIUS_TEXT_LIMITS.partyName} onChange={(event) => { props.onChange({ name: event.currentTarget.value }) }} />
     </Field>
     <Field label={identifierLabel(form.partyType)} optional={form.partyType === "individual"} required={form.partyType === "company"}>
       <Input value={fiscalIdentifier} required={form.partyType === "company"} disabled={disabled}
@@ -43,10 +44,10 @@ export const BuyerOneTimeFields = (props: BuyerOneTimeFieldsProps) => {
       : null}
     <Field label="Țară"><Select value="RO" disabled><option value="RO">România (RO)</option></Select></Field>
     <Field label="Localitate" required>
-      <Input required disabled={disabled} value={form.city} onChange={(event) => { props.onChange({ city: event.currentTarget.value }) }} />
+      <Input required disabled={disabled} value={form.city} maxLength={CIUS_TEXT_LIMITS.city} onChange={(event) => { props.onChange({ city: event.currentTarget.value }) }} />
     </Field>
     <Field label="Stradă și număr" required className="span-two">
-      <Input required disabled={disabled} value={form.street} onChange={(event) => { props.onChange({ street: event.currentTarget.value }) }} />
+      <Input required disabled={disabled} value={form.street} maxLength={CIUS_TEXT_LIMITS.street} onChange={(event) => { props.onChange({ street: event.currentTarget.value }) }} />
     </Field>
     <Field label="Județ" required>
       <Select required disabled={disabled} value={form.county} onChange={(event) => { props.onCountyChange(event.currentTarget.value) }}>
@@ -63,7 +64,7 @@ export const BuyerOneTimeFields = (props: BuyerOneTimeFieldsProps) => {
       </Field>
       : null}
     <Field label="Cod poștal" optional>
-      <Input disabled={disabled} value={form.postalCode} onChange={(event) => { props.onChange({ postalCode: event.currentTarget.value }) }} />
+      <Input disabled={disabled} value={form.postalCode} maxLength={CIUS_TEXT_LIMITS.postalCode} onChange={(event) => { props.onChange({ postalCode: event.currentTarget.value }) }} />
     </Field>
   </div>
 }

@@ -37,6 +37,28 @@ export const validateDocumentSeries = (documentSeries: DocumentSeries): void => 
   if (issues.length > 0) throw new ValidationFailure({ issues })
 }
 
+/** e-Factura counts a text the way the CIUS-RO Schematron does: XPath normalize-space
+ * (only space, tab, CR and LF collapse or trim; a no-break space is a character) and
+ * characters rather than UTF-16 units. Same expression as `normalizeSpace` and
+ * `characterCount` in cube/efactura/decimals.ts, which this cube may not import. */
+export const ciusTextLength = (value: string): number =>
+  Array.from(value.replace(/[\t\n\r ]+/gu, " ").replace(/^ | $/gu, "")).length
+
+/** BR-RO-L200 (party name), L150 (street), L050 (city), L020 (postal code), L100 (item name). */
+export const CIUS_TEXT_LIMITS = { partyName: 200, street: 150, city: 50, postalCode: 20, lineDescription: 100 } as const
+
+export const textLimit = (field: string, value: string | undefined, maximum: number, issues: Array<string>): void => {
+  if (value !== undefined && ciusTextLength(value) > maximum) issues.push(`${field} must be at most ${String(maximum)} characters`)
+}
+
+/** Only where a line description is entered: totals are recomputed on read and on storno,
+ * and a description stored before the limit must stay readable and correctable. */
+export const validateLineDescription = (description: string): void => {
+  const issues: Array<string> = []
+  textLimit("description", description.trim(), CIUS_TEXT_LIMITS.lineDescription, issues)
+  if (issues.length > 0) throw new ValidationFailure({ issues })
+}
+
 const freeText = (field: string, value: string, maximum: number, issues: Array<string>, newlines = false): void => {
   if (value.trim().length === 0) issues.push(`${field} is required`)
   if (value !== value.trim()) issues.push(`${field} must not have surrounding whitespace`)

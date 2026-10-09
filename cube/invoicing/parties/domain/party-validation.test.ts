@@ -67,3 +67,25 @@ void test("publishes all ISO Romanian counties and validates county-sector coupl
   assert.throws(() => { validateParty({ ...party, address: { ...party.address, county: "RO-IS" } }) }, ValidationFailure)
   assert.throws(() => { validateParty({ ...party, address: { ...withoutSector, county: "Iași" } }) }, ValidationFailure)
 })
+
+void test("bounds the party texts e-Factura carries, counted the way the CIUS-RO Schematron counts", () => {
+  const party = {
+    name: "Exemplu SRL", fiscalIdentifier: "45561046",
+    address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1", county: "RO-BT" },
+  }
+  const issues = (value: typeof party & { address: { postalCode?: string } }): ReadonlyArray<string> => {
+    try { validateParty(value); return [] } catch (error) { return error instanceof ValidationFailure ? error.issues : [String(error)] }
+  }
+  assert.deepEqual(issues({ ...party, name: "a".repeat(200) }), [])
+  assert.deepEqual(issues({ ...party, name: "a".repeat(201) }), ["name must be at most 200 characters"])
+  // Characters, not UTF-16 units: 200 emoji are 400 units and still 200 characters.
+  assert.deepEqual(issues({ ...party, name: "😀".repeat(200) }), [])
+  // normalize-space trims only space, tab, CR and LF: a trailing no-break space is a character.
+  assert.deepEqual(issues({ ...party, name: `${"a".repeat(200)}\u00A0` }), ["name must be at most 200 characters"])
+  // ...while runs of XML whitespace collapse to one and the ends are trimmed.
+  assert.deepEqual(issues({ ...party, name: ` ${"a ".repeat(99)}\t\t\n a ` }), [])
+  assert.deepEqual(issues({ ...party, address: { ...party.address, street: "s".repeat(151) } }), ["address.street must be at most 150 characters"])
+  assert.deepEqual(issues({ ...party, address: { ...party.address, city: "c".repeat(51) } }), ["address.city must be at most 50 characters"])
+  assert.deepEqual(issues({ ...party, address: { ...party.address, postalCode: "7".repeat(20) } }), [])
+  assert.deepEqual(issues({ ...party, address: { ...party.address, postalCode: "7".repeat(21) } }), ["address.postalCode must be at most 20 characters"])
+})
