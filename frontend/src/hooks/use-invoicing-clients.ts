@@ -9,6 +9,8 @@ import { createDraftsClient } from "../lib/drafts-client.ts"
 import type { DraftsClient } from "../lib/drafts-client.ts"
 import { createAuthoringReferenceClient } from "../lib/authoring-reference-client.ts"
 import type { AuthoringReferenceClient } from "../lib/authoring-reference-client.ts"
+import { createPaymentsClient } from "../lib/payments-client.ts"
+import type { PaymentsClient } from "../lib/payments-client.ts"
 import { createProformaReplayClient } from "../lib/proforma-replay-client.ts"
 import type { ProformaReplayClient } from "../lib/proforma-replay-client.ts"
 import { createProformasClient } from "../lib/proformas-client.ts"
@@ -38,6 +40,8 @@ export interface InvoicingClients {
   readonly proformaReplay: ProformaReplayClient
   /** The settings screen's writes: the issuer profile and one new document series. */
   readonly settings: SettingsClient
+  /** An issued invoice's payment ledger: the summary and its two writes. */
+  readonly payments: PaymentsClient
 }
 
 export const useInvoicingClients = (): InvoicingClients => {
@@ -51,5 +55,6 @@ export const useInvoicingClients = (): InvoicingClients => {
     proformas: createProformasClient(transport),
     proformaReplay: createProformaReplayClient(transport),
     settings: createSettingsClient(transport),
+    payments: createPaymentsClient(transport),
   }), [transport])
 }

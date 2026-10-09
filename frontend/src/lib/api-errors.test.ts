@@ -66,6 +66,8 @@ void test("a domain conflict is read as Romanian, not as the bare `DomainConflic
     // (standalone/storage/sqlite-customers.ts, sqlite-catalog.ts, sqlite-rows.ts).
     "customer_has_open_drafts", "customer_not_found", "customer_id_taken",
     "product_preset_id_taken", "persistence_conflict",
+    // A reversal of a payment another session already reversed.
+    "payment_already_reversed",
   ]
   for (const code of conflicts) {
     const failure = parseApiFailure({ error: "DomainConflict", code }, 409)

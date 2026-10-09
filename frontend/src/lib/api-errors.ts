@@ -73,6 +73,7 @@ const failureMessages: Readonly<Record<string, string>> = {
   customer_id_taken: "Clientul nu a putut fi salvat: identificatorul este deja folosit. Reîncarcă lista de clienți și încearcă din nou.",
   product_preset_id_taken: "Produsul nu a putut fi salvat: identificatorul este deja folosit. Reîncarcă lista de produse și încearcă din nou.",
   persistence_conflict: "Datele s-au schimbat în paralel. Reîncarcă pagina și încearcă din nou.",
+  payment_already_reversed: "Plata a fost deja anulată.",
 }
 
 /**

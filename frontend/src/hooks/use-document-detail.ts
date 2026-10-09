@@ -1,8 +1,8 @@
-import { useQuery } from "@tanstack/react-query"
+import { queryOptions, useQuery } from "@tanstack/react-query"
 
 import { useAuth } from "./auth-context.ts"
 import { useDocumentDownload, type DocumentDownloadAction } from "./use-document-download.ts"
-import { useInvoicingClients } from "./use-invoicing-clients.ts"
+import { useInvoicingClients, type InvoicingClients } from "./use-invoicing-clients.ts"
 import { isTransientFailure } from "../lib/api-errors.ts"
 import { documentFilename } from "../lib/browser-download.ts"
 import { projectCorrectionDocument, projectIssuedInvoice, type DocumentSnapshotView } from "../lib/document-projection.ts"
@@ -28,14 +28,17 @@ export interface DocumentDetailModel {
 export const retryAction = (error: unknown, refetch: () => void): (() => void) | undefined =>
   isTransientFailure(error) ? refetch : undefined
 
+/** One definition of the invoice read, shared by the detail and the payments panel that needs its currency. */
+export const invoiceQueryOptions = (clients: InvoicingClients, id: string, enabled: boolean) => queryOptions({
+  queryKey: ["invoice", id],
+  enabled,
+  queryFn: ({ signal }) => clients.documents.getInvoice(id, signal),
+})
+
 export const useInvoiceDetail = (id: string): DocumentDetailModel => {
   const { status } = useAuth()
   const clients = useInvoicingClients()
-  const query = useQuery({
-    queryKey: ["invoice", id],
-    enabled: status === "authenticated",
-    queryFn: ({ signal }) => clients.documents.getInvoice(id, signal),
-  })
+  const query = useQuery(invoiceQueryOptions(clients, id, status === "authenticated"))
   const invoice = query.data
   const pdf = useDocumentDownload({
     key: "pdf",
