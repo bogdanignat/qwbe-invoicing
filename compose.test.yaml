@@ -9,7 +9,7 @@
 # Nothing here ships and nothing here persists: the cluster lives on tmpfs inside
 # its own compose project, no port is published, no application volume is
 # referenced and `down` is never given `-v`. The dependency volumes are the
-# verifier's, read-write because `pretest` builds the UI into the working tree.
+# verifier's, read-write because `install` populates them.
 #
 # Run:   scripts/verify-docker.sh test
 #        scripts/verify-docker.sh test "node --test standalone/storage/pagination.test.ts"

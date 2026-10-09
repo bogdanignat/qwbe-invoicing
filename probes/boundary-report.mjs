@@ -13,7 +13,7 @@ import { boundaryGateInputs, staticRuleCount } from "./boundary-gate-lib.mjs"
 const SCHEMA_VERSION = 1
 const DEFAULT_TIMEOUT_MS = 60_000
 const DEFAULT_MAX_BUFFER = 16 * 1024 * 1024
-const NON_CUBE_AREAS = ["standalone", "web/src", "frontend/src"]
+const NON_CUBE_AREAS = ["standalone", "frontend/src"]
 // Fingerprinted for audit: every input that can change the reported graph. No
 // timestamp is recorded anywhere, so an unchanged repository hashes identically.
 const SOURCES = [
@@ -34,7 +34,7 @@ Usage: node probes/boundary-report.mjs [--json] [--root <path>] [--timeout <ms>]
 
 Scope
   Cruises exactly the roots, options and rule set of \`pnpm gate:boundaries\`
-  (cube roots from qwbe.config.json plus standalone, web/src, frontend/src;
+  (cube roots from qwbe.config.json plus standalone and frontend/src;
   test files included; no tsconfig), using the dependency-cruiser installed in
   this project. Reports raw counts; it never reports gate success or failure.
 

@@ -95,7 +95,7 @@ void test("a customer held by an open draft says what blocks the deletion", () =
   assert.equal(isTransientFailure(failure), false)
 })
 
-void test("a second storno reads as the Vite screen reads it", () => {
+void test("a second storno reads as a conflict with the existing storno", () => {
   const failure = parseApiFailure({
     error: "DomainConflict", code: "invoice_already_corrected", message: "An invoice can have only one full correction document",
   }, 409)

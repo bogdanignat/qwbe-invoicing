@@ -5,7 +5,7 @@ Source snapshot: QWBE mother repository at `a98d9ef` (main, 31 August 2026; prev
 Conformance review against that snapshot: 2 September 2026, section 18
 Package manager: pnpm
 Runtime: Node.js + TypeScript + **Effect 3.x as primary runtime** (`effect`, `@effect/platform`, `@effect/platform-node`) — all cube application logic, host capabilities (Clock, Store, IdGenerator, Auth), and HTTP handling are modelled as `Effect`
-UI: React 19 + TypeScript styled with Tailwind CSS 4, built with Vite and served by the standalone host; Effect owns browser API effects, typed failures, cancellation and concurrency, while TanStack Query integrates server state with React. The boundary remains API-first: every cube use-case has a corresponding authenticated HTTP endpoint, and the UI contains no fiscal business logic
+UI: React 19 + TypeScript styled with Tailwind CSS 4, a Next.js 16 App Router application in `frontend/` that reaches the standalone host only through its BFF under `/api/qwbe/*`; TanStack Query integrates server state with React. The boundary remains API-first: every cube use-case has a corresponding authenticated HTTP endpoint, and the UI contains no fiscal business logic
 
 ## 1. Purpose
 
@@ -372,10 +372,9 @@ Rules:
 - do not create tiny pass-through modules only to manipulate the metric.
 
 The same 6,000-character file cap also covers production TypeScript/JavaScript in
-`standalone/` and `web/`, via `sizeFileRoots`. These are file-only roots, not fake
-cube units: the 40,000-character / 15-file unit caps still apply to each cube's own
-sources. `sizeExcludedDirectories` excludes only the generated `standalone/ui-dist`
-tree; test/spec/test-support sources and ordinary build/dependency directories are
+`standalone/` and `frontend/src/`, via `sizeFileRoots`. These are file-only roots, not
+fake cube units: the 40,000-character / 15-file unit caps still apply to each cube's own
+sources. Test/spec/test-support sources and ordinary build/dependency directories are
 not production measurements. Overlapping roots are deduplicated and invalid roots
 fail the gate. `bin/` and root tooling/config files are outside this extension.
 
@@ -524,21 +523,15 @@ qwbe-invoicing/
 │   └── efactura/               RO e-Factura UBL, CIUS-RO limits, EN 16931 validation
 ├── standalone/                 standalone host and adapters; never packaged
 │   ├── config.ts, failure-log.ts
-│   ├── http/                   server, static UI, SPA route contract, readiness, API docs
+│   ├── http/                   server, security headers, readiness, API docs
 │   ├── auth/                   credentials, browser session, login throttle
 │   ├── api/                    HttpApi contract, schemas, handlers
 │   ├── storage/                PostgreSQL pool and store, row mappers, migration runner, schema fingerprint
 │   ├── documents/              PDF renderer, artifact store and recovery, fonts
 │   ├── efactura/               host mapping into the e-Factura cube
 │   ├── ops/                    CLI, backup, restore
-│   ├── parity/                 host, UI and cube agreement tests
-│   └── ui-dist/                built UI, ignored
-├── web/                        browser UI; never packaged
-│   └── src/                    main.tsx, App.tsx, app.css
-│       ├── lib/                client, models, pure state and fiscal helpers
-│       ├── hooks/              React hooks
-│       ├── components/         ui, layout, document, authoring, invoice, settings, catalog
-│       └── views/              one component per route
+│   └── parity/                 SQLite baseline fixtures for the PostgreSQL schema gate
+├── frontend/                   browser UI: Next App Router, BFF under /api/qwbe; never packaged
 ├── bin/                        CLI entry point and container command
 ├── probes/                     package, persistence, gate, and decoupling checks
 ├── scripts/                    fixtures and local helpers
@@ -615,7 +608,7 @@ Reviewed on 2 September 2026 after the mother's `main` moved from `987e11b` to `
 | One Postgres, one schema per cube, NOLOGIN role per cube, kernel outbox, SQLite removed | QWB-43, QWB-44 | Intentionally separate: since T-1480 standalone persists in its own PostgreSQL 16 database, one `public` schema owned by the application role, with relational tables and triggers. The schema-per-cube layout and the NOLOGIN role per cube are deliberately **not** adopted. Confirmed future mother integration is an external app/sidecar for installation/authentication, not direct persistence in mother Postgres; the integration is not implemented. |
 | `usesBatch` raw-SQL capability (declared, outbox-exempt) | QWB-45 | Not usable as an escape: the role has no `CREATE`, so DDL is refused. |
 | Custom field values under the reserved `custom` key of a row body | QWB-46 | No impact on relational tables. `custom` becomes a reserved column name if the cube ever moves to the six-operation store. |
-| Installer strips a pack's top-level `frontend/`, `dist/`, `build/` | QWB-48 | No impact: the UI lives in `web/` and `standalone/ui-dist`, outside the package. Future external-app integration remains unimplemented. |
+| Installer strips a pack's top-level `frontend/`, `dist/`, `build/` | QWB-48 | No impact: the UI lives in `frontend/`, outside the packaged cubes. Future external-app integration remains unimplemented. |
 | Size caps unchanged at 6,000 / 40,000 / 15 | - | Aligned on 5 September 2026: `qwbe.config.json` is back at 6,000 / 40,000 / 15 after the cube was split into component cubes (registry, drafts, issuance, corrections) and the three files still over 6,000 were cut. Section 10. |
 
 Pre-existing gaps that the pull did not create but that a mounted install would hit first: `create()` returns `handlers: {}`, so the cube serves no HTTP surface under the mother (every endpoint lives in `standalone/api/api.ts`); `CurrentOrganization` is still a standalone-only contract (section 4); `qwbe-core` is still `0.0.0` and private (open decision 10).

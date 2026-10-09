@@ -31,7 +31,7 @@ const STATUS_LABELS: Readonly<Record<PaymentStatus, string>> = {
 
 export type PaymentStatusTone = "muted" | "info" | "positive" | "storno"
 
-/** `overdue` reads like `unpaid`: only the label differs (the Vite panel did the same). */
+/** `overdue` reads like `unpaid`: only the label differs. */
 const STATUS_TONES: Readonly<Record<PaymentStatus, PaymentStatusTone>> = {
   unpaid: "muted",
   partially_paid: "info",

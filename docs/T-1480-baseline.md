@@ -70,13 +70,11 @@ the result back, not by reading SQL by eye.
 | `sqlite-baseline-objects.json` | per plan: tables with columns, generated columns, CHECK expressions, foreign keys (per-FK deferrability), indexes with collations, full DDL, statement order, reference graph |
 | `sqlite-baseline-triggers.json` | all 60 triggers: timing, event, `UPDATE OF` columns, `WHEN`, body, RAISE messages, classification |
 | `sqlite-dialect-behavior.json` | GLOB/NOCASE/`json_valid`/money vectors with the observed SQLite answers |
-| `size-headroom.json` | 543 measured files, code characters and headroom against the 6000 cap |
+| `size-headroom.json` | 543 measured files, code characters and headroom against the 6000 cap (deleted in T-1649) |
 
 `--check` compares only the first three — the golden capture of schema and
-behaviour. `size-headroom.json` is excluded on purpose: it moves with every
-source edit, so checking it would report drift against the very change being
-written. It is refreshed by `--apply` and read as a measurement, not as a
-contract.
+behaviour. `size-headroom.json` was a measurement, never part of `--check`;
+it was deleted in T-1649 together with the parity tests that produced it.
 
 These fixtures and their generator are **temporary**: they hold the SQLite
 behaviour while the PostgreSQL side is written against it. They do not make the

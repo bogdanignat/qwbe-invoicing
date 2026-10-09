@@ -4,13 +4,13 @@
 > (`frontend` service in `compose.yaml`, Traefik labels moved off `app`); the backend
 > is internal and the production bundle routes Caddy to `frontend` with a second,
 > digest-pinned image. The isolated preview below remains for the synthetic fixture.
-> The legacy Vite UI is still built into the backend image, unrouted, until it is removed.
+> The legacy Vite UI (`web/`) and the backend's static UI serving were removed in T-1649.
 
 > **T-1400 phase two (this branch, `feat/T-1400-next-authoring`):** invoice authoring and
 > drafts are now migrated. `/invoices/new` authors a new invoice or draft,
 > `/drafts/[id]` resumes one, and `/invoices` gained a "Factură nouă" CTA plus a cursor-paged
 > drafts section. See the **Authoring and drafts** section below for the design notes and the
-> exact gaps that remain. The existing Vite UI remains operational; nothing is cut over.
+> exact gaps that remain. (The Vite UI stayed operational until T-1649 removed it.)
 
 The new `frontend/` package is an opt-in application in the existing pnpm workspace.
 It provides the unlock screen, session restore/logout, and the invoice register with
@@ -20,8 +20,8 @@ idempotency key and the session epoch guard. Storno is migrated as well (T-1642,
 **Storno** below). **What remains** is the CUI lookup (T-1371) and the cutover (issuing,
 drafts, proformas, the product catalogue, the customer registry and the issuer settings
 are migrated, in the phases described below).
-The existing Vite UI, public API, default Compose/Warden routing and release image
-remain operational. This phase does not switch traffic or remove `web/`.
+Until T-1649 the Vite UI, public API, default Compose/Warden routing and release image
+stayed on the backend; T-1649 switched traffic to `frontend` and removed `web/`.
 
 ## Ownership and request flow
 
@@ -96,7 +96,7 @@ pnpm install --frozen-lockfile
 pnpm verify
 ```
 
-`verify` includes both UI builds, frontend type generation/typecheck, existing and
+`verify` includes the Next build, frontend type generation/typecheck, existing and
 new unit/integration tests, and package/test/size/boundary gates. Pure server modules
 are tested with Node; framework route adapters carry the `server-only` markers.
 The new package declares its own dependencies. No TypeScript path aliases are used;
@@ -250,8 +250,7 @@ Migrated routes: `/proformas` (cursor-paginated register), `/proformas/[id]` (do
 
 ## Master data — products and customers (T-1400 phase four)
 
-Migrated routes: `/products` (the product catalogue, canonical in
-`standalone/http/ui-routes.ts` — not `/product-presets`) and `/customers` (the customer
+Migrated routes: `/products` (the product catalogue — not `/product-presets`) and `/customers` (the customer
 registry). Both shell links are now live; `/settings` followed in phase five, below.
 
 - Master-data writes live in their own client (`lib/registry-client.ts`), separate from the
@@ -500,7 +499,7 @@ On success the screen opens the storno detail (`/corrections/{id}`), which shows
 values and offers **Descarcă PDF** (`GET /api/corrections/{id}/pdf`, rendered on request,
 not persisted) and **Descarcă XML e-Factura**. On a reversed invoice the payment form is
 replaced by a note naming the storno and what was already collected; reversing a payment
-stays available. Refunds, partial stornos and the Vite screen are out of scope.
+stays available. Refunds and partial stornos are out of scope.
 
 ## Isolated container preview
 
@@ -566,11 +565,10 @@ introduced later, its runtime copy must be added explicitly.
 
 Phase-one images are local `qwbe-invoicing:t1400-preview` and
 `qwbe-invoicing-frontend:t1400-preview`. They are not automatically published.
-The backend Dockerfile already accounts for the new workspace manifests while
-continuing to build and serve the legacy UI.
+The backend Dockerfile already accounts for the new workspace manifests; since
+T-1649 it builds no UI.
 
-Later migration steps: port each existing business screen, preserve T-1399 and
-encoded IDs/idempotency/download behavior, redirect UI `/products` to `/catalog`,
-then remove Vite/static serving from the backend. The final cutover must update
-both Caddy and Traefik routing and publish two coordinated image digests. None of
-those traffic or release changes is part of this preview phase.
+Later migration steps (done in T-1649): port each existing business screen, preserve
+T-1399 and encoded IDs/idempotency/download behavior, then remove the Vite UI and its
+static serving from the backend. The cutover updated both Caddy and Traefik routing and
+publishes two coordinated image digests.

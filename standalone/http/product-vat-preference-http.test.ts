@@ -8,9 +8,6 @@ import { handleApiRequest } from "../api/api.test-support.ts"
 import { createRequestAuthenticator } from "../auth/auth.ts"
 import { migratedFixture } from "../storage/postgres-rig.test-support.ts"
 import * as S from "../api/http-schemas.ts"
-import { vatChangeFromSelection } from "../../web/src/lib/issuer-settings-state.ts"
-import { decodeIssuer, decodeProductPreset, decodeVatCatalogue } from "../../web/src/lib/models.ts"
-import { presetVatCode } from "../../web/src/lib/vat-defaults.ts"
 
 const issuer = {
   name: "Firma Test SRL", fiscalIdentifier: "12345674", legalForm: "srl",
@@ -39,17 +36,10 @@ const fixture = async (label: string) => {
   const call = (method: string, url: string, body?: unknown, idempotencyKey?: string) => handleApiRequest({
     method, url, authorization: `Bearer ${token}`, body, ...(idempotencyKey === undefined ? {} : { idempotencyKey }),
   }, runtime)
-  // What the authoring form does when the product is chosen: resolve the preference on the document date.
-  const lineFromPreset = async (issuerBody: unknown) => {
-    const preset = decodeProductPreset((await call("POST", "/api/product-presets", { ...book, preferredVatRateCode: "RO_REDUCED" })).body)
-    const catalogue = decodeVatCatalogue((await call("GET", "/api/vat-regimes")).body)
-    const vatRateCode = presetVatCode(preset.preferredVatRateCode, catalogue, decodeIssuer(issuerBody), issueDate)
-    return { ...reducedLine, vatRateCode }
-  }
   const issue = (line: unknown, key: string) => call("POST", "/api/invoices", {
     customer: buyer, issueDate, dueDate: "2026-10-01", currency: "RON", series: "INV", lines: [line],
   }, key)
-  return { call, lineFromPreset, issue, close: () => rig.close() }
+  return { call, issue, close: () => rig.close() }
 }
 
 void test("HTTP stores a product's preferred VAT code, clears it on a PUT without it and refuses bad codes", async () => {
@@ -72,15 +62,13 @@ void test("HTTP stores a product's preferred VAT code, clears it on a PUT withou
   } finally { await value.close() }
 })
 
-void test("a reduced-rate product on a registered issuer yields an invoice at the rate in force on the issue date", async () => {
+void test("a reduced-rate line on a registered issuer yields an invoice at the rate in force on the issue date", async () => {
   const value = await fixture("resolve")
   try {
     const configured = await value.call("PUT", "/api/issuer", { ...issuer, vatChange: { registered: true, effectiveFrom: "2025-08-01" } })
     assert.equal(configured.status, 200)
     assert.equal((await value.call("POST", "/api/document-series", { documentType: "invoice", series: "INV" })).status, 200)
-    const line = await value.lineFromPreset(configured.body)
-    assert.equal(line.vatRateCode, "RO_REDUCED")
-    const issued = await value.issue(line, "reduced-invoice")
+    const issued = await value.issue(reducedLine, "reduced-invoice")
     assert.equal(issued.status, 200)
     const invoice = Schema.decodeUnknownSync(S.IssuedInvoice)(issued.body)
     assert.equal(invoice.lines[0]?.vatRate, "11.00")
@@ -93,11 +81,11 @@ void test("a reduced-rate product on a registered issuer yields an invoice at th
 
 // The server knows nothing of product preferences: a line's code is checked against the
 // issuer on the document date, and an Article 310 issuer cannot charge a taxable rate.
-void test("an Article 310 issuer: the product falls back to the exemption, a reduced code sent directly is refused", async () => {
+void test("an Article 310 issuer: the exemption is accepted, a reduced code sent directly is refused", async () => {
   const value = await fixture("issue")
   try {
     const configured = await value.call("PUT", "/api/issuer", {
-      ...issuer, vatChange: vatChangeFromSelection({ registered: false, effectiveFrom: "2025-08-01" }),
+      ...issuer, vatChange: { registered: false, effectiveFrom: "2025-08-01", nonVatBasis: "article_310" },
     })
     assert.equal(configured.status, 200)
     assert.equal((await value.call("POST", "/api/document-series", { documentType: "invoice", series: "INV" })).status, 200)
@@ -109,9 +97,7 @@ void test("an Article 310 issuer: the product falls back to the exemption, a red
     assert.equal((await value.call("POST", `/api/drafts/${draftId}/lines`, { ...reducedLine, vatRateCode: "RO_NON_VAT" })).status, 200)
     assert.equal((await value.issue(reducedLine, "article310-reduced")).status, 400)
     assert.deepEqual((await value.call("GET", "/api/invoices")).body, { items: [], nextCursor: null })
-    const line = await value.lineFromPreset(configured.body)
-    assert.equal(line.vatRateCode, "RO_NON_VAT")
-    const issued = await value.issue(line, "article310-preset")
+    const issued = await value.issue({ ...reducedLine, vatRateCode: "RO_NON_VAT" }, "article310-exempt")
     assert.equal(issued.status, 200)
     const invoice = Schema.decodeUnknownSync(S.IssuedInvoice)(issued.body)
     assert.deepEqual(invoice.lines.map(({ vatCategoryCode, vatRate }) => ({ vatCategoryCode, vatRate })), [{ vatCategoryCode: "O", vatRate: "0.00" }])

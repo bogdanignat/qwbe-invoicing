@@ -8,7 +8,6 @@ import type { ApiResponse } from "../api/api.test-support.ts"
 import { handleApiRequest } from "../api/api.test-support.ts"
 import { createRequestAuthenticator } from "../auth/auth.ts"
 import { migratedFixture, type RawSql, type TestFixture } from "../storage/postgres-rig.test-support.ts"
-import { positiveInvoiceRequiresDueDate } from "../../web/src/lib/invoice-authoring-state.ts"
 
 /**
  * The e-Factura routes over PostgreSQL. The API fixture now carries the pool,
@@ -171,7 +170,7 @@ void test("zero-value invoice permits an explicit null dueDate", async () => {
   } finally { await value.close() }
 })
 
-void test("unsaved UI due-date gating agrees with public invoice totals at the cent boundary", async () => {
+void test("issue without dueDate is refused exactly when the rounded total is non-zero", async () => {
   const value = await fixture("cent_bound")
   try {
     for (const quantity of ["0.0001", "0.0049", "0.0050", "0.0051", "1.0000"]) {
@@ -182,8 +181,7 @@ void test("unsaved UI due-date gating agrees with public invoice totals at the c
       const calculated = await value.call("POST", `/api/drafts/${draftId}/lines`, input)
       assert.equal(calculated.status, 200)
       const total = (calculated.body as { totalIncludingVat: string }).totalIncludingVat
-      const needsDate = positiveInvoiceRequiresDueDate(null, undefined, [input])
-      assert.equal(needsDate, total !== "0.00", quantity)
+      const needsDate = total !== "0.00"
       const issued = await value.call("POST", `/api/drafts/${draftId}/issue`, {}, `rounded-${quantity}`)
       assert.equal(issued.status, needsDate ? 400 : 200, quantity)
     }

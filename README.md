@@ -222,7 +222,7 @@ hits `/health/ready`.
 
 For a local development setup with Docker Compose see
 [`docs/LOCAL_DEVELOPMENT.md`](./docs/LOCAL_DEVELOPMENT.md). For a bare-metal run without
-Docker: `pnpm install`, `pnpm build:ui`, then `node bin/qwbe-invoicing.ts migrate --apply`
+Docker: `pnpm install`, then `node bin/qwbe-invoicing.ts migrate --apply`
 and `node bin/qwbe-invoicing.ts serve` with the variables below set, against a PostgreSQL 16
 database that already exists and whose role owns it.
 
@@ -578,22 +578,15 @@ cube/invoicing/documents/  component: rendered PDFs and artifact recovery
 cube/payments/             payment records and derived invoice payment status
 cube/efactura/             RO e-Factura: UBL builders, CIUS-RO limits, EN 16931 validation
 standalone/                host, never packaged; config.ts and failure-log.ts at its root
-standalone/http/           server, security headers, static UI, SPA route contract, readiness, API docs
+standalone/http/           server, security headers, readiness, API docs
 standalone/auth/           credentials, browser session, login throttle
 standalone/api/            authenticated endpoints: HttpApi contract, schemas, handlers, branding normalizer
 standalone/storage/        PostgreSQL store, pool and transactions, row mappers, migration runner, schema fingerprint
 standalone/documents/      PDF renderer and layout, artifact store and recovery, bundled fonts
 standalone/efactura/       host mapping from issued documents to the e-Factura cube
 standalone/ops/            CLI, backup and restore
-standalone/parity/         tests that hold host, UI and cube rules in agreement
-standalone/ui-dist/        built UI, ignored by git
+standalone/parity/         SQLite baseline fixtures read by the PostgreSQL schema gate
 frontend/                  browser UI served at invoice.test: Next App Router, BFF under /api/qwbe
-web/                       legacy Vite UI, no longer routed; scheduled for removal (T-1649)
-web/src/lib/               API client, models, formatting, pure state and fiscal helpers
-web/src/hooks/             React hooks: queries, authoring sessions, idempotency
-web/src/components/ui/     shared primitives: buttons, load more
-web/src/components/        layout (shell, page, async states), document, authoring, invoice, settings, catalog
-web/src/views/             one component per route
 bin/qwbe-invoicing.ts      CLI entry point, also the container command
 probes/                    repository gates: runtime, package shape, tests, size, boundaries
 scripts/                   e-Factura fixtures, the local warden helper, the Docker verifier rig (verify-docker.sh)
@@ -604,7 +597,7 @@ Dockerfile                 multi-stage build, pinned Node image
 ```
 
 Stack: Node 24, TypeScript, [Effect](https://effect.website) (`effect`, `@effect/platform`),
-`pdf-lib`, PostgreSQL 16 through `pg`, React 19, Vite, pnpm.
+`pdf-lib`, PostgreSQL 16 through `pg`, React 19, Next.js 16, pnpm.
 
 ## Development
 
@@ -620,7 +613,6 @@ scripts/verify-docker.sh verify                  # pnpm verify: runtime gate, li
 scripts/verify-docker.sh test                    # pnpm test only — the fast loop
 scripts/verify-docker.sh test "node --test standalone/storage/pagination.test.ts"
 scripts/verify-docker.sh down                    # stops both rigs; removes no volume
-pnpm dev:ui                                      # Vite dev server for the browser UI
 ```
 
 The gates keep the core inside the QWBE cube contract: no host or infrastructure imports
@@ -629,25 +621,16 @@ cube. A change that breaks a gate is not mergeable.
 
 ### UI theme and dependency policy
 
-Tailwind CSS 4 is configured CSS-first in `web/src/app.css`; this setup does not use a
-`tailwind.config` file. Invoice colors, typography, shadows and border radii live in its
-top-level `@theme` block as CSS variables. They generate semantic utilities such as
-`bg-invoice-primary`, `text-invoice-ink`, `border-invoice-border`,
-`rounded-invoice-control` and `rounded-invoice-panel` whenever those classes are used, while
-the existing component classes consume the same variables directly. The explicit
-`@source ".."` boundary includes the React tree in Tailwind's class detection;
-moving UI source outside `web/` requires updating that boundary.
+Tailwind CSS 4 is configured CSS-first in `frontend/src/app/globals.css`; this setup does
+not use a `tailwind.config` file. Invoice colors, typography and border radii live in the
+`@theme` block of `frontend/src/app/theme.css` as CSS variables and generate semantic
+utilities such as `bg-invoice-primary`, `text-invoice-ink` and `rounded-invoice-panel`.
+The explicit `@source ".."` in `globals.css` limits class detection to `frontend/src`.
 
 Any third-party UI component, icon or font library added to this project must be free to use
 and MIT-licensed. Check the package's published license before adding it and record that check
 in the change or pull-request notes. This is a review requirement; commercial packages,
 non-MIT packages and packages with unclear licensing are not accepted.
-
-The shared button primitives use `tailwind-variants` 3.3.1 (MIT) for typed variants and its
-`cn()` helper for deterministic Tailwind class merging. The configured `tv()` and `cn()`
-exports in `web/src/lib/classnames.ts` are the required class-composition boundary so custom invoice
-utilities merge consistently. `class-variance-authority` is not used because its Apache-2.0
-license does not satisfy this repository's UI dependency policy.
 
 ## Relation to QWBE
 

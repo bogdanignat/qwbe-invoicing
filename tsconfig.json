@@ -20,6 +20,6 @@
     "resolveJsonModule": true,
     "types": ["node"]
   },
-  "include": ["bin/**/*.ts", "cube/**/*.ts", "standalone/**/*.ts", "vite.config.ts"],
+  "include": ["bin/**/*.ts", "cube/**/*.ts", "standalone/**/*.ts"],
   "exclude": ["node_modules", "probes/fixtures"]
 }
