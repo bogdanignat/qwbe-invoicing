@@ -1,10 +1,11 @@
-# Caddyfile for the optional TLS proxy in front of qwbe-invoicing `app`.
+# Caddyfile for the optional TLS proxy in front of the qwbe-invoicing Next `frontend`.
 # Used only with `docker compose -f compose.prod.yaml --profile proxy up -d`.
-# Replace invoice.example.com and keep the reverse_proxy target as `app:3000`.
+# Replace invoice.example.com (it must match FRONTEND_ORIGIN) and keep the
+# reverse_proxy target as `frontend:3000`; the backend `app` is internal.
 
 invoice.example.com {
   encode zstd gzip
-  reverse_proxy app:3000 {
+  reverse_proxy frontend:3000 {
     header_up Host {host}
     header_up X-Real-IP {remote}
     header_up X-Forwarded-For {remote}

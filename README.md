@@ -119,11 +119,17 @@ cash-register rules and sector-specific obligations must be validated with an ac
 One application process, one PostgreSQL 16 server, one data directory for the PDFs.
 
 ```text
-browser ──> /app  (React UI)  ──┐
-                                 ├──> standalone host ──> invoicing core ──> PostgreSQL 16
-API client ──> /api (Bearer) ───┘        │                                    one database, schema `public`
-                                          └──> PDF renderer ──> /data/artifacts/<sha256>
+browser ──> Next frontend ──> /api/qwbe/* (BFF) ──┐
+                                                   ├──> standalone host ──> invoicing core ──> PostgreSQL 16
+internal API client ──> /api (Bearer) ────────────┘        │                                    one database, schema `public`
+                                                            └──> PDF renderer ──> /data/artifacts/<sha256>
 ```
+
+Since T-1649 the public entry point is the Next application in `frontend/`; the backend
+is internal. `docker compose up -d --build` builds two images (`qwbe-invoicing` and
+`qwbe-invoicing-frontend`) and `invoice.test` serves Next. The API is reachable from the
+browser session through `/api/qwbe/<path>`; the BFF refuses `Authorization`, so Bearer
+clients run inside the Compose network (`docker compose exec app …`).
 
 - **The core** (`cube/invoicing`) holds the domain model, VAT arithmetic, date
   validation, the store ports and the idempotency rules, and composes the service from its
@@ -196,13 +202,13 @@ docker compose -f compose.prod.yaml up -d
 # with TLS:
 docker compose -f compose.prod.yaml --profile proxy up -d
 
-# 5. Verify
+# 5. Verify (no port is published; FRONTEND_ORIGIN and FRONTEND_IMAGE_TAG are in .env)
 docker compose -f compose.prod.yaml exec app node bin/qwbe-invoicing.ts doctor --json
-curl --fail http://127.0.0.1:3000/health/live
-curl --fail http://127.0.0.1:3000/health/ready
+docker compose -f compose.prod.yaml exec app wget -qO- http://127.0.0.1:3000/health/ready
+docker compose -f compose.prod.yaml exec frontend wget -qO- http://127.0.0.1:3000/healthz
 ```
 
-Then open `https://<your-domain>/app`, unlock the UI with the API token, and configure the
+Then open `https://<your-domain>`, unlock the UI with the API token, and configure the
 issuer and the first invoice series.
 
 What the bundle enforces: the application container runs as a non-root user with a
@@ -243,7 +249,7 @@ chmod 600 .local/pg-password
 pnpm local:setup --apply   # once per machine: Warden network, DNS and certificate
 docker compose up -d       # add --build after code changes
 docker compose ps
-curl --fail --cacert ~/.warden/ssl/rootca/certs/ca.cert.pem https://invoice.test/health/ready
+curl --fail --cacert ~/.warden/ssl/rootca/certs/ca.cert.pem https://invoice.test/healthz
 ```
 
 The full local walkthrough is in [`docs/LOCAL_DEVELOPMENT.md`](./docs/LOCAL_DEVELOPMENT.md).
@@ -393,7 +399,10 @@ the backup taken before the upgrade, then start the previous image. The full pro
 ## API
 
 Authenticated routes live under `/api` and require `Authorization: Bearer <token>`.
-The Swagger page is at `/api` (behind the browser session) and the OpenAPI 3.1 document is
+This API is internal: it is reached through `docker compose exec app …` or the Compose
+network, not through the public origin, whose BFF only forwards the browser session.
+The authenticated Swagger page at the backend's `/api` is not reachable through the
+public origin (the BFF forwards only `/api/qwbe/<path>`); the OpenAPI 3.1 document is
 generated from the same Effect `HttpApi` contract served by `HttpApiBuilder`.
 The builder handles routing, decoding and response encoding; input errors retain
 the existing `400 ValidationFailure` envelope. The server disposes its Effect
@@ -578,7 +587,8 @@ standalone/efactura/       host mapping from issued documents to the e-Factura c
 standalone/ops/            CLI, backup and restore
 standalone/parity/         tests that hold host, UI and cube rules in agreement
 standalone/ui-dist/        built UI, ignored by git
-web/                       browser UI: React 19, TypeScript, Tailwind CSS 4, Vite
+frontend/                  browser UI served at invoice.test: Next App Router, BFF under /api/qwbe
+web/                       legacy Vite UI, no longer routed; scheduled for removal (T-1649)
 web/src/lib/               API client, models, formatting, pure state and fiscal helpers
 web/src/hooks/             React hooks: queries, authoring sessions, idempotency
 web/src/components/ui/     shared primitives: buttons, load more

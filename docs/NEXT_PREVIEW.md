@@ -1,5 +1,11 @@
 # Next frontend preview — T-1400, phase one
 
+> **Cutover (T-1649, 2026-10-09):** `invoice.test` now serves this Next application
+> (`frontend` service in `compose.yaml`, Traefik labels moved off `app`); the backend
+> is internal and the production bundle routes Caddy to `frontend` with a second,
+> digest-pinned image. The isolated preview below remains for the synthetic fixture.
+> The legacy Vite UI is still built into the backend image, unrouted, until it is removed.
+
 > **T-1400 phase two (this branch, `feat/T-1400-next-authoring`):** invoice authoring and
 > drafts are now migrated. `/invoices/new` authors a new invoice or draft,
 > `/drafts/[id]` resumes one, and `/invoices` gained a "Factură nouă" CTA plus a cursor-paged
