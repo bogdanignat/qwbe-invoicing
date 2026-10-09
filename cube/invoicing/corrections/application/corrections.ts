@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 import { DomainConflict, ValidationFailure, type InvoicingFailure } from "../../contracts/failures.ts"
 import type { InvoicingPermissions } from "../../contracts/permissions.ts"
-import { negateMoney, validateCreateCorrectionInput, type CorrectionDocument, type CreateCorrectionInput } from "../domain/corrections.ts"
+import { negateDecimal, validateCreateCorrectionInput, type CorrectionDocument, type CreateCorrectionInput } from "../domain/corrections.ts"
 import type { DocumentSource, Idempotent } from "../../domain/invoice.ts"
 import { calendarDate, validateDocumentSource } from "../../domain/validation.ts"
 import { findIdempotencyReplay, idempotencyRecord, missingIdempotencyResult } from "../../application/idempotency.ts"
@@ -52,15 +52,16 @@ export const createCorrectionOperations = (d: OperationDependencies<CorrectionWo
       const number = yield* tx.allocateDocumentNumber(ctx.organization.id, fy(issueDate), "invoice", orig.series)
       const issuedAt = now.toISOString()
       const source = input.source ?? orig.source
-      const negLines = orig.lines.map((l) => ({ ...l, totalExcludingVat: negateMoney(l.totalExcludingVat), vatAmount: negateMoney(l.vatAmount), totalIncludingVat: negateMoney(l.totalIncludingVat) }))
-      const negBreakdown = orig.vatBreakdown.map((t) => ({ ...t, vatBaseAmount: negateMoney(t.vatBaseAmount), vatAmount: negateMoney(t.vatAmount) }))
+      // Storno RO: the quantity carries the minus, the unit price stays positive (ANAF code guide; EN 16931 BR-27).
+      const negLines = orig.lines.map((l) => ({ ...l, quantity: negateDecimal(l.quantity), totalExcludingVat: negateDecimal(l.totalExcludingVat), vatAmount: negateDecimal(l.vatAmount), totalIncludingVat: negateDecimal(l.totalIncludingVat) }))
+      const negBreakdown = orig.vatBreakdown.map((t) => ({ ...t, vatBaseAmount: negateDecimal(t.vatBaseAmount), vatAmount: negateDecimal(t.vatAmount) }))
       const corr: CorrectionDocument = {
         id, organizationId: ctx.organization.id, originalInvoiceId: orig.id, fiscalYear: fy(issueDate), series: orig.series, number, issueDate, issuedAt,
         reason: input.reason.trim(), actorId: ctx.identity.id, currency: orig.currency,
         ...(source === undefined ? {} : { source: copySource(source) }),
         issuer: copyIssuerCompanySnapshot(orig.issuer), customer: copyBuyer(orig.customer),
         lines: negLines, vatBreakdown: negBreakdown,
-        totalExcludingVat: negateMoney(orig.totalExcludingVat), vatTotal: negateMoney(orig.vatTotal), totalIncludingVat: negateMoney(orig.totalIncludingVat),
+        totalExcludingVat: negateDecimal(orig.totalExcludingVat), vatTotal: negateDecimal(orig.vatTotal), totalIncludingVat: negateDecimal(orig.totalIncludingVat),
       }
       yield* tx.saveCorrection(corr)
       yield* tx.saveIdempotencyRecord(idempotencyRecord(

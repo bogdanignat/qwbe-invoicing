@@ -82,6 +82,7 @@ const correction: CorrectionDocument = {
   lines: [{
     ...line,
     id: "correction-line-1",
+    quantity: negated(line.quantity),
     totalExcludingVat: negated(line.totalExcludingVat),
     vatAmount: negated(line.vatAmount),
     totalIncludingVat: negated(line.totalIncludingVat),
@@ -208,6 +209,11 @@ void test("refuses a correction whose amounts are not negative, instead of silen
     /totalIncludingVat is expected to be negative/u)
 })
 
+void test("refuses a correction whose quantity is not negative", () => {
+  refuses(() => mapCorrection({ ...correction, lines: correction.lines.map((corrected) => ({ ...corrected, quantity: line.quantity })) },
+    invoice), /lines\[0\]\.quantity is expected to be negative/u)
+})
+
 void test("refuses a correction that does not reverse the invoice exactly", () => {
   refuses(() => mapCorrection({
     ...correction,
@@ -238,7 +244,7 @@ const article310Invoice: IssuedInvoice = {
 const article310Correction: CorrectionDocument = {
   ...correction,
   issuer: { ...issuer, vatRegistered: false },
-  lines: [{ ...article310Line, id: "correction-line-1", totalExcludingVat: "-300.00",
+  lines: [{ ...article310Line, id: "correction-line-1", quantity: negated(article310Line.quantity), totalExcludingVat: "-300.00",
     vatAmount: "-0.00", totalIncludingVat: "-300.00" }],
   vatBreakdown: [{ code: "RO_NON_VAT", rate: "0.00", vatCategoryCode: "O", vatExemptionReason: ARTICLE_310,
     vatBaseAmount: "-300.00", vatAmount: "-0.00" }],

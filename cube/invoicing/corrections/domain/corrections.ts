@@ -33,4 +33,5 @@ export const validateCreateCorrectionInput = (input: CreateCorrectionInput): voi
   }
   if (issues.length > 0) throw new ValidationFailure({ issues })
 }
-export const negateMoney = (value: string): string => Number(value) === 0 ? "0.00" : value.startsWith("-") ? value.slice(1) : `-${value}`
+/** Flips the sign of a decimal string and keeps its scale; zero is never signed ("-0.0000" -> "0.0000"). */
+export const negateDecimal = (value: string): string => Number(value) === 0 ? value.replace(/^-/u, "") : value.startsWith("-") ? value.slice(1) : `-${value}`
