@@ -3,6 +3,7 @@ import { useMemo, useState } from "react"
 
 import { useAuth } from "./auth-context.ts"
 import { useInvoicingClients } from "./use-invoicing-clients.ts"
+import { usePluginEnabled } from "./use-plugin-enabled.ts"
 import { isTransientFailure } from "../lib/api-errors.ts"
 import {
   emptyRegisterFilter, filterInvoiceRegisterRows, projectInvoiceRegisterRow,
@@ -14,6 +15,8 @@ export const invoiceRegisterQueryKey = ["invoice-register"] as const
 export interface InvoiceRegisterModel {
   readonly rows: ReadonlyArray<InvoiceRegisterPresentationRow> | undefined
   readonly totalLoaded: number
+  /** The e-Factura status column, only with that plugin on. */
+  readonly eFacturaColumn: boolean
   readonly error: unknown
   /** Present only when asking again could plausibly answer differently. */
   readonly retry: (() => void) | undefined
@@ -63,6 +66,7 @@ const retryAction = (
 export const useInvoiceRegister = (): InvoiceRegisterModel => {
   const { status } = useAuth()
   const clients = useInvoicingClients()
+  const eFacturaColumn = usePluginEnabled("efactura")
   const [filter, setFilter] = useState<RegisterFilter>(emptyRegisterFilter)
   const query = useInfiniteQuery({
     queryKey: invoiceRegisterQueryKey,
@@ -80,6 +84,7 @@ export const useInvoiceRegister = (): InvoiceRegisterModel => {
   return {
     rows,
     totalLoaded: loaded?.length ?? 0,
+    eFacturaColumn,
     error: query.error,
     retry: retryAction(
       query.error,

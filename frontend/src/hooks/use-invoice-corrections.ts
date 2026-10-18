@@ -1,13 +1,13 @@
 "use client"
 
-import { queryOptions, useMutation, useQuery } from "@tanstack/react-query"
+import { useMutation, useQuery } from "@tanstack/react-query"
 import { useRef } from "react"
 
 import { useAuth } from "./auth-context.ts"
 import { useAuthoringRecovery } from "./use-authoring-recovery.ts"
 import { useCorrectionIssuanceController } from "./use-correction-issuance-controller.ts"
-import { invoiceQueryOptions, retryAction } from "./use-document-detail.ts"
-import { useInvoicingClients, type InvoicingClients } from "./use-invoicing-clients.ts"
+import { correctionsQueryOptions, invoiceQueryOptions, retryAction } from "./use-document-detail.ts"
+import { useInvoicingClients } from "./use-invoicing-clients.ts"
 import type { CorrectionOutcome } from "../lib/correction-issuance-types.ts"
 import {
   CORRECTION_CONFIRM, correctionInputFrom, correctionSummary, correctionsView, type CorrectionsView,
@@ -15,13 +15,6 @@ import {
 import type { CorrectionInput } from "../lib/document-snapshot.ts"
 import { knownResultNotice, type KnownWrite, type RecoveryNoticeModel } from "../lib/operation-recovery-view.ts"
 import type { RecoveryRecord } from "../lib/operation-recovery-types.ts"
-
-/** One definition of the corrections read, shared by the storno section and the payments panel. */
-export const correctionsQueryOptions = (clients: InvoicingClients, invoiceId: string, enabled: boolean) => queryOptions({
-  queryKey: ["invoice", invoiceId, "corrections"],
-  enabled,
-  queryFn: ({ signal }) => clients.documents.listCorrections(invoiceId, signal),
-})
 
 export interface InvoiceCorrectionsModel {
   /** Absent until the corrections list has answered. */

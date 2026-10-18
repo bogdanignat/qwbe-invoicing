@@ -28,7 +28,9 @@ export type EFacturaStatus = "not_sent" | "pending" | "sent" | "accepted" | "rej
 
 const eFacturaStatuses: ReadonlyArray<string> = ["not_sent", "pending", "sent", "accepted", "rejected"]
 
-export const decodeEFacturaStatus = (input: unknown): EFacturaStatus => {
+/** `null` is an invoice of an installation that runs no e-Factura plugin; any other value is the closed enum. */
+export const decodeEFacturaStatus = (input: unknown): EFacturaStatus | null => {
+  if (input === null) return null
   if (typeof input !== "string" || !eFacturaStatuses.includes(input)) throw new Error("invalid eFacturaStatus")
   return input as EFacturaStatus
 }
@@ -36,7 +38,7 @@ export const decodeEFacturaStatus = (input: unknown): EFacturaStatus => {
 export interface InvoiceRegisterInvoiceRow extends InvoiceRegisterCommon {
   readonly kind: "invoice"
   readonly dueDate: string | null
-  readonly eFacturaStatus: EFacturaStatus
+  readonly eFacturaStatus: EFacturaStatus | null
   readonly originalReference?: never
 }
 

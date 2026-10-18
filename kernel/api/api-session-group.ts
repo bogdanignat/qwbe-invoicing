@@ -4,9 +4,12 @@ import { Effect, Schema } from "effect"
 import { CurrentSession, applicationHttpApi } from "./http-api.ts"
 import type { ApiRuntime } from "./api-types.ts"
 import { LoginInput } from "./schema-errors-session.ts"
+import { activePluginNames } from "../plugins.ts"
 
+// The browser session is cookie-only: a bearer caller is not told the plugins here.
 export const sessionsGroup = (runtime: ApiRuntime) => HttpApiBuilder.group(applicationHttpApi, "sessions", (handlers) => handlers
-  .handle("getSession", () => Effect.map(CurrentSession, ({ csrfToken }) => ({ authenticated: true as const, csrfToken })))
+  .handle("getSession", () => Effect.map(CurrentSession, ({ csrfToken }) =>
+    ({ authenticated: true as const, csrfToken, plugins: activePluginNames(runtime.plugins) })))
   .handleRaw("createSession", ({ request }) => Effect.gen(function*() {
     const session = runtime.browserSession
     if (session === undefined) return HttpServerResponse.unsafeJson({ error: "not_found" }, { status: 404 })
@@ -23,7 +26,9 @@ export const sessionsGroup = (runtime: ApiRuntime) => HttpApiBuilder.group(appli
     if (login.kind === "unauthorized") return HttpServerResponse.unsafeJson({ error: "invalid_credentials" }, {
       status: 401, headers: { "set-cookie": session.clearCookie },
     })
-    return HttpServerResponse.unsafeJson({ authenticated: true, csrfToken: login.csrfToken }, {
+    return HttpServerResponse.unsafeJson({
+      authenticated: true, csrfToken: login.csrfToken, plugins: activePluginNames(runtime.plugins),
+    }, {
       headers: { "set-cookie": login.setCookie },
     })
   }))

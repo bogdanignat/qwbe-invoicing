@@ -19,6 +19,9 @@ for (const plugins of combinations) {
       const served = await serve(fixture, plugins)
       const { call } = served
       try {
+        const names = [...plugins.payments ? ["payments"] : [], ...plugins.efactura ? ["efactura"] : []]
+        assert.deepEqual(served.login.plugins, names, "login")
+        assert.deepEqual((await ok(call("GET", "/api/session"), "session")).plugins, names, "session")
         await seed(served)
         const status = plugins.efactura ? "not_sent" : null
         const invoice = await issueInvoice(call, "issue-1")

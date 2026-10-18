@@ -99,7 +99,8 @@ export interface IssuedInvoice extends DocumentBody {
   readonly id: string
   readonly dueDate: string | null
   readonly notes: string | null
-  readonly eFacturaStatus: EFacturaStatus
+  /** `null` when the installation runs no e-Factura plugin. */
+  readonly eFacturaStatus: EFacturaStatus | null
 }
 
 export interface CorrectionDocument extends DocumentBody {

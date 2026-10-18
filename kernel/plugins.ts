@@ -20,6 +20,12 @@ export interface PluginSelection {
 
 export const allPlugins: PluginSelection = { payments: true, efactura: true }
 
+export type PluginName = keyof PluginSelection
+
+/** The active plugins, by name, in manifest order: what a browser session is told it may use. */
+export const activePluginNames = (selection: PluginSelection): ReadonlyArray<PluginName> =>
+  (["payments", "efactura"] as const).filter((name) => selection[name])
+
 /**
  * Absent: every optional plugin. Empty: none. A comma-separated list, spaces
  * ignored, duplicates tolerated. An unknown name refuses to start: a typo must

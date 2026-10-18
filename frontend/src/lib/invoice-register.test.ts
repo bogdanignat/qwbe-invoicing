@@ -81,7 +81,11 @@ void test("an unknown document kind is refused instead of rendered blank", () =>
 
 void test("an e-Factura status outside the contract is refused", () => {
   assert.throws(() => decodeInvoiceRegisterRow({ ...invoice, eFacturaStatus: "queued" }), /invalid eFacturaStatus/u)
-  assert.throws(() => decodeInvoiceRegisterRow({ ...invoice, eFacturaStatus: null }), /invalid eFacturaStatus/u)
+  assert.throws(() => decodeInvoiceRegisterRow({ ...invoice, eFacturaStatus: undefined }), /invalid eFacturaStatus/u)
+})
+
+void test("an invoice row without e-Factura status decodes: the plugin is off", () => {
+  assert.equal(decodeInvoiceRegisterRow({ ...invoice, eFacturaStatus: null }).eFacturaStatus, null)
 })
 
 void test("a fractional document number is refused", () => {

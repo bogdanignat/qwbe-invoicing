@@ -3,7 +3,10 @@ import { Schema } from "effect"
 
 export const Deleted = Schema.Struct({ deleted: Schema.Literal(true) })
 export const LoginInput = Schema.Struct({ token: Schema.String })
-export const AuthenticatedSession = Schema.Struct({ authenticated: Schema.Literal(true), csrfToken: Schema.String })
+/** `plugins`: the optional plugins this installation runs, so the browser asks nothing of one that is off. */
+export const AuthenticatedSession = Schema.Struct({
+  authenticated: Schema.Literal(true), csrfToken: Schema.String, plugins: Schema.Array(Schema.Literal("payments", "efactura")),
+})
 export const LoggedOutSession = Schema.Struct({ authenticated: Schema.Literal(false) })
 
 const withStatus = <A, I, R>(status: number, schema: Schema.Schema<A, I, R>) =>

@@ -31,7 +31,7 @@ void test("BFF exchanges credentials with the real backend and preserves session
       origin: frontendOrigin, "content-type": "application/json",
     }, body: JSON.stringify({ token }) }), config)
     assert.equal(login.status, 200)
-    assert.deepEqual(Object.keys(await login.clone().json()).sort(), ["authenticated", "csrfToken"])
+    assert.deepEqual(Object.keys(await login.clone().json()).sort(), ["authenticated", "csrfToken", "plugins"])
     const setCookie = login.headers.getSetCookie()[0]
     assert.match(setCookie, /; Secure;/)
     const cookie = setCookie.split(";", 1)[0]

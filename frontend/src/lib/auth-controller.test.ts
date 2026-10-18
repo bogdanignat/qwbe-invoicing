@@ -2,10 +2,11 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import { ApiFailure } from "./api-errors.ts"
-import { createAuthController, type AuthSessionClient, type AuthSnapshot } from "./auth-controller.ts"
+import { createAuthController } from "./auth-controller.ts"
+import type { AuthSessionClient, AuthSnapshot } from "./auth-session.ts"
 import { createBrowserTransport } from "./browser-transport.ts"
 import { createSessionClient } from "./session-client.ts"
-import type { AuthenticatedSession } from "./api-contracts.ts"
+import type { AuthenticatedSession, PluginName } from "./api-contracts.ts"
 
 interface Deferred<Value> {
   readonly promise: Promise<Value>
@@ -18,10 +19,12 @@ const deferred = <Value>(): Deferred<Value> => {
   const promise = new Promise<Value>((resolve, reject) => { resolvePromise = resolve; rejectPromise = reject })
   return { promise, resolve: resolvePromise, reject: rejectPromise }
 }
-const authenticated = (csrfToken: string): AuthenticatedSession => ({ authenticated: true, csrfToken })
+const ALL_PLUGINS: ReadonlyArray<PluginName> = ["payments", "efactura"]
+const authenticated = (csrfToken: string, plugins = ALL_PLUGINS): AuthenticatedSession =>
+  ({ authenticated: true, csrfToken, plugins })
 
 const harness = (session: AuthSessionClient, pathname = "/unlock") => {
-  let snapshot: AuthSnapshot = { status: "checking", error: undefined, loginPending: false, logoutPending: false }
+  let snapshot: AuthSnapshot = { status: "checking", error: undefined, loginPending: false, logoutPending: false, plugins: [] }
   let clears = 0
   const navigation: Array<string> = []
   const controller = createAuthController({
@@ -389,4 +392,34 @@ void test("ownsEpoch tells a settled mutation whether its session still exists",
   await subject.controller.logout()
   assert.equal(subject.snapshot().status, "locked")
   assert.equal(subject.controller.ownsEpoch(subject.controller.epoch()), false)
+})
+
+void test("the session's plugins reach the snapshot and leave with the session", async () => {
+  const restoring = deferred<AuthenticatedSession>()
+  let loginAnswer: Promise<AuthenticatedSession> = Promise.resolve(authenticated("login-csrf", ["efactura"]))
+  const subject = harness({
+    restore: () => restoring.promise,
+    login: () => loginAnswer,
+    logout: () => Promise.resolve(),
+  })
+  const restore = subject.controller.restore()
+  assert.deepEqual(subject.snapshot().plugins, [])
+  const login = subject.controller.login("token")
+  await login
+  // The superseded restore answers with every plugin on; the login's own list stands.
+  restoring.resolve(authenticated("stale-csrf"))
+  await restore
+  assert.deepEqual([subject.snapshot().status, subject.snapshot().plugins], ["authenticated", ["efactura"]])
+
+  await subject.controller.logout()
+  assert.deepEqual([subject.snapshot().status, subject.snapshot().plugins], ["locked", []])
+
+  loginAnswer = Promise.resolve(authenticated("again", ["payments"]))
+  await subject.controller.login("token")
+  subject.controller.unauthorized(subject.controller.epoch())
+  assert.deepEqual([subject.snapshot().status, subject.snapshot().plugins], ["locked", []])
+
+  loginAnswer = Promise.reject(new ApiFailure({ message: "no", status: 401 }))
+  await subject.controller.login("token")
+  assert.deepEqual([subject.snapshot().status, subject.snapshot().plugins], ["locked", []])
 })

@@ -159,7 +159,7 @@ export const projectIssuedInvoice = (invoice: IssuedInvoice): DocumentSnapshotVi
     { label: "Emisă", value: invoice.issueDate },
     { label: "Scadență", value: orDash(invoice.dueDate) },
     { label: "Monedă", value: invoice.currency },
-    { label: "e-Factura", value: eFacturaStatusLabel(invoice.eFacturaStatus) },
+    ...invoice.eFacturaStatus === null ? [] : [{ label: "e-Factura", value: eFacturaStatusLabel(invoice.eFacturaStatus) }],
   ],
   notes: invoice.notes,
   originalInvoice: null,

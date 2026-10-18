@@ -262,6 +262,12 @@ void test("an e-Factura status reads in the same words as the register", () => {
 
 void test("an e-Factura status outside the contract fails the document", () => {
   assert.throws(() => decodeIssuedInvoice({ ...invoiceJson, eFacturaStatus: "queued" }), /invalid eFacturaStatus/u)
+  assert.throws(() => decodeIssuedInvoice({ ...invoiceJson, eFacturaStatus: undefined }), /invalid eFacturaStatus/u)
+})
+
+void test("with the e-Factura plugin off the invoice decodes and its head names no e-Factura status", () => {
+  const view = projectIssuedInvoice(decodeIssuedInvoice({ ...invoiceJson, eFacturaStatus: null }))
+  assert.deepEqual(view.facts.map((fact) => fact.label), ["Emisă", "Scadență", "Monedă"])
 })
 
 // The correction's amounts arrive signed and are rendered signed: the screen is

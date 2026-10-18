@@ -9,7 +9,7 @@ import { Effect } from "effect"
 import { activePayments } from "./api/api-services.ts"
 import { createRequestAuthenticator } from "./auth/auth.ts"
 import { runtimeConfig } from "./config.ts"
-import { allPlugins, optionalPlugins, parsePlugins } from "./plugins.ts"
+import { activePluginNames, allPlugins, optionalPlugins, parsePlugins } from "./plugins.ts"
 
 const none = { payments: false, efactura: false }
 
@@ -44,6 +44,13 @@ void test("the optional plugins are exactly the declared units with required: fa
   assert.equal(units.length, 11)
   assert.deepEqual(units.filter((unit) => !unit.required).map((unit) => unit.name).sort(), [...optionalPlugins].sort())
   assert.deepEqual(Object.keys(allPlugins).sort(), [...optionalPlugins].sort())
+  assert.deepEqual(activePluginNames(allPlugins), optionalPlugins, "the session names exactly the declared plugins")
+})
+
+void test("the session names only the plugins that are on", () => {
+  assert.deepEqual(activePluginNames(none), [])
+  assert.deepEqual(activePluginNames({ payments: true, efactura: false }), ["payments"])
+  assert.deepEqual(activePluginNames({ payments: false, efactura: true }), ["efactura"])
 })
 
 void test("the payments routes fail closed when the payments service is not composed", () => {

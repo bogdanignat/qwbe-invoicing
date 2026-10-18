@@ -31,6 +31,8 @@ export interface Served {
   /** For a test that sends its own headers: the server's origin and the session cookie. */
   readonly origin: string
   readonly cookie: string
+  /** What the login answered, for the session contract. */
+  readonly login: Record<string, unknown>
 }
 
 /** Start, prove readiness, log in: the session cookie and its CSRF token carry every later call. */
@@ -46,7 +48,8 @@ export const serve = async (fixture: TestFixture, plugins: PluginSelection): Pro
       headers: { "content-type": "application/json", origin }, body: JSON.stringify({ token }) })
     assert.equal(login.status, 200)
     const cookie = (login.headers.get("set-cookie") ?? "").split(";", 1)[0] ?? ""
-    const { csrfToken } = await login.json() as { readonly csrfToken: string }
+    const loginBody = await login.json() as Record<string, unknown>
+    const csrfToken = String(loginBody.csrfToken)
     const call = async (method: string, path: string, body?: unknown, idempotencyKey?: string): Promise<Reply> => {
       const headers: Record<string, string> = { cookie, origin }
       if (method !== "GET") Object.assign(headers, { "content-type": "application/json", "x-csrf-token": csrfToken })
@@ -57,7 +60,7 @@ export const serve = async (fixture: TestFixture, plugins: PluginSelection): Pro
       return { status: response.status, type,
         body: type.includes("json") ? await response.json() : type.includes("pdf") ? undefined : await response.text() }
     }
-    return { call, close: running.close, origin, cookie }
+    return { call, close: running.close, origin, cookie, login: loginBody }
   } catch (error) {
     await running.close()
     throw error
