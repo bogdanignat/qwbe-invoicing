@@ -3,7 +3,7 @@
 Branch `feat/T-1480-postgresql`, HEAD `b3ebd4c` (no commit, no push). Everything
 below ran in Docker. Captured 2026-10-01.
 
-This unit adds **only new `postgres-*` files** under `standalone/storage`. The
+This unit adds **only new `postgres-*` files** under `kernel/storage`. The
 four files the schema step produced (`postgres-foundation.ts`,
 `postgres-migration-plans.ts`, `postgres-maintenance-lock.ts`,
 `postgres-migrations.ts`) and the six schema contracts are untouched; so are the
@@ -262,7 +262,7 @@ the transaction rolls back.
 
 ## 4 The test rig
 
-`compose.pg-adapters.yaml` + `standalone/storage/postgres-rig.test-support.ts`.
+`compose.pg-adapters.yaml` + `kernel/storage/postgres-rig.test-support.ts`.
 A fourth rig, added rather than folded into the three that exist: the verifier,
 the driver probe and the schema gate are untouched. `postgres:16-alpine` pinned
 by digest, cluster on tmpfs, no published port, own compose project, `trust`
@@ -345,7 +345,7 @@ docker compose --file compose.pg-adapters.yaml down                  # no volume
 still 175 failing tests across 32 files from the schema step, and the two new
 database-backed files add to that count when run without a server — they need the
 PostgreSQL service the integration step will give the verifier. Nothing legacy
-was skipped, disabled or modified, and no frozen fixture in `standalone/parity/`
+was skipped, disabled or modified, and no frozen fixture in `kernel/parity/`
 was touched or re-captured.
 
 `pnpm verify` therefore still fails at `pnpm test`; the gates that do not depend

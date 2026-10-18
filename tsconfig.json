@@ -20,6 +20,6 @@
     "resolveJsonModule": true,
     "types": ["node"]
   },
-  "include": ["bin/**/*.ts", "cube/**/*.ts", "standalone/**/*.ts"],
+  "include": ["bin/**/*.ts", "cubes/**/*.ts", "kernel/**/*.ts"],
   "exclude": ["node_modules", "probes/fixtures"]
 }

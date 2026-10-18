@@ -37,7 +37,7 @@ Two harness defects were found and fixed by running it, not by reading it:
    (`⚠ You are using a non-standard "NODE_ENV" value`, then
    `TypeError: Cannot read properties of null (reading 'useContext')` while
    prerendering `/_global-error`). `NODE_ENV` is no longer set; every caller
-   that cares sets it itself (`standalone/config.ts:22` defaults to
+   that cares sets it itself (`kernel/config.ts:22` defaults to
    `development`). With the variable removed `pnpm build:frontend` exits 0.
 
 A third, non-harness gap: the TLS cases of `probes/frontend-runtime.mjs` need
@@ -60,7 +60,7 @@ Run 3 suite summary: `node --test` 1116 pass / 0 fail / 0 skipped / 0 todo;
 unit-test, size and boundaries all passed; the boundary cruise reports
 `no dependency violations found (753 modules, 3362 dependencies cruised)`.
 
-## 3 SQLite inventory (fixtures in `standalone/parity/`)
+## 3 SQLite inventory (fixtures in `kernel/parity/`)
 
 Captured by applying every migration plan to a throwaway database and reading
 the result back, not by reading SQL by eye.

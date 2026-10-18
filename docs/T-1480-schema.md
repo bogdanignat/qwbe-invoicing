@@ -5,14 +5,14 @@ below ran in Docker; the host has no Node, pnpm or PostgreSQL client in play.
 Captured 2026-10-01.
 
 This step translates the five `migrations.json` contracts and
-`cube/invoicing/documents/contracts/migrations.ts` **in place** to PostgreSQL 16,
+`cubes/invoicing/documents/contracts/migrations.ts` **in place** to PostgreSQL 16,
 adds the foundation scope and the asynchronous migration executor in
-`standalone/storage/postgres-*.ts`, and proves both with a gate that runs only
+`kernel/storage/postgres-*.ts`, and proves both with a gate that runs only
 against a throwaway PostgreSQL 16 cluster.
 
 It deliberately does **not** port the business adapters, the session store, the
 HTTP layer, the backup/restore commands or the legacy SQLite tests. Those stay
-visibly unported: `standalone/storage/migrations.ts` and
+visibly unported: `kernel/storage/migrations.ts` and
 `sqlite-migration-replay.ts` were not touched, so the SQLite executor now fails
 on the translated SQL instead of silently accepting a second dialect. See
 §5 for exactly what that costs today.
@@ -21,14 +21,14 @@ on the translated SQL instead of silently accepting a second dialect. See
 
 | File | Scope | Statements |
 |---|---|---|
-| `cube/invoicing/customers/contracts/migrations.json` | `customers` | 3 |
-| `cube/invoicing/catalog/contracts/migrations.json` | `catalog` | 2 |
-| `cube/invoicing/issuer/contracts/migrations.json` | `issuer` | 2 |
-| `cube/invoicing/contracts/migrations.json` | `invoicing` | 92 |
-| `cube/payments/contracts/migrations.json` | `payments` | 10 |
-| `cube/invoicing/documents/contracts/migrations.ts` | `documents` | 12 |
-| `standalone/storage/postgres-foundation.ts` | `foundation` | 1 |
-| `standalone/storage/postgres-migration-plans.ts` | `standalone` | 2 |
+| `cubes/invoicing/customers/contracts/migrations.json` | `customers` | 3 |
+| `cubes/invoicing/catalog/contracts/migrations.json` | `catalog` | 2 |
+| `cubes/invoicing/issuer/contracts/migrations.json` | `issuer` | 2 |
+| `cubes/invoicing/contracts/migrations.json` | `invoicing` | 92 |
+| `cubes/payments/contracts/migrations.json` | `payments` | 10 |
+| `cubes/invoicing/documents/contracts/migrations.ts` | `documents` | 12 |
+| `kernel/storage/postgres-foundation.ts` | `foundation` | 1 |
+| `kernel/storage/postgres-migration-plans.ts` | `kernel` | 2 |
 
 The reference inventory of the SQLite baseline is preserved exactly:
 **26 domain tables, 30 explicit indexes, 60 trigger behaviours, 98 CHECK
@@ -68,7 +68,7 @@ had four of them plus one real cycle. The new order is:
 4. **6 trigger functions**, then **51 triggers**.
 
 Cross-scope order is unchanged and already safe: `foundation`, `customers`,
-`catalog`, `issuer`, `invoicing`, `payments`, `documents`, `standalone`.
+`catalog`, `issuer`, `invoicing`, `payments`, `documents`, `kernel`.
 
 ### The triggers, in two classes
 
@@ -113,7 +113,7 @@ applies an assignment cast. Measured on the gate, in the gate:
 Every storage adapter is parameterized, so the rounding path is not reachable
 through the API, and the one caller-supplied integer that is not machine
 allocated — `sector` — is already guarded at the domain boundary by
-`Number.isInteger` (`cube/invoicing/parties/domain/party-validation.ts:38`).
+`Number.isInteger` (`cubes/invoicing/parties/domain/party-validation.ts:38`).
 Document numbers (`proformas.number`, `issued_invoices.number`,
 `correction_documents.number`, `invoice_sequences.last_number`) are allocated by
 the issuance sequence, not by callers, and `invoice_artifacts.byte_length` is a
@@ -176,10 +176,10 @@ gate asserts every name is ≤63 characters, unique, and does not end in
 
 | File | What it owns |
 |---|---|
-| `standalone/storage/postgres-foundation.ts` | `SchemaMigration`, `foundationScope`, `foundationMigrations` (`qwbe_abort`) |
-| `standalone/storage/postgres-migration-plans.ts` | `MigrationScope`, the ordered `migrationScopes`, `migrationCount`, `migrationKey` |
-| `standalone/storage/postgres-maintenance-lock.ts` | `maintenanceLockKey`, acquire/try/release in exclusive and shared mode |
-| `standalone/storage/postgres-migrations.ts` | `SqlExecutor`, `MigrationReport`, `planMigrations`, `applyMigrations`, `applyMigrationsOnClient`, `databaseReady`, `ledgerTable` |
+| `kernel/storage/postgres-foundation.ts` | `SchemaMigration`, `foundationScope`, `foundationMigrations` (`qwbe_abort`) |
+| `kernel/storage/postgres-migration-plans.ts` | `MigrationScope`, the ordered `migrationScopes`, `migrationCount`, `migrationKey` |
+| `kernel/storage/postgres-maintenance-lock.ts` | `maintenanceLockKey`, acquire/try/release in exclusive and shared mode |
+| `kernel/storage/postgres-migrations.ts` | `SqlExecutor`, `MigrationReport`, `planMigrations`, `applyMigrations`, `applyMigrationsOnClient`, `databaseReady`, `ledgerTable` |
 
 **Ownership is in the types**, and it is the contract the next step consumes:
 
@@ -229,7 +229,7 @@ transactional, so a migration and its ledger row commit together or neither does
 The foundation is a single ledger row, scope `foundation`, applied once before
 every cube scope. The consequence is a real coupling and is written down in the
 contracts themselves: **the cube baselines are no longer self-sufficient SQL**,
-they depend on a function `standalone/storage` owns.
+they depend on a function `kernel/storage` owns.
 
 ## 3 Gate G1 and the parity matrix
 
@@ -253,11 +253,11 @@ real defect in the gate itself — see §4).
 | G1 | `applyMigrations` on a fresh database changes all 8 migrations; a second run on the **same** database changes 0 and leaves `pending` empty; the inventory captured **before** the reapply equals the one captured after it; a **second fresh database** produces an identical inventory (tables, index definitions, constraint definitions, trigger definitions, function definitions) |
 | collation | the created database answers `datcollate=C datctype=C encoding=UTF8` |
 | inventory | 26 tables and 30 explicit indexes, compared **by name against the frozen SQLite capture** rather than against the generator; 60 triggers, 98 CHECKs, 7 functions; every CHECK name ≤63, unique, not auto-generated; the lineage FK still `DEFERRABLE INITIALLY DEFERRED` on `(organization_id, direct_source_proforma_id, id)` |
-| triggers vs capture | every trigger compared against `standalone/parity/sqlite-baseline-triggers.json` — table, timing, event, `FOR EACH ROW`, the `UPDATE OF` column list, where the predicate lives, the predicate's semantic footprint and the raised message; plus the two lists (11 `UPDATE OF`, 6 moved predicates). The comparator is itself shown to report eight kinds of mutation, so it cannot pass vacuously |
+| triggers vs capture | every trigger compared against `kernel/parity/sqlite-baseline-triggers.json` — table, timing, event, `FOR EACH ROW`, the `UPDATE OF` column list, where the predicate lives, the predicate's semantic footprint and the raised message; plus the two lists (11 `UPDATE OF`, 6 moved predicates). The comparator is itself shown to report eight kinds of mutation, so it cannot pass vacuously |
 | fault cases | a non-C database is refused before any write and stays empty; the same guard passes on a C database; a barrier held SHARED by another session makes `migrate` refuse inside its bound (<5 s) instead of hanging, and the next run succeeds once the holder releases |
 | numeric | a raw numeric literal rounds into an integer column (the lost `STRICT`), a bound JS number and a bound text fraction are both refused with `22P02` |
-| ownership | each scope's **real** `pg_class` delta in a composed schema equals the tables its cube manifest declares; `standalone` declares `browser_sessions` explicitly and the ledger is excluded; the comparison is shown to fail on a wrong owner and on an extra table |
-| bare DDL | each scope applied alone on a fresh database: `customers`, `catalog`, `issuer` and `standalone` stand alone; `invoicing`, `payments` and `documents` fail, `documents` with `42883` (no `qwbe_abort`) |
+| ownership | each scope's **real** `pg_class` delta in a composed schema equals the tables its cube manifest declares; `kernel` declares `browser_sessions` explicitly and the ledger is excluded; the comparison is shown to fail on a wrong owner and on an extra table |
+| bare DDL | each scope applied alone on a fresh database: `customers`, `catalog`, `issuer` and `kernel` stand alone; `invoicing`, `payments` and `documents` fail, `documents` with `42883` (no `qwbe_abort`) |
 | accept | 31 seed statements — issuer, tax configuration, series, customer, preset, three drafts, three proformas with lines and breakdown, sealing, invoices, lines, both conversion kinds, correction, audit, idempotency, payments and a reversal, both artifact tables, a session — all accepted, including the deferred cycle inside one transaction |
 | triggers | one reject case per trigger, cross-checked both ways against `pg_trigger` so neither an uncovered trigger nor a case without a trigger can pass; each asserts `23514` **and** the exact message |
 | constraints | generated column not writable (`428C9` only — `28C9` does not exist and was removed), FK (`23503`), unique (`23505`), NOT NULL (`23502`), four CHECK cases (`23514`) |
@@ -267,7 +267,7 @@ real defect in the gate itself — see §4).
 
 The trigger capture, the GLOB vectors and the JSON vectors are the
 non-tautological part: the expected answers
-come from `standalone/parity/sqlite-dialect-behavior.json`, captured on SQLite
+come from `kernel/parity/sqlite-dialect-behavior.json`, captured on SQLite
 before any translation existed, and are replayed as real inserts against the
 translated CHECKs.
 
@@ -306,7 +306,7 @@ translated CHECKs.
 executing the contracts through `node:sqlite`. The first failure is
 `unrecognized token: "!"` at `sqlite-migration-replay.ts:8` — SQLite parsing the
 PostgreSQL regular-expression operator. The 32 files are the storage suite, the
-API/HTTP suites that boot the application, `standalone/ops/*`, the two frontend
+API/HTTP suites that boot the application, `kernel/ops/*`, the two frontend
 proxy probes that start the app, and `probes/schema-inventory.test.mjs`, whose
 `--check` drift gate compares a SQLite capture of contracts that are no longer
 SQLite.
@@ -315,7 +315,7 @@ Nothing was skipped, disabled or deleted to hide that, and **`pnpm verify` is no
 green**. The legacy executor was left untouched precisely so the gap stays
 visible until the adapters are ported.
 
-The frozen golden fixtures in `standalone/parity/` were not re-captured and not
+The frozen golden fixtures in `kernel/parity/` were not re-captured and not
 modified.
 
 ## 6 API surface for the next step
@@ -382,7 +382,7 @@ database the gate creates it also drops.
 # Review fix pass — what changed, per finding
 
 Review `/tmp/code-review.2N6U7b/review.md`, verdict `changes_requested`.
-Scope of this pass: the 6 contracts, the 4 `standalone/storage/postgres-*.ts`
+Scope of this pass: the 6 contracts, the 4 `kernel/storage/postgres-*.ts`
 files, the G1 probe/rig and these docs. The pool/transaction/adapter files of the
 parallel worker were not touched.
 
@@ -390,7 +390,7 @@ parallel worker were not touched.
 |---|---|---|---|
 | reapply comparator compared the inventory with itself | medium | the inventory is now captured **before** `applyMigrations` runs the second time (`probes/pg-schema-gate.mjs:127`) and compared with the post-reapply capture | check "reapply leaves the schema byte-identical with the first apply" |
 | trigger parity was only numeric; `sqlite-baseline-triggers.json` unread | medium | new `probes/pg-schema-trigger-parity-lib.mjs`; the gate reads the golden and compares name, table, timing, event, `FOR EACH ROW`, `UPDATE OF` list, where the predicate lives, the predicate's semantic footprint and the raised message, plus both lists (11 / 6) | checks "every trigger matches the frozen SQLite capture", "the 11 UPDATE OF column lists and the 6 moved predicates match the capture", "the trigger comparator reports a mutated trigger (it is not vacuous)" (8 mutation kinds) |
-| `releaseMaintenanceLock` failure masked the migration error | low | the release is wrapped; the original error propagates and the client is returned with `client.release(error)`, which destroys it | `standalone/storage/postgres-migrations.ts:180-190` |
+| `releaseMaintenanceLock` failure masked the migration error | low | the release is wrapped; the original error propagates and the client is returned with `client.release(error)`, which destroys it | `kernel/storage/postgres-migrations.ts:180-190` |
 | unbounded `pg_advisory_lock` on `migrate` | low | `pg_try_advisory_lock` in a bounded retry (`defaultLockBound` 10 × 300 ms), explicit "the application is running" message | check "a held barrier refuses the migration within its bound", with the barrier held SHARED by another session, and "the barrier is free again once the holder releases" |
 | collation C never verified at migration | low | `assertCollationC` runs first in `applyMigrationsOnClient`, before any write | checks "the target locale really differs from C", "migration refuses a non-C database before writing anything" (and nothing was created), "the same guard passes on a C database" |
 | deferred FK test could not tell `INSERT` from `COMMIT` | low | the two statements are asserted separately on the same client and transaction | checks "the deferred lineage key does not fire at INSERT" and "… fires at COMMIT with 23503" |
@@ -410,7 +410,7 @@ adapters reject a fraction in an integer field, and to report a blocker if not.
   both raise `22P02` — asserted in the gate, twice;
 - the only caller-supplied integer that is not machine-allocated, `sector`, is
   rejected by `Number.isInteger` in
-  `cube/invoicing/parties/domain/party-validation.ts:38`;
+  `cubes/invoicing/parties/domain/party-validation.ts:38`;
 - the rounding path needs a raw SQL numeric literal, which no adapter emits.
 
 ## Verification of this pass
@@ -429,4 +429,4 @@ returned the literal string `{}` so the first comparison diffed character arrays
 
 The legacy SQLite suite stays red and nothing was skipped or disabled:
 `pnpm test` → 175 failing tests across 32 files, `pnpm verify` is not green.
-The frozen golden fixtures in `standalone/parity/` were not modified.
+The frozen golden fixtures in `kernel/parity/` were not modified.

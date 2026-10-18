@@ -20,16 +20,16 @@ answers with `400` and the list of limits it breaks.
 
 | Unit | Role |
 | --- | --- |
-| `cube/efactura/contracts/document.ts` | `EFacturaDocument` — the normalized fiscal contract, every amount a decimal string, every value already positive |
-| `cube/efactura/validation.ts` + `totals.ts`, `vat-rules.ts`, `vat-groups.ts` | the EN 16931 rules checkable without the official validator |
-| `cube/efactura/cius-limits.ts` | the CIUS-RO limits and address rules, read from the official Schematron |
-| `cube/efactura/codelists.ts` | the EN 16931 code lists we can violate: countries and VATEX |
-| `cube/efactura/xml.ts` | deterministic serializer: element order is array order, no mixed content, no unrepresentable characters |
-| `cube/efactura/ubl.ts`, `ubl-party.ts` | the UBL document and party builders, in `xsd:sequence` order |
-| `cube/efactura/profile.ts` | the CIUS-RO constants, injected rather than hard-coded |
-| `standalone/efactura/efactura-mapper.ts` | the host translation from `IssuedInvoice` / `CorrectionDocument` |
-| `standalone/api/api.ts` — `efacturaXml` | renders the download; a mapping refusal travels as the list of reasons, not as a 500 |
-| `cube/efactura/fixtures.test-support.ts` | the synthetic documents, all invented |
+| `cubes/efactura/contracts/document.ts` | `EFacturaDocument` — the normalized fiscal contract, every amount a decimal string, every value already positive |
+| `cubes/efactura/validation.ts` + `totals.ts`, `vat-rules.ts`, `vat-groups.ts` | the EN 16931 rules checkable without the official validator |
+| `cubes/efactura/cius-limits.ts` | the CIUS-RO limits and address rules, read from the official Schematron |
+| `cubes/efactura/codelists.ts` | the EN 16931 code lists we can violate: countries and VATEX |
+| `cubes/efactura/xml.ts` | deterministic serializer: element order is array order, no mixed content, no unrepresentable characters |
+| `cubes/efactura/ubl.ts`, `ubl-party.ts` | the UBL document and party builders, in `xsd:sequence` order |
+| `cubes/efactura/profile.ts` | the CIUS-RO constants, injected rather than hard-coded |
+| `kernel/efactura/efactura-mapper.ts` | the host translation from `IssuedInvoice` / `CorrectionDocument` |
+| `kernel/api/api.ts` — `efacturaXml` | renders the download; a mapping refusal travels as the list of reasons, not as a 500 |
+| `cubes/efactura/fixtures.test-support.ts` | the synthetic documents, all invented |
 
 The generator never imports the invoicing cube, and the mapper is the only code
 that knows both models. The cube re-states its own decimal arithmetic instead of

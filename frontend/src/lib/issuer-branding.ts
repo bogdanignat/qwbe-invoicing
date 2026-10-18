@@ -5,7 +5,7 @@ import type { IssuerBranding } from "./draft-models.ts"
  * facts a file carries.
  *
  * Every limit here is the backend's own
- * (`standalone/api/branding-normalizer.ts:7`): 256 KiB, 2048 px per axis, four
+ * (`kernel/api/branding-normalizer.ts:7`): 256 KiB, 2048 px per axis, four
  * megapixels, PNG or JPEG. They are re-stated in the browser so a rejection is
  * immediate and legible instead of a `400` after a 350 KB upload — not as the
  * authority, which stays the server.

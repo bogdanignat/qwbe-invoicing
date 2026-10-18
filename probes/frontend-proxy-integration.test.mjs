@@ -9,8 +9,8 @@ import { setTimeout } from "node:timers"
 import { URL } from "node:url"
 
 import { handleProxyRequest } from "../frontend/src/lib/server/proxy.ts"
-import { startServer } from "../standalone/http/http.ts"
-import { withMigrated } from "../standalone/storage/postgres-rig.test-support.ts"
+import { startServer } from "../kernel/http/http.ts"
+import { withMigrated } from "../kernel/storage/postgres-rig.test-support.ts"
 import { close, frontendOrigin, listen, proxyRequest } from "./frontend-proxy-fixture.mjs"
 
 void test("BFF exchanges credentials with the real backend and preserves session/CSRF semantics", async () => {

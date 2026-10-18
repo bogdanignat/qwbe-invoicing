@@ -126,7 +126,7 @@ the pre-review version was 15/15 ×3 in `50`, `51`, `55`).
 ### Money delta against the SQLite baseline — recorded, not imposed
 
 The baseline stores a JS `1` into a `STRICT TEXT` column as `'1.0'`
-(`standalone/parity/sqlite-dialect-behavior.json`). PostgreSQL stores the same
+(`kernel/parity/sqlite-dialect-behavior.json`). PostgreSQL stores the same
 value as `'1'`; `1e21` is `'1e+21'` there and `'1.0e+21'` on SQLite, `-0` is
 `'0'` versus `'0.0'`. Both accept a JS number for a `TEXT` money column and both
 keep the column `text`. **No new contract is introduced here** — the delta is on
@@ -187,7 +187,7 @@ defined` in the new probe (the repo's flat config gives `.mjs` no browser
 globals; `probes/frontend-runtime-fixture.mjs:9` imports them from
 `node:timers`). Fixed the same way, probe re-run, verify green.
 
-The boundary rule that forbids `pg` inside `cube/` is **plan step 2** work and is
+The boundary rule that forbids `pg` inside `cubes/` is **plan step 2** work and is
 not in this step; today nothing imports `pg` except the probe, which lives in
 `probes/`.
 

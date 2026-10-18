@@ -1,6 +1,6 @@
 /**
  * The payment ledger of one invoice, as `GET /api/invoices/{id}/payments`
- * answers it (standalone/api/schema-payments.ts), narrowed to what the screen
+ * answers it (kernel/api/schema-payments.ts), narrowed to what the screen
  * renders: `invoiceId`, `organizationId` and `createdAt` on each entry are not
  * carried into the model.
  *

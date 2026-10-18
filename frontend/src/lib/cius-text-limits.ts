@@ -1,6 +1,6 @@
 /**
  * The CIUS-RO lengths e-Factura refuses beyond (BR-RO-L200/L150/L050/L020/L100),
- * mirrored from `CIUS_TEXT_LIMITS` in cube/invoicing/domain/validation.ts and held
+ * mirrored from `CIUS_TEXT_LIMITS` in cubes/invoicing/domain/validation.ts and held
  * equal to it by probes/frontend-cube-parity.test.mjs. The server counts characters
  * after normalize-space; the native `maxLength` counts UTF-16 units, so the form is
  * at most stricter than the server, never more permissive.

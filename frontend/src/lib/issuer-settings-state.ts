@@ -12,7 +12,7 @@ import type { VatRegistration } from "./draft-models.ts"
  * choosing the opposite writes the Article 310 exemption. That is why the
  * non-VAT basis is not a field: there is exactly one supported basis, and
  * sending any other would be refused by the schema
- * (`standalone/api/schema-issuer.ts:27`).
+ * (`kernel/api/schema-issuer.ts:27`).
  *
  * The status line is derived rather than stored: a screen that remembers "the
  * user chose this manually" as state can show it after the choice has been

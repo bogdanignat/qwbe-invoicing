@@ -79,7 +79,7 @@ export interface AlreadyConverted {
   readonly message: string
 }
 
-/** The server's code for a second conversion (`cube/invoicing/issuance/application/proforma-conversion-context.ts:13`). */
+/** The server's code for a second conversion (`cubes/invoicing/issuance/application/proforma-conversion-context.ts:13`). */
 export const ALREADY_CONVERTED_CODE = "proforma_already_converted"
 
 export const ALREADY_CONVERTED = "Proforma a fost deja convertită — aici sau în altă sesiune. Am reîncărcat documentul: deschide factura sau draftul rezultat de mai sus."

@@ -13,7 +13,7 @@ assigns `O` + `VATEX-EU-O` to supplies by taxable persons not registered for VAT
 and `E` + `VATEX-EU-309` to a different case entirely — the travel agents' margin
 scheme, which this product does not issue. `E` is therefore absent from
 `VatCategoryCode`: a category nothing can produce would only leave branches no
-document reaches. `cube/efactura` still knows all three, because it renders the
+document reaches. `cubes/efactura` still knows all three, because it renders the
 standard rather than this product's subset.
 
 The stored rate stays `0.00` while the UBL percentage is **absent**. These are
@@ -111,7 +111,7 @@ extracted dependency previews on 2026-09-16, not inferred from the root alone.
   BR-RO-L100 limits BT-120 to 100 characters after `normalize-space`;
   BR-RO-065 accepts the seller tax registration ID as an alternative to VAT ID.
   The flattened `preprocessed/ROeFactura-UBL-validation-Invoice_v1.0.8.sch` was
-  read in full on 2026-09-17 and is where `cube/efactura/cius-limits.ts` comes
+  read in full on 2026-09-17 and is where `cubes/efactura/cius-limits.ts` comes
   from. It also settles a citation this file used to carry: there is **no**
   BR-RO-060 in CIUS-RO 1.0.1 — BT-22 as the place for the Article 310 reference
   rests on ANAF's technical recommendation alone.

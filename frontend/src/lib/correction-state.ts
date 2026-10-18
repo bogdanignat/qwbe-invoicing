@@ -67,7 +67,7 @@ export const correctionSummary = (invoice: IssuedInvoice, body: CorrectionInput)
   lineCount: invoice.lines.length,
 })
 
-/** The backend's limit on the reason (`cube/invoicing/corrections/domain/corrections.ts:25`). */
+/** The backend's limit on the reason (`cubes/invoicing/corrections/domain/corrections.ts:25`). */
 export const CORRECTION_REASON_MAX_LENGTH = 300
 
 export const CORRECTION_CONFIRM = "Emiți un document storno integral? Documentul va fi fiscal și imuabil."

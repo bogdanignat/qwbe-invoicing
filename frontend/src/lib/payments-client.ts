@@ -8,7 +8,7 @@ import type { PaymentInput, PaymentSummary } from "./payment-models.ts"
  *
  * Both writes carry the session's CSRF token and an idempotency key — the
  * backend requires the two on every ledger write (`idempotentBody`,
- * standalone/api/http-endpoints-fiscal.ts). Their answers are not decoded: the
+ * kernel/api/http-endpoints-fiscal.ts). Their answers are not decoded: the
  * screen refetches the summary after a write rather than deriving state from
  * a `RecordPaymentResult`, so the summary decoder stays the only reader of the
  * ledger.

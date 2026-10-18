@@ -53,17 +53,17 @@ void test("only a failure a repeat could answer differently is offered a retry",
 
 void test("a domain conflict is read as Romanian, not as the bare `DomainConflict` tag", () => {
   // The 409 body is `{ error: 'DomainConflict', code }` with no `message`
-  // (standalone/api/schema-errors-session.ts:25).
+  // (kernel/api/schema-errors-session.ts:25).
   const conflicts = [
     "idempotency_key_reused", "draft_creation_result_deleted",
     "invoice_already_issued", "derived_draft_cannot_be_deleted",
     // The conversion answer carries an English `message` as well, so this one
-    // also proves the code wins over it (cube/invoicing/issuance/application/
+    // also proves the code wins over it (cubes/invoicing/issuance/application/
     // proforma-conversion-context.ts:13).
     "proforma_already_converted",
     // Every conflict the master-data writes can answer with: the business one
     // on a customer delete, and the store conflicts behind the six writes
-    // (standalone/storage/sqlite-customers.ts, sqlite-catalog.ts, sqlite-rows.ts).
+    // (kernel/storage/sqlite-customers.ts, sqlite-catalog.ts, sqlite-rows.ts).
     "customer_has_open_drafts", "customer_not_found", "customer_id_taken",
     "product_preset_id_taken", "persistence_conflict",
     // A reversal of a payment another session already reversed.

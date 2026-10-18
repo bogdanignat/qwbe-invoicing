@@ -18,13 +18,13 @@ module.exports = {
     {
       name: "cube-does-not-import-host-or-tooling",
       severity: "error",
-      from: { path: "^cube/" },
-      to: { path: "^(standalone|probes)/" },
+      from: { path: "^cubes/" },
+      to: { path: "^(kernel|probes)/" },
     },
     {
       name: "cube-does-not-touch-runtime-infrastructure",
       severity: "error",
-      from: { path: "^cube/" },
+      from: { path: "^cubes/" },
       // One rule, four alternatives, because `to.path` is OR'd: the core modules,
       // then the PostgreSQL driver in each of the three shapes dependency-cruiser
       // 18.0.0 actually reports. A bare specifier is what an unresolved import
@@ -49,14 +49,14 @@ module.exports = {
       },
     },
     {
-      name: "standalone-uses-only-public-cube-surface",
+      name: "kernel-uses-only-public-cube-surface",
       severity: "error",
-      from: { path: "^standalone/" },
+      from: { path: "^kernel/" },
       to: {
-        path: "^cube/[^/]+/",
+        path: "^cubes/[^/]+/",
         pathNot: [
-          "^cube/[^/]+/(index[.]ts|contracts/)",
-          "^cube/[^/]+/[^/]+/(index[.]ts|contracts/)",
+          "^cubes/[^/]+/(index[.]ts|contracts/)",
+          "^cubes/[^/]+/[^/]+/(index[.]ts|contracts/)",
         ]
       },
     },
@@ -89,7 +89,7 @@ module.exports = {
       name: "frontend-does-not-import-host-or-tooling",
       severity: "error",
       from: { path: "^frontend/src/" },
-      to: { path: "^(cube|standalone|probes|bin|scripts)/|^frontend/scripts/" },
+      to: { path: "^(cubes|kernel|probes|bin|scripts)/|^frontend/scripts/" },
     },
     {
       name: "frontend-does-not-import-build-output",
@@ -100,7 +100,7 @@ module.exports = {
     {
       name: "backend-does-not-import-frontend",
       severity: "error",
-      from: { path: "^(cube|standalone)/" },
+      from: { path: "^(cubes|kernel)/" },
       to: { path: "^frontend/" },
     },
     {

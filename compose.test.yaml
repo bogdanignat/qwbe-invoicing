@@ -12,7 +12,7 @@
 # verifier's, read-write because `install` populates them.
 #
 # Run:   scripts/verify-docker.sh test
-#        scripts/verify-docker.sh test "node --test standalone/storage/pagination.test.ts"
+#        scripts/verify-docker.sh test "node --test kernel/storage/pagination.test.ts"
 # Down:  docker compose --file compose.test.yaml down    (no volume, no -v)
 name: qwbe-invoicing-test
 
@@ -38,7 +38,7 @@ services:
   # in this repository owns its cluster, so one project's `down` cannot take
   # another's server with it.
   #
-  # `scram-sha-256` and not `trust`: `standalone/config.ts` reads the password from
+  # `scram-sha-256` and not `trust`: `kernel/config.ts` reads the password from
   # PGPASSWORD_FILE and the backup services hand a real credential to `pg_dump`, so
   # a trusting cluster would let both paths pass while broken. The literal below is
   # a rig fixture, is never read by the shipped stack and reaches no network — the
@@ -123,7 +123,7 @@ services:
       PGDATABASE: qwbe_test
       PGUSER: qwbe_test
       PGPASSWORD_FILE: /run/qwbe-test/pgpassword
-      # `standalone/ops/postgres-backup.test.ts` builds the subprocess credential
+      # `kernel/ops/postgres-backup.test.ts` builds the subprocess credential
       # from PGPASSWORD. It is set for that suite only and never reaches a child of
       # the CLI: the fixture's `childEnv` strips it, so the ported CLI tests prove
       # the shipped path works from the secret file alone.

@@ -39,7 +39,7 @@ const failureMessages: Readonly<Record<string, string>> = {
   request_body_too_large: "Cererea este prea mare.",
   not_found: "Ruta API cerută nu există.",
   // The fiscal API answers a missing document with the bare tag `ResourceNotFound`
-  // (standalone/api/schema-errors-session.ts:23) and a missing renderable document
+  // (kernel/api/schema-errors-session.ts:23) and a missing renderable document
   // with `DocumentNotFound`. Without an entry here `parseApiFailure` falls through
   // to `error` itself and the screen prints the tag.
   ResourceNotFound: "Documentul cerut nu există sau nu mai este disponibil.",
@@ -52,7 +52,7 @@ const failureMessages: Readonly<Record<string, string>> = {
   PersistenceFailure: "Datele nu au putut fi citite. Încearcă din nou.",
   internal_failure: "Serviciul API a întâmpinat o eroare. Încearcă din nou.",
   // `DomainConflict` answers carry a programmatic `code` and no `message`
-  // (standalone/api/schema-errors-session.ts:25). Without an entry here
+  // (kernel/api/schema-errors-session.ts:25). Without an entry here
   // `parseApiFailure` falls back to the bare `error` tag and the screen shows
   // `DomainConflict` instead of what actually happened.
   idempotency_key_reused: "Cheia de idempotență a fost deja folosită pentru un alt document. Verifică registrul de facturi înainte de a încerca din nou.",
@@ -64,9 +64,9 @@ const failureMessages: Readonly<Record<string, string>> = {
   proforma_already_converted: "Proforma a fost deja convertită. Reîncarcă pagina pentru a deschide documentul rezultat.",
   // The master-data conflicts the two registry screens can produce. The delete
   // of a customer an open draft still names is the only one of business origin
-  // (cube/invoicing/customers/application/customers.ts:64); the rest come from
+  // (cubes/invoicing/customers/application/customers.ts:64); the rest come from
   // the store and mean the record moved under the screen
-  // (standalone/storage/postgres-customers.ts:45,76, postgres-catalog.ts:42,
+  // (kernel/storage/postgres-customers.ts:45,76, postgres-catalog.ts:42,
   // postgres-errors.ts:63).
   customer_has_open_drafts: "Clientul este folosit de un draft deschis. Șterge sau finalizează draftul, apoi încearcă din nou.",
   customer_not_found: "Clientul nu mai există în registru. Reîncarcă lista de clienți.",
@@ -74,7 +74,7 @@ const failureMessages: Readonly<Record<string, string>> = {
   product_preset_id_taken: "Produsul nu a putut fi salvat: identificatorul este deja folosit. Reîncarcă lista de produse și încearcă din nou.",
   persistence_conflict: "Datele s-au schimbat în paralel. Reîncarcă pagina și încearcă din nou.",
   payment_already_reversed: "Plata a fost deja anulată.",
-  // A second full storno of the same invoice (cube/invoicing/corrections/application/corrections.ts:37).
+  // A second full storno of the same invoice (cubes/invoicing/corrections/application/corrections.ts:37).
   invoice_already_corrected: "Factura are deja un document storno integral.",
 }
 

@@ -16,13 +16,13 @@ storage backend: the pool.
 
 | Site | Before | Now |
 |---|---|---|
-| `standalone/config.ts` | `RuntimeConfig` without a database | `pgSettings: PostgresSettings`, password read from `PGPASSWORD_FILE` |
-| `standalone/storage/migrations.ts` | `node:sqlite`, three files, WAL | facade over `postgres-migrations.ts` + the global fingerprint, every entry point async |
-| `standalone/api/api-services.ts` | `createSqliteStore(dataDirectory)` | `createPostgresStore(runtime.pool)` / `createPostgresPaymentsStore(runtime.pool)` |
-| `standalone/documents/artifact-runtime.ts` | `createArtifactRepository(dataDirectory)` | `createPostgresArtifactRepository(pool)` + `createPostgresInvoiceSource(pool)`; `dataDirectory` is the PDF object store only |
-| `standalone/auth/browser-session.ts` | `DatabaseSync` per call | `browser-session-store.ts` on the pool; `login/resume/authorize/revoke` are `Promise`-returning |
-| `standalone/http/readiness.ts` | sync cache | async, single-flight, fail-closed, stale-within-interval |
-| `standalone/http/http.ts` | `startServer(config, …)` | `startServer(config, pool, …)`, `applicationReady(config, pool, barrierHeld)` |
+| `kernel/config.ts` | `RuntimeConfig` without a database | `pgSettings: PostgresSettings`, password read from `PGPASSWORD_FILE` |
+| `kernel/storage/migrations.ts` | `node:sqlite`, three files, WAL | facade over `postgres-migrations.ts` + the global fingerprint, every entry point async |
+| `kernel/api/api-services.ts` | `createSqliteStore(dataDirectory)` | `createPostgresStore(runtime.pool)` / `createPostgresPaymentsStore(runtime.pool)` |
+| `kernel/documents/artifact-runtime.ts` | `createArtifactRepository(dataDirectory)` | `createPostgresArtifactRepository(pool)` + `createPostgresInvoiceSource(pool)`; `dataDirectory` is the PDF object store only |
+| `kernel/auth/browser-session.ts` | `DatabaseSync` per call | `browser-session-store.ts` on the pool; `login/resume/authorize/revoke` are `Promise`-returning |
+| `kernel/http/readiness.ts` | sync cache | async, single-flight, fail-closed, stale-within-interval |
+| `kernel/http/http.ts` | `startServer(config, …)` | `startServer(config, pool, …)`, `applicationReady(config, pool, barrierHeld)` |
 | `bin/qwbe-invoicing.ts` | sync commands on a directory | a pool per command, `finally close()`, `serve` holds the SHARED barrier |
 
 ## 2 The API this unit consumes and the API it adds
@@ -34,28 +34,28 @@ Consumed, unchanged: `createPostgresRuntime` / `createQueryRuntime` /
 `applyMigrationsOnClient`, `assertCollationC`, the maintenance lock helpers, and
 the ops contract `BackupContext{pool,settings,dataDirectory}` with
 `executeBackup`/`executeRestore`/`planBackup`/`planRestore` from
-`standalone/ops/postgres-backup.ts` (owned by the ops unit, consumed here).
+`kernel/ops/postgres-backup.ts` (owned by the ops unit, consumed here).
 
 Added:
 
 ```ts
-// standalone/storage/postgres-schema-fingerprint.ts
+// kernel/storage/postgres-schema-fingerprint.ts
 const appliedOrder:   (executor: SqlExecutor) => Promise<ReadonlyArray<string>>
 const replayFingerprint: (client: PoolClient, keys: ReadonlyArray<string>) => Promise<SchemaObjects>
 const schemaDriftOnClient: (client: PoolClient) => Promise<ReadonlyArray<string>>
 const schemaDrift:    (pool: Pool) => Promise<ReadonlyArray<string>>
 const resetFingerprintCache: () => void
-// standalone/storage/postgres-schema-introspection.ts
+// kernel/storage/postgres-schema-introspection.ts
 const introspectSchema: (executor: SqlExecutor, schema: string) => Promise<SchemaObjects>
-// standalone/storage/postgres-maintenance-session.ts
+// kernel/storage/postgres-maintenance-session.ts
 const startMaintenanceSession: (pool: Pool, options?) => Promise<MaintenanceSession>
 //   MaintenanceSession = { held: () => boolean; release: () => Promise<void> }
-// standalone/storage/migrations.ts
+// kernel/storage/migrations.ts
 const databaseReady: (pool: Pool) => Promise<boolean>
 const artifactsDirectoryReady: (dataDirectory: string) => boolean
-// standalone/http/http.ts
+// kernel/http/http.ts
 const applicationReady: (config, pool, barrierHeld?) => () => Promise<boolean>
-// standalone/ops/cli-doctor.ts
+// kernel/ops/cli-doctor.ts
 const doctorReport: (config: RuntimeConfig, pool: Pool) => Promise<DoctorReport>
 ```
 
@@ -122,7 +122,7 @@ First round: 266 of the 270 were legacy `*.test.ts` files still calling the
 synchronous SQLite API, 3 were the dead `sqlite-*` modules and 1 belonged to the
 ops unit. After the fix round the tests are ported (by the tests unit), the dead
 `sqlite-*` cluster is deleted, and the only two remaining errors are in
-`standalone/ops/postgres-backup.test.ts`, which the ops unit owns.
+`kernel/ops/postgres-backup.test.ts`, which the ops unit owns.
 
 ## 5 Review fix round
 
@@ -133,7 +133,7 @@ The full finding-by-finding answer, the commands and the remaining gaps are in
 
 | # | Sev | Where | Done |
 |---|---|---|---|
-| 1 | high | `config.ts` secret not fail-closed | `secretFrom(path, nodeEnvironment)`: outside `development`/`test` a missing file throws `PGPASSWORD_FILE is required outside development`, an empty file throws `PGPASSWORD_FILE is empty: <path>`. Empty password survives only in dev/test (`trust` rigs). Test: `standalone/http/postgres-readiness.test.ts` |
+| 1 | high | `config.ts` secret not fail-closed | `secretFrom(path, nodeEnvironment)`: outside `development`/`test` a missing file throws `PGPASSWORD_FILE is required outside development`, an empty file throws `PGPASSWORD_FILE is empty: <path>`. Empty password survives only in dev/test (`trust` rigs). Test: `kernel/http/postgres-readiness.test.ts` |
 | 2 | high | `/health/live` waited on the database | `needsReadiness(url)` in `http-request-listener.ts`: only `/health/ready` evaluates readiness; `/health/live`, `/`, 404 and 405 answer with no DB call. Test: "liveness never depends on readiness" |
 | 3 | high | boot died with the database | `startMaintenanceSession` no longer rejects (acquire failures are caught internally, the candidate client is destroyed), and `bin` additionally `.catch`es it into an unheld session. HTTP listens regardless |
 | 4 | high | lost barrier was terminal | rewritten: `held()` flips false at once, the client is destroyed (`release(error)`) so the `max: 1` pool keeps its slot, and a bounded-backoff worker (250ms → 5000ms cap) re-acquires forever. Verified live with `pg_terminate_backend` |
@@ -141,7 +141,7 @@ The full finding-by-finding answer, the commands and the remaining gaps are in
 | 6 | medium | exclusive lock on session reads | **invalid by decision** — see §2 |
 | 7 | medium | dirty connection returned after a failed ROLLBACK | `ScratchNotRolledBack` (`postgres-schema-replay.ts`) is thrown when the second ROLLBACK also fails; `schemaDrift` and `doctorReport` both `client.release(error)` on it, so a dirty connection is never pooled |
 | 8 | medium | DDL privilege for runtime readiness | **approved plan decision** (owner role + scratch schema) kept; the real gap — no diagnostic — is fixed: `applicationReady` takes a `report` callback emitting codes `maintenance_barrier_not_held` / `artifact_directory_not_writable` / `schema_pending_or_drifted` / `schema_check_failed:<Error.name>`, and `serve` logs them with the barrier state. Codes and `Error.name` only, never a driver message |
-| 9 | medium | raw `error.message` in the CLI catch | `standalone/ops/cli-redaction.ts`: `cliRedactor(secret)` = pattern redactor + the literal secret, `failureMessage` walks a bounded cause chain (3 links). Used for the final catch, the barrier catch and pool errors. Tests: `standalone/ops/postgres-cli-redaction.test.ts` |
+| 9 | medium | raw `error.message` in the CLI catch | `kernel/ops/cli-redaction.ts`: `cliRedactor(secret)` = pattern redactor + the literal secret, `failureMessage` walks a bounded cause chain (3 links). Used for the final catch, the barrier catch and pool errors. Tests: `kernel/ops/postgres-cli-redaction.test.ts` |
 | 10 | low | readiness comment contradicted the code | a failed run is now genuinely not cached (fail-closed `false`, next call retries), the value+timestamp are recorded inside the same continuation and `inFlight` is cleared after, so the single-flight window is closed. Tests: 3 cases |
 | 11 | low | `planRestore` called twice in dry-run | one scan, both `scanned` and `files` derived from it |
 | 12 | info | `barrierHeld` defaulted to `true` | the parameter is now required; `startServer`'s own default passes `() => true` explicitly |
@@ -166,27 +166,27 @@ diagnostic, and that is now there (§1 row 8).
 
 ## 3 Also finished in this round
 
-- **Dead SQLite production cluster removed**: 25 `standalone/storage/sqlite-*.ts`
+- **Dead SQLite production cluster removed**: 25 `kernel/storage/sqlite-*.ts`
   files deleted after an import scan proved no live caller
-  (`grep -rl` over `standalone bin cube probes web frontend`; the only hits are
+  (`grep -rl` over `kernel bin cubes probes web frontend`; the only hits are
   two comment references in `frontend/src/lib/api-errors.ts:69-70`, no imports).
   No compatibility shim was left behind.
 - **`api.ts` / listener splits** to stay inside the 6000-character cap:
-  `standalone/api/api-invoicing-group.ts`, `standalone/http/http-api-forward.ts`,
-  `standalone/storage/postgres-schema-replay.ts`.
+  `kernel/api/api-invoicing-group.ts`, `kernel/http/http-api-forward.ts`,
+  `kernel/storage/postgres-schema-replay.ts`.
 
 ## 4 Commands, exit codes, evidence
 
 ```
 docker compose --file compose.pg-adapters.yaml run --rm adapters \
-  node --test standalone/http/postgres-readiness.test.ts \
-             standalone/ops/postgres-cli-redaction.test.ts \
-             standalone/storage/postgres-maintenance.test.ts
+  node --test kernel/http/postgres-readiness.test.ts \
+             kernel/ops/postgres-cli-redaction.test.ts \
+             kernel/storage/postgres-maintenance.test.ts
 → tests 14, pass 14, fail 0, duration_ms 1822.8   (real PostgreSQL 16, exit 0)
 
-scripts/verify-docker.sh run "npx eslint standalone bin"      → clean, exit 0
+scripts/verify-docker.sh run "npx eslint kernel bin"          → clean, exit 0
 scripts/verify-docker.sh run "npx tsc -p tsconfig.json"       → 2 errors, BOTH in
-  standalone/ops/postgres-backup.test.ts (300,24) and (458,21) — the ops unit's
+  kernel/ops/postgres-backup.test.ts (300,24) and (458,21) — the ops unit's
   own in-flight file. 0 errors in any file this unit owns (was 270 last round).
 scripts/verify-docker.sh run "node probes/{size,package,test,boundary}-gate.mjs"
   → size gate passed; package-shape gate passed; unit-test gate passed;

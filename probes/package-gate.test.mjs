@@ -16,9 +16,9 @@ const write = (root, path, content) => {
 test("accepts a complete cube package root", () => {
   const root = fixture()
   try {
-    write(root, "cube/invoicing/qwbe-package.json", JSON.stringify({ name: "invoicing", kind: "cube", summary: "Invoices" }))
-    write(root, "cube/invoicing/index.ts", "export const cube = {}\n")
-    assert.deepEqual(inspectPackageShapes(root, ["cube"]), [{ id: "cube/invoicing", failures: [] }])
+    write(root, "cubes/invoicing/qwbe-package.json", JSON.stringify({ name: "invoicing", kind: "cube", summary: "Invoices" }))
+    write(root, "cubes/invoicing/index.ts", "export const cube = {}\n")
+    assert.deepEqual(inspectPackageShapes(root, ["cubes"]), [{ id: "cubes/invoicing", failures: [] }])
   } finally {
     rmSync(root, { recursive: true, force: true })
   }
@@ -27,8 +27,8 @@ test("accepts a complete cube package root", () => {
 test("rejects a mismatched package without a public entry", () => {
   const root = fixture()
   try {
-    write(root, "cube/invoicing/qwbe-package.json", JSON.stringify({ name: "billing", kind: "plugin", summary: "" }))
-    assert.deepEqual(inspectPackageShapes(root, ["cube"])[0]?.failures, [
+    write(root, "cubes/invoicing/qwbe-package.json", JSON.stringify({ name: "billing", kind: "plugin", summary: "" }))
+    assert.deepEqual(inspectPackageShapes(root, ["cubes"])[0]?.failures, [
       "manifest name must match its directory",
       'manifest kind must be "cube"',
       "manifest summary is required",

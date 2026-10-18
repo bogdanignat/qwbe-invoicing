@@ -232,7 +232,7 @@ Required protections include:
 - organization- and resource-level authorization;
 - explicit permissions for reading, drafting, issuing, correcting, recording
   payments, and changing settings;
-- secure HttpOnly cookie sessions and CSRF protection in the standalone host;
+- secure HttpOnly cookie sessions and CSRF protection in the kernel;
 - TLS, secret management, rate limiting, and sensitive-log redaction;
 - encrypted off-host backups and tested restore;
 - data minimization and retention compatible with fiscal/accounting obligations.
@@ -350,7 +350,7 @@ Docker Compose
 └── proxy     optional Caddy profile for TLS
 ```
 
-PostgreSQL 16 is the standalone host's persistence, in a container this bundle runs
+PostgreSQL 16 is the kernel's persistence, in a container this bundle runs
 and on a volume it owns. It is still an intentional deployment choice rather than
 convergence on the mother: the confirmed future integration direction is an external
 application/sidecar, where the mother may provide installation and authentication
@@ -413,7 +413,7 @@ There are two canonical runtime contexts and one optional convenience tool:
 | Artifact | Purpose |
 |---|---|
 | Docker image + Compose bundle | Standalone self-hosted application |
-| `cube/invoicing/` package | Installation into a compatible QWBE runtime |
+| `cubes/invoicing/` package | Installation into a compatible QWBE runtime |
 | npm CLI, later | Thin installer/operator wrapper around Docker and Compose |
 
 `npm install` is not the runtime deployment mechanism. Requiring Node and npm on a
@@ -473,7 +473,7 @@ durable workflow seam are stable.
 - create strict TypeScript, test, lint, size, and boundary gates;
 - define organization, identity, store, clock, ID, and rendering ports as `Effect` capabilities;
 - define observable domain failures as typed `Effect` failures;
-- create package allowlist and standalone composition root (every use-case gets an `Effect`-based HTTP endpoint);
+- create package allowlist and kernel composition root (every use-case gets an `Effect`-based HTTP endpoint);
 - add Docker build and Compose development baseline.
 
 ### Phase 1 — invoice core
@@ -488,7 +488,7 @@ durable workflow seam are stable.
 
 ### Phase 2 — usable standalone product
 
-- React 19 + TypeScript UI styled with Tailwind CSS 4: a Next.js 16 App Router application (`frontend/`) that reaches the standalone host only through its BFF under `/api/qwbe/*`, with TanStack Query as the React server-state adapter;
+- React 19 + TypeScript UI styled with Tailwind CSS 4: a Next.js 16 App Router application (`frontend/`) that reaches the kernel only through its BFF under `/api/qwbe/*`, with TanStack Query as the React server-state adapter;
 - PDF rendering and preserved artifacts;
 - payment recording and status calculation;
 - correction documents;
@@ -524,7 +524,7 @@ The following decisions must be explicit before their relevant implementation:
    domestic VAT and non-VAT-registered issuers?
 3. Resolved for the first usable release: delivery is PDF download. Email remains a
    future capability; proforma delivery specifically means download, not email.
-4. Resolved: React 19 + TypeScript + Tailwind CSS 4 in a Next.js 16 App Router application (the Vite UI was removed in T-1649), same-origin and API-first through the BFF under `/api/qwbe/*`; TanStack Query holds React server state. The standalone host exchanges the local API token for a revocable, opaque 30-day session persisted server-side and referenced by an HttpOnly `SameSite=Strict` cookie. The browser keeps only the per-session CSRF token in memory; bearer authentication remains for direct API clients on the internal network.
+4. Resolved: React 19 + TypeScript + Tailwind CSS 4 in a Next.js 16 App Router application (the Vite UI was removed in T-1649), same-origin and API-first through the BFF under `/api/qwbe/*`; TanStack Query holds React server state. The kernel exchanges the local API token for a revocable, opaque 30-day session persisted server-side and referenced by an HttpOnly `SameSite=Strict` cookie. The browser keeps only the per-session CSRF token in memory; bearer authentication remains for direct API clients on the internal network.
 5. What retention policy and backup targets are promised to operators?
 6. Which public, versioned QWBE contracts replace the current private `0.0.0`
    compatibility snapshot?

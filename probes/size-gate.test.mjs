@@ -64,8 +64,8 @@ test("counts a shebang as the code it is, slashes included", () => {
 
 test("rejects file, unit, and file-count cap violations", () => {
   const measurement = {
-    files: [{ path: "cube/invoicing/index.ts", code: 11, raw: 11 }],
-    units: [{ id: "cube/invoicing", files: 2, code: 11, raw: 11 }],
+    files: [{ path: "cubes/invoicing/index.ts", code: 11, raw: 11 }],
+    units: [{ id: "cubes/invoicing", files: 2, code: 11, raw: 11 }],
   }
   assert.deepEqual(sizeViolations(measurement, {
     maxCharsPerFile: 10,
@@ -77,16 +77,16 @@ test("rejects file, unit, and file-count cap violations", () => {
 test("measures nested cubes independently and excludes tests", () => {
   const root = fixture()
   try {
-    makeUnit(root, "cube/invoicing")
-    write(root, "cube/invoicing/index.ts", "export const parent = 1\n")
-    write(root, "cube/invoicing/index.test.ts", "// tests are not production size\n")
-    makeUnit(root, "cube/invoicing/cubes/reporting")
-    write(root, "cube/invoicing/cubes/reporting/index.ts", "export const child = 2\n")
+    makeUnit(root, "cubes/invoicing")
+    write(root, "cubes/invoicing/index.ts", "export const parent = 1\n")
+    write(root, "cubes/invoicing/index.test.ts", "// tests are not production size\n")
+    makeUnit(root, "cubes/invoicing/cubes/reporting")
+    write(root, "cubes/invoicing/cubes/reporting/index.ts", "export const child = 2\n")
 
-    const measurement = inspectSizes(root, ["cube"])
+    const measurement = inspectSizes(root, ["cubes"])
     assert.deepEqual(measurement.units.map(({ id, files }) => ({ id, files })), [
-      { id: "cube/invoicing", files: 1 },
-      { id: "cube/invoicing/cubes/reporting", files: 1 },
+      { id: "cubes/invoicing", files: 1 },
+      { id: "cubes/invoicing/cubes/reporting", files: 1 },
     ])
     assert.equal(measurement.files.length, 2)
   } finally {
@@ -97,35 +97,35 @@ test("measures nested cubes independently and excludes tests", () => {
 test("measures host and browser sources without treating them as cubes", () => {
   const root = fixture()
   try {
-    makeUnit(root, "cube/invoicing")
-    write(root, "cube/invoicing/index.ts", "export const cube = 1\n")
-    write(root, "standalone/api/new/handler.ts", "export const handler = 'over cap'\n")
+    makeUnit(root, "cubes/invoicing")
+    write(root, "cubes/invoicing/index.ts", "export const cube = 1\n")
+    write(root, "kernel/api/new/handler.ts", "export const handler = 'over cap'\n")
     write(root, "web/src/View.tsx", 'export const View = () => <a href="https://example.test">Link</a>\n')
-    write(root, "standalone/api/handler.test.ts", "test fixture")
-    write(root, "standalone/api/handler.spec.ts", "test fixture")
-    write(root, "standalone/api/handler.test-support.ts", "test fixture")
-    write(root, "standalone/ui-dist/assets/app.js", "generated bundle")
-    write(root, "standalone/ui-dist-source/real.ts", "export const real = 1\n")
+    write(root, "kernel/api/handler.test.ts", "test fixture")
+    write(root, "kernel/api/handler.spec.ts", "test fixture")
+    write(root, "kernel/api/handler.test-support.ts", "test fixture")
+    write(root, "kernel/ui-dist/assets/app.js", "generated bundle")
+    write(root, "kernel/ui-dist-source/real.ts", "export const real = 1\n")
     write(root, "web/dist/app.js", "generated bundle")
     write(root, "web/node_modules/library/index.js", "dependency")
     write(root, "web/.cache/generated.js", "generated bundle")
     write(root, "web/src/app.css", "stylesheet")
-    symlinkSync(join(root, "standalone/api/new/handler.ts"), join(root, "web/linked.ts"))
-    const measurement = inspectSizes(root, ["cube"], {
-      fileRoots: ["standalone", "web", "standalone/api", "cube", "standalone/ui-dist/assets"],
-      excludedDirectories: ["standalone/ui-dist"],
+    symlinkSync(join(root, "kernel/api/new/handler.ts"), join(root, "web/linked.ts"))
+    const measurement = inspectSizes(root, ["cubes"], {
+      fileRoots: ["kernel", "web", "kernel/api", "cubes", "kernel/ui-dist/assets"],
+      excludedDirectories: ["kernel/ui-dist"],
     })
     assert.deepEqual(measurement.files.map(({ path }) => path), [
-      "cube/invoicing/index.ts",
-      "standalone/api/new/handler.ts",
-      "standalone/ui-dist-source/real.ts",
+      "cubes/invoicing/index.ts",
+      "kernel/api/new/handler.ts",
+      "kernel/ui-dist-source/real.ts",
       "web/src/View.tsx",
     ])
     assert.deepEqual(measurement.units.map(({ id, files }) => ({ id, files })), [
-      { id: "cube/invoicing", files: 1 },
+      { id: "cubes/invoicing", files: 1 },
     ])
     const violations = sizeViolations(measurement, { maxCharsPerFile: 25, maxCharsPerUnit: 40000, maxFilesPerUnit: 15 })
-    assert.deepEqual(violations.files.map(({ path }) => path), ["standalone/api/new/handler.ts", "web/src/View.tsx"])
+    assert.deepEqual(violations.files.map(({ path }) => path), ["kernel/api/new/handler.ts", "web/src/View.tsx"])
     assert.deepEqual(violations.units, [])
     assert.equal(measurement.files.find(({ path }) => path.endsWith("View.tsx")).code,
       'export const View = () => <a href="https://example.test">Link</a>'.length)
@@ -154,16 +154,16 @@ test("size gate CLI fails on oversized host and frontend/src sources and invalid
       write(root, `probes/${name}`, readFileSync(new URL(name, import.meta.url), "utf8"))
     }
     symlinkSync(fileURLToPath(new URL("../node_modules", import.meta.url)), join(root, "node_modules"))
-    const config = { cubeRoots: [], sizeFileRoots: ["standalone", "frontend/src"], caps: { maxCharsPerFile: 10, maxCharsPerUnit: 40000, maxFilesPerUnit: 15 } }
+    const config = { cubeRoots: [], sizeFileRoots: ["kernel", "frontend/src"], caps: { maxCharsPerFile: 10, maxCharsPerUnit: 40000, maxFilesPerUnit: 15 } }
     write(root, "qwbe.config.json", JSON.stringify(config))
-    write(root, "standalone/adapter.ts", "export const adapter = 1\n")
+    write(root, "kernel/adapter.ts", "export const adapter = 1\n")
     write(root, "frontend/src/app/page.tsx", "export const Page = 1\n")
     const run = () => spawnSync(process.execPath, [join(root, "probes/size-gate.mjs")], { encoding: "utf8" })
     const overCap = run()
     assert.equal(overCap.status, 1)
-    assert.match(overCap.stderr, /File over cap: standalone\/adapter.ts/)
+    assert.match(overCap.stderr, /File over cap: kernel\/adapter.ts/)
     assert.match(overCap.stderr, /File over cap: frontend\/src\/app\/page.tsx/)
-    write(root, "standalone/adapter.ts", "const x=1")
+    write(root, "kernel/adapter.ts", "const x=1")
     write(root, "frontend/src/app/page.tsx", "const x=1")
     assert.equal(run().status, 0)
     write(root, "qwbe.config.json", JSON.stringify({ ...config, sizeFileRoots: ["missing"] }))

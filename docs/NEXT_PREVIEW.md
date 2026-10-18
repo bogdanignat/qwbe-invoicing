@@ -175,7 +175,7 @@ probe plus this browser pass, not by a permanent hook regression test (non-block
 Fable LOW).
 
 The same pass reported an apparent early session expiry. It was **not reproduced**: the
-browser session lives 30 days (`sessionLifetimeSeconds`, `standalone/auth/browser-session.ts`),
+browser session lives 30 days (`sessionLifetimeSeconds`, `kernel/auth/browser-session.ts`),
 the proxy forwards `Max-Age` unchanged and validates rather than shortens it
 (`frontend/src/lib/server/proxy-cookie.ts`), and the only fixture route that answers
 `401` belongs to the stub API used by `probes/frontend-runtime.mjs`, which the browser
@@ -257,7 +257,7 @@ registry). Both shell links are now live; `/settings` followed in phase five, be
 
 - Master-data writes live in their own client (`lib/registry-client.ts`), separate from the
   read-only reference client. They carry **CSRF only**: the backend requires no idempotency
-  key for them (`standalone/api/http-endpoints-master-data.ts`), there is nothing to replay,
+  key for them (`kernel/api/http-endpoints-master-data.ts`), there is nothing to replay,
   and a duplicate created by a repeated request is deletable — unlike an issued number. So
   none of the operation-recovery machinery is wired to them, deliberately.
 - Each screen is a registry on the left and an editor on the right. What may be saved and
@@ -371,7 +371,7 @@ review found, and what was done about it:
   a recognized regime or fallback, none undefined. That enumeration held one date constant
   on both ends, and that is exactly the assumption that fails. `currentVat` is a snapshot
   the server computes when it builds the answer
-  (`cube/invoicing/issuer/application/issuer-view.ts:14`), the query client keeps it with
+  (`cubes/invoicing/issuer/application/issuer-view.ts:14`), the query client keeps it with
   no `staleTime` and no refetch on focus (`hooks/use-app-query-client.ts:7`), while the
   form's `today` is recomputed on every render. A tab left open across midnight holds
   yesterday's regime and today's date — and with a registration that was scheduled for
@@ -380,7 +380,7 @@ review found, and what was done about it:
   The snapshot is no longer read by this screen. The regime in force is projected from the
   stored configurations against the same `today` as the fallback and the change date
   (`lib/issuer-vat-baseline.ts`, `currentVatRegistration`) — the same projection the
-  backend performs (`cube/invoicing/issuer/domain/vat-regime.ts:18`) — so both ends answer
+  backend performs (`cubes/invoicing/issuer/domain/vat-regime.ts:18`) — so both ends answer
   about the same day by construction. That covers the cached-null regime that came into
   force overnight and the cached regime that expired overnight, in one rule rather than in
   a branch per case.
@@ -403,7 +403,7 @@ review found, and what was done about it:
   it to the file input, through the helper the refusal focus already uses
   (`lib/focus.ts`, `focusRegistryField`).
 - **`branding` was optional on the model and tolerated as missing by the decoder.** The
-  contract sends it on every answer (`standalone/api/schema-issuer.ts:51`), only nullable.
+  contract sends it on every answer (`kernel/api/schema-issuer.ts:51`), only nullable.
   It is now `readonly branding: IssuerBranding | null` and an absent field throws at the
   boundary like every other required one; the fixtures that relied on the tolerance supply
   `branding: null`.

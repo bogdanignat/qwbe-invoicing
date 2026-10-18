@@ -11,7 +11,7 @@ import type { Address, DocumentSeries, DocumentType, Issuer, NonVatBasis } from 
  * be able to rewrite it through the same object.
  *
  * Both carry CSRF and no idempotency key, like the rest of the master data
- * (`standalone/api/http-endpoints-master-data.ts:11-14`): the issuer is a profile
+ * (`kernel/api/http-endpoints-master-data.ts:11-14`): the issuer is a profile
  * that is replaced whole, and a series is idempotent by conflict — a second
  * identical `POST` answers `document_series_exists`, not a duplicate.
  *
