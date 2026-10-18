@@ -3,7 +3,7 @@ import { cube as catalogCube, catalogMigrations } from "../../cubes/invoicing/ca
 import { cube as customersCube, customersMigrations } from "../../cubes/invoicing/customers/index.ts"
 import { cube as documentsCube, documentsMigrations } from "../../cubes/invoicing/documents/index.ts"
 import { cube as issuerCube, issuerMigrations } from "../../cubes/invoicing/issuer/index.ts"
-import { cube as paymentsCube, paymentsMigrations } from "../../cubes/payments/index.ts"
+import { cube as paymentsCube, paymentsMigrations } from "../../cubes/invoicing/payments/index.ts"
 import { foundationMigrations, foundationScope, type SchemaMigration } from "./postgres-foundation.ts"
 
 /**

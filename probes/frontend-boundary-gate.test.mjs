@@ -6,6 +6,8 @@ import { fileURLToPath } from "node:url"
 import { spawnSync } from "node:child_process"
 import test from "node:test"
 
+import { listCube } from "./cube-fixture.test-support.mjs"
+
 const gate = join(dirname(fileURLToPath(import.meta.url)), "boundary-gate.mjs")
 const write = (root, path, content = "export type Value = string\n") => {
   const target = join(root, path)
@@ -24,7 +26,7 @@ const cruise = (build) => {
   try {
     // A valid backend root makes every frontend-only rejection prove frontend/src was cruised.
     write(root, "cubes/invoicing/index.ts")
-    write(root, "cubes/invoicing/qwbe-package.json", "{}\n")
+    listCube(root, "cubes/invoicing")
     build(root)
     const result = spawnSync(process.execPath, [gate, "--root", root], { encoding: "utf8" })
     return { status: result.status, output: result.stdout + result.stderr }

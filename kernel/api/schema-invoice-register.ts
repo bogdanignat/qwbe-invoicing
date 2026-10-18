@@ -8,7 +8,7 @@ const common = {
 }
 const EFacturaStatus = Schema.Literal("not_sent", "pending", "sent", "accepted", "rejected")
 const InvoiceRegisterInvoice = Schema.Struct({
-  kind: Schema.Literal("invoice"), ...common, dueDate: nullableString, eFacturaStatus: EFacturaStatus,
+  kind: Schema.Literal("invoice"), ...common, dueDate: nullableString, eFacturaStatus: Schema.NullOr(EFacturaStatus),
 })
 const InvoiceRegisterCorrection = Schema.Struct({
   kind: Schema.Literal("correction"), ...common, dueDate: Schema.Null, eFacturaStatus: Schema.Null,
@@ -16,6 +16,6 @@ const InvoiceRegisterCorrection = Schema.Struct({
 })
 
 export const InvoiceRegisterRow = Schema.Union(InvoiceRegisterInvoice, InvoiceRegisterCorrection).annotations({
-  description: "kind discriminates invoice/correction. Correction totals retain their stored negative sign, dueDate/eFacturaStatus are null, and originalReference is present; invoices omit originalReference.",
+  description: "kind discriminates invoice/correction. Correction totals retain their stored negative sign, dueDate/eFacturaStatus are null, and originalReference is present; invoices omit originalReference. An invoice's eFacturaStatus is null when the e-Factura plugin is off.",
 })
 export const InvoiceRegisterPage = pageOf(InvoiceRegisterRow)

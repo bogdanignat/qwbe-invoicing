@@ -1,6 +1,6 @@
 import { createContext, useContext } from "react"
 
-import type { AuthSnapshot } from "../lib/auth-controller.ts"
+import type { AuthSnapshot } from "../lib/auth-session.ts"
 import type { BrowserTransport } from "../lib/browser-transport.ts"
 
 export interface AuthController extends AuthSnapshot {

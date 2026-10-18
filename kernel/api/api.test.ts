@@ -18,6 +18,7 @@ const summaryOf = (document: unknown): unknown => {
   return { ...value, issuer }
 }
 import { proformaTemplateVersion } from "../documents/pdf-renderer.ts"
+import { allPlugins } from "../plugins.ts"
 const each = { code: "C62", name: "unitate" } as const
 
 void test("requires host authentication and serves the complete invoice-core route sequence", async () => {
@@ -29,6 +30,7 @@ void test("requires host authentication and serves the complete invoice-core rou
       authenticate: createRequestAuthenticator(fixture.config({ authTokenFile: tokenFile })),
       pool: fixture.pool,
       dataDirectory: fixture.dataDirectory,
+      plugins: allPlugins,
       // The route sequence writes literal September 2026 dates; pin "today" so chronology,
       // future-date and correction rules judge them the same way on every run.
       now: () => new Date("2026-09-05T10:00:00.000Z"),
@@ -622,6 +624,7 @@ void test("authenticates before parsing protected request bodies", async () => {
       authenticate: createRequestAuthenticator(fixture.config({ authTokenFile: undefined })),
       pool: fixture.pool,
       dataDirectory: fixture.dataDirectory,
+      plugins: allPlugins,
     }
     const response = await handleApiRequest({
       method: "POST",
@@ -653,6 +656,7 @@ void test("carries document remarks through the HTTP contract and rejects invali
       authenticate: createRequestAuthenticator(fixture.config({ authTokenFile: tokenFile })),
       pool: fixture.pool,
       dataDirectory: fixture.dataDirectory,
+      plugins: allPlugins,
       now: () => new Date("2026-09-05T10:00:00.000Z"),
     }
     const authorization = `Bearer ${token}`

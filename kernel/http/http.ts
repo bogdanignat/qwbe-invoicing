@@ -2,7 +2,7 @@ import { createServer, type IncomingMessage, type Server } from "node:http"
 
 import type { Pool } from "pg"
 
-import { apiDocsResponse } from "./api-docs.ts"
+import { apiDocsResponse, type ApiDocsResponse } from "./api-docs.ts"
 import { createApiHandler } from "../api/api.ts"
 import { createRequestAuthenticator } from "../auth/auth.ts"
 import { createBrowserSession } from "../auth/browser-session.ts"
@@ -87,7 +87,7 @@ export const startServer = async (
   /** The application pool. The server borrows it and never ends it. */
   pool: Pool,
   isReady?: () => Promise<boolean>,
-  renderApiDocs: () => Promise<Awaited<ReturnType<typeof apiDocsResponse>>> = apiDocsResponse,
+  renderApiDocs: () => Promise<ApiDocsResponse> = apiDocsResponse(config.plugins),
   dependencies: ServerDependencies = {},
 ): Promise<RunningServer> => {
   const ready = isReady ?? cachedReadiness(
@@ -101,7 +101,7 @@ export const startServer = async (
     ...(dependencies.monotonicNow === undefined ? {} : { monotonicNow: dependencies.monotonicNow }),
     ...(dependencies.securityLogger === undefined ? {} : { logger: dependencies.securityLogger }) })
   const apiFactory = dependencies.apiHandlerFactory ?? createApiHandler
-  const api = apiFactory({ authenticate, pool, dataDirectory: config.dataDirectory, browserSession })
+  const api = apiFactory({ authenticate, pool, dataDirectory: config.dataDirectory, browserSession, plugins: config.plugins })
   let disposePromise: Promise<void> | undefined
   const dispose = () => disposePromise ??= api.dispose()
   let closePromise: Promise<void> | undefined

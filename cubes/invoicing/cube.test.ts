@@ -8,6 +8,7 @@ import { invoicingMigrations } from "./contracts/migrations.ts"
 
 void test("exports a minimal authenticated QWBE cube definition", () => {
   assert.equal(cube.manifest.name, "invoicing")
+  assert.equal(cube.manifest.required, true)
   assert.equal(cube.manifest.requiresAuth, true)
   assert.equal(cube.manifest.permissions.length, 7)
   assert.deepEqual(cube.manifest.tables, [

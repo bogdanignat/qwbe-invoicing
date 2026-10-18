@@ -7,7 +7,7 @@ import {
   DomainConflict, createInvoicingService,
   type Clock, type IdGenerator, type RequestContextProvider,
 } from "../../cubes/invoicing/index.ts"
-import { createPaymentsService } from "../../cubes/payments/index.ts"
+import { createPaymentsService } from "../../cubes/invoicing/payments/index.ts"
 import { writeFailure } from "./postgres-errors.ts"
 import { createPostgresArtifactRepository } from "./postgres-artifact-repository.ts"
 import { freshRuntime } from "./postgres-rig.test-support.ts"

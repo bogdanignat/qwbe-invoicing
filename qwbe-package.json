@@ -1,0 +1,18 @@
+{
+  "name": "invoicing-pack",
+  "kind": "plugin",
+  "summary": "Romanian invoicing parent with its required child cubes and the payments and e-Factura plugins.",
+  "cubes": [
+    "invoicing",
+    "invoicing/catalog",
+    "invoicing/corrections",
+    "invoicing/customers",
+    "invoicing/documents",
+    "invoicing/drafts",
+    "invoicing/issuance",
+    "invoicing/issuer",
+    "invoicing/parties",
+    "invoicing/payments",
+    "invoicing/efactura"
+  ]
+}

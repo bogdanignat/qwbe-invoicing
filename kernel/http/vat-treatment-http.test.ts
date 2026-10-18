@@ -8,6 +8,7 @@ import { handleApiRequest } from "../api/api.test-support.ts"
 import { createRequestAuthenticator } from "../auth/auth.ts"
 import { migratedFixture } from "../storage/postgres-rig.test-support.ts"
 import * as S from "../api/http-schemas.ts"
+import { allPlugins } from "../plugins.ts"
 
 const reason = "Regim special de scutire conform art. 310 din Codul fiscal"
 const issuer = {
@@ -29,6 +30,7 @@ const fixture = async (label: string) => {
   const runtime = {
     pool: rig.pool,
     dataDirectory: rig.dataDirectory, now: () => new Date(`${date}T10:00:00.000Z`),
+    plugins: allPlugins,
     authenticate: createRequestAuthenticator(rig.config({ authTokenFile: tokenFile })),
   }
   const call = (method: string, url: string, body?: unknown, idempotencyKey?: string) => handleApiRequest({

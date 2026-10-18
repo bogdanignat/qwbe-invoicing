@@ -2,11 +2,12 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import { HttpApi, OpenApi } from "@effect/platform"
-import { Schema } from "effect"
+import { Schema, SchemaAST } from "effect"
 
 import { makeApiDocsResponse } from "../http/api-docs.ts"
-import { applicationHttpApi, operationNames } from "./http-api.ts"
+import { activeHttpApi, applicationHttpApi, efacturaHttpApi, operationNames, paymentsHttpApi } from "./http-api.ts"
 import * as S from "./http-schemas.ts"
+import { allPlugins } from "../plugins.ts"
 
 const inventory = [
   "GET /api/issuer", "PUT /api/issuer", "GET /api/document-series", "POST /api/document-series",
@@ -26,9 +27,13 @@ const inventory = [
   "GET /api/session", "POST /api/session", "DELETE /api/session",
 ].sort()
 
-void test("the contract exposes exactly the current 50 operations", () => {
+const paymentRoutes = ["GET /api/invoices/:invoiceId/payments", "POST /api/invoices/:invoiceId/payments",
+  "POST /api/invoices/:invoiceId/payments/:paymentId/reversal"]
+const efacturaRoutes = ["GET /api/invoices/:id/efactura.xml", "GET /api/corrections/:id/efactura.xml"]
+
+void test("the contract with every plugin on exposes exactly the current 50 operations", () => {
   const applicationRoutes: Array<{ readonly method: string, readonly operationId: string, readonly path: string }> = []
-  HttpApi.reflect(applicationHttpApi, { onGroup() {}, onEndpoint({ endpoint }) {
+  HttpApi.reflect(activeHttpApi(allPlugins), { onGroup() {}, onEndpoint({ endpoint }) {
     applicationRoutes.push({ method: endpoint.method, operationId: endpoint.name, path: endpoint.path })
   } })
   assert.equal(operationNames.length, 50)
@@ -38,6 +43,47 @@ void test("the contract exposes exactly the current 50 operations", () => {
   assert.ok(operationNames.includes("listVatRegimes"))
   assert.deepEqual(applicationRoutes.map((route) => `${route.method} ${route.path}`).sort(), inventory)
   assert.equal(applicationRoutes.some((route) => route.path === "/api"), false)
+})
+
+void test("a plugin that is off leaves the contract and keeps every other operation id", () => {
+  const all = OpenApi.fromApi(activeHttpApi(allPlugins)).paths
+  assert.deepEqual([all["/api/invoices/{invoiceId}/payments"]?.get?.operationId, all["/api/invoices/{invoiceId}/payments"]?.get?.tags],
+    ["invoicing.listPayments", ["invoicing"]])
+  assert.equal(all["/api/invoices/{id}/efactura.xml"]?.get?.operationId, "invoicing.downloadInvoiceEFactura")
+  for (const plugins of [{ payments: false, efactura: true }, { payments: true, efactura: false }, { payments: false, efactura: false }]) {
+    const spec = OpenApi.fromApi(activeHttpApi(plugins))
+    const routes = Object.entries(spec.paths).flatMap(([path, item]) => Object.entries(item).map(([method, operation]) =>
+      ({ path, method, route: `${method.toUpperCase()} ${path.replace(/\{(\w+)\}/g, ":$1")}`, operation })))
+    const expected = inventory.filter((route) => (plugins.payments || !paymentRoutes.includes(route))
+      && (plugins.efactura || !efacturaRoutes.includes(route)))
+    assert.deepEqual(routes.map(({ route }) => route).sort(), expected, JSON.stringify(plugins))
+    const full = OpenApi.fromApi(activeHttpApi(allPlugins))
+    for (const { path, method, route, operation } of routes) {
+      const before = (full.paths[path] as Record<string, { operationId: string, tags: unknown } | undefined>)[method]
+      assert.deepEqual([operation.operationId, operation.tags], [before?.operationId, before?.tags], route)
+    }
+  }
+})
+
+// The core API is the only one `createApiHandler` hands to `HttpApiBuilder.api`, so it
+// is the one that encodes a handler's failure: a plugin error it does not know
+// would leave the route as a 500.
+const declaredErrors = (api: HttpApi.HttpApi.Any): ReadonlyArray<SchemaAST.AST> => {
+  const errors: Array<SchemaAST.AST> = []
+  HttpApi.reflect(api as HttpApi.HttpApi.AnyWithProps, { onGroup() {}, onEndpoint({ endpoint }) {
+    const ast = endpoint.errorSchema.ast
+    errors.push(...(SchemaAST.isUnion(ast) ? ast.types : [ast]))
+  } })
+  return errors
+}
+
+void test("every error a plugin endpoint declares is one the core API encodes", () => {
+  const core = new Set(declaredErrors(applicationHttpApi))
+  for (const plugin of [paymentsHttpApi, efacturaHttpApi]) {
+    const unknown = declaredErrors(plugin).filter((error) => !core.has(error))
+    assert.deepEqual(unknown.map(String), [])
+  }
+  assert.equal(core.has(Schema.Struct({ error: Schema.Literal("plugin_only") }).ast), false)
 })
 
 void test("dueDate contracts accept absent, null, or string input and encode explicit null responses", () => {
@@ -110,7 +156,7 @@ void test("customer payment terms and monetary product presets have explicit wir
 })
 
 void test("OpenAPI 3.1 mirrors paths, PDF encoding, and authentication metadata", () => {
-  const spec = OpenApi.fromApi(applicationHttpApi)
+  const spec = OpenApi.fromApi(activeHttpApi(allPlugins))
   const openApiInventory = Object.entries(spec.paths).flatMap(([path, item]) =>
     Object.keys(item).map((method) => `${method.toUpperCase()} ${path.replace(/\{(\w+)\}/g, ":$1")}`)).sort()
   assert.equal(spec.openapi, "3.1.0")

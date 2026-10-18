@@ -6,7 +6,7 @@ import { inspectSizes, sizeViolations } from "./size-gate-lib.mjs"
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..")
 const config = JSON.parse(readFileSync(join(root, "qwbe.config.json"), "utf8"))
-const measurement = inspectSizes(root, config.cubeRoots, {
+const measurement = await inspectSizes(root, {
   fileRoots: config.sizeFileRoots,
   excludedDirectories: config.sizeExcludedDirectories,
 })

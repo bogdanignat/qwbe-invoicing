@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { EFacturaContractViolation, renderEFacturaXml } from "../../cubes/efactura/index.ts"
+import { EFacturaContractViolation, renderEFacturaXml } from "../../cubes/invoicing/efactura/index.ts"
 import type { CorrectionDocument, DraftLine, IssuedInvoice } from "../../cubes/invoicing/index.ts"
 import { documentNumber, mapCorrection, mapIssuedInvoice } from "./efactura-mapper.ts"
 

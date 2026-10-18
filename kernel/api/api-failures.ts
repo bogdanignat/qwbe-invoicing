@@ -1,6 +1,6 @@
 import type { DocumentsFailure } from "../../cubes/invoicing/documents/index.ts"
 import type { InvoicingFailure } from "../../cubes/invoicing/index.ts"
-import type { PaymentsFailure } from "../../cubes/payments/index.ts"
+import type { PaymentsFailure } from "../../cubes/invoicing/payments/index.ts"
 import { logInternalFailure } from "../failure-log.ts"
 
 type Wire =

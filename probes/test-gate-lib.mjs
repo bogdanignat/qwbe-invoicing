@@ -1,7 +1,7 @@
 import { discoverCubeUnits, isTestFile, sourceFilesOwnedBy } from "./source-tree.mjs"
 
-export const inspectTestCoverage = (root, cubeRoots) => {
-  const units = discoverCubeUnits(root, cubeRoots)
+export const inspectTestCoverage = async (root) => {
+  const units = await discoverCubeUnits(root)
   return units.map((unit) => {
     const files = sourceFilesOwnedBy(unit, units)
     const tests = files.filter(isTestFile)
@@ -13,5 +13,5 @@ export const inspectTestCoverage = (root, cubeRoots) => {
   })
 }
 
-export const untestedUnits = (root, cubeRoots) =>
-  inspectTestCoverage(root, cubeRoots).filter((unit) => unit.sourceCount > 0 && unit.testCount === 0)
+export const untestedUnits = async (root) =>
+  (await inspectTestCoverage(root)).filter((unit) => unit.sourceCount > 0 && unit.testCount === 0)

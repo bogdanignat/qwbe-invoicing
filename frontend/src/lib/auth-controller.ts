@@ -1,19 +1,9 @@
 import { ApiFailure, LogoutUnconfirmedError } from "./api-errors.ts"
 import { createSessionEpoch } from "./session-epoch.ts"
-import type { AuthenticatedSession } from "./api-contracts.ts"
+import {
+  createHeldSession, initialAuthSnapshot, settled, type AuthSessionClient, type AuthSnapshot, type AuthState,
+} from "./auth-session.ts"
 
-export type AuthStatus = "checking" | "locked" | "authenticated" | "restore-error"
-export interface AuthSnapshot {
-  readonly status: AuthStatus
-  readonly error: unknown
-  readonly loginPending: boolean
-  readonly logoutPending: boolean
-}
-export interface AuthSessionClient {
-  readonly restore: (signal: AbortSignal) => Promise<AuthenticatedSession>
-  readonly login: (token: string, signal: AbortSignal) => Promise<AuthenticatedSession>
-  readonly logout: (csrfToken: string, signal: AbortSignal) => Promise<void>
-}
 export interface AuthController {
   readonly mount: () => void
   readonly dispose: () => void
@@ -49,20 +39,14 @@ interface ActiveOperation {
   promise: Promise<void>
 }
 
-/** A snapshot with no operation in flight; every transition here is a settled one. */
-const settled = (status: AuthStatus, error?: unknown): AuthSnapshot =>
-  ({ status, error, loginPending: false, logoutPending: false })
-
-export const initialAuthSnapshot: AuthSnapshot = settled("checking")
-
 export const createAuthController = (dependencies: Dependencies): AuthController => {
   let state = initialAuthSnapshot
-  let csrfToken: string | undefined
+  const held = createHeldSession()
   let generation = 0
   let active: ActiveOperation | undefined
   let mounted = false
   const sessionEpoch = createSessionEpoch()
-  const emit = (next: AuthSnapshot): void => { state = next; dependencies.publish(next) }
+  const emit = (next: AuthState): void => { state = held.snapshot(next); dependencies.publish(state) }
   const current = (operation: ActiveOperation): boolean =>
     mounted && active === operation && generation === operation.id && !operation.controller.signal.aborted
   const route = (pathname: string): void => {
@@ -85,7 +69,7 @@ export const createAuthController = (dependencies: Dependencies): AuthController
   }
   const anonymous = (): void => {
     sessionEpoch.close()
-    csrfToken = undefined
+    held.adopt()
     dependencies.clearCache()
     emit(settled("locked"))
     route(dependencies.pathname())
@@ -96,7 +80,7 @@ export const createAuthController = (dependencies: Dependencies): AuthController
       const restored = await dependencies.session.restore(operation.controller.signal)
       if (!current(operation)) return
       sessionEpoch.open()
-      csrfToken = restored.csrfToken
+      held.adopt(restored)
       emit(settled("authenticated"))
       route(dependencies.pathname())
     } catch (error) {
@@ -111,18 +95,18 @@ export const createAuthController = (dependencies: Dependencies): AuthController
       const authenticated = await dependencies.session.login(token, operation.controller.signal)
       if (!current(operation)) return
       sessionEpoch.open()
-      csrfToken = authenticated.csrfToken
+      held.adopt(authenticated)
       dependencies.clearCache()
       emit(settled("authenticated"))
       route(dependencies.pathname())
     } catch (error) {
       if (!current(operation)) return
-      csrfToken = undefined
+      held.adopt()
       emit(settled("locked", error))
     }
   })
   const logout = (): Promise<void> => {
-    const token = csrfToken
+    const token = held.csrfToken()
     if (state.status !== "authenticated" || token === undefined) return Promise.resolve()
     return begin("logout", async (operation) => {
       emit({ status: "authenticated", error: state.error, loginPending: false, logoutPending: true })
@@ -147,7 +131,7 @@ export const createAuthController = (dependencies: Dependencies): AuthController
     route,
     epoch: sessionEpoch.value,
     ownsEpoch: sessionEpoch.owns,
-    csrfToken: () => csrfToken,
+    csrfToken: held.csrfToken,
     unauthorized: (epoch) => {
       if (!mounted || !sessionEpoch.owns(epoch)) return
       active?.controller.abort(); active = undefined; generation += 1

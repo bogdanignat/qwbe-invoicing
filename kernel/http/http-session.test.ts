@@ -7,6 +7,7 @@ import test from "node:test"
 
 import { apiDocsResponse } from "./api-docs.ts"
 import { startServer } from "./http.ts"
+import { allPlugins } from "../plugins.ts"
 import { withMigrated, type TestFixture } from "../storage/postgres-rig.test-support.ts"
 
 /**
@@ -27,7 +28,7 @@ void test("the HTTP host exchanges the API token for a cookie session", async ()
     async () => {
       docsAttempts += 1
       if (docsAttempts === 1) throw new Error("simulated docs render failure")
-      return apiDocsResponse()
+      return apiDocsResponse(allPlugins)()
     },
   )
   const { server } = running

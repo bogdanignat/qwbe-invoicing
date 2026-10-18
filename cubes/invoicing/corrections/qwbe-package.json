@@ -1,5 +1,0 @@
-{
-  "name": "corrections",
-  "kind": "cube",
-  "summary": "Full correction documents (storno) that reverse an issued invoice"
-}

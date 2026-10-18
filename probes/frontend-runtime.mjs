@@ -19,7 +19,7 @@ void test("standalone runtime preserves backend auth, request guards, methods, a
       headers: headers({ origin: frontend.origin, "content-type": "application/json" }),
       chunks: [JSON.stringify({ token: backend.token })] })
     assert.equal(login.status, 200)
-    assert.deepEqual(Object.keys(json(login)).sort(), ["authenticated", "csrfToken"])
+    assert.deepEqual(Object.keys(json(login)).sort(), ["authenticated", "csrfToken", "plugins"])
     const cookieHeader = login.headers["set-cookie"]
     assert.ok(Array.isArray(cookieHeader) && cookieHeader.length === 1)
     // The shipped attributes, as they arrive through the deployed BFF. The probe

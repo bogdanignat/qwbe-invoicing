@@ -11,8 +11,8 @@ import { useInvoiceCorrections } from "../hooks/use-invoice-corrections.ts"
 import { useInvoicePayments } from "../hooks/use-invoice-payments.ts"
 
 /**
- * An issued invoice, its payments and its storno. The unresolved-write card
- * comes first: a storno whose answer was lost is replayed or acknowledged from
+ * An issued invoice, its payments (only with that plugin on) and its storno.
+ * The unresolved-write card comes first: a storno whose answer was lost is replayed or acknowledged from
  * here, under the key it left with, rather than issued a second time.
  */
 export const InvoiceDetailView = ({ id }: { readonly id: string }) => {
@@ -26,7 +26,7 @@ export const InvoiceDetailView = ({ id }: { readonly id: string }) => {
         notice={corrections.notice} pending={corrections.noticePending}
         onReplay={corrections.replay} onDismiss={corrections.dismiss}
       />
-      <PaymentsSection payments={payments} />
+      {payments === undefined ? null : <PaymentsSection payments={payments} />}
       <CorrectionsSection corrections={corrections} />
     </DocumentDetail>
   </PrivateScreen>

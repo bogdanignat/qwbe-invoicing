@@ -1,12 +1,10 @@
-import { readFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 
 import { inspectPackageShapes } from "./package-gate-lib.mjs"
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..")
-const config = JSON.parse(readFileSync(join(root, "qwbe.config.json"), "utf8"))
-const packages = inspectPackageShapes(root, config.cubeRoots)
+const packages = await inspectPackageShapes(root)
 const failures = packages.filter((unit) => unit.failures.length > 0)
 
 for (const unit of packages) {

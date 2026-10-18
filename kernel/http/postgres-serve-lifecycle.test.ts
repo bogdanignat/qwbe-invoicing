@@ -6,6 +6,7 @@ import { join } from "node:path"
 import test from "node:test"
 
 import type { RuntimeConfig } from "../config.ts"
+import { allPlugins } from "../plugins.ts"
 import { createQueryPool } from "../storage/postgres-pool.ts"
 import { startServer } from "./http.ts"
 
@@ -41,6 +42,7 @@ const configFor = (port: number, tokenFile: string): RuntimeConfig => ({
   authTokenFile: tokenFile,
   organizationId: undefined,
   pgSettings: { host: "127.0.0.1", port: 1, database: "nothing", user: "nobody", password: "" },
+  plugins: allPlugins,
 })
 
 const tokenFile = (): string => {

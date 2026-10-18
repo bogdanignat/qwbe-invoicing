@@ -9,6 +9,8 @@ export const cube = {
   manifest: {
     name: identity,
     parent: "invoicing",
+    summary: "Immutable rendered invoice representations and artifact recovery",
+    required: true,
     tables: ["invoice_artifacts", "proforma_artifacts"],
     requiresAuth: true,
     permissions: [

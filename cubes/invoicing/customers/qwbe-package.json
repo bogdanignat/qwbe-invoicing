@@ -1,5 +1,0 @@
-{
-  "name": "customers",
-  "kind": "cube",
-  "summary": "Saved customers of an organization: fiscal identity, default payment term and soft deletion"
-}

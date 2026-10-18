@@ -145,7 +145,7 @@ export interface DraftInvoice extends DocumentContent {
  * absent on purpose: the standard keeps it for cases we do not issue, such as
  * the travel agents' margin scheme, and a category nothing can produce would
  * only leave branches no document reaches. docs/VAT_TREATMENT.md has the
- * reasoning; `cubes/efactura` still knows all three, because it renders the
+ * reasoning; `cubes/invoicing/efactura` still knows all three, because it renders the
  * standard rather than this product's subset.
  */
 export type VatCategoryCode = "S" | "O"

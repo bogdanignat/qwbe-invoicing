@@ -6,7 +6,7 @@ import { Field } from "./ui/Field.tsx"
 import { Input } from "./ui/Input.tsx"
 import { Select } from "./ui/Select.tsx"
 import { Textarea } from "./ui/Textarea.tsx"
-import type { InvoicePaymentsModel } from "../hooks/use-invoice-payments.ts"
+import type { InvoicePaymentsModel } from "../hooks/invoice-payments-query.ts"
 import { ORGANIZATION_TIME_ZONE, todayIn } from "../lib/format.ts"
 import { PAYMENT_METHODS } from "../lib/payment-state.ts"
 

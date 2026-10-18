@@ -11,6 +11,19 @@
  * reads the invoicing cube.
  */
 
+export const cube = {
+  manifest: {
+    name: "efactura",
+    parent: "invoicing",
+    summary: "Deterministic UBL 2.1 / CIUS-RO rendering of issued fiscal documents",
+    required: false,
+    tables: [],
+    requiresAuth: true,
+    permissions: [],
+  },
+  create: () => ({ handlers: {} }),
+}
+
 export * from "./contracts/document.ts"
 export { EFacturaContractViolation, type EFacturaFailure } from "./contracts/failures.ts"
 export { ANONYMOUS_BUYER_IDENTIFIER, DEFAULT_CIUS_RO_PROFILE, type EFacturaProfile } from "./profile.ts"

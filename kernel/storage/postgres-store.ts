@@ -6,7 +6,7 @@ import type { CorrectionsTransaction } from "../../cubes/invoicing/corrections/i
 import type { CustomersTransaction } from "../../cubes/invoicing/customers/index.ts"
 import type { ProformaTransaction } from "../../cubes/invoicing/issuance/index.ts"
 import type { IssuerTransaction } from "../../cubes/invoicing/issuer/index.ts"
-import type { PaymentsTransaction, TransactionalStore as PaymentsStore } from "../../cubes/payments/index.ts"
+import type { PaymentsTransaction, TransactionalStore as PaymentsStore } from "../../cubes/invoicing/payments/index.ts"
 import { persistence } from "./postgres-errors.ts"
 import { catalogTransactionAdapter } from "./postgres-catalog.ts"
 import { correctionsTransactionAdapter } from "./postgres-corrections.ts"

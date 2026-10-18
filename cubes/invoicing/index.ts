@@ -9,6 +9,8 @@ const group = HttpApiGroup.make(identity)
 export const cube = {
   manifest: {
     name: identity,
+    summary: "Romanian invoicing with immutable issued-document snapshots",
+    required: true,
     tables: `document_series invoice_drafts draft_lines invoice_sequences
       issued_invoices issued_lines issued_tax_breakdown proformas proforma_lines proforma_tax_breakdown proforma_conversions
        proforma_invoice_conversions correction_documents correction_lines correction_tax_breakdown idempotency_records audit_events`.split(/\s+/),

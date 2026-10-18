@@ -4,37 +4,18 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useRef, useState } from "react"
 
 import { useAuth } from "./auth-context.ts"
-import { invoiceQueryOptions, retryAction } from "./use-document-detail.ts"
-import { correctionsQueryOptions } from "./use-invoice-corrections.ts"
+import { invoicePaymentsQueries, type InvoicePaymentsModel, type PaymentWrite } from "./invoice-payments-query.ts"
+import { retryAction } from "./use-document-detail.ts"
 import { useInvoicingClients } from "./use-invoicing-clients.ts"
+import { usePluginEnabled } from "./use-plugin-enabled.ts"
 import { SESSION_CLOSED } from "./use-registry-writes.ts"
 import { isTransientFailure } from "../lib/api-errors.ts"
 import { correctionsView } from "../lib/correction-state.ts"
 import { createOperationIdempotency, operationFingerprint } from "../lib/operation-idempotency.ts"
 import {
-  PAYMENT_RECORDED, PAYMENT_REVERSED, REVERSAL_CONFIRM, paymentInputFrom, paymentsView, type PaymentsView,
+  PAYMENT_RECORDED, PAYMENT_REVERSED, REVERSAL_CONFIRM, paymentInputFrom, paymentsView,
 } from "../lib/payment-state.ts"
 import { registryWriteOutcome } from "../lib/registry-write-outcome.ts"
-
-export interface InvoicePaymentsModel {
-  /** Absent until the ledger, the invoice it is priced in and the invoice's corrections have answered. */
-  readonly view: PaymentsView | undefined
-  readonly isPending: boolean
-  /** The ledger read first, then the last write: one alert, the most fundamental failure. */
-  readonly error: unknown
-  readonly retry: (() => void) | undefined
-  readonly notice: string | undefined
-  readonly pending: boolean
-  readonly record: (form: FormData) => void
-  readonly reverse: (paymentId: string) => void
-}
-
-interface PaymentWrite {
-  readonly operation: "record" | "reverse"
-  readonly fingerprint: string
-  readonly notice: string
-  readonly send: (csrfToken: string, idempotencyKey: string) => Promise<void>
-}
 
 /**
  * The payments panel of an issued invoice: the ledger read, and the two writes
@@ -52,26 +33,27 @@ interface PaymentWrite {
  * The ref is set synchronously before `mutate` and cleared when it settles.
  * An answer that outlived its session (`registryWriteOutcome`) leaves no
  * notice, refetch, key change or error behind.
+ *
+ * With the payments plugin off nothing is read and there is no model: no
+ * panel to render and no write to start.
  */
-export const useInvoicePayments = (invoiceId: string): InvoicePaymentsModel => {
+export const useInvoicePayments = (invoiceId: string): InvoicePaymentsModel | undefined => {
   const auth = useAuth()
   const clients = useInvoicingClients()
   const queryClient = useQueryClient()
-  const enabled = auth.status === "authenticated"
-  const queryKey = ["invoice", invoiceId, "payments"]
-  const ledger = useQuery({
-    queryKey, enabled, queryFn: ({ signal }) => clients.payments.summary(invoiceId, signal),
-  })
-  const currency = useQuery(invoiceQueryOptions(clients, invoiceId, enabled)).data?.currency
-  // The same key as the storno section: one fetch, one cache. A reversed invoice takes no new payment.
-  const corrections = useQuery(correctionsQueryOptions(clients, invoiceId, enabled))
+  const enabled = usePluginEnabled("payments")
+  const queries = invoicePaymentsQueries(clients, invoiceId, enabled)
+  const ledger = useQuery(queries.ledger)
+  const currency = useQuery(queries.invoice).data?.currency
+  // A reversed invoice takes no new payment.
+  const corrections = useQuery(queries.corrections)
   const view = ledger.data === undefined || currency === undefined || corrections.data === undefined
     ? undefined
     : paymentsView(ledger.data, currency, correctionsView(corrections.data).correctedBy)
   const [idempotency] = useState(() => createOperationIdempotency())
   const [notice, setNotice] = useState<string | undefined>(undefined)
   const inFlight = useRef(false)
-  const refresh = (): void => { void queryClient.invalidateQueries({ queryKey }) }
+  const refresh = (): void => { void queryClient.invalidateQueries({ queryKey: queries.ledger.queryKey }) }
   const mutation = useMutation({
     mutationFn: async (write: PaymentWrite): Promise<PaymentWrite | undefined> => {
       const csrfToken = auth.csrfToken()
@@ -97,6 +79,7 @@ export const useInvoicePayments = (invoiceId: string): InvoicePaymentsModel => {
     setNotice(undefined)
     mutation.mutate(write)
   }
+  if (!enabled) return undefined
   return {
     view,
     isPending: ledger.isPending || corrections.isPending || (ledger.data !== undefined && currency === undefined),

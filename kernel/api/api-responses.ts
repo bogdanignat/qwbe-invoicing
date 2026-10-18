@@ -3,9 +3,9 @@ import { createHash } from "node:crypto"
 import { HttpServerResponse } from "@effect/platform"
 import { Effect } from "effect"
 
-import type { EFacturaDocument } from "../../cubes/efactura/index.ts"
+import type { EFacturaDocument } from "../../cubes/invoicing/efactura/index.ts"
 import type { DocumentKind } from "../../cubes/invoicing/documents/index.ts"
-import { EFacturaContractViolation, renderEFacturaXml } from "../../cubes/efactura/index.ts"
+import { EFacturaContractViolation, renderEFacturaXml } from "../../cubes/invoicing/efactura/index.ts"
 import { ValidationFailure } from "../../cubes/invoicing/index.ts"
 
 export const pdfResponse = (kind: DocumentKind, id: string, bytes: Uint8Array, sha256: string) => {

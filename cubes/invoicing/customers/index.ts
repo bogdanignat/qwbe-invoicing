@@ -4,6 +4,8 @@ export const cube = {
   manifest: {
     name: identity,
     parent: "invoicing",
+    summary: "Saved customers of an organization: fiscal identity, default payment term and soft deletion",
+    required: true,
     tables: ["customers"],
     requiresAuth: true,
     permissions: [],

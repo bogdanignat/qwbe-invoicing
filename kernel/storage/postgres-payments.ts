@@ -2,7 +2,7 @@ import { Effect } from "effect"
 
 import {
   DomainConflict, PersistenceFailure, type Payment, type PaymentsTransaction,
-} from "../../cubes/payments/index.ts"
+} from "../../cubes/invoicing/payments/index.ts"
 import { isConflict } from "./postgres-errors.ts"
 import { firstRow, nullableText, optionalText, text, type Row } from "./postgres-rows.ts"
 import { appendAuditEvent } from "./postgres-kernel.ts"

@@ -8,6 +8,7 @@ import type { ApiResponse } from "../api/api.test-support.ts"
 import { handleApiRequest } from "../api/api.test-support.ts"
 import { createRequestAuthenticator } from "../auth/auth.ts"
 import { migratedFixture, type RawSql, type TestFixture } from "../storage/postgres-rig.test-support.ts"
+import { allPlugins } from "../plugins.ts"
 
 /**
  * The e-Factura routes over PostgreSQL. The API fixture now carries the pool,
@@ -43,6 +44,7 @@ const fixture = async (label: string) => {
     authenticate: createRequestAuthenticator(rig.config({ authTokenFile: tokenFile })),
     pool: rig.pool,
     dataDirectory: rig.dataDirectory,
+    plugins: allPlugins,
     now: () => new Date("2026-09-05T10:00:00.000Z"),
   }
   const call = (method: string, url: string, body: unknown, idempotencyKey?: string) =>
@@ -274,7 +276,7 @@ void test("a line description e-Factura cannot carry is refused when it is enter
   try {
     // BR-RO-L100 caps an item name at 100 characters. The domain enforces it at input
     // (T-1390), so an issued invoice can no longer hold a description the export
-    // would refuse; the export's own refusal stays covered in cubes/efactura.
+    // would refuse; the export's own refusal stays covered in cubes/invoicing/efactura.
     const issued = await value.call("POST", "/api/invoices", {
       customer: buyer, series: "INV", issueDate: "2026-09-05", dueDate: "2026-09-20", currency: "RON",
       lines: [{ ...line, description: "Servicii ".repeat(20) }],
@@ -295,7 +297,7 @@ void test("the export answers for documents that do not exist and callers that d
       assert.equal((await handleApiRequest({ method: "GET", url, authorization: undefined, body: undefined },
         { authenticate: createRequestAuthenticator(value.rig.config({
           authTokenFile: join(value.rig.dataDirectory, "api-token") })),
-          pool: value.rig.pool, dataDirectory: value.rig.dataDirectory })).status, 401, url)
+          pool: value.rig.pool, plugins: allPlugins, dataDirectory: value.rig.dataDirectory })).status, 401, url)
     }
   } finally { await value.close() }
 })

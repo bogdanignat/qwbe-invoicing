@@ -3,6 +3,7 @@ import { queryOptions, useQuery } from "@tanstack/react-query"
 import { useAuth } from "./auth-context.ts"
 import { useDocumentDownload, type DocumentDownloadAction } from "./use-document-download.ts"
 import { useInvoicingClients, type InvoicingClients } from "./use-invoicing-clients.ts"
+import { usePluginEnabled } from "./use-plugin-enabled.ts"
 import { isTransientFailure } from "../lib/api-errors.ts"
 import { documentFilename } from "../lib/browser-download.ts"
 import { projectCorrectionDocument, projectIssuedInvoice, type DocumentSnapshotView } from "../lib/document-projection.ts"
@@ -28,15 +29,32 @@ export interface DocumentDetailModel {
 export const retryAction = (error: unknown, refetch: () => void): (() => void) | undefined =>
   isTransientFailure(error) ? refetch : undefined
 
+/** The PDF always; the e-Factura XML only with that plugin on, so its route, absent then, is never asked. */
+export const detailDownloads = (
+  pdf: DocumentDownloadAction, xml: DocumentDownloadAction, eFactura: boolean,
+): ReadonlyArray<DocumentDownloadAction> => eFactura ? [pdf, xml] : [pdf]
+
 /** One definition of the invoice read, shared by the detail and the payments panel that needs its currency. */
-export const invoiceQueryOptions = (clients: InvoicingClients, id: string, enabled: boolean) => queryOptions({
+export const invoiceQueryOptions = (
+  clients: Pick<InvoicingClients, "documents">, id: string, enabled: boolean,
+) => queryOptions({
   queryKey: ["invoice", id],
   enabled,
   queryFn: ({ signal }) => clients.documents.getInvoice(id, signal),
 })
 
+/** One definition of the corrections read, shared by the storno section and the payments panel. */
+export const correctionsQueryOptions = (
+  clients: Pick<InvoicingClients, "documents">, invoiceId: string, enabled: boolean,
+) => queryOptions({
+  queryKey: ["invoice", invoiceId, "corrections"],
+  enabled,
+  queryFn: ({ signal }) => clients.documents.listCorrections(invoiceId, signal),
+})
+
 export const useInvoiceDetail = (id: string): DocumentDetailModel => {
   const { status } = useAuth()
+  const eFactura = usePluginEnabled("efactura")
   const clients = useInvoicingClients()
   const query = useQuery(invoiceQueryOptions(clients, id, status === "authenticated"))
   const invoice = query.data
@@ -47,7 +65,7 @@ export const useInvoiceDetail = (id: string): DocumentDetailModel => {
     request: (csrfToken) => clients.documents.downloadInvoicePdf(id, requireCsrf(csrfToken)),
     filename: invoice === undefined ? undefined : documentFilename("factura", invoice, "pdf"),
   })
-  const efactura = useDocumentDownload({
+  const xml = useDocumentDownload({
     key: "efactura",
     label: "Descarcă XML e-Factura",
     pendingLabel: "Se generează…",
@@ -59,7 +77,7 @@ export const useInvoiceDetail = (id: string): DocumentDetailModel => {
     isPending: query.isPending,
     error: query.error,
     retry: retryAction(query.error, () => { void query.refetch() }),
-    downloads: [pdf, efactura],
+    downloads: detailDownloads(pdf, xml, eFactura),
   }
 }
 
@@ -70,6 +88,7 @@ export const useInvoiceDetail = (id: string): DocumentDetailModel => {
  */
 export const useCorrectionDetail = (id: string): DocumentDetailModel => {
   const { status } = useAuth()
+  const eFactura = usePluginEnabled("efactura")
   const clients = useInvoicingClients()
   const query = useQuery({
     queryKey: ["correction", id],
@@ -84,7 +103,7 @@ export const useCorrectionDetail = (id: string): DocumentDetailModel => {
     request: () => clients.documents.downloadCorrectionPdf(id),
     filename: correction === undefined ? undefined : documentFilename("storno", correction, "pdf"),
   })
-  const efactura = useDocumentDownload({
+  const xml = useDocumentDownload({
     key: "efactura",
     label: "Descarcă XML e-Factura",
     pendingLabel: "Se generează…",
@@ -96,6 +115,6 @@ export const useCorrectionDetail = (id: string): DocumentDetailModel => {
     isPending: query.isPending,
     error: query.error,
     retry: retryAction(query.error, () => { void query.refetch() }),
-    downloads: [pdf, efactura],
+    downloads: detailDownloads(pdf, xml, eFactura),
   }
 }

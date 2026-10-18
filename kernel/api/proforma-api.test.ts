@@ -6,6 +6,7 @@ import test from "node:test"
 import { handleApiRequest } from "./api.test-support.ts"
 import { createRequestAuthenticator } from "../auth/auth.ts"
 import { withMigrated } from "../storage/postgres-rig.test-support.ts"
+import { allPlugins } from "../plugins.ts"
 
 void test("direct proforma authoring needs only a proforma series configuration", async () => {
   await withMigrated("proforma_api", async (fixture) => {
@@ -17,6 +18,7 @@ void test("direct proforma authoring needs only a proforma series configuration"
       authenticate: createRequestAuthenticator(fixture.config({ authTokenFile: tokenFile })),
       pool: fixture.pool,
       dataDirectory: fixture.dataDirectory,
+      plugins: allPlugins,
       now: () => new Date("2026-09-05T10:00:00.000Z"),
     }
     const issuer = await handleApiRequest({ method: "PUT", url: "/api/issuer", authorization, body: {

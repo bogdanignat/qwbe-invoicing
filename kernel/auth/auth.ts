@@ -11,7 +11,7 @@ import {
   type RequestContextProvider,
 } from "../../cubes/invoicing/index.ts"
 import { documentsPermissions } from "../../cubes/invoicing/documents/index.ts"
-import { paymentsPermissions } from "../../cubes/payments/index.ts"
+import { paymentsPermissions } from "../../cubes/invoicing/payments/index.ts"
 import type { RuntimeConfig } from "../config.ts"
 
 const bearerToken = (authorization: string | undefined): string | undefined => {
@@ -40,6 +40,9 @@ export const createRequestAuthenticator = (config: RuntimeConfig): RequestAuthen
   }
   const invoicing = invoicingPermissions("invoicing")
   const payments = paymentsPermissions("payments")
+  // The payments grants exist only with the plugin on. `invoicing:read` stays
+  // regardless: it is the invoicing base permission, and the alias the payments
+  // cube still accepts for reading.
   const permissions = [
     invoicing.read,
     invoicing.manageCustomers,
@@ -48,8 +51,7 @@ export const createRequestAuthenticator = (config: RuntimeConfig): RequestAuthen
     invoicing.issueProformas,
     invoicing.voidInvoices,
     invoicing.manageSettings,
-    payments.read,
-    payments.record,
+    ...(config.plugins.payments ? [payments.read, payments.record] : []),
     documentsPermissions.read,
     documentsPermissions.render,
   ]

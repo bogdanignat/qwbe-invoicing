@@ -1,12 +1,10 @@
-import { readFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 
 import { inspectTestCoverage } from "./test-gate-lib.mjs"
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..")
-const config = JSON.parse(readFileSync(join(root, "qwbe.config.json"), "utf8"))
-const units = inspectTestCoverage(root, config.cubeRoots)
+const units = await inspectTestCoverage(root)
 const failures = units.filter((unit) => unit.sourceCount > 0 && unit.testCount === 0)
 
 for (const unit of units) {

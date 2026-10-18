@@ -1,5 +1,5 @@
 import { useAuth } from "./auth-context.ts"
-import type { AuthStatus } from "../lib/auth-controller.ts"
+import type { AuthStatus } from "../lib/auth-session.ts"
 
 export interface AuthenticatedShellModel {
   readonly status: AuthStatus

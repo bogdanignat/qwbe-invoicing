@@ -3,7 +3,7 @@
 Status: product baseline; T-1069 implemented
 Jurisdiction: Romania  
 Last researched: 2026-08-30  
-Mother alignment reviewed: 2026-09-02 against QWBE `a98d9ef` (see `FOUNDATION.md` section 18)
+Mother alignment reviewed: 2026-09-02 against QWBE `a98d9ef` (historical, `FOUNDATION.md` section 18); direction since T-1876 in `FOUNDATION.md` sections 1, 3 and 13
 Architecture companion: [`FOUNDATION.md`](./FOUNDATION.md)
 
 ## 1. Product direction
@@ -11,7 +11,9 @@ Architecture companion: [`FOUNDATION.md`](./FOUNDATION.md)
 QWBE Invoicing is a self-hosted invoicing application that:
 
 - runs as a useful standalone product;
-- can later be installed as a QWBE cube;
+- is shaped as one QWBE plugin pack, `invoicing` with `payments` and `efactura` as
+  optional plugins (`required: false`, active by default; `QWBE_PLUGINS` switches them off
+  at startup, and a plugin that is off keeps its data), while the QWBE mother installs nothing;
 - is distributed primarily as versioned Docker images and a Docker Compose bundle;
 - issues and preserves Romanian invoices without implementing direct ANAF transport in the first release;
 - keeps the data model compatible with a later RO e-Factura workflow;
@@ -351,14 +353,13 @@ Docker Compose
 ```
 
 PostgreSQL 16 is the kernel's persistence, in a container this bundle runs
-and on a volume it owns. It is still an intentional deployment choice rather than
-convergence on the mother: the confirmed future integration direction is an external
-application/sidecar, where the mother may provide installation and authentication
-integration while invoicing data stays owned by this application. The same engine on
-both sides is not the same database — this bundle does not adopt the mother's
-schema-per-cube layout or its NOLOGIN role per cube, does not require a shared
-database topology, and does not store invoicing data in the mother's Postgres. Mother
-integration itself is not implemented.
+and on a volume it owns. It is an intentional deployment choice rather than
+convergence on the mother: the mother installs nothing, and invoicing data stays owned
+by this application. The same engine on both sides is not the same database — this
+bundle does not adopt the mother's schema-per-cube layout or its NOLOGIN role per cube,
+does not require a shared database topology, and does not store invoicing data in the
+mother's Postgres. A future mother could only call the API as an external client
+(`FOUNDATION.md` section 19); that is not implemented.
 
 The database port is never published; the application role owns the one `public`
 schema it migrates; and both credentials are files the operator creates, read through
@@ -408,13 +409,15 @@ optional offline image bundle
 
 ## 8. Distribution artifacts
 
-There are two canonical runtime contexts and one optional convenience tool:
+There is one canonical runtime context and one optional convenience tool:
 
 | Artifact | Purpose |
 |---|---|
 | Docker image + Compose bundle | Standalone self-hosted application |
-| `cubes/invoicing/` package | Installation into a compatible QWBE runtime |
 | npm CLI, later | Thin installer/operator wrapper around Docker and Compose |
+
+The plugin pack manifest (`qwbe-package.json`) describes the package structure for this
+repository's gates; it is not an artifact installed into a QWBE runtime.
 
 `npm install` is not the runtime deployment mechanism. Requiring Node and npm on a
 Docker host would duplicate the runtime contract. A later CLI may expose commands
@@ -501,9 +504,8 @@ durable workflow seam are stable.
 - versioned production Compose bundle and optional Caddy profile;
 - migration and restore drills;
 - security review and audit-log verification;
-- exact cube artifact and compatibility checks against a versioned QWBE public
-  contract, including the shared `qwbe-core/package` checker (QWB-40) once the
-  package shape can be judged by it.
+- local package contract checks (`FOUNDATION.md` section 13); compatibility with the
+  `qwbe-core/package` checker is not claimed.
 
 ### Later — RO e-Factura
 
@@ -526,16 +528,14 @@ The following decisions must be explicit before their relevant implementation:
    future capability; proforma delivery specifically means download, not email.
 4. Resolved: React 19 + TypeScript + Tailwind CSS 4 in a Next.js 16 App Router application (the Vite UI was removed in T-1649), same-origin and API-first through the BFF under `/api/qwbe/*`; TanStack Query holds React server state. The kernel exchanges the local API token for a revocable, opaque 30-day session persisted server-side and referenced by an HttpOnly `SameSite=Strict` cookie. The browser keeps only the per-session CSRF token in memory; bearer authentication remains for direct API clients on the internal network.
 5. What retention policy and backup targets are promised to operators?
-6. Which public, versioned QWBE contracts replace the current private `0.0.0`
-   compatibility snapshot?
+6. Resolved: no mandatory dependency on `qwbe-core`; shapes are copied and declared
+   locally.
 7. Resolved: standalone owns its own database — PostgreSQL 16 since T-1480, SQLite
-   before it. Intended future mother integration is an external application/sidecar
-   for installation and authentication; invoicing data does not move into the mother's
-   Postgres database, and no shared topology is adopted. The integration contract and
-   packaging are still unimplemented.
-8. Package shape: keep the `kind: "cube"` package or reshape into a plugin pack
-   (`cubes: ["invoicing", "invoicing/documents"]`) so the mother's shared checker and
-   hierarchy rule apply.
+   before it — and its own login. The mother installs and mounts nothing; invoicing
+   data does not move into its database, and no shared topology is adopted. A future
+   mother would call the API under `FOUNDATION.md` section 19, which is not implemented.
+8. Resolved (T-1876): package shape is one plugin pack, a root `qwbe-package.json` with
+   `kind: "plugin"` listing every unit, without claiming `qwbe-core/package` compatibility.
 
 ## 12. Primary references
 

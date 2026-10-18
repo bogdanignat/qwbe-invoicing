@@ -13,6 +13,8 @@ export const cube = {
   manifest: {
     name: identity,
     parent: "invoicing",
+    summary: "Numbered issuance of invoices and proformas with immutable snapshots and idempotent replay",
+    required: true,
     tables: [],
     requiresAuth: true,
     permissions: [],

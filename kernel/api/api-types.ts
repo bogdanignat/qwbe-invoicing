@@ -3,9 +3,10 @@ import type { Pool } from "pg"
 
 import type { InvoicingService } from "../../cubes/invoicing/index.ts"
 import type { ArtifactService } from "../../cubes/invoicing/documents/index.ts"
-import type { PaymentsService } from "../../cubes/payments/index.ts"
+import type { PaymentsService } from "../../cubes/invoicing/payments/index.ts"
 import type { RequestAuthenticator } from "../auth/auth.ts"
 import type { BrowserSession } from "../auth/browser-session.ts"
+import type { PluginSelection } from "../plugins.ts"
 import type { CurrentRequest } from "./api-context.ts"
 
 export interface ApiRuntime {
@@ -21,10 +22,13 @@ export interface ApiRuntime {
   readonly dataDirectory: string
   readonly now?: () => Date
   readonly browserSession?: BrowserSession
+  /** The optional plugins this installation runs; `RuntimeConfig.plugins` in production. */
+  readonly plugins: PluginSelection
 }
 export interface ApiServices {
   readonly invoicing: InvoicingService
-  readonly payments: PaymentsService
+  /** Absent when the payments plugin is off: nothing else composes it. */
+  readonly payments?: PaymentsService
   readonly documents: ArtifactService
 }
 export interface UseServices {

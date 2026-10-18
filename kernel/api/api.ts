@@ -9,6 +9,8 @@ import { failureMiddleware, finalMiddleware, methodFallbackLayer } from "./api-r
 import { pdfResponse } from "./api-responses.ts"
 import { createUseServices } from "./api-services.ts"
 import { invoicingGroup } from "./api-invoicing-group.ts"
+import { efacturaGroup } from "./handlers-efactura.ts"
+import { paymentsGroup } from "./handlers-payments.ts"
 import { sessionsGroup } from "./api-session-group.ts"
 import type { ApiRuntime } from "./api-types.ts"
 import { documentHandlers } from "./handlers-documents.ts"
@@ -35,7 +37,12 @@ const documentsGroup = (runtime: ApiRuntime) => {
 }
 
 export const createApiHandler = (runtime: ApiRuntime): ApiHandler => {
-  const groups = Layer.mergeAll(invoicingGroup(runtime), documentsGroup(runtime), sessionsGroup(runtime))
+  // A plugin that is off has no route at all: the router answers 404 for it.
+  const plugins = [
+    ...(runtime.plugins.payments ? [paymentsGroup(runtime)] : []),
+    ...(runtime.plugins.efactura ? [efacturaGroup(runtime)] : []),
+  ]
+  const groups = Layer.mergeAll(invoicingGroup(runtime), documentsGroup(runtime), sessionsGroup(runtime), ...plugins)
   const routes = methodFallbackLayer.pipe(Layer.provideMerge(groups))
   const api = HttpApiBuilder.api(applicationHttpApi).pipe(
     Layer.provide(routes), Layer.provide(authenticationLayer(runtime)), Layer.provide(sessionAuthenticationLayer(runtime)),

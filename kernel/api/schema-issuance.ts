@@ -14,7 +14,9 @@ export const IssuedInvoice = Schema.Struct({
   notes: DocumentNotes, issuer: IssuerParty, customer: Buyer, lines: Schema.Array(DraftLine),
   vatBreakdown: Schema.Array(VatBreakdown), totalExcludingVat: Schema.String,
   vatTotal: Schema.String, totalIncludingVat: Schema.String,
-  eFacturaStatus: Schema.Literal("not_sent", "pending", "sent", "accepted", "rejected"),
+  eFacturaStatus: Schema.NullOr(Schema.Literal("not_sent", "pending", "sent", "accepted", "rejected")).annotations({
+    description: "null when the e-Factura plugin is off in this installation.",
+  }),
 })
 export const IssuedInvoiceSummary = Schema.Struct({ ...IssuedInvoice.fields, issuer: IssuerCompanySnapshot })
 export const IssuedInvoicePage = pageOf(IssuedInvoiceSummary)

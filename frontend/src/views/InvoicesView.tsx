@@ -46,7 +46,7 @@ export const InvoicesView = () => {
                   ? "Nu există încă documente emise."
                   : "Niciun document încărcat nu corespunde filtrului."}
               </EmptyState>
-              : <InvoiceRegisterTable rows={register.rows} />}
+              : <InvoiceRegisterTable rows={register.rows} eFactura={register.eFacturaColumn} />}
             <LoadMore visible={register.hasMore} pending={register.loadingMore} onClick={register.loadMore} />
           </section>}
         <DraftsSection drafts={drafts} />

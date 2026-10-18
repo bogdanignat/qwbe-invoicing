@@ -14,6 +14,7 @@ import { migrationScopes } from "./postgres-migration-plans.ts"
 import { introspectSchema } from "./postgres-schema-introspection.ts"
 import { resetFingerprintCache } from "./postgres-schema-fingerprint.ts"
 import { withEmpty, withMigrated, type RawSql, type TestFixture } from "./postgres-rig.test-support.ts"
+import { allPlugins } from "../plugins.ts"
 
 /**
  * Drift, on the real PostgreSQL catalogue. The answer is no longer a table name
@@ -140,6 +141,7 @@ const apiRuntime = (fixture: TestFixture, tokenFile: string) => ({
   authenticate: createRequestAuthenticator(fixture.config({ authTokenFile: tokenFile })),
   pool: fixture.pool,
   dataDirectory: fixture.dataDirectory,
+  plugins: allPlugins,
   now: () => new Date("2026-09-17T10:00:00.000Z"),
 })
 
