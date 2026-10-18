@@ -6,6 +6,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import test from "node:test"
 
+import { listCube } from "./cube-fixture.test-support.mjs"
 import { inspectSizes, sizeViolations, stripCommentsAndBlankLines } from "./size-gate-lib.mjs"
 
 const fixture = () => mkdtempSync(join(tmpdir(), "qwbe-size-gate-"))
@@ -14,7 +15,7 @@ const write = (root, path, content) => {
   mkdirSync(join(target, ".."), { recursive: true })
   writeFileSync(target, content)
 }
-const makeUnit = (root, path) => write(root, `${path}/qwbe-package.json`, "{}\n")
+const makeUnit = listCube
 
 test("counts code while preserving comment markers inside strings", () => {
   const source = '// removed\nconst url = "https://example.test/a"\n/* removed */\n\nconst value = 1\n'
@@ -74,7 +75,7 @@ test("rejects file, unit, and file-count cap violations", () => {
   }), measurement)
 })
 
-test("measures nested cubes independently and excludes tests", () => {
+test("measures nested cubes independently and excludes tests", async () => {
   const root = fixture()
   try {
     makeUnit(root, "cubes/invoicing")
@@ -83,7 +84,7 @@ test("measures nested cubes independently and excludes tests", () => {
     makeUnit(root, "cubes/invoicing/cubes/reporting")
     write(root, "cubes/invoicing/cubes/reporting/index.ts", "export const child = 2\n")
 
-    const measurement = inspectSizes(root, ["cubes"])
+    const measurement = await inspectSizes(root)
     assert.deepEqual(measurement.units.map(({ id, files }) => ({ id, files })), [
       { id: "cubes/invoicing", files: 1 },
       { id: "cubes/invoicing/cubes/reporting", files: 1 },
@@ -94,7 +95,7 @@ test("measures nested cubes independently and excludes tests", () => {
   }
 })
 
-test("measures host and browser sources without treating them as cubes", () => {
+test("measures host and browser sources without treating them as cubes", async () => {
   const root = fixture()
   try {
     makeUnit(root, "cubes/invoicing")
@@ -111,7 +112,7 @@ test("measures host and browser sources without treating them as cubes", () => {
     write(root, "web/.cache/generated.js", "generated bundle")
     write(root, "web/src/app.css", "stylesheet")
     symlinkSync(join(root, "kernel/api/new/handler.ts"), join(root, "web/linked.ts"))
-    const measurement = inspectSizes(root, ["cubes"], {
+    const measurement = await inspectSizes(root, {
       fileRoots: ["kernel", "web", "kernel/api", "cubes", "kernel/ui-dist/assets"],
       excludedDirectories: ["kernel/ui-dist"],
     })
@@ -134,13 +135,14 @@ test("measures host and browser sources without treating them as cubes", () => {
   }
 })
 
-test("refuses missing, non-directory and symbolic-link file roots", () => {
+test("refuses missing, non-directory and symbolic-link file roots", async () => {
   const root = fixture()
   try {
+    makeUnit(root, "cubes/invoicing")
     write(root, "web/src/index.ts", "export const value = 1\n")
     symlinkSync(join(root, "web"), join(root, "linked"))
     for (const fileRoot of ["missing", "web/src/index.ts", "linked", "linked/src", "../outside"]) {
-      assert.throws(() => inspectSizes(root, [], { fileRoots: [fileRoot] }), /source root/i)
+      await assert.rejects(inspectSizes(root, { fileRoots: [fileRoot] }), /source root/i)
     }
   } finally {
     rmSync(root, { recursive: true, force: true })
@@ -154,8 +156,9 @@ test("size gate CLI fails on oversized host and frontend/src sources and invalid
       write(root, `probes/${name}`, readFileSync(new URL(name, import.meta.url), "utf8"))
     }
     symlinkSync(fileURLToPath(new URL("../node_modules", import.meta.url)), join(root, "node_modules"))
-    const config = { cubeRoots: [], sizeFileRoots: ["kernel", "frontend/src"], caps: { maxCharsPerFile: 10, maxCharsPerUnit: 40000, maxFilesPerUnit: 15 } }
+    const config = { sizeFileRoots: ["kernel", "frontend/src"], caps: { maxCharsPerFile: 10, maxCharsPerUnit: 40000, maxFilesPerUnit: 15 } }
     write(root, "qwbe.config.json", JSON.stringify(config))
+    makeUnit(root, "cubes/invoicing")
     write(root, "kernel/adapter.ts", "export const adapter = 1\n")
     write(root, "frontend/src/app/page.tsx", "export const Page = 1\n")
     const run = () => spawnSync(process.execPath, [join(root, "probes/size-gate.mjs")], { encoding: "utf8" })

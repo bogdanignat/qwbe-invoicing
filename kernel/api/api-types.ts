@@ -3,7 +3,7 @@ import type { Pool } from "pg"
 
 import type { InvoicingService } from "../../cubes/invoicing/index.ts"
 import type { ArtifactService } from "../../cubes/invoicing/documents/index.ts"
-import type { PaymentsService } from "../../cubes/payments/index.ts"
+import type { PaymentsService } from "../../cubes/invoicing/payments/index.ts"
 import type { RequestAuthenticator } from "../auth/auth.ts"
 import type { BrowserSession } from "../auth/browser-session.ts"
 import type { CurrentRequest } from "./api-context.ts"

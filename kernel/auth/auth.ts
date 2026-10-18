@@ -11,7 +11,7 @@ import {
   type RequestContextProvider,
 } from "../../cubes/invoicing/index.ts"
 import { documentsPermissions } from "../../cubes/invoicing/documents/index.ts"
-import { paymentsPermissions } from "../../cubes/payments/index.ts"
+import { paymentsPermissions } from "../../cubes/invoicing/payments/index.ts"
 import type { RuntimeConfig } from "../config.ts"
 
 const bearerToken = (authorization: string | undefined): string | undefined => {

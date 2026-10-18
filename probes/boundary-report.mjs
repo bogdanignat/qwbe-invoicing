@@ -22,7 +22,7 @@ const SOURCES = [
   "probes/boundary-report.mjs",
   "probes/boundary-rules.mjs",
   "probes/source-tree.mjs",
-  "qwbe.config.json",
+  "qwbe-package.json",
 ]
 
 const repositoryRoot = join(dirname(fileURLToPath(import.meta.url)), "..")
@@ -34,7 +34,7 @@ Usage: node probes/boundary-report.mjs [--json] [--root <path>] [--timeout <ms>]
 
 Scope
   Cruises exactly the roots, options and rule set of \`pnpm gate:boundaries\`
-  (cube roots from qwbe.config.json plus kernel and frontend/src;
+  (cubes listed in qwbe-package.json plus kernel and frontend/src;
   test files included; no tsconfig), using the dependency-cruiser installed in
   this project. Reports raw counts; it never reports gate success or failure.
 
@@ -55,7 +55,7 @@ Protocol (--json), schemaVersion ${SCHEMA_VERSION}
   cruise      raw dependency-cruiser JSON output, unmodified
   rules       [{ name, severity }] of the full rule set actually used
   roots       cruised roots, relative to the cruised repository
-  areas       [{ id, folder, group }]; cube units discovered by their
+  areas       [{ id, folder, group }]; cube units listed in the root
               qwbe-package.json plus ${NON_CUBE_AREAS.join(", ")}.
               group is the cube tree root for cube units and the first path
               segment otherwise. Assign a module to the area whose folder is its
@@ -160,18 +160,17 @@ const cruiseGraph = (root, roots, generated, timeout, maxBuffer) => {
   }
 }
 
-const collect = (argv) => {
+const collect = async (argv) => {
   const root = (() => {
     const given = stringOption(argv, "--root")
     return given === undefined ? repositoryRoot : resolve(given)
   })()
   const timeout = numericOption(argv, "--timeout", DEFAULT_TIMEOUT_MS)
   const maxBuffer = numericOption(argv, "--max-buffer", DEFAULT_MAX_BUFFER)
-  const config = JSON.parse(readFileSync(join(repositoryRoot, "qwbe.config.json"), "utf8"))
   const depcruiseVersion = JSON.parse(
     readFileSync(join(repositoryRoot, "node_modules", "dependency-cruiser", "package.json"), "utf8"),
   ).version
-  const { roots, generated, units } = boundaryGateInputs(root, config.cubeRoots)
+  const { roots, generated, units } = await boundaryGateInputs(root)
   return {
     schemaVersion: SCHEMA_VERSION,
     cruise: cruiseGraph(root, roots, generated, timeout, maxBuffer),
@@ -205,7 +204,7 @@ try {
   if (argv.includes("--help")) {
     process.stdout.write(HELP)
   } else {
-    const payload = collect(argv)
+    const payload = await collect(argv)
     process.stdout.write(argv.includes("--json") ? `${JSON.stringify(payload)}\n` : humanSummary(payload))
   }
 } catch (error) {

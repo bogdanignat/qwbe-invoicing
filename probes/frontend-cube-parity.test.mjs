@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { characterCount, normalizeSpace } from "../cubes/efactura/decimals.ts"
+import { characterCount, normalizeSpace } from "../cubes/invoicing/efactura/decimals.ts"
 import { ROMANIAN_COUNTIES } from "../cubes/invoicing/index.ts"
 import { CIUS_TEXT_LIMITS, ciusTextLength } from "../cubes/invoicing/domain/validation.ts"
 import { validateIssuerForIssuance } from "../cubes/invoicing/issuer/index.ts"

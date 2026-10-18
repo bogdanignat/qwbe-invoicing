@@ -4,6 +4,8 @@ export const cube = {
   manifest: {
     name: identity,
     parent: "invoicing",
+    summary: "Saved products and services of an organization and the unit-of-measure list they are chosen from",
+    required: true,
     tables: ["product_presets"],
     requiresAuth: true,
     permissions: [],

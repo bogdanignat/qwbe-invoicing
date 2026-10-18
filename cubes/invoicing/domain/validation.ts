@@ -40,7 +40,7 @@ export const validateDocumentSeries = (documentSeries: DocumentSeries): void => 
 /** e-Factura counts a text the way the CIUS-RO Schematron does: XPath normalize-space
  * (only space, tab, CR and LF collapse or trim; a no-break space is a character) and
  * characters rather than UTF-16 units. Same expression as `normalizeSpace` and
- * `characterCount` in cubes/efactura/decimals.ts, which this cube may not import. */
+ * `characterCount` in cubes/invoicing/efactura/decimals.ts, which this cube may not import. */
 export const ciusTextLength = (value: string): number =>
   Array.from(value.replace(/[\t\n\r ]+/gu, " ").replace(/^ | $/gu, "")).length
 

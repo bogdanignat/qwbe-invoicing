@@ -10,6 +10,8 @@ export const cube = {
   manifest: {
     name: identity,
     parent: "invoicing",
+    summary: "Invoice draft authoring: buyer resolution, header dates, lines and totals before issuance",
+    required: true,
     tables: [],
     requiresAuth: true,
     permissions: [],

@@ -7,12 +7,12 @@ import { spawnSync } from "node:child_process"
 import test from "node:test"
 
 import { boundaryGateInputs } from "./boundary-gate-lib.mjs"
+import { listCube } from "./cube-fixture.test-support.mjs"
 
 const probes = dirname(fileURLToPath(import.meta.url))
 const repositoryRoot = join(probes, "..")
 const report = join(probes, "boundary-report.mjs")
 const gate = join(probes, "boundary-gate.mjs")
-const cubeRoots = JSON.parse(readFileSync(join(repositoryRoot, "qwbe.config.json"), "utf8")).cubeRoots
 
 const run = (...args) => spawnSync(process.execPath, [report, ...args], { encoding: "utf8", maxBuffer: 32 * 1024 * 1024 })
 const fixture = () => mkdtempSync(join(tmpdir(), "qwbe-boundary-report-test-"))
@@ -22,7 +22,7 @@ const write = (root, path, content) => {
   writeFileSync(target, content)
 }
 const makeUnit = (root, path, source = "export const value = 1\n") => {
-  write(root, `${path}/qwbe-package.json`, "{}\n")
+  listCube(root, path)
   write(root, `${path}/index.ts`, source)
 }
 const withFixture = (build, use) => {
@@ -53,9 +53,9 @@ test("reports the real repository graph as the fixed protocol, without log conta
   assert.deepEqual(payload.roots, ["cubes", "kernel", "frontend/src"])
 })
 
-test("describes every cube unit and host root as an area with its family", () => {
+test("describes every cube unit and host root as an area with its family", async () => {
   const payload = JSON.parse(run("--json").stdout)
-  const { units } = boundaryGateInputs(repositoryRoot, cubeRoots)
+  const { units } = await boundaryGateInputs(repositoryRoot)
   const expected = [...units.map((unit) => unit.id), "kernel", "frontend/src"].sort()
   assert.deepEqual(payload.areas.map((area) => area.id), expected)
   assert.deepEqual(payload.areas.map((area) => area.folder), expected)
@@ -76,20 +76,22 @@ test("fingerprints the inputs that decide the graph, stably and without a timest
     "probes/boundary-report.mjs",
     "probes/boundary-rules.mjs",
     "probes/source-tree.mjs",
-    "qwbe.config.json",
+    "qwbe-package.json",
   ])
   for (const source of first.sources) assert.match(source.sha256, /^[0-9a-f]{64}$/)
   assert.ok(!JSON.stringify(first).includes("generatedAt"))
 })
 
-test("reports exactly the rule set and roots the gate validates against", () => {
+test("reports exactly the rule set and roots the gate validates against", async () => {
   const payload = JSON.parse(run("--json").stdout)
-  const { roots, generated } = boundaryGateInputs(repositoryRoot, cubeRoots)
+  const { roots, generated } = await boundaryGateInputs(repositoryRoot)
   assert.deepEqual(payload.roots, roots)
   assert.deepEqual(payload.rules, generated.forbidden.map((rule) => ({ name: rule.name, severity: rule.severity })))
   assert.ok(payload.provenance.generatedRuleCount > 0)
   assert.equal(payload.provenance.generatedRuleCount, payload.rules.filter((rule) =>
-    rule.name.startsWith("no-cube-import-") || rule.name.startsWith("cube-tree-")).length)
+    rule.name.startsWith("no-cube-import-") || rule.name.startsWith("cube-tree-")
+    || rule.name === "required-cube-does-not-import-plugin").length)
+  assert.ok(payload.rules.some((rule) => rule.name === "required-cube-does-not-import-plugin"))
   assert.deepEqual(payload.cruise.summary.optionsUsed.doNotFollow, generated.options.doNotFollow)
   assert.equal(payload.cruise.summary.optionsUsed.tsPreCompilationDeps, true)
   assert.ok(payload.cruise.modules.some((module) => /[.]test[.]ts$/.test(module.source)), "test files stay in the graph")
@@ -110,7 +112,7 @@ test("collects a graph with violations and still exits zero, reporting raw count
   assert.deepEqual(payload.areas.map((area) => area.id), ["cubes/invoicing", "cubes/reporting"])
 })
 
-test("stays a reporter where the gate is a gate, on the same fixture", () => {
+test("stays a reporter where the gate is a gate, on the same fixture", async () => {
   const root = fixture()
   try {
     makeUnit(root, "cubes/invoicing", 'import "../reporting/index.ts"\nexport const invoice = 1\n')
@@ -118,7 +120,7 @@ test("stays a reporter where the gate is a gate, on the same fixture", () => {
     const gateResult = spawnSync(process.execPath, [gate, "--root", root], { encoding: "utf8" })
     assert.notEqual(gateResult.status, 0, "the gate still fails on a violating tree")
     const payload = JSON.parse(run("--json", "--root", root).stdout)
-    const { roots, generated } = boundaryGateInputs(root, cubeRoots)
+    const { roots, generated } = await boundaryGateInputs(root)
     assert.deepEqual(payload.roots, roots)
     assert.deepEqual(payload.rules.map((rule) => rule.name), generated.forbidden.map((rule) => rule.name))
     assert.match(gateResult.stdout + gateResult.stderr, new RegExp(payload.cruise.summary.violations[0].rule.name))

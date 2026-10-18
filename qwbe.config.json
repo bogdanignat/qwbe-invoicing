@@ -1,7 +1,4 @@
 {
-  "cubeRoots": [
-    "cubes"
-  ],
   "sizeFileRoots": [
     "kernel",
     "frontend/src"

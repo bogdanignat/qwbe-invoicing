@@ -11,7 +11,7 @@ import {
   type IdGenerator,
   type RequestContextProvider,
 } from "../../cubes/invoicing/index.ts"
-import { PersistenceFailure as PaymentsPersistenceFailure, createPaymentsService } from "../../cubes/payments/index.ts"
+import { PersistenceFailure as PaymentsPersistenceFailure, createPaymentsService } from "../../cubes/invoicing/payments/index.ts"
 import { withEmpty, withMigrated, type RawSql } from "./postgres-rig.test-support.ts"
 import { createPostgresPaymentsStore, createPostgresStore } from "./postgres-store.ts"
 

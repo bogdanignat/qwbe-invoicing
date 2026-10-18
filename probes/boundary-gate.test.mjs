@@ -6,6 +6,8 @@ import { fileURLToPath } from "node:url"
 import { spawnSync } from "node:child_process"
 import test from "node:test"
 
+import { listCube } from "./cube-fixture.test-support.mjs"
+
 const gate = join(dirname(fileURLToPath(import.meta.url)), "boundary-gate.mjs")
 const fixture = () => mkdtempSync(join(tmpdir(), "qwbe-boundary-gate-"))
 const write = (root, path, content) => {
@@ -14,7 +16,7 @@ const write = (root, path, content) => {
   writeFileSync(target, content)
 }
 const makeUnit = (root, path, source = "export const value = 1\n") => {
-  write(root, `${path}/qwbe-package.json`, "{}\n")
+  listCube(root, path)
   write(root, `${path}/index.ts`, source)
 }
 const cruise = (root) => spawnSync(process.execPath, [gate, "--root", root], { encoding: "utf8" })
@@ -74,11 +76,11 @@ test("rejects imports from a nested child cube into another top-level cube", () 
   const root = fixture()
   try {
     makeUnit(root, "cubes/invoicing")
-    makeUnit(root, "cubes/invoicing/cubes/reporting", 'import "../../../payments/index.ts"\nexport const nested = 1\n')
-    makeUnit(root, "cubes/payments")
+    makeUnit(root, "cubes/invoicing/cubes/reporting", 'import "../../../billing/index.ts"\nexport const nested = 1\n')
+    makeUnit(root, "cubes/billing")
     const result = cruise(root)
     assert.notEqual(result.status, 0)
-    assert.match(output(result), /no-cube-import-cubes-invoicing-cubes-reporting-to-cubes-payments/)
+    assert.match(output(result), /no-cube-import-cubes-invoicing-cubes-reporting-to-cubes-billing/)
   } finally {
     rmSync(root, { recursive: true, force: true })
   }
@@ -115,8 +117,11 @@ const installThroughStore = (root, name, version) => {
 
 test("rejects the PostgreSQL driver from cube code in every install shape", () => {
   for (const specifier of ["pg", "pg-pool", "pg-native", "pg-cursor"]) {
+    // In a file of its own: the gate loads index.ts to read the manifest, and an
+    // unresolved driver there would stop it before the cruise could name the rule.
     const unresolved = withFixture((root) => {
-      makeUnit(root, "cubes/invoicing", `import "${specifier}"\nexport const cube = {}\n`)
+      makeUnit(root, "cubes/invoicing", "export const cube = {}\n")
+      write(root, "cubes/invoicing/driver.ts", `import "${specifier}"\n`)
     })
     assert.notEqual(unresolved.status, 0, specifier)
     assert.match(output(unresolved), /cube-does-not-touch-runtime-infrastructure/)
@@ -241,8 +246,26 @@ test("refuses the kernel port and its test store reaching into a child's interio
 test("still refuses import cycles inside one cube tree", () => {
   const result = withFixture((root) => {
     makeUnit(root, "cubes/invoicing", 'import { child } from "./reporting/index.ts"\nexport const parent = child\n')
-    makeUnit(root, "cubes/invoicing/reporting", 'import { parent } from "../index.ts"\nexport const child = 1\nvoid parent\n')
+    makeUnit(root, "cubes/invoicing/reporting", 'import { parent } from "../index.ts"\nexport const child = 1\nexport const read = () => parent\n')
   })
   assert.notEqual(result.status, 0)
   assert.match(output(result), /no-circular-dependencies/)
+})
+
+test("refuses a required cube importing a plugin, and lets the plugin use its parent", () => {
+  const cube = (name, required, imports = "") =>
+    `${imports}export const cube = { manifest: { name: "${name}", required: ${String(required)} } }\n`
+  const base = (root, { parent = "", sibling = "", plugin = "" }) => {
+    makeUnit(root, "cubes/invoicing", cube("invoicing", true, parent))
+    makeUnit(root, "cubes/invoicing/catalog", cube("catalog", true, sibling))
+    makeUnit(root, "cubes/invoicing/payments", cube("payments", false, plugin))
+    write(root, "cubes/invoicing/shared.ts", "export const shared = 1\n")
+  }
+  const allowed = withFixture((root) => base(root, { plugin: 'import "../shared.ts"\nimport "../catalog/index.ts"\n' }))
+  assert.equal(allowed.status, 0, output(allowed))
+  for (const imports of [{ parent: 'import "./payments/index.ts"\n' }, { sibling: 'import "../payments/index.ts"\n' }]) {
+    const rejected = withFixture((root) => base(root, imports))
+    assert.notEqual(rejected.status, 0, JSON.stringify(imports))
+    assert.match(output(rejected), /required-cube-does-not-import-plugin/)
+  }
 })

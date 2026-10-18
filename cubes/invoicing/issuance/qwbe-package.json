@@ -1,5 +1,0 @@
-{
-  "name": "issuance",
-  "kind": "cube",
-  "summary": "Numbered issuance of invoices and proformas with immutable snapshots and idempotent replay"
-}

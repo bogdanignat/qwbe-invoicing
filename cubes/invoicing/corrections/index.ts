@@ -4,6 +4,8 @@ export const cube = {
   manifest: {
     name: identity,
     parent: "invoicing",
+    summary: "Full correction documents (storno) that reverse an issued invoice",
+    required: true,
     tables: [],
     requiresAuth: true,
     permissions: [],

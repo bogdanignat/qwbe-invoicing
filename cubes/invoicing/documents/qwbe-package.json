@@ -1,5 +1,0 @@
-{
-  "name": "documents",
-  "kind": "cube",
-  "summary": "Immutable rendered invoice representations and artifact recovery"
-}

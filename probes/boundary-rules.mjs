@@ -38,6 +38,24 @@ export const cubeIsolationRules = (units) => units.flatMap((source) =>
 // through its exact `index.ts`. That keeps each child's interior private to it
 // while the kernel it grew out of stays shared. No edge is exempt: a parent that
 // needs a child's type takes it from the child's index, and the child owns its port.
+// A required cube has to run with every plugin switched off, so no code of it imports
+// a plugin. A plugin's subtree is optional as a whole: whatever lives under it counts as
+// plugin code. Only a manifest that says `required: false` makes a plugin; a unit whose
+// manifest says nothing stays on the stricter, required side.
+const subtree = (unit) => `^${escapePattern(unit.id)}/`
+
+export const requiredCubeRules = (units) => {
+  const plugins = units.filter((unit) => unit.required === false).map(subtree)
+  const required = units.filter((unit) => unit.required !== false).map(subtree)
+  if (plugins.length === 0 || required.length === 0) return []
+  return [{
+    name: "required-cube-does-not-import-plugin",
+    severity: "error",
+    from: { path: required, pathNot: plugins },
+    to: { path: plugins },
+  }]
+}
+
 const exactPath = (path) => `^${escapePattern(path)}$`
 const isAncestor = (candidate, unit) => unit.id.startsWith(`${candidate.id}/`)
 

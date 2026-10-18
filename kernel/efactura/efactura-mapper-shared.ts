@@ -1,5 +1,5 @@
-import type { EFacturaLine, EFacturaParty, EFacturaTaxSubtotal } from "../../cubes/efactura/index.ts"
-import { ANONYMOUS_BUYER_IDENTIFIER, VATEX_NOT_SUBJECT } from "../../cubes/efactura/index.ts"
+import type { EFacturaLine, EFacturaParty, EFacturaTaxSubtotal } from "../../cubes/invoicing/efactura/index.ts"
+import { ANONYMOUS_BUYER_IDENTIFIER, VATEX_NOT_SUBJECT } from "../../cubes/invoicing/efactura/index.ts"
 import type { Address, BuyerSnapshot, DraftLine, IssuerCompanySnapshot, VatBreakdown } from "../../cubes/invoicing/index.ts"
 import { isValidRomanianCnp } from "../../cubes/invoicing/index.ts"
 

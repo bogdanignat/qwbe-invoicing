@@ -25,7 +25,7 @@ on the translated SQL instead of silently accepting a second dialect. See
 | `cubes/invoicing/catalog/contracts/migrations.json` | `catalog` | 2 |
 | `cubes/invoicing/issuer/contracts/migrations.json` | `issuer` | 2 |
 | `cubes/invoicing/contracts/migrations.json` | `invoicing` | 92 |
-| `cubes/payments/contracts/migrations.json` | `payments` | 10 |
+| `cubes/invoicing/payments/contracts/migrations.json` | `payments` | 10 |
 | `cubes/invoicing/documents/contracts/migrations.ts` | `documents` | 12 |
 | `kernel/storage/postgres-foundation.ts` | `foundation` | 1 |
 | `kernel/storage/postgres-migration-plans.ts` | `kernel` | 2 |

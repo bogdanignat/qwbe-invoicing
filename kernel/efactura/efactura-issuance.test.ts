@@ -274,7 +274,7 @@ void test("a line description e-Factura cannot carry is refused when it is enter
   try {
     // BR-RO-L100 caps an item name at 100 characters. The domain enforces it at input
     // (T-1390), so an issued invoice can no longer hold a description the export
-    // would refuse; the export's own refusal stays covered in cubes/efactura.
+    // would refuse; the export's own refusal stays covered in cubes/invoicing/efactura.
     const issued = await value.call("POST", "/api/invoices", {
       customer: buyer, series: "INV", issueDate: "2026-09-05", dueDate: "2026-09-20", currency: "RON",
       lines: [{ ...line, description: "Servicii ".repeat(20) }],

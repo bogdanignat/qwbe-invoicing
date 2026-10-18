@@ -1,5 +1,5 @@
-import type { EFacturaDocument } from "../../cubes/efactura/index.ts"
-import { EFacturaContractViolation, validateEFacturaDocument } from "../../cubes/efactura/index.ts"
+import type { EFacturaDocument } from "../../cubes/invoicing/efactura/index.ts"
+import { EFacturaContractViolation, validateEFacturaDocument } from "../../cubes/invoicing/efactura/index.ts"
 import type { CorrectionDocument, DraftLine, IssuedInvoice, VatBreakdown } from "../../cubes/invoicing/index.ts"
 import { validateFiscalDocument } from "../../cubes/invoicing/index.ts"
 import {

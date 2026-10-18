@@ -4,6 +4,8 @@ export const cube = {
   manifest: {
     name: identity,
     parent: "invoicing",
+    summary: "Romanian fiscal party rules shared by the issuer, saved customers and inline buyers: CUI, CNP, counties and sectors",
+    required: true,
     tables: [],
     requiresAuth: true,
     permissions: [],

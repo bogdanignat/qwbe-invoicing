@@ -4,6 +4,8 @@ export const cube = {
   manifest: {
     name: identity,
     parent: "invoicing",
+    summary: "Issuer profile, branding, VAT registration and legal VAT catalogue",
+    required: true,
     tables: ["issuers", "issuer_tax_configurations"],
     requiresAuth: true,
     permissions: [],

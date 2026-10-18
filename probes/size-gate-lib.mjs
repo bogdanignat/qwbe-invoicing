@@ -121,8 +121,8 @@ const fileRoot = (root, path) => {
   return { directory }
 }
 
-export const inspectSizes = (root, cubeRoots, { fileRoots = [], excludedDirectories = [] } = {}) => {
-  const units = discoverCubeUnits(root, cubeRoots)
+export const inspectSizes = async (root, { fileRoots = [], excludedDirectories = [] } = {}) => {
+  const units = await discoverCubeUnits(root)
   const files = []
   const measuredUnits = units.map((unit) => {
     const owned = sourceFilesOwnedBy(unit, units).filter((path) => !isTestFile(path))

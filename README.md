@@ -144,8 +144,9 @@ clients run inside the Compose network (`docker compose exec app …`).
   configurations and their own tables and baseline), `drafts`
   (authoring a document, draft and line editing), `issuance` (numbered invoices and
   proformas, document series, conversion, idempotent replay), `corrections` (storno) and `documents`
-  (rendered PDF artifacts, their hashes and recovery). A child enters another child only
-  through its `index.ts`.
+  (rendered PDF artifacts, their hashes and recovery). `payments` and `efactura` are
+  plugins: optional children (`required: false`), today always active like the other
+  components; turning them off through `QWBE_PLUGINS` comes in T-1876 D1. A child enters another child only through its `index.ts`.
 - **The kernel** (`kernel/`) is the composition root. It authenticates the
   request, provides the contracts above, exposes every use case as an HTTP endpoint, serves
   the UI, runs migrations and implements the CLI.
@@ -463,7 +464,7 @@ Numbered invoices, proformas and corrections expose a trusted `actorId`. Their
 issuance, issuer/series configuration, payments and reversals append fiscal events
 inside the business transaction; idempotent retries do not append duplicates.
 `audit_events` rejects updates/deletes. There is no audit browsing endpoint yet.
-Payments remains a separate cube with `payments:*` permissions; recording a payment
+Payments is an optional plugin under `invoicing` with its own `payments:*` permissions; recording a payment
 is optional and is not required to issue an invoice. Document/PDF metadata and browser
 sessions are owned by their own scopes and tables inside the one database, and
 `eFacturaStatus` is retained.
@@ -566,6 +567,7 @@ empty target database.
 ## Repository layout
 
 ```text
+qwbe-package.json            plugin pack manifest: invoicing and its ten child cubes
 cubes/invoicing/             core: domain model, VAT arithmetic, ports, contracts, migrations, service composition
 cubes/invoicing/parties/     component: CUI, CNP, counties and sectors shared by issuer and buyers
 cubes/invoicing/customers/   component: saved customers, their table and baseline migration
@@ -575,8 +577,8 @@ cubes/invoicing/drafts/      component: document authoring, draft and line editi
 cubes/invoicing/issuance/    component: document series, numbered invoices and proformas, conversion, idempotent replay
 cubes/invoicing/corrections/ component: correction documents (storno)
 cubes/invoicing/documents/   component: rendered PDFs and artifact recovery
-cubes/payments/              payment records and derived invoice payment status
-cubes/efactura/              RO e-Factura: UBL builders, CIUS-RO limits, EN 16931 validation
+cubes/invoicing/payments/    plugin: payment records and derived invoice payment status
+cubes/invoicing/efactura/    plugin: RO e-Factura UBL builders, CIUS-RO limits, EN 16931 validation
 kernel/                      host, never packaged; config.ts and failure-log.ts at its root
 kernel/http/                 server, security headers, readiness, API docs
 kernel/auth/                 credentials, browser session, login throttle
@@ -616,7 +618,8 @@ scripts/verify-docker.sh down                    # stops both rigs; removes no v
 ```
 
 The gates keep the core inside the QWBE cube contract: no host or infrastructure imports
-from `cubes/`, no cube-to-cube imports, size caps per file and per unit, a test next to every
+from `cubes/`, no imports between separate cube trees and none past a unit's `index.ts`
+inside the invoicing tree, size caps per file and per unit, a test next to every
 cube. A change that breaks a gate is not mergeable.
 
 ### UI theme and dependency policy
@@ -634,12 +637,12 @@ non-MIT packages and packages with unclear licensing are not accepted.
 
 ## Relation to QWBE
 
-QWBE Invoicing is built as an application for the [QWBE](https://github.com/theZenNana/qwbe)
-platform: a package of cubes with its own runtime, its own database and its own UI, taking
-user authentication from the QWBE mother and exposing its API for other applications to
-compose (a CRM issuing invoices, for example). The exact installation contract with the
-mother is still being decided; until then the kernel is the only supported way to
-run it, and it is a complete product on its own.
+QWBE Invoicing follows the package structure of the [QWBE](https://github.com/theZenNana/qwbe)
+platform: one plugin pack with `invoicing` as the main cube and `payments` and `efactura` as
+plugins. It keeps its own runtime, database, login and UI, and the QWBE mother installs
+nothing. A later integration would let the mother call this API from its backend under the
+contract in [`FOUNDATION.md`](./FOUNDATION.md) section 19; it is not implemented, and the
+kernel is the only way to run the product.
 
 Further cubes are planned inside the same application: ANAF e-Factura transport, RO CIUS
 XML export, and an export in the format accepted by SAGA.
@@ -648,8 +651,8 @@ XML export, and an export in the format accepted by SAGA.
 
 - [`PRODUCT.md`](./PRODUCT.md): product scope, legal boundary, capabilities, lifecycle,
   deployment, delivery phases, open decisions, references to Romanian legislation and ANAF.
-- [`FOUNDATION.md`](./FOUNDATION.md): architecture, host contracts, packaging, alignment
-  with the QWBE mother.
+- [`FOUNDATION.md`](./FOUNDATION.md): architecture, host contracts, plugin pack, future
+  mother contract.
 - [`docs/LOCAL_DEVELOPMENT.md`](./docs/LOCAL_DEVELOPMENT.md): local setup, full route
   inventory, operational checks.
 - [`docs/RELEASE.md`](./docs/RELEASE.md): production bundle, install, upgrade, backup,

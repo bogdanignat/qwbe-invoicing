@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto"
 import { Effect } from "effect"
 
 import { createInvoicingService, type RequestContext } from "../../cubes/invoicing/index.ts"
-import { createPaymentsService } from "../../cubes/payments/index.ts"
+import { createPaymentsService } from "../../cubes/invoicing/payments/index.ts"
 import { createKernelArtifactService } from "../documents/artifact-runtime.ts"
 import { createPostgresPaymentsStore, createPostgresStore } from "../storage/postgres-store.ts"
 import { brandingNormalizer } from "./branding-normalizer.ts"
