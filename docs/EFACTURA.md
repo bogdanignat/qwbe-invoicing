@@ -11,6 +11,10 @@ frozen snapshot and render it on the spot — no migration, no write to
 `eFacturaStatus`, nothing stored and nothing sent. Transport to the SPV stays in
 T-1346 (T-1395).
 
+Both routes belong to the `efactura` plugin. With it off (`QWBE_PLUGINS` without
+`efactura`) they answer 404, are absent from OpenAPI, and every invoice response
+says `eFacturaStatus: null`; issuance, PDF and the fiscal validations do not change.
+
 A refusal is reachable today: the invoicing domain does not cap line
 descriptions or party names at input, while CIUS-RO does at export (T-1390), so
 an invoice can be issued — and, being immutable, stays issued — that the export

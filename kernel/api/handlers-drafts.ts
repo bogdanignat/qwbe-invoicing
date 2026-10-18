@@ -4,10 +4,11 @@ import { Effect } from "effect"
 import { errors } from "./api-failures.ts"
 import { idempotent, sourceFilter } from "./api-operation-inputs.ts"
 import type { UseServices } from "./api-types.ts"
+import type { EFacturaStatusView } from "./efactura-status.ts"
 import { applicationHttpApi } from "./http-api.ts"
 
 const deleted = { deleted: true } as const
-export const draftHandlers = (use: UseServices) => ({
+export const draftHandlers = (use: UseServices, status: EFacturaStatusView) => ({
   listDrafts: HttpApiBuilder.handler(applicationHttpApi, "invoicing", "listDrafts", ({ urlParams }) =>
     sourceFilter(urlParams).pipe(Effect.flatMap((source) => use((s) => s.invoicing.listDrafts(source, urlParams))),
       Effect.mapError(errors("ValidationFailure")))),
@@ -33,6 +34,6 @@ export const draftHandlers = (use: UseServices) => ({
       Effect.mapError(errors("ResourceNotFound", "DomainConflict")))),
   issueDraftInvoice: HttpApiBuilder.handler(applicationHttpApi, "invoicing", "issueDraftInvoice", ({ path, headers }) =>
     idempotent(headers["idempotency-key"], "issue_invoice_from_draft", { draftId: path.draftId }).pipe(
-      Effect.flatMap((input) => use((s) => s.invoicing.issueInvoice(input))),
+      Effect.flatMap((input) => use((s) => s.invoicing.issueInvoice(input))), Effect.map(status.invoice),
       Effect.mapError(errors("ValidationFailure", "ResourceNotFound", "DomainConflict")))),
 })

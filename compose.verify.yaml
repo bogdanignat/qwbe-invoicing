@@ -115,6 +115,9 @@ services:
       PGDATABASE: verify
       PGUSER: verify
       PGPASSWORD_FILE: /run/qwbe-verify/pgpassword
+      # Passed through only when set, for the CLI children the suite spawns; the
+      # in-process fixtures choose their plugins themselves. Unset: every plugin.
+      QWBE_PLUGINS:
       # `kernel/ops/postgres-backup.test.ts` builds the subprocess credential
       # from PGPASSWORD. It is set for that suite only and never reaches a child of
       # the CLI: the fixture's `childEnv` strips it, so the ported CLI tests prove

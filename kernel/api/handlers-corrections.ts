@@ -6,17 +6,7 @@ import { idempotent, sourceFilter } from "./api-operation-inputs.ts"
 import type { UseServices } from "./api-types.ts"
 import { applicationHttpApi } from "./http-api.ts"
 
-export const paymentCorrectionHandlers = (use: UseServices) => ({
-  listPayments: HttpApiBuilder.handler(applicationHttpApi, "invoicing", "listPayments", ({ path }) =>
-    use((s) => s.payments.listPayments(path.invoiceId)).pipe(Effect.mapError(errors("ResourceNotFound")))),
-  recordPayment: HttpApiBuilder.handler(applicationHttpApi, "invoicing", "recordPayment", ({ path, payload, headers }) =>
-    idempotent(headers["idempotency-key"], "record_payment", { invoiceId: path.invoiceId, ...payload }).pipe(
-      Effect.flatMap((input) => use((s) => s.payments.recordPayment(input))),
-      Effect.mapError(errors("ValidationFailure", "ResourceNotFound", "DomainConflict")))),
-  reversePayment: HttpApiBuilder.handler(applicationHttpApi, "invoicing", "reversePayment", ({ path, payload, headers }) =>
-    idempotent(headers["idempotency-key"], "reverse_payment", { invoiceId: path.invoiceId, paymentId: path.paymentId, ...payload }).pipe(
-      Effect.flatMap((input) => use((s) => s.payments.reversePayment(input))),
-      Effect.mapError(errors("ValidationFailure", "ResourceNotFound", "DomainConflict")))),
+export const correctionHandlers = (use: UseServices) => ({
   createCorrection: HttpApiBuilder.handler(applicationHttpApi, "invoicing", "createCorrection", ({ path, payload, headers }) =>
     idempotent(headers["idempotency-key"], "create_correction", { originalInvoiceId: path.invoiceId, ...payload }).pipe(
       Effect.flatMap((input) => use((s) => s.invoicing.createCorrection(input))),

@@ -1,6 +1,6 @@
 # QWBE Invoicing Foundation
 
-Status: architecture baseline; T-1876 direction (standalone plugin pack). Items marked "target T-1876" are decided but not yet in code: plugin selection through `QWBE_PLUGINS`, conditional plugin composition in the kernel, and moving the e-Factura mappers out of `kernel/efactura/`
+Status: architecture baseline; T-1876 direction (standalone plugin pack), with plugin selection through `QWBE_PLUGINS` and conditional plugin composition in the kernel
 Source snapshot: QWBE mother repository at `a98d9ef` (main, 31 August 2026; previous baseline `987e11b`); structural reference: `qwbe-plugins/crm-pack`
 Conformance review against that snapshot: 2 September 2026, section 18 (historical)
 Package manager: pnpm
@@ -63,7 +63,7 @@ Standalone is the only runtime mode:
 kernel                      composition root, own PostgreSQL, own login
 ├── authentication adapter  API token, browser session
 ├── organization adapter    ORGANIZATION_ID
-├── plugin selection        QWBE_PLUGINS, read once at start (target T-1876)
+├── plugin selection        QWBE_PLUGINS, read once at start
 └── invoicing (required)
     ├── parties, customers, catalog, issuer, drafts, issuance, corrections, documents (required)
     ├── payments (plugin, required: false)
@@ -126,8 +126,9 @@ payments:payment.record
 Each manifest uses its literal leaf identity as prefix. Payments keeps the `payments:*`
 prefix and the legacy aliases `invoicing:read` and `invoicing:payment.record` under
 `invoicing/`, so grants and migration ledger keys do not change. When the
-payments plugin is disabled its routes are not mounted, so its grants reach nothing
-(target T-1876). Identity rebinding
+payments plugin is off its routes are not mounted and the kernel grants no `payments:*`
+permission; `invoicing:read` stays, because it is the invoicing base permission. e-Factura
+declares no permission and needs none. Identity rebinding
 under another mounted name is outside the direction (decision 8 in section 16); the
 prefixes are local and differ from the full-identity prefix `qwbe-core` would require
 (section 13).
@@ -187,8 +188,9 @@ This repository copies the common shape and nothing else: a named `cube` export,
 plus `create`, `manifest.name` equal to the path leaf, an explicit `parent` on children,
 and `required` (section 13). The objects are plain; there is no `defineCube` import and no
 local wrapper imitating it. The runtime contract is local: `create()` returns
-`handlers: {}` and the kernel owns every HTTP endpoint. It will mount only those of the
-required cubes and the selected plugins, for routing and OpenAPI alike (target T-1876).
+`handlers: {}` and the kernel owns every HTTP endpoint. It mounts only those of the
+required cubes and the selected plugins, for routing and OpenAPI alike: a disabled plugin's
+route is a 404 from the router, and its operations keep their ids in the `invoicing` group.
 Manifests are static: the
 plugin selection filters the active surface and never rewrites a manifest.
 
@@ -261,8 +263,8 @@ Inside one tree the gate is stricter than the mother. A child cube may import th
 
 Plugins stay optional in the graph. The boundary gate refuses any import from a
 `required: true` unit into a `required: false` unit, and `invoicing/index.ts` does not
-re-export the plugins. The kernel will compose a plugin only when it is selected
-(`kernel/api/api-services.ts`, target T-1876). A plugin's internal modules import their leaf
+re-export the plugins. The kernel composes a plugin only when it is selected
+(`kernel/api/api-services.ts`). A plugin's internal modules import their leaf
 modules, never their own `index.ts`, so re-exports create no cycle.
 
 Source: QWBE `core/.dependency-cruiser.cjs`.
@@ -407,9 +409,11 @@ On 4 September 2026, adding customer payment terms and product presets exposed t
 unit cap. The payment lifecycle was extracted into its own bounded context, composed by
 the kernel through public ports, and the cap was not raised. It now lives in
 `cubes/invoicing/payments` as a plugin and stays its own measured unit with its own ports.
-The same holds for `cubes/invoicing/efactura`. When it receives the pure e-Factura mappers
-from `kernel/efactura/` (target T-1876), it must fit 15 files by consolidating them, not
-by raising a cap.
+The same holds for `cubes/invoicing/efactura`. The mappers from invoicing's model to the
+e-Factura document stay in `kernel/efactura/` as a host adapter: the plugin uses 37,340 of
+its 40,000 code characters and the mappers would add about 9,800, which only an artificial
+child cube could absorb. With e-Factura off the XML routes are not mounted, so the mappers
+are never called.
 
 ## 11. Tests and verification
 
@@ -424,12 +428,13 @@ Minimum verification layers:
 5. event declaration and payload decoding tests;
 6. plugin selection tests for all four `payments`/`efactura` combinations: the app boots,
    login, readiness, issuance, proforma, storno, and PDF work; a disabled plugin's routes,
-   OpenAPI entries, and UI requests are absent; re-enabling keeps its data; an unknown name
-   in `QWBE_PLUGINS` refuses start (target T-1876);
+   OpenAPI entries are absent and `eFacturaStatus` is `null` with e-Factura off; re-enabling
+   keeps its data and idempotency; an unknown name in `QWBE_PLUGINS` refuses start
+   (`kernel/plugins.test.ts`, `kernel/http/plugins-http.test.ts`). That the UI sends no
+   request to a disabled plugin is the frontend's to prove and is not covered here yet;
 7. package manifest tests: every declared unit exists, no unit is undeclared or duplicated,
    a missing manifest or zero units fails;
-8. decoupling: disabling a plugin leaves the host and every required cube operational
-   (target T-1876);
+8. decoupling: disabling a plugin leaves the host and every required cube operational;
 9. size and dependency-boundary gates;
 10. TypeScript strict typecheck.
 
@@ -485,9 +490,10 @@ The package copies the `crm-pack` structure: one plugin pack, a parent with chil
   and `required`: `true` for `invoicing` and its eight components, `false` for `payments`
   and `efactura`. The field has the `qwbe-core` manifest shape; the semantics are this
   kernel's own.
-- `QWBE_PLUGINS` selects the plugins at start (target T-1876): absent means every plugin,
-  empty means none, any name that is not a plugin refuses start, and any change needs a
-  restart. Required units are always active. Until then both plugins are always active.
+- `QWBE_PLUGINS` selects the plugins at start (`kernel/config.ts`, `kernel/plugins.ts`):
+  absent means every plugin, empty means none, any name that is not a plugin refuses start,
+  spaces are ignored and duplicates tolerated, and any change needs a restart. The known
+  names are the units whose manifest says `required: false`. Required units are always active.
 - The gates check the declared list against the tree: declared units exist, no unit is
   undeclared or duplicated, paths are valid, and a missing manifest or zero units fails.
 - Cube code may not import `pg`, `node:fs`, process, module, or vm APIs; this repository's
@@ -556,8 +562,9 @@ qwbe-invoicing/
 └── docs/                       development, release, e-Factura, VAT treatment
 ```
 
-The pure mappers in `kernel/efactura/` move into the `efactura` plugin (target T-1876);
-the PDF renderer stays in `kernel/documents/` because it needs the filesystem and fonts. Kernel code depends only on the cubes' `index.ts` and `contracts/`;
+The e-Factura mappers stay in `kernel/efactura/` as a host adapter, because the `efactura`
+plugin's 40,000-character unit budget has no room for them (section 10); the PDF renderer
+stays in `kernel/documents/` because it needs the filesystem and fonts. Kernel code depends only on the cubes' `index.ts` and `contracts/`;
 cube code never imports the kernel.
 
 Tests are colocated with what they exercise. Do not create empty directories or placeholder abstractions.

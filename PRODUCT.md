@@ -12,8 +12,8 @@ QWBE Invoicing is a self-hosted invoicing application that:
 
 - runs as a useful standalone product;
 - is shaped as one QWBE plugin pack, `invoicing` with `payments` and `efactura` as
-  optional plugins (`required: false`, today always active; turning them off through
-  `QWBE_PLUGINS` comes in T-1876 D1), while the QWBE mother installs nothing;
+  optional plugins (`required: false`, active by default; `QWBE_PLUGINS` switches them off
+  at startup, and a plugin that is off keeps its data), while the QWBE mother installs nothing;
 - is distributed primarily as versioned Docker images and a Docker Compose bundle;
 - issues and preserves Romanian invoices without implementing direct ANAF transport in the first release;
 - keeps the data model compatible with a later RO e-Factura workflow;

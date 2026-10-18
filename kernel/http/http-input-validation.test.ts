@@ -13,6 +13,7 @@ import { createRequestAuthenticator } from "../auth/auth.ts"
 import { applicationHttpApi } from "../api/http-api.ts"
 import * as S from "../api/http-schemas.ts"
 import { withMigrated } from "../storage/postgres-rig.test-support.ts"
+import { allPlugins } from "../plugins.ts"
 
 const customer = { partyType: "company", name: "Client", fiscalIdentifier: " 87654329 ", vatRegistered: true,
   address: { countryCode: "RO", city: "Iași", street: "Strada 1", county: "RO-IS" } }
@@ -240,6 +241,7 @@ void test("HTTP maps schema failures to the existing 400 envelope before domain 
     const runtime = {
       pool: fixture.pool,
       dataDirectory: fixture.dataDirectory,
+      plugins: allPlugins,
       authenticate: createRequestAuthenticator(fixture.config({ authTokenFile: tokenFile })),
     }
     const raw = { ...customer, name: 1, address: { ...customer.address, city: null } }

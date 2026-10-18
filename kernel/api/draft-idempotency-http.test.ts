@@ -6,6 +6,7 @@ import test from "node:test"
 import { createRequestAuthenticator } from "../auth/auth.ts"
 import { migratedFixture } from "../storage/postgres-rig.test-support.ts"
 import { handleApiRequest } from "./api.test-support.ts"
+import { allPlugins } from "../plugins.ts"
 
 const each = { code: "C62", name: "unitate" } as const
 const customer = {
@@ -24,6 +25,7 @@ const fixture = async (label: string) => {
     authenticate: createRequestAuthenticator(rig.config({ authTokenFile: tokenFile })),
     pool: rig.pool,
     dataDirectory: rig.dataDirectory,
+    plugins: allPlugins,
     now: () => new Date("2026-09-05T10:00:00.000Z"),
   }
   const call = (method: string, url: string, body?: unknown, idempotencyKey?: string) =>

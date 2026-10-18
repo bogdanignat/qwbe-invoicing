@@ -6,6 +6,7 @@ import { join } from "node:path"
 import type { Pool } from "pg"
 
 import type { RuntimeConfig } from "../config.ts"
+import { allPlugins } from "../plugins.ts"
 import { applyMigrations } from "./postgres-migrations.ts"
 import {
   createPostgresRuntime,
@@ -492,6 +493,7 @@ const fixtureOn = (database: string): TestFixture => {
       authTokenFile: undefined,
       organizationId: "org-1",
       pgSettings: configured,
+      plugins: allPlugins,
       ...overrides,
     }),
     childEnv: (overrides = {}) => {

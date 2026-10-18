@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs"
 
+import { parsePlugins, type PluginSelection } from "./plugins.ts"
 import type { PostgresSettings } from "./storage/postgres-pool.ts"
 
 export interface RuntimeConfig {
@@ -11,6 +12,8 @@ export interface RuntimeConfig {
   readonly organizationId: string | undefined
   /** Everything the pools need. The password is already read from its file. */
   readonly pgSettings: PostgresSettings
+  /** `QWBE_PLUGINS`, parsed at startup: an unknown name fails here. */
+  readonly plugins: PluginSelection
 }
 
 const boundedPort = (value: string | undefined, variable: string, fallback: string): number => {
@@ -71,5 +74,6 @@ export const runtimeConfig = (environment: NodeJS.ProcessEnv = process.env): Run
     authTokenFile: environment.AUTH_TOKEN_FILE,
     organizationId: environment.ORGANIZATION_ID,
     pgSettings: postgresSettings(environment, nodeEnvironment),
+    plugins: parsePlugins(environment.QWBE_PLUGINS),
   }
 }

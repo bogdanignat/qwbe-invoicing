@@ -73,6 +73,9 @@ services:
       DATA_DIR: /data
       ORGANIZATION_ID: ${ORGANIZATION_ID:-local-organization}
       AUTH_TOKEN_FILE: /run/secrets/api_token
+      # Optional plugins, comma-separated (`payments`, `efactura`). Passed through
+      # only when set: unset means every plugin runs, empty means none. Restart to apply.
+      QWBE_PLUGINS:
       # `backup` and `restore` stage into a `mkdtemp` under TMPDIR, and the archive
       # bounds allow 1 GiB expanded: staging is a disk volume, not the small tmpfs
       # below, because a 1 GiB staging tree in `/tmp` would be 1 GiB of RAM.

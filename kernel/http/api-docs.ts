@@ -1,6 +1,7 @@
 import { HttpApiSwagger, HttpLayerRouter } from "@effect/platform"
 
-import { applicationHttpApi } from "../api/http-api.ts"
+import { activeHttpApi } from "../api/http-api.ts"
+import type { PluginSelection } from "../plugins.ts"
 
 export interface ApiDocsResponse {
   readonly status: number
@@ -13,8 +14,8 @@ export interface ApiDocsHandler {
   readonly dispose: () => Promise<void>
 }
 
-const createSwaggerHandler = (): ApiDocsHandler => HttpLayerRouter.toWebHandler(
-  HttpApiSwagger.layerHttpLayerRouter({ api: applicationHttpApi, path: "/api" }),
+const swaggerHandler = (plugins: PluginSelection) => (): ApiDocsHandler => HttpLayerRouter.toWebHandler(
+  HttpApiSwagger.layerHttpLayerRouter({ api: activeHttpApi(plugins), path: "/api" }),
   { disableLogger: true },
 )
 
@@ -38,7 +39,7 @@ const render = async (createHandler: () => ApiDocsHandler): Promise<ApiDocsRespo
 }
 
 export const makeApiDocsResponse = (
-  createHandler: () => ApiDocsHandler = createSwaggerHandler,
+  createHandler: () => ApiDocsHandler,
 ): (() => Promise<ApiDocsResponse>) => {
   let materialized: Promise<ApiDocsResponse> | undefined
   return () => {
@@ -50,4 +51,6 @@ export const makeApiDocsResponse = (
   }
 }
 
-export const apiDocsResponse = makeApiDocsResponse()
+/** The docs of this installation: only the routes of the plugins it runs. Cached per server, not globally. */
+export const apiDocsResponse = (plugins: PluginSelection): (() => Promise<ApiDocsResponse>) =>
+  makeApiDocsResponse(swaggerHandler(plugins))

@@ -145,8 +145,8 @@ clients run inside the Compose network (`docker compose exec app …`).
   (authoring a document, draft and line editing), `issuance` (numbered invoices and
   proformas, document series, conversion, idempotent replay), `corrections` (storno) and `documents`
   (rendered PDF artifacts, their hashes and recovery). `payments` and `efactura` are
-  plugins: optional children (`required: false`), today always active like the other
-  components; turning them off through `QWBE_PLUGINS` comes in T-1876 D1. A child enters another child only through its `index.ts`.
+  plugins: optional children (`required: false`), active by default and switched off at
+  startup through `QWBE_PLUGINS` (see Configuration). A child enters another child only through its `index.ts`.
 - **The kernel** (`kernel/`) is the composition root. It authenticates the
   request, provides the contracts above, exposes every use case as an HTTP endpoint, serves
   the UI, runs migrations and implements the CLI.
@@ -330,6 +330,7 @@ Everything is configured through environment variables, read once at startup.
 | `NODE_ENV` | `development` | `production` requires `--confirm-production` on destructive CLI operations and marks cookies `Secure` |
 | `ORGANIZATION_ID` | none | the legal entity this installation serves; every record is scoped to it |
 | `AUTH_TOKEN_FILE` | none | path to the file holding the API bearer token (the Compose secret mounts it at `/run/secrets/api_token`) |
+| `QWBE_PLUGINS` | absent: every plugin | the optional plugins to run, comma-separated: `payments`, `efactura`. Absent runs both; empty (`QWBE_PLUGINS=`) runs none; an unknown name stops the application at startup with an error naming the known plugins. Spaces are ignored and duplicates tolerated; a change takes a restart. A plugin that is off has no route (404), no OpenAPI entry and, for payments, no `payments:*` grant; with e-Factura off every invoice response says `eFacturaStatus: null`. Migrations, tables and data stay, so switching a plugin back on finds its records |
 
 Variables used only by the Compose files, in `.env`:
 
@@ -465,7 +466,8 @@ issuance, issuer/series configuration, payments and reversals append fiscal even
 inside the business transaction; idempotent retries do not append duplicates.
 `audit_events` rejects updates/deletes. There is no audit browsing endpoint yet.
 Payments is an optional plugin under `invoicing` with its own `payments:*` permissions; recording a payment
-is optional and is not required to issue an invoice. Document/PDF metadata and browser
+is optional and is not required to issue an invoice. With `payments` off its routes answer 404
+and storno keeps working. Document/PDF metadata and browser
 sessions are owned by their own scopes and tables inside the one database, and
 `eFacturaStatus` is retained.
 
@@ -496,7 +498,7 @@ number and id, registries by name and id, so a cursor stays valid while new reco
 `GET /api/invoice-register` is the read-only mixed fiscal register; `GET /api/invoices`
 keeps its invoice-only contract. Every row has `kind`, its own `id`, series, number,
 issue date, customer name, currency and stored total. Invoice rows expose nullable
-`dueDate` and their non-null `eFacturaStatus`, and omit `originalReference`. Correction
+`dueDate` and their `eFacturaStatus` (`null` when the e-Factura plugin is off), and omit `originalReference`. Correction
 rows retain their negative total, expose `dueDate: null`, `eFacturaStatus: null`, and
 reference the organization-scoped original invoice by id, series and number. The mixed
 register uses a dedicated opaque cursor that also contains `kind`; invoice-list cursors

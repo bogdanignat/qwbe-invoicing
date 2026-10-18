@@ -5,6 +5,7 @@ import type { Pool, PoolClient } from "pg"
 
 import { doctorReport } from "../ops/cli-doctor.ts"
 import type { RuntimeConfig } from "../config.ts"
+import { allPlugins } from "../plugins.ts"
 import { databaseReady } from "./migrations.ts"
 import { ledgerTable, planMigrations } from "./postgres-migrations.ts"
 import { migrationScopes } from "./postgres-migration-plans.ts"
@@ -36,6 +37,7 @@ const config = (runtime: TestRuntime): RuntimeConfig => ({
   authTokenFile: undefined,
   organizationId: undefined,
   pgSettings: { ...runtime.pool.options, password: "" } as RuntimeConfig["pgSettings"],
+  plugins: allPlugins,
 })
 
 /** The pool still works, and nothing is stuck in an aborted transaction. */

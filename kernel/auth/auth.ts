@@ -40,6 +40,9 @@ export const createRequestAuthenticator = (config: RuntimeConfig): RequestAuthen
   }
   const invoicing = invoicingPermissions("invoicing")
   const payments = paymentsPermissions("payments")
+  // The payments grants exist only with the plugin on. `invoicing:read` stays
+  // regardless: it is the invoicing base permission, and the alias the payments
+  // cube still accepts for reading.
   const permissions = [
     invoicing.read,
     invoicing.manageCustomers,
@@ -48,8 +51,7 @@ export const createRequestAuthenticator = (config: RuntimeConfig): RequestAuthen
     invoicing.issueProformas,
     invoicing.voidInvoices,
     invoicing.manageSettings,
-    payments.read,
-    payments.record,
+    ...(config.plugins.payments ? [payments.read, payments.record] : []),
     documentsPermissions.read,
     documentsPermissions.render,
   ]

@@ -10,6 +10,7 @@ import { createApiHandler, type ApiHandler } from "../api/api.ts"
 import { createRequestAuthenticator } from "../auth/auth.ts"
 import { startServer } from "./http.ts"
 import { withEmpty, withMigrated } from "../storage/postgres-rig.test-support.ts"
+import { allPlugins } from "../plugins.ts"
 
 /**
  * The transport contract. The API handler and the server now take the
@@ -29,6 +30,7 @@ void test("the materialized application contract serves routes and stable transp
     const handler = createApiHandler({
       pool: fixture.pool,
       dataDirectory: fixture.dataDirectory,
+      plugins: allPlugins,
       authenticate: createRequestAuthenticator(fixture.config({ port: 0, authTokenFile: tokenFile })),
     })
     const call = (path: string, method = "GET", body?: string) => handler.handle(new Request(`http://qwbe.local${path}`, {
