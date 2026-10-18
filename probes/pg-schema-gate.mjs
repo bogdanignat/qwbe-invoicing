@@ -15,13 +15,13 @@ import pg from "pg"
 
 
 import { translatedPredicate, triggerDifferences } from "./pg-schema-trigger-parity-lib.mjs"
-import { migrationScopes } from "../standalone/storage/postgres-migration-plans.ts"
+import { migrationScopes } from "../kernel/storage/postgres-migration-plans.ts"
 import {
   applyMigrations, applyMigrationsOnClient, assertCollationC, databaseReady, planMigrations,
-} from "../standalone/storage/postgres-migrations.ts"
+} from "../kernel/storage/postgres-migrations.ts"
 import {
   acquireSharedMaintenanceLock, releaseSharedMaintenanceLock,
-} from "../standalone/storage/postgres-maintenance-lock.ts"
+} from "../kernel/storage/postgres-maintenance-lock.ts"
 
 const { Client, Pool } = pg
 
@@ -180,7 +180,7 @@ const main = async () => {
     })
 
     // -------------------------------------------------- inventory parity
-    const golden = JSON.parse(readFileSync(new URL("../standalone/parity/sqlite-baseline-objects.json",
+    const golden = JSON.parse(readFileSync(new URL("../kernel/parity/sqlite-baseline-objects.json",
       import.meta.url), "utf8"))
     const goldenTables = golden.plans.flatMap((plan) => plan.tables.map(({ name }) => name)).sort()
     const goldenIndexes = golden.plans.flatMap((plan) => plan.explicitIndexes.map(({ name }) => name)).sort()
@@ -225,7 +225,7 @@ const main = async () => {
 
     // ------------------------------------------- triggers vs the capture
     const goldenTriggers = JSON.parse(readFileSync(new URL(
-      "../standalone/parity/sqlite-baseline-triggers.json", import.meta.url), "utf8"))
+      "../kernel/parity/sqlite-baseline-triggers.json", import.meta.url), "utf8"))
     const liveTriggers = (await first.query(TRIGGER_ROWS)).rows
     check("every trigger matches the frozen SQLite capture", () => {
       assert.deepEqual(triggerDifferences(goldenTriggers, liveTriggers), [])
@@ -326,7 +326,7 @@ const main = async () => {
       assert.equal(byScope.customers.ok, true, "customers stands alone")
       assert.equal(byScope.catalog.ok, true, "catalog stands alone")
       assert.equal(byScope.issuer.ok, true, "issuer stands alone")
-      assert.equal(byScope.standalone.ok, true, "standalone sessions stand alone")
+      assert.equal(byScope.kernel.ok, true, "kernel sessions stand alone")
       assert.equal(byScope.invoicing.ok, false, "invoicing needs issuers, customers and the foundation")
       assert.equal(byScope.payments.ok, false, "payments needs issued_invoices and the foundation")
       assert.equal(byScope.documents.ok, false, "documents needs the foundation function")
@@ -475,7 +475,7 @@ const main = async () => {
       })
 
       // Dialect vectors, replayed from the frozen SQLite capture.
-      const dialect = JSON.parse(readFileSync(new URL("../standalone/parity/sqlite-dialect-behavior.json",
+      const dialect = JSON.parse(readFileSync(new URL("../kernel/parity/sqlite-dialect-behavior.json",
         import.meta.url), "utf8"))
       const vectorInsert = {
         product_presets: (value) => ["INSERT INTO product_presets(id,organization_id,description,unit_price,"

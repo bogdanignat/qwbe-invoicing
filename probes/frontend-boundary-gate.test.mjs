@@ -23,8 +23,8 @@ const cruise = (build) => {
   const root = mkdtempSync(join(tmpdir(), "qwbe-frontend-boundaries-"))
   try {
     // A valid backend root makes every frontend-only rejection prove frontend/src was cruised.
-    write(root, "cube/invoicing/index.ts")
-    write(root, "cube/invoicing/qwbe-package.json", "{}\n")
+    write(root, "cubes/invoicing/index.ts")
+    write(root, "cubes/invoicing/qwbe-package.json", "{}\n")
     build(root)
     const result = spawnSync(process.execPath, [gate, "--root", root], { encoding: "utf8" })
     return { status: result.status, output: result.stdout + result.stderr }
@@ -87,7 +87,7 @@ test("layer rules cover type re-exports and dynamic imports", () => {
 
 test("frontend cannot import backend, tooling, or Next build output", () => {
   for (const target of [
-    "cube/invoicing/index.ts", "standalone/http/runtime.ts", "probes/helper.mjs", "bin/helper.ts",
+    "cubes/invoicing/index.ts", "kernel/http/runtime.ts", "probes/helper.mjs", "bin/helper.ts",
     "frontend/.next/server/generated.js",
   ]) {
     rejects(cruise((root) => edge(root, "frontend/src/app/page.tsx", target)),
@@ -96,7 +96,7 @@ test("frontend cannot import backend, tooling, or Next build output", () => {
 })
 
 test("backend cannot import frontend", () => {
-  for (const source of ["cube/invoicing/leak.ts", "standalone/leak.ts"]) {
+  for (const source of ["cubes/invoicing/leak.ts", "kernel/leak.ts"]) {
     rejects(cruise((root) => edge(root, source, "frontend/src/lib/value.ts")), "backend-does-not-import-frontend")
   }
 })
@@ -108,7 +108,7 @@ test("frontend cannot bypass source boundaries through runtime or operational sc
         rejects(cruise((root) => {
           edge(root, source, target, kind)
           const downstream = target.startsWith("frontend/")
-            ? "frontend/src/lib/server/config.ts" : "standalone/runtime.ts"
+            ? "frontend/src/lib/server/config.ts" : "kernel/runtime.ts"
           write(root, downstream)
           write(root, target, `import "${posix.relative(posix.dirname(target), downstream)}"\nexport const value = 1\n`)
         }), "frontend-does-not-import-host-or-tooling")

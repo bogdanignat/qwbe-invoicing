@@ -57,7 +57,7 @@ export interface AlreadyCorrected {
   readonly message: string
 }
 
-/** The server's code for a second storno (`cube/invoicing/corrections/application/corrections.ts:37`). */
+/** The server's code for a second storno (`cubes/invoicing/corrections/application/corrections.ts:37`). */
 export const ALREADY_CORRECTED_CODE = "invoice_already_corrected"
 
 export const ALREADY_CORRECTED = "Factura are deja un document storno — aici sau în altă sesiune. Am reîncărcat lista."

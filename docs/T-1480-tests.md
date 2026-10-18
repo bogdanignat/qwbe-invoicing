@@ -10,7 +10,7 @@ talks to a live PostgreSQL 16 cluster, so `node --test` on the host means nothin
 The suite runs in its own rig:
 
     scripts/verify-docker.sh test                                   # pnpm test
-    scripts/verify-docker.sh test "node --test standalone/storage/pagination.test.ts"
+    scripts/verify-docker.sh test "node --test kernel/storage/pagination.test.ts"
     scripts/verify-docker.sh verify                                 # pnpm verify
     docker compose --file compose.test.yaml down                    # never -v
 
@@ -22,7 +22,7 @@ dependency volumes are the verifier project's, owned by the host UID through
 `/run/qwbe-test/pgpassword`, mode 0600, host UID — a file because the shipped
 runtime only ever reads `PGPASSWORD_FILE`, so the ported CLI tests exercise the
 production path. `PGPASSWORD` is set in the environment for
-`standalone/ops/postgres-backup.test.ts` alone and the fixture's `childEnv()`
+`kernel/ops/postgres-backup.test.ts` alone and the fixture's `childEnv()`
 strips it before spawning anything.
 
 `package.json` runs `node --test --test-concurrency=4 --test-timeout=120000`. The
@@ -35,7 +35,7 @@ slowest legitimate case (the longest integration cases declare their own
 maintenance connection and a short-lived creation connection — 8, so ~32 for four
 files, plus the `pg_dump`/`psql` children of the ops suites.
 
-## The harness: `standalone/storage/postgres-rig.test-support.ts`
+## The harness: `kernel/storage/postgres-rig.test-support.ts`
 
 One module, no mock, no SQLite compatibility layer, no SQL translation. It gives:
 
@@ -62,31 +62,31 @@ Startup, API handler and sessions are async: every caller `await`s close/dispose
 
 | file | tests |
 |---|---|
-| standalone/storage/postgres-adapter-surface.test.ts | 2 |
-| standalone/storage/vat-treatment-storage.test.ts | 1 |
-| standalone/storage/pagination.test.ts | 1 |
-| standalone/storage/invoice-register-pagination.test.ts | 1 |
-| standalone/storage/issuer-storage-validation.test.ts | 1 |
-| standalone/storage/issuer-vat-storage.test.ts | 1 |
-| standalone/storage/proforma-storage.test.ts | 2 |
-| standalone/storage/draft-atomicity.test.ts | 3 |
-| standalone/storage/proforma-atomicity.test.ts | 4 |
-| standalone/storage/postgres-catalog.test.ts | 4 |
-| standalone/storage/postgres-store.test.ts | 4 |
-| standalone/storage/schema-baseline.test.ts | 6 |
-| standalone/storage/schema-drift.test.ts | 7 |
-| standalone/auth/browser-session.test.ts | 1 |
-| standalone/documents/artifacts.test.ts | 2 |
-| standalone/efactura/efactura-issuance.test.ts | 9 |
-| standalone/http/readiness.test.ts | 1 |
-| standalone/http/http-session.test.ts | 1 |
-| standalone/http/http-builder.test.ts | 3 |
-| standalone/http/http-input-validation.test.ts | 40 |
-| standalone/http/http-login-throttle.test.ts | 12 |
-| standalone/http/product-vat-preference-http.test.ts | 3 |
-| standalone/http/vat-treatment-http.test.ts | 3 |
-| standalone/api/{api,draft-idempotency-http,invoice-register-api,proforma-api}.test.ts | 24 |
-| standalone/ops/standalone.test.ts | 11 |
+| kernel/storage/postgres-adapter-surface.test.ts | 2 |
+| kernel/storage/vat-treatment-storage.test.ts | 1 |
+| kernel/storage/pagination.test.ts | 1 |
+| kernel/storage/invoice-register-pagination.test.ts | 1 |
+| kernel/storage/issuer-storage-validation.test.ts | 1 |
+| kernel/storage/issuer-vat-storage.test.ts | 1 |
+| kernel/storage/proforma-storage.test.ts | 2 |
+| kernel/storage/draft-atomicity.test.ts | 3 |
+| kernel/storage/proforma-atomicity.test.ts | 4 |
+| kernel/storage/postgres-catalog.test.ts | 4 |
+| kernel/storage/postgres-store.test.ts | 4 |
+| kernel/storage/schema-baseline.test.ts | 6 |
+| kernel/storage/schema-drift.test.ts | 7 |
+| kernel/auth/browser-session.test.ts | 1 |
+| kernel/documents/artifacts.test.ts | 2 |
+| kernel/efactura/efactura-issuance.test.ts | 9 |
+| kernel/http/readiness.test.ts | 1 |
+| kernel/http/http-session.test.ts | 1 |
+| kernel/http/http-builder.test.ts | 3 |
+| kernel/http/http-input-validation.test.ts | 40 |
+| kernel/http/http-login-throttle.test.ts | 12 |
+| kernel/http/product-vat-preference-http.test.ts | 3 |
+| kernel/http/vat-treatment-http.test.ts | 3 |
+| kernel/api/{api,draft-idempotency-http,invoice-register-api,proforma-api}.test.ts | 24 |
+| kernel/ops/kernel.test.ts | 11 |
 | probes/frontend-proxy-{http,integration}.test.mjs | 5 |
 
 ## How SQLite assertions became PostgreSQL assertions
@@ -120,7 +120,7 @@ meta-test, the per-cube in-memory baselines, `journal_mode`/WAL, the unwritable
 database file, `STRICT` tables, the `DATA_DIR` CLI failure, and the forged
 `invoice_series` column (which no schema ever had — the legacy `assert.throws`
 passed for the wrong reason). Nothing was skipped, deleted, stubbed or weakened.
-`standalone/parity/sqlite-*.json` goldens are untouched.
+`kernel/parity/sqlite-*.json` goldens are untouched.
 
 ## State of the gates
 
@@ -137,8 +137,8 @@ exit code captured):
   (`/tmp/T-1480-final-fix2.log`).
 
 - `probes/frontend-container-contract.test.mjs`,
-  `standalone/storage/postgres-rig.test.ts`,
-  `standalone/storage/postgres-maintenance.test.ts` → **10 tests, 10 pass**,
+  `kernel/storage/postgres-rig.test.ts`,
+  `kernel/storage/postgres-maintenance.test.ts` → **10 tests, 10 pass**,
   exit 0 (`/tmp/T-1480-fix1.log`).
 - Stability of the concurrency path that was red: three consecutive runs of
   `postgres-maintenance`, `postgres-runtime`, `postgres-rig` and
@@ -151,8 +151,8 @@ What was red in `/tmp/T-1480-final-verify.log` (**1190 tests, 1187 pass, 3 fail*
 | failing case | owner | state |
 |---|---|---|
 | `probes/frontend-container-contract.test.mjs` "preview is opt-in …", `4 !== 3` | this unit | fixed: the fixture no longer counts profile occurrences, it asserts the roster `[db, migrate-fixture, backend-fixture, frontend]`, that each service carries `profiles: [preview]`, and that the new `db` has the preview secret, the preview volume and no published port |
-| `standalone/storage/postgres-runtime.test.ts` `Connection terminated unexpectedly` | this unit (the kill fixture) | fixed: see the advisory-lock note below |
-| `standalone/storage/schema-drift.test.ts:223` `['missing:documents/documents-001-baseline']` | runtime unit | not edited here; green in the 1194/1194 run after the runtime unit made gap detection per scope |
+| `kernel/storage/postgres-runtime.test.ts` `Connection terminated unexpectedly` | this unit (the kill fixture) | fixed: see the advisory-lock note below |
+| `kernel/storage/schema-drift.test.ts:223` `['missing:documents/documents-001-baseline']` | runtime unit | not edited here; green in the 1194/1194 run after the runtime unit made gap detection per scope |
 
 Verified in the resume round of 2026-10-01 (every command through
 `scripts/verify-docker.sh`, `LOG=` to a durable file under `.local/t-1480`, real exit
@@ -160,7 +160,7 @@ code echoed and recorded in each log's `=== exit code:` line):
 
 | what ran | result | log |
 |---|---|---|
-| `node --test standalone/storage/postgres-maintenance.test.ts` | 6 tests, 6 pass | `.local/t-1480/300-maintenance.log`, exit 0 |
+| `node --test kernel/storage/postgres-maintenance.test.ts` | 6 tests, 6 pass | `.local/t-1480/300-maintenance.log`, exit 0 |
 | `pnpm build:frontend` (verify rig) | Next 16.3.5 build + `prepare-standalone` | `.local/t-1480/301-build-frontend.log`, exit 0 |
 | `pnpm test:frontend:runtime` (test rig) | 8 tests, 8 pass | `.local/t-1480/302-frontend-runtime.log`, exit 0 |
 | `postgres-cli-lifecycle` + `postgres-serve-lifecycle` | 5 tests, 5 pass | `.local/t-1480/304-lifecycle.log`, exit 0 |
@@ -199,7 +199,7 @@ were silently dropped and those connections ran with `statement_timeout = 0`. Th
 statements they run are exactly the ones that wait: `pg_advisory_lock(1480, 9001)`,
 the reclaim behind a live connection, and `ALTER TABLE … DISABLE TRIGGER USER`
 (ACCESS EXCLUSIVE). Unbounded, the file hung instead of failing.
-`standalone/storage/postgres-rig.test.ts` reads the bounds back from the server for
+`kernel/storage/postgres-rig.test.ts` reads the bounds back from the server for
 all three pools — application 4000/3000/8000 ms, raw SQL 30000/15000, maintenance
 60000/60000, each `connectionTimeoutMillis > 0` — and proves the bound bites: a
 lock wait past `lock_timeout` comes back as `55P03`.
@@ -213,17 +213,17 @@ disconnects whatever was still attached.
 
 Searched for every `new Pool(` and `new Client(` outside `node_modules` and
 `frontend/.next`. Four remain and none of them is handed a `PostgresSettings`:
-`standalone/storage/postgres-pool.ts:84` and `:97` are the production builders
+`kernel/storage/postgres-pool.ts:84` and `:97` are the production builders
 themselves, and `probes/pg-driver-probe.mjs:39` plus
 `probes/pg-schema-gate.mjs:60`/`:138` build their config with `pg`'s own names
 (`max`, `connectionTimeoutMillis`, `statement_timeout`), so nothing is dropped. Every
-camelCase bound in the suite (`standalone/storage/postgres-rig.test-support.ts`,
-`standalone/storage/postgres-maintenance.test.ts`,
-`standalone/http/postgres-serve-lifecycle.test.ts`,
-`standalone/ops/postgres-backup.test.ts`) reaches a pool only through
+camelCase bound in the suite (`kernel/storage/postgres-rig.test-support.ts`,
+`kernel/storage/postgres-maintenance.test.ts`,
+`kernel/http/postgres-serve-lifecycle.test.ts`,
+`kernel/ops/postgres-backup.test.ts`) reaches a pool only through
 `createQueryPool`.
 
-One cast is worth naming: `standalone/storage/postgres-history-drift.test.ts:35`
+One cast is worth naming: `kernel/storage/postgres-history-drift.test.ts:35`
 builds `pgSettings` as `{ ...runtime.pool.options, password: "" } as
 RuntimeConfig["pgSettings"]`. It opens no pool — `doctorReport` reads host, port,
 database and user from it for the report and queries through the rig pool it is given
@@ -241,7 +241,7 @@ does isolate the barrier. `pg_locks`, however, lists the whole cluster, and the 
 kill fixture terminated by key alone — under `--test-concurrency=4` that reached
 another file's session, which is how `postgres-runtime.test.ts` died while passing
 alone. No key namespacing was needed, only the correct identity:
-`standalone/storage/postgres-maintenance.test.ts` now selects
+`kernel/storage/postgres-maintenance.test.ts` now selects
 `classid`/`objid` plus `objsubid = 2` (the two-key advisory form) plus
 `l.database = current_database()`'s oid, joined to `pg_stat_activity`, asserts
 exactly one holder, terminates that one pid — and keeps a peer that holds the same
@@ -250,18 +250,18 @@ pid is unchanged. The filter is therefore proved, not declared.
 
 ## Dead SQLite modules
 
-Done: the 25 `standalone/storage/sqlite-*.ts` files no longer exist — the import
+Done: the 25 `kernel/storage/sqlite-*.ts` files no longer exist — the import
 scan found no importer outside that set, and the integrator deleted them. The only
 remaining mentions are two comments (`frontend/src/lib/api-errors.ts:69-70`,
 `frontend/src/lib/api-errors.test.ts:66`) and two in prose
-(`standalone/storage/schema-drift.test.ts:20`,
+(`kernel/storage/schema-drift.test.ts:20`,
 `postgres-rig.test-support.ts:22`). No test imports anything SQLite.
 
 ## History semantics moved to the runtime unit
 
 The drift report now answers `history:missing:<scope>/<name>` and
 `history:not_replayable:<sqlstate>` for a ledger whose history cannot be rebuilt
-(`standalone/storage/postgres-schema-fingerprint.ts`, runtime unit). The ported
+(`kernel/storage/postgres-schema-fingerprint.ts`, runtime unit). The ported
 `schema-drift.test.ts` still reads the one-segment prefix at line 55 and fails at
 line 223 for that reason. The file was left untouched here on purpose: the
 semantics and that test are the runtime unit's, and adapting the expectation from
@@ -278,11 +278,11 @@ frontend-runtime 8/8, `311-full-verify.exit` = 0), ran on the tree **before** th
 fixes and says nothing about them.
 
 **Readiness destroys a connection whose rollback failed.**
-`standalone/storage/migrations.ts:56-66` now mirrors `schemaDrift` and
+`kernel/storage/migrations.ts:56-66` now mirrors `schemaDrift` and
 `doctorReport`: `ScratchNotRolledBack` is caught, recorded and the client is
 released *with* it, so `pg` drops the connection instead of recycling one whose
 transaction state is unknown. The regression lives in
-`standalone/storage/postgres-history-drift.test.ts` ("readiness destroys the
+`kernel/storage/postgres-history-drift.test.ts` ("readiness destroys the
 connection when the drift replay could not be rolled back"): a real `freshRuntime`
 pool, a real replay, and the single injected failure is a `ROLLBACK` that never
 comes back, with the session left alive — the shape a `statement_timeout` on the
@@ -296,12 +296,12 @@ only connection) would see its own uncommitted schema, and a destroyed one canno
 the drain rejected, and its deadline only called `closeAllConnections()` — the
 maintenance pool keeps a client checked out with `idleTimeoutMillis: 0`, so the
 loop never drains and the container waited for Docker's SIGKILL (137). The sequence
-moved to `standalone/http/shutdown.ts` (`runShutdown`), which keeps the order
+moved to `kernel/http/shutdown.ts` (`runShutdown`), which keeps the order
 (drain → queries → barrier → pools), destroys the remaining sockets when the drain
 rejects or is still running at `escalateMs` before giving up the barrier, attempts every step even after a failure,
 answers 1 if anything failed, and calls `abandon` — `process.exit(1)` in
 production, from an `unref`'d timer — at the deadline. It is a parameter per step,
-so `standalone/http/shutdown.test.ts` drives a rejecting drain, a rejecting
+so `kernel/http/shutdown.test.ts` drives a rejecting drain, a rejecting
 release, a rejecting pool close and a drain that never settles without an
 environment variable or a test-only branch in production code.
 
@@ -317,7 +317,7 @@ but the drain reports a failure, so the barrier is released by the sequence). `c
 the other compose files, so Docker's default 10 s no longer races the deadline.
 
 **The anti-leak assertion is no longer vacuous under the gate.**
-`standalone/http/postgres-cli-lifecycle.test.ts:142-156` read the secret off
+`kernel/http/postgres-cli-lifecycle.test.ts:142-156` read the secret off
 `fixture.settings.password` instead of matching `compose.test.yaml`'s literal, so
 it also holds in the verify rig, where the password is `rig-only-verify-password`.
 The secret is never printed — the failure message carries its length — and the
@@ -332,7 +332,7 @@ The real reason is the cookie: `browser-session.ts` marks the session cookie
 now says that, `probes/frontend-runtime.mjs` asserts the attributes it does issue
 (`HttpOnly`, `SameSite=Strict`, no `Secure`), and the production policy is pinned at
 the port on a real database by
-`standalone/http/http-session.test.ts` ("a production host marks the session cookie
+`kernel/http/http-session.test.ts` ("a production host marks the session cookie
 Secure, a development host does not") — same transport, same token, only the
 environment differs.
 
@@ -376,14 +376,14 @@ that a released session barrier lets `migrate --apply`/`restore` run DDL beside 
 live write, because destroying a socket does not cancel the request behind it.
 The second half is true, the conclusion is not: every writer takes
 `pg_advisory_xact_lock_shared` on the maintenance key as the first statement of
-its own transaction (`standalone/storage/postgres-transaction.ts:147`,
-`standalone/auth/browser-session-store.ts:49-52`), a transaction-scoped lock is
+its own transaction (`kernel/storage/postgres-transaction.ts:147`,
+`kernel/auth/browser-session-store.ts:49-52`), a transaction-scoped lock is
 held until COMMIT/ROLLBACK, and the maintenance commands take the same key with
 `pg_try_advisory_lock` — no wait (`postgres-maintenance-lock.ts:43-49`,
 `postgres-migrations.ts:150`, `postgres-backup.ts:106`). A live writer therefore
 refuses maintenance by itself, with or without the application's session hold.
 That is now a test rather than an argument:
-`standalone/http/shutdown-barrier.test.ts` ("a live writer refuses maintenance on
+`kernel/http/shutdown-barrier.test.ts` ("a live writer refuses maintenance on
 its own, with no session barrier at all") starts no session, probes a quiet
 database (maintenance may start), opens one gated writer (maintenance refused) and
 commits it (allowed again).
@@ -442,7 +442,7 @@ out at that point, and it is the one under test.
 | `node --test` on `shutdown`, `shutdown-barrier`, `postgres-cli-lifecycle`, `postgres-history-drift`, `postgres-runtime`, `postgres-maintenance` (test rig) | 33 tests, 33 pass | `.local/t-1480/422-shutdown-tests.log`, exit 0 |
 | the same `shutdown` + `shutdown-barrier` files against the **old** order (`barrier` before `queries`, no fail-closed branch), restored afterwards | 8 tests, **2 pass, 6 fail** — the real-PG case fails on `the barrier must still be held while a writer is open`, the unit cases on `actual [ 'drain', 'barrier', 'queries', 'pools' ]`; the false-positive case passes in both, which is what it is for | `.local/t-1480/423-falsification.log`, exit 1 |
 | `pnpm gate:size && pnpm gate:boundaries` (verify rig) | "Size gate passed."; "no dependency violations found (794 modules, 3541 dependencies cruised)" | `.local/t-1480/424-gates.log`, exit 0 |
-| `node --test` on all of `standalone/{http,storage,ops,auth}` (test rig) | 213 tests, 213 pass | `.local/t-1480/425-http-storage-tests.log`, exit 0 |
+| `node --test` on all of `kernel/{http,storage,ops,auth}` (test rig) | 213 tests, 213 pass | `.local/t-1480/425-http-storage-tests.log`, exit 0 |
 
 Not run in this round, and not claimed: `pnpm verify` in full, `pnpm test` in full,
 `gate:runtime`, `gate:package`, `gate:test`, `pnpm build:frontend` and

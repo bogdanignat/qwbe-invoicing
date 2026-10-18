@@ -1,9 +1,9 @@
 {
   "cubeRoots": [
-    "cube"
+    "cubes"
   ],
   "sizeFileRoots": [
-    "standalone",
+    "kernel",
     "frontend/src"
   ],
   "caps": {

@@ -14,7 +14,7 @@ import type { BuyerSnapshot, Customer, ProductPreset, UnitOfMeasure } from "./dr
  *
  * Every write states the session's CSRF token, and none of them carries an
  * idempotency key — the backend requires one only for the fiscal writes
- * (`standalone/api/http-endpoints-master-data.ts` declares CSRF alone), and
+ * (`kernel/api/http-endpoints-master-data.ts` declares CSRF alone), and
  * there would be nothing to replay it with: a master-data record is not sealed,
  * it is visible in the registry this screen already shows, and a duplicate can
  * simply be deleted. That is also why these writes do not pass through

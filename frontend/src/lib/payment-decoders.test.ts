@@ -4,7 +4,7 @@ import test from "node:test"
 import { decodePaymentSummary } from "./payment-decoders.ts"
 import { PAYMENT_STATUSES } from "./payment-models.ts"
 
-/** What `PaymentSummary` answers (standalone/api/schema-payments.ts), server-only fields included. */
+/** What `PaymentSummary` answers (kernel/api/schema-payments.ts), server-only fields included. */
 const payment = {
   id: "pay-1", invoiceId: "inv-1", organizationId: "org-1", kind: "payment",
   amount: "100.00", currency: "RON", paymentDate: "2026-10-01", method: "transfer",

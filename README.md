@@ -120,7 +120,7 @@ One application process, one PostgreSQL 16 server, one data directory for the PD
 
 ```text
 browser ──> Next frontend ──> /api/qwbe/* (BFF) ──┐
-                                                   ├──> standalone host ──> invoicing core ──> PostgreSQL 16
+                                                   ├──> kernel ───────────> invoicing core ──> PostgreSQL 16
 internal API client ──> /api (Bearer) ────────────┘        │                                    one database, schema `public`
                                                             └──> PDF renderer ──> /data/artifacts/<sha256>
 ```
@@ -131,12 +131,12 @@ is internal. `docker compose up -d --build` builds two images (`qwbe-invoicing` 
 browser session through `/api/qwbe/<path>`; the BFF refuses `Authorization`, so Bearer
 clients run inside the Compose network (`docker compose exec app …`).
 
-- **The core** (`cube/invoicing`) holds the domain model, VAT arithmetic, date
+- **The core** (`cubes/invoicing`) holds the domain model, VAT arithmetic, date
   validation, the store ports and the idempotency rules, and composes the service from its
   components. It knows nothing about HTTP, the database or the browser. It depends only on a small
-  set of host contracts (`cube/invoicing/contracts/host.ts`): who is calling and for which
+  set of host contracts (`cubes/invoicing/contracts/host.ts`): who is calling and for which
   organization, a clock, an id generator, a transactional store and a renderer.
-- **The component cubes** under `cube/invoicing/` each own one piece of the logic and share
+- **The component cubes** under `cubes/invoicing/` each own one piece of the logic and share
   the parent's domain: `parties` (the Romanian fiscal rules for every party: CUI, CNP,
   counties and sectors), `customers` (saved customers, with their own table and baseline),
   `catalog` (saved products and services and the unit-of-measure list they are chosen from,
@@ -146,7 +146,7 @@ clients run inside the Compose network (`docker compose exec app …`).
   proformas, document series, conversion, idempotent replay), `corrections` (storno) and `documents`
   (rendered PDF artifacts, their hashes and recovery). A child enters another child only
   through its `index.ts`.
-- **The standalone host** (`standalone/`) is the composition root. It authenticates the
+- **The kernel** (`kernel/`) is the composition root. It authenticates the
   request, provides the contracts above, exposes every use case as an HTTP endpoint, serves
   the UI, runs migrations and implements the CLI.
 - **Every request is an `Effect` program** with typed failures, mapped to HTTP status codes:
@@ -475,7 +475,7 @@ entries in total: `foundation/000-foundation`, `customers/customers-001-baseline
 `catalog/catalog-001-baseline`, `issuer/issuer-001-baseline`,
 `invoicing/invoicing-001-baseline`, `payments/payments-001-baseline`,
 `documents/documents-001-baseline` and the host's own
-`standalone/000-browser-sessions`. Customers and issuer precede invoicing because it
+`kernel/000-browser-sessions`. Customers and issuer precede invoicing because it
 references them. A schema change edits the owning baseline, so a database created
 before it no longer matches: `migrate` refuses it before writing anything and `doctor`
 reports it, both naming the drifted objects and asking to recreate the database.
@@ -534,7 +534,7 @@ empty target database.
 ## Security model
 
 - The single API token is the shared owner/admin credential for the installation. Every
-  holder receives owner access as actor `standalone-owner`; standalone mode has no users or
+  holder receives owner access as actor `kernel-owner`; standalone mode has no users or
   separate authorization levels yet. The token is read from a file, never printed and never
   stored in the image. Rotate it by writing the new token into the secret file and
   recreating the container (`docker compose up -d --force-recreate app`, with
@@ -566,34 +566,34 @@ empty target database.
 ## Repository layout
 
 ```text
-cube/invoicing/            core: domain model, VAT arithmetic, ports, contracts, migrations, service composition
-cube/invoicing/parties/    component: CUI, CNP, counties and sectors shared by issuer and buyers
-cube/invoicing/customers/  component: saved customers, their table and baseline migration
-cube/invoicing/catalog/    component: saved products and services, their table and baseline migration
-cube/invoicing/issuer/     component: issuer profile, branding, VAT configurations and baseline
-cube/invoicing/drafts/     component: document authoring, draft and line editing
-cube/invoicing/issuance/   component: document series, numbered invoices and proformas, conversion, idempotent replay
-cube/invoicing/corrections/ component: correction documents (storno)
-cube/invoicing/documents/  component: rendered PDFs and artifact recovery
-cube/payments/             payment records and derived invoice payment status
-cube/efactura/             RO e-Factura: UBL builders, CIUS-RO limits, EN 16931 validation
-standalone/                host, never packaged; config.ts and failure-log.ts at its root
-standalone/http/           server, security headers, readiness, API docs
-standalone/auth/           credentials, browser session, login throttle
-standalone/api/            authenticated endpoints: HttpApi contract, schemas, handlers, branding normalizer
-standalone/storage/        PostgreSQL store, pool and transactions, row mappers, migration runner, schema fingerprint
-standalone/documents/      PDF renderer and layout, artifact store and recovery, bundled fonts
-standalone/efactura/       host mapping from issued documents to the e-Factura cube
-standalone/ops/            CLI, backup and restore
-standalone/parity/         SQLite baseline fixtures read by the PostgreSQL schema gate
-frontend/                  browser UI served at invoice.test: Next App Router, BFF under /api/qwbe
-bin/qwbe-invoicing.ts      CLI entry point, also the container command
-probes/                    repository gates: runtime, package shape, tests, size, boundaries
-scripts/                   e-Factura fixtures, the local warden helper, the Docker verifier rig (verify-docker.sh)
-docs/                      local development and release procedures
-compose.yaml               local development stack
-compose.prod.yaml          production bundle
-Dockerfile                 multi-stage build, pinned Node image
+cubes/invoicing/             core: domain model, VAT arithmetic, ports, contracts, migrations, service composition
+cubes/invoicing/parties/     component: CUI, CNP, counties and sectors shared by issuer and buyers
+cubes/invoicing/customers/   component: saved customers, their table and baseline migration
+cubes/invoicing/catalog/     component: saved products and services, their table and baseline migration
+cubes/invoicing/issuer/      component: issuer profile, branding, VAT configurations and baseline
+cubes/invoicing/drafts/      component: document authoring, draft and line editing
+cubes/invoicing/issuance/    component: document series, numbered invoices and proformas, conversion, idempotent replay
+cubes/invoicing/corrections/ component: correction documents (storno)
+cubes/invoicing/documents/   component: rendered PDFs and artifact recovery
+cubes/payments/              payment records and derived invoice payment status
+cubes/efactura/              RO e-Factura: UBL builders, CIUS-RO limits, EN 16931 validation
+kernel/                      host, never packaged; config.ts and failure-log.ts at its root
+kernel/http/                 server, security headers, readiness, API docs
+kernel/auth/                 credentials, browser session, login throttle
+kernel/api/                  authenticated endpoints: HttpApi contract, schemas, handlers, branding normalizer
+kernel/storage/              PostgreSQL store, pool and transactions, row mappers, migration runner, schema fingerprint
+kernel/documents/            PDF renderer and layout, artifact store and recovery, bundled fonts
+kernel/efactura/             host mapping from issued documents to the e-Factura cube
+kernel/ops/                  CLI, backup and restore
+kernel/parity/               SQLite baseline fixtures read by the PostgreSQL schema gate
+frontend/                    browser UI served at invoice.test: Next App Router, BFF under /api/qwbe
+bin/qwbe-invoicing.ts        CLI entry point, also the container command
+probes/                      repository gates: runtime, package shape, tests, size, boundaries
+scripts/                     e-Factura fixtures, the local warden helper, the Docker verifier rig (verify-docker.sh)
+docs/                        local development and release procedures
+compose.yaml                 local development stack
+compose.prod.yaml            production bundle
+Dockerfile                   multi-stage build, pinned Node image
 ```
 
 Stack: Node 24, TypeScript, [Effect](https://effect.website) (`effect`, `@effect/platform`),
@@ -611,12 +611,12 @@ scripts/verify-docker.sh verify                  # pnpm verify: runtime gate, li
                                                  # tests, frontend build and runtime, package/
                                                  # test/size/boundary gates
 scripts/verify-docker.sh test                    # pnpm test only — the fast loop
-scripts/verify-docker.sh test "node --test standalone/storage/pagination.test.ts"
+scripts/verify-docker.sh test "node --test kernel/storage/pagination.test.ts"
 scripts/verify-docker.sh down                    # stops both rigs; removes no volume
 ```
 
 The gates keep the core inside the QWBE cube contract: no host or infrastructure imports
-from `cube/`, no cube-to-cube imports, size caps per file and per unit, a test next to every
+from `cubes/`, no cube-to-cube imports, size caps per file and per unit, a test next to every
 cube. A change that breaks a gate is not mergeable.
 
 ### UI theme and dependency policy
@@ -638,7 +638,7 @@ QWBE Invoicing is built as an application for the [QWBE](https://github.com/theZ
 platform: a package of cubes with its own runtime, its own database and its own UI, taking
 user authentication from the QWBE mother and exposing its API for other applications to
 compose (a CRM issuing invoices, for example). The exact installation contract with the
-mother is still being decided; until then the standalone host is the only supported way to
+mother is still being decided; until then the kernel is the only supported way to
 run it, and it is a complete product on its own.
 
 Further cubes are planned inside the same application: ANAF e-Factura transport, RO CIUS

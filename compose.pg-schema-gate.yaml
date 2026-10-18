@@ -51,8 +51,8 @@ services:
       # The contracts, the executor, the gate and the frozen parity fixtures.
       # Read-only: the gate writes nothing to the tree.
       - ./probes:/app/probes:ro
-      - ./cube:/app/cube:ro
-      - ./standalone:/app/standalone:ro
+      - ./cubes:/app/cubes:ro
+      - ./kernel:/app/kernel:ro
       - ./package.json:/app/package.json:ro
       - verify-node-modules:/app/node_modules:ro
     tmpfs:

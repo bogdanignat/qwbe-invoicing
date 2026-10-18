@@ -65,8 +65,8 @@ services:
       # The staging tree of every operation lives here, and it is a tmpfs.
       TMPDIR: /tmp
     volumes:
-      - ./cube:/app/cube:ro
-      - ./standalone:/app/standalone:ro
+      - ./cubes:/app/cubes:ro
+      - ./kernel:/app/kernel:ro
       - ./package.json:/app/package.json:ro
       - ./tsconfig.json:/app/tsconfig.json:ro
       - verify-node-modules:/app/node_modules:ro
@@ -90,8 +90,8 @@ services:
         pg_dump --version
         psql --version
         exec node --test \
-          standalone/ops/postgres-backup-archive.test.ts \
-          standalone/ops/postgres-backup.test.ts
+          kernel/ops/postgres-backup-archive.test.ts \
+          kernel/ops/postgres-backup.test.ts
     init: true
     restart: "no"
 

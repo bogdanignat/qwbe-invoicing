@@ -10,7 +10,7 @@ Branch feat/T-1480-postgresql, cod NECOMIS. Fara deploy/reset; workerii de imple
 ## Stare
 Repo `/home/bogdan/projects/invoicing-qwbe`, branch `feat/T-1480-postgresql`, HEAD `b3ebd4c`. Implementarea este APROBATA; nu mai cere acord pe plan. Working tree mare, inclusiv fisiere NOI UNTRACKED si stergeri/rename STAGED. Toate sunt munca taskului: NU reset/clean/checkout peste ele. Fara commit/push/deploy/reset al datelor existente. La pauza nu mai exista worker sau teste active cu cwd-ul repo-ului.
 
-PG16-only standalone, Docker-only, Effect/porturi pastrate, fara migrare date/mother/dual-engine. Schema, adaptoare, pool/tx, sesiuni async, HTTP/CLI, fingerprint/drift, backup/restore, compose x3 si boundaries implementate. Vechile module SQLite eliminate; JSON-urile `standalone/parity/sqlite-*` sunt golden fixtures istorice, NU recaptura/sterge.
+PG16-only standalone, Docker-only, Effect/porturi pastrate, fara migrare date/mother/dual-engine. Schema, adaptoare, pool/tx, sesiuni async, HTTP/CLI, fingerprint/drift, backup/restore, compose x3 si boundaries implementate. Vechile module SQLite eliminate; JSON-urile `kernel/parity/sqlite-*` sunt golden fixtures istorice, NU recaptura/sterge.
 
 ## Dovezi obtinute (nu echivaleaza cu poarta finala)
 - Schema: 177 verificari; adaptoare: 23 teste; review schema+adapters PASS.
@@ -21,7 +21,7 @@ PG16-only standalone, Docker-only, Effect/porturi pastrate, fara migrare date/mo
 - ULTIMUL `pnpm verify` complet: FAIL, 1190 teste/1187 PASS/3 FAIL (preview roster, history expectation, cross-DB kill din test). Aceste 3 au fost reparate; full verify NU a fost rerulat dupa toate fixurile.
 
 ## Ultimul worker OPRIT de user, modificari partiale NEVALIDATE
-A reparat deja pe disc `probes/frontend-runtime-fixture.mjs` (startServer necesita pool, lifecycle async) si `standalone/storage/postgres-maintenance.test.ts` (peer/killer prin createQueryPool, nu raw PostgresSettings). Nu exista raport final/verificare pentru aceasta ultima runda. Citeste diff-ul, nu reface orb.
+A reparat deja pe disc `probes/frontend-runtime-fixture.mjs` (startServer necesita pool, lifecycle async) si `kernel/storage/postgres-maintenance.test.ts` (peer/killer prin createQueryPool, nu raw PostgresSettings). Nu exista raport final/verificare pentru aceasta ultima runda. Citeste diff-ul, nu reface orb.
 
 ## Reluare — ordine
 1. Status/diff; inspecteaza cele doua fixuri partiale. Ruleaza in Docker testul maintenance + build frontend/test:frontend:runtime. Audit raw new Pool cu campuri PostgresSettings camelCase: acestea NU sunt optiuni pg.

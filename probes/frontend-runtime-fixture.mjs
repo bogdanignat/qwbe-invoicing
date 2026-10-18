@@ -9,8 +9,8 @@ import { dirname, join, resolve } from "node:path"
 import { setTimeout } from "node:timers"
 import { fileURLToPath, URL } from "node:url"
 
-import { startServer } from "../standalone/http/http.ts"
-import { migratedFixture } from "../standalone/storage/postgres-rig.test-support.ts"
+import { startServer } from "../kernel/http/http.ts"
+import { migratedFixture } from "../kernel/storage/postgres-rig.test-support.ts"
 
 const repositoryRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..")
 const standaloneServer = join(repositoryRoot, "frontend/.next/standalone/frontend/server.js")
@@ -143,7 +143,7 @@ export const startFrontend = async (upstreamOrigin, { env = {} } = {}) => {
  * over `http://127.0.0.1`. The credential is NOT the reason: it comes from the
  * rig (`riggedPassword`) and never from `runtimeConfig`, so `nodeEnvironment`
  * does not influence it at all. The production attribute is pinned on the real
- * HTTP surface in `standalone/http/http-session.test.ts`, and the non-Secure
+ * HTTP surface in `kernel/http/http-session.test.ts`, and the non-Secure
  * cookie this fixture does issue is asserted in `frontend-runtime.mjs`. The
  * token file is still a real 64-character secret on disk, mode 0600, because the
  * frontend under test logs in through it.

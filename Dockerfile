@@ -19,8 +19,8 @@ WORKDIR /app
 COPY --from=dependencies /app/node_modules ./node_modules
 COPY package.json ./
 COPY bin ./bin
-COPY cube ./cube
-COPY standalone ./standalone
+COPY cubes ./cubes
+COPY kernel ./kernel
 # `pg_dump`/`pg_restore` for the ops commands, installed in the runtime stage and
 # BEFORE `USER node`, because apk needs root. Client 16 exactly, matching the
 # server: a newer client writes an archive the older server cannot read back,

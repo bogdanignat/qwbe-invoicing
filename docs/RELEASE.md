@@ -19,7 +19,7 @@ Since T-1649 the public traffic goes to the Next frontend (Caddy and Traefik rou
 
 Run `pnpm verify` before building the image. The size gate keeps the existing
 6,000-character file cap and the 40,000-character / 15-file cube caps; it also checks
-production source files under `standalone/` and `frontend/src/` without treating these
+production source files under `kernel/` and `frontend/src/` without treating these
 trees as a cube. `bin/` and root tooling/config files are outside that file-only extension.
 
 Host/UI refactors must also preserve the HTTP contract and runtime error/idempotency
@@ -40,8 +40,8 @@ dependencies follow this matrix:
 `app/` and `proxy.ts` compose the layers, never the reverse. Type-only imports,
 re-exports and dynamic imports follow the same rules, and cycles are forbidden.
 Browser layers cannot import `lib/server/` or Node core modules; under `app/` only
-`route.ts` files may import `lib/server/`. Frontend source cannot import `cube/`,
-`standalone/`, `probes/`, `bin/`, `scripts/`, `frontend/scripts/` or the Next build
+`route.ts` files may import `lib/server/`. Frontend source cannot import `cubes/`,
+`kernel/`, `probes/`, `bin/`, `scripts/`, `frontend/scripts/` or the Next build
 output, and the backend cannot import `frontend/`. The CLI fixture tests in
 `probes/frontend-boundary-gate.test.mjs` exercise allowed edges and rejected violations;
 no size thresholds or cube rules are relaxed.

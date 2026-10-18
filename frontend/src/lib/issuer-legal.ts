@@ -7,7 +7,7 @@
  * could not point at. Here every rule answers, so `issuer-payload.ts` can name
  * the field the keyboard is moved to and each rule is tested without a DOM.
  *
- * The rules themselves are the backend's (`cube/invoicing/issuer`): the trade
+ * The rules themselves are the backend's (`cubes/invoicing/issuer`): the trade
  * registry number in either the classic or the 13-digit form, an IBAN with a
  * valid mod-97 check digit, a social capital with at most 18 integer digits and
  * two decimals, a bank name of at most 120 characters on one line. Three of the

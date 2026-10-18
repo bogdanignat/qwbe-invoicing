@@ -1,21 +1,21 @@
 #!/usr/bin/env node
 import { Effect } from "effect"
 
-import { documentsPermissions } from "../cube/invoicing/documents/index.ts"
-import { reconcileArtifacts } from "../standalone/documents/artifact-reconciliation.ts"
-import { createStandaloneArtifactService } from "../standalone/documents/artifact-runtime.ts"
-import { executeBackup, executeRestore, planRestore, restoreTrustWarning } from "../standalone/ops/postgres-backup.ts"
-import { assertDataDirectory } from "../standalone/ops/postgres-backup-destinations.ts"
-import { CliInputError, helpText, parseCommand, type Command } from "../standalone/ops/cli.ts"
-import { doctorReport } from "../standalone/ops/cli-doctor.ts"
-import { runtimeConfig } from "../standalone/config.ts"
-import { applicationReady, startServer } from "../standalone/http/http.ts"
-import { runShutdown } from "../standalone/http/shutdown.ts"
-import { applyMigrations, planMigrations, schemaDrift } from "../standalone/storage/migrations.ts"
-import { startMaintenanceSession } from "../standalone/storage/postgres-maintenance-session.ts"
-import { cliRedactor, failureMessage } from "../standalone/ops/cli-redaction.ts"
-import { createPostgresRuntime, createQueryRuntime } from "../standalone/storage/postgres-pool.ts"
-import { cachedReadiness, readinessIntervalMs } from "../standalone/http/readiness.ts"
+import { documentsPermissions } from "../cubes/invoicing/documents/index.ts"
+import { reconcileArtifacts } from "../kernel/documents/artifact-reconciliation.ts"
+import { createKernelArtifactService } from "../kernel/documents/artifact-runtime.ts"
+import { executeBackup, executeRestore, planRestore, restoreTrustWarning } from "../kernel/ops/postgres-backup.ts"
+import { assertDataDirectory } from "../kernel/ops/postgres-backup-destinations.ts"
+import { CliInputError, helpText, parseCommand, type Command } from "../kernel/ops/cli.ts"
+import { doctorReport } from "../kernel/ops/cli-doctor.ts"
+import { runtimeConfig } from "../kernel/config.ts"
+import { applicationReady, startServer } from "../kernel/http/http.ts"
+import { runShutdown } from "../kernel/http/shutdown.ts"
+import { applyMigrations, planMigrations, schemaDrift } from "../kernel/storage/migrations.ts"
+import { startMaintenanceSession } from "../kernel/storage/postgres-maintenance-session.ts"
+import { cliRedactor, failureMessage } from "../kernel/ops/cli-redaction.ts"
+import { createPostgresRuntime, createQueryRuntime } from "../kernel/storage/postgres-pool.ts"
+import { cachedReadiness, readinessIntervalMs } from "../kernel/http/readiness.ts"
 
 /**
  * The CLI. Two rules it exists to hold:
@@ -198,9 +198,9 @@ if (command !== undefined) {
         await assertDataDirectory(config.dataDirectory)
         const runtime = createQueryRuntime(settings)
         try {
-          const service = createStandaloneArtifactService(config.dataDirectory, runtime.pool, Effect.succeed({
+          const service = createKernelArtifactService(config.dataDirectory, runtime.pool, Effect.succeed({
             identity: {
-              id: "standalone-operator",
+              id: "kernel-operator",
               permissions: [documentsPermissions.read, documentsPermissions.render],
             },
             organization: { id: config.organizationId },

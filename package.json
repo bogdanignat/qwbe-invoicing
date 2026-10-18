@@ -13,7 +13,7 @@
     "build:frontend": "pnpm --filter @qwbe/invoicing-frontend build",
     "test:frontend:runtime": "node --test probes/frontend-runtime.mjs",
     "local:setup": "node scripts/local-warden.mjs",
-    "test": "node --test --test-concurrency=4 --test-timeout=120000 \"cube/**/*.test.ts\" \"standalone/**/*.test.ts\" \"frontend/src/**/*.test.ts\" \"probes/**/*.test.mjs\"",
+    "test": "node --test --test-concurrency=4 --test-timeout=120000 \"cubes/**/*.test.ts\" \"kernel/**/*.test.ts\" \"frontend/src/**/*.test.ts\" \"probes/**/*.test.mjs\"",
     "typecheck": "tsc -p tsconfig.json && pnpm --filter @qwbe/invoicing-frontend typecheck",
     "lint": "pnpm --filter @qwbe/invoicing-frontend typegen && eslint .",
     "gate:runtime": "node probes/runtime-version.mjs",

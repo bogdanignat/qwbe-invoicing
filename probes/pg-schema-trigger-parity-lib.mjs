@@ -2,7 +2,7 @@
  * Trigger parity against the frozen SQLite capture, not against a hand-written
  * list shipped in the same change.
  *
- * `standalone/parity/sqlite-baseline-triggers.json` was captured from SQLite
+ * `kernel/parity/sqlite-baseline-triggers.json` was captured from SQLite
  * before any translation existed, so it is the oracle: name, table, timing,
  * event, the `UPDATE OF` column list, whether a `WHEN` predicate existed and
  * whether that predicate used a subquery, and the message the trigger raised.

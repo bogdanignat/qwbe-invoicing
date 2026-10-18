@@ -50,20 +50,20 @@ test("reports the real repository graph as the fixed protocol, without log conta
     payload.depcruiseVersion,
     JSON.parse(readFileSync(join(repositoryRoot, "node_modules", "dependency-cruiser", "package.json"), "utf8")).version,
   )
-  assert.deepEqual(payload.roots, ["cube", "standalone", "frontend/src"])
+  assert.deepEqual(payload.roots, ["cubes", "kernel", "frontend/src"])
 })
 
 test("describes every cube unit and host root as an area with its family", () => {
   const payload = JSON.parse(run("--json").stdout)
   const { units } = boundaryGateInputs(repositoryRoot, cubeRoots)
-  const expected = [...units.map((unit) => unit.id), "standalone", "frontend/src"].sort()
+  const expected = [...units.map((unit) => unit.id), "kernel", "frontend/src"].sort()
   assert.deepEqual(payload.areas.map((area) => area.id), expected)
   assert.deepEqual(payload.areas.map((area) => area.folder), expected)
   const group = (id) => payload.areas.find((area) => area.id === id).group
-  assert.equal(group("cube/invoicing"), "cube/invoicing")
-  assert.equal(group("cube/invoicing/issuance"), "cube/invoicing", "a child cube belongs to its tree root")
+  assert.equal(group("cubes/invoicing"), "cubes/invoicing")
+  assert.equal(group("cubes/invoicing/issuance"), "cubes/invoicing", "a child cube belongs to its tree root")
   assert.equal(group("frontend/src"), "frontend")
-  assert.equal(group("standalone"), "standalone")
+  assert.equal(group("kernel"), "kernel")
 })
 
 test("fingerprints the inputs that decide the graph, stably and without a timestamp", () => {
@@ -97,24 +97,24 @@ test("reports exactly the rule set and roots the gate validates against", () => 
 
 test("collects a graph with violations and still exits zero, reporting raw counts", () => {
   const result = withFixture((root) => {
-    makeUnit(root, "cube/invoicing", 'import "../reporting/index.ts"\nexport const invoice = 1\n')
-    makeUnit(root, "cube/reporting")
+    makeUnit(root, "cubes/invoicing", 'import "../reporting/index.ts"\nexport const invoice = 1\n')
+    makeUnit(root, "cubes/reporting")
   }, (root) => run("--json", "--root", root))
   assert.equal(result.status, 0, result.stderr)
   assert.equal(result.stderr, "")
   const payload = JSON.parse(result.stdout)
   assert.equal(payload.cruise.summary.error, 1)
   assert.deepEqual(payload.cruise.summary.violations.map((violation) => violation.rule.name),
-    ["no-cube-import-cube-invoicing-to-cube-reporting"])
+    ["no-cube-import-cubes-invoicing-to-cubes-reporting"])
   assert.equal(payload.roots.length, 1)
-  assert.deepEqual(payload.areas.map((area) => area.id), ["cube/invoicing", "cube/reporting"])
+  assert.deepEqual(payload.areas.map((area) => area.id), ["cubes/invoicing", "cubes/reporting"])
 })
 
 test("stays a reporter where the gate is a gate, on the same fixture", () => {
   const root = fixture()
   try {
-    makeUnit(root, "cube/invoicing", 'import "../reporting/index.ts"\nexport const invoice = 1\n')
-    makeUnit(root, "cube/reporting")
+    makeUnit(root, "cubes/invoicing", 'import "../reporting/index.ts"\nexport const invoice = 1\n')
+    makeUnit(root, "cubes/reporting")
     const gateResult = spawnSync(process.execPath, [gate, "--root", root], { encoding: "utf8" })
     assert.notEqual(gateResult.status, 0, "the gate still fails on a violating tree")
     const payload = JSON.parse(run("--json", "--root", root).stdout)
@@ -156,7 +156,7 @@ test("keeps failure messages short and free of the environment", () => {
 test("prints human counts without the protocol, and documents itself", () => {
   const human = run()
   assert.equal(human.status, 0, human.stderr)
-  assert.match(human.stdout, /^roots {12}cube standalone frontend\/src$/m)
+  assert.match(human.stdout, /^roots {12}cubes kernel frontend\/src$/m)
   assert.match(human.stdout, /^modules {10}\d+$/m)
   assert.match(human.stdout, /^violations {7}\d+ \(error \d+, warn \d+, info \d+\)$/m)
   assert.ok(!human.stdout.includes("schemaVersion"))

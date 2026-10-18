@@ -10,7 +10,7 @@ Fara migrare retro-compatibila: baseline-ul se editeaza in loc, baza de dev se r
 din UI, autora un al doilea draft. Liniile se adaugau abia dupa creare, deci un draft partial
 ramanea in urma fiecarei incercari esuate.
 
-## 1 Domeniu / contracte (`cube/invoicing`)
+## 1 Domeniu / contracte (`cubes/invoicing`)
 - `IdempotencyOperation` primeste `create_draft`; `resultKind` `draft` exista deja.
 - `contracts/migrations.json`: CHECK-ul `operation IN(...)` din baseline include `create_draft`.
 - `CreateDraftInput` primeste `lines?: ReadonlyArray<RawDocumentLine>` — un draft poate fi creat
@@ -26,7 +26,7 @@ sau deloc. Replay returneaza draftul **curent** (editat sau emis). Draft sters �
 draft_creation_result_deleted`, niciodata recreare. Alt payload pe aceeasi cheie ⇒ `idempotency_key_reused`.
 Extras din `draft-operations.ts` ca fisier separat pentru gate:size (cap 6000 chars/fisier).
 
-## 3 HTTP (`standalone/api`)
+## 3 HTTP (`kernel/api`)
 - `DraftInput` primeste `lines?: Schema.Array(DraftLineInput)` (`DraftLineInput` ridicat deasupra).
 - Endpoint: `conflict(notFound(validation(idempotentBody(...))))` **si** handler
   `errors("ValidationFailure", "ResourceNotFound", "DomainConflict")` — altfel `only()` din
@@ -82,7 +82,7 @@ pass.
 Limite ramase (neverificate aici):
 - `pnpm verify` complet (gate:runtime, test backend, build:frontend,
   test:frontend:runtime, gate:package, gate:test) NU a fost rulat.
-- Testele backend (cube/standalone) nu au fost rulate in aceasta sesiune.
+- Testele backend (cubes/kernel) nu au fost rulate in aceasta sesiune.
 - Validarea live in browser (F5 dupa raspuns pierdut, `corruptAfterCommit`,
   UI recovery 320/390px) ramane deschisa.
 - Fara teste de randare pentru `OperationRecoveryNotice` / `use-authoring-recovery`

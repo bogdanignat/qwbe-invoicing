@@ -1,14 +1,14 @@
 import { mkdirSync, writeFileSync } from "node:fs"
 import { join, resolve } from "node:path"
 
-import { renderEFacturaXml } from "../cube/efactura/index.ts"
-import { syntheticFixtures } from "../cube/efactura/fixtures.test-support.ts"
+import { renderEFacturaXml } from "../cubes/efactura/index.ts"
+import { syntheticFixtures } from "../cubes/efactura/fixtures.test-support.ts"
 
 /**
  * Writes the synthetic e-Factura fixtures to disk so they can be uploaded to
  * ANAF's public validator.
  *
- * Every document is invented — see cube/efactura/fixtures.test-support.ts. No
+ * Every document is invented — see cubes/efactura/fixtures.test-support.ts. No
  * real invoice ever goes through here: the validator is a third-party service
  * and an uploaded document is out of our hands.
  *

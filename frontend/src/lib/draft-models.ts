@@ -92,7 +92,7 @@ export interface VatCatalogue {
 
 /**
  * The logo the backend stores, always re-encoded to PNG on the way in
- * (`standalone/api/branding-normalizer.ts`), which is why the answer names the
+ * (`kernel/api/branding-normalizer.ts`), which is why the answer names the
  * encoding it kept rather than the one that was uploaded.
  */
 export interface IssuerBrandingImage {
@@ -104,7 +104,7 @@ export interface IssuerBrandingImage {
 /**
  * Either half may be absent, but not both: the backend refuses a branding object
  * that carries neither text nor image
- * (`cube/invoicing/issuer/application/issuer.ts:45`). "No branding at all" is
+ * (`cubes/invoicing/issuer/application/issuer.ts:45`). "No branding at all" is
  * `null`, not an empty object.
  */
 export interface IssuerBranding {
@@ -133,7 +133,7 @@ export interface Issuer {
   readonly defaultPaymentTermDays: number
   readonly vatConfigurations: ReadonlyArray<VatConfiguration>
   readonly currentVat: VatRegistration | null
-  /** Always answered, `null` when the issuer has no brand at all: `standalone/api/schema-issuer.ts:51`. */
+  /** Always answered, `null` when the issuer has no brand at all: `kernel/api/schema-issuer.ts:51`. */
   readonly branding: IssuerBranding | null
 }
 

@@ -17,19 +17,19 @@ Repo: /home/bogdan/projects/invoicing-qwbe, main 24580b8 (curat). Branch nou:
   Next are doar `DocumentDetail` (`frontend/src/views/InvoiceDetailView.tsx:8-14`).
   Deci cutover-ul cere și Etapa D (mai jos). `POST /api/drafts/{id}/proformas` există
   pe backend dar nu e folosit de niciun ecran legacy → rămâne nefolosit.
-- Rute canonice (`standalone/http/ui-routes.ts:9-15`): `/proformas`, `/proformas/new`,
+- Rute canonice (`kernel/http/ui-routes.ts:9-15`): `/proformas`, `/proformas/new`,
   `/proformas/[id]`, `/customers`, `/products` (NU `/product-presets`), `/settings`.
 - Backend: toate endpoint-urile necesare există și au teste HTTP —
   `/api/proformas` (+`/{id}`, `/{id}/invoice`, `/{id}/draft-invoice`, `/{id}/pdf`),
   `/api/product-presets` CRUD, `/api/unit-of-measures`, `/api/vat-regimes`,
   `/api/customers` CRUD, `/api/issuer` GET/PUT, `/api/document-series` GET/POST.
   Scrierile de proformă cer `idempotency-key` OBLIGATORIU
-  (`standalone/api/http-endpoints-fiscal.ts:28-31`); scrierile de master-data cer doar
+  (`kernel/api/http-endpoints-fiscal.ts:28-31`); scrierile de master-data cer doar
   CSRF (`http-endpoints-master-data.ts:19-26`). ZERO backend changes.
 - BFF nu se schimbă: catch-all acceptă toate metodele
   (`frontend/src/app/api/qwbe/[...path]/route.ts:8-14`), forwardează `x-csrf-token` și
   `idempotency-key` (`frontend/src/lib/server/proxy-headers.ts:51`), cap body 1 MB >
-  256 KiB max branding (`standalone/api/branding-normalizer.ts:7`).
+  256 KiB max branding (`kernel/api/branding-normalizer.ts:7`).
 - Pattern Next: `app/**/page.tsx` server component tipat (`PageProps<"/...">`) →
   view client component din `frontend/src/views/`, `useAuthenticatedShell` +
   `PrivateScreen`, clienți construiți din transportul sesiunii

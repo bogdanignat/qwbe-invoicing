@@ -5,7 +5,7 @@ and the development certificate authority. The Next `frontend` service joins the
 external `warden` Docker network and serves `invoice.test`; the backend `app` is
 internal to the Compose network. Neither publishes a port.
 
-> Runtime: every request is an `Effect`. The standalone host authenticates (`Bearer` → `RequestContext`), injects `Clock`/`IdGenerator`/`TransactionalStore`, and runs the cube service `Effect` via `Effect.runPromise(Effect.either(...))`. Failures are typed (`ValidationFailure` → 400, `PermissionDenied` → 403, `ResourceNotFound` → 404, `DomainConflict` → 409).
+> Runtime: every request is an `Effect`. The kernel authenticates (`Bearer` → `RequestContext`), injects `Clock`/`IdGenerator`/`TransactionalStore`, and runs the cube service `Effect` via `Effect.runPromise(Effect.either(...))`. Failures are typed (`ValidationFailure` → 400, `PermissionDenied` → 403, `ResourceNotFound` → 404, `DomainConflict` → 409).
 
 ## First setup on microq
 
@@ -41,7 +41,7 @@ Persistence is a PostgreSQL 16 cluster in the `db` service — a container like
 everything else here, pinned by digest, on its own named volume, with the cluster
 initialised `--locale=C --encoding=UTF8` because the schema's indexes and keyset
 cursors are written against binary text ordering. Its port is not published; only the
-application network reaches it. PostgreSQL here is a standalone-host choice and the
+application network reaches it. PostgreSQL here is a kernel choice and the
 mother's Postgres is a different database: `FOUNDATION.md` section 18 explains why
 this still does not describe mounted operation.
 
@@ -52,7 +52,7 @@ the barrier, the schema and the artifact directory all agree. Repeated
 `docker compose up -d` is safe: migration is idempotent and does not consume invoice
 or proforma numbers or create business records. While the project is in development each
 cube owns one baseline migration; a database created from an older baseline is refused
-as drift and has to be recreated (README, "Schema during development"). The API reads its standalone bearer
+as drift and has to be recreated (README, "Schema during development"). The API reads its kernel bearer
 credential from the Compose secret; the secret is never stored in the image or
 printed by the application. `ORGANIZATION_ID` selects the trusted organization for
 this initial single-organization host adapter.
@@ -103,7 +103,7 @@ is conspicuously marked `DOCUMENT NEFISCAL`.
 
 Issued invoices remain immutable; payments are separate `Effect` records and never mutate the fiscal snapshot. For local calls, pass
 `Authorization: Bearer $(cat .local/api-token)` and JSON request bodies. The bearer
-adapter is the API-first standalone transport; the cube receives only the verified
+adapter is the API-first kernel transport; the cube receives only the verified
 identity and organization context.
 
 Stop containers without deleting data:
@@ -158,7 +158,7 @@ and can be rerun safely after partial failure. In non-development environments,
 applying either operation also requires `--confirm-production`. PDFs are stored by
 SHA-256 below `/data/artifacts`; reads verify key, digest, and byte length. The bundled
 DejaVu Sans font supports Romanian glyphs and its distribution license is stored next
-to the font in `standalone/documents/assets/fonts/`.
+to the font in `kernel/documents/assets/fonts/`.
 
 `doctor` reports `database` (host, port, database, user — never the password),
 `databaseReady`, `pendingMigrations`, `migrationsReady`, `schemaDrift`,

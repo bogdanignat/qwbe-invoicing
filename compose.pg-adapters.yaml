@@ -62,8 +62,8 @@ services:
     volumes:
       # The cubes, the adapters and their tests. Read-only: the suite writes
       # nothing to the tree.
-      - ./cube:/app/cube:ro
-      - ./standalone:/app/standalone:ro
+      - ./cubes:/app/cubes:ro
+      - ./kernel:/app/kernel:ro
       - ./package.json:/app/package.json:ro
       - ./tsconfig.json:/app/tsconfig.json:ro
       - verify-node-modules:/app/node_modules:ro
@@ -75,9 +75,9 @@ services:
     command:
       - node
       - --test
-      - standalone/storage/postgres-sql.test.ts
-      - standalone/storage/postgres-adapters.test.ts
-      - standalone/storage/postgres-runtime.test.ts
+      - kernel/storage/postgres-sql.test.ts
+      - kernel/storage/postgres-adapters.test.ts
+      - kernel/storage/postgres-runtime.test.ts
     init: true
     restart: "no"
 

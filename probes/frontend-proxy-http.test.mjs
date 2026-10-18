@@ -6,8 +6,8 @@ import test from "node:test"
 import { URL } from "node:url"
 
 import { handleProxyRequest } from "../frontend/src/lib/server/proxy.ts"
-import { startServer } from "../standalone/http/http.ts"
-import { withMigrated } from "../standalone/storage/postgres-rig.test-support.ts"
+import { startServer } from "../kernel/http/http.ts"
+import { withMigrated } from "../kernel/storage/postgres-rig.test-support.ts"
 
 void test("HTTP development preview accepts the backend's non-Secure session cookie", async () => {
   await withMigrated("frontend_http", async (fixture) => {

@@ -8,7 +8,7 @@ import { forwardToUpstream } from "./proxy.ts"
  * by the same `forwardToUpstream` every other BFF route uses.
  *
  * The proxy keeps only a short list of upstream headers, so the page's own policy is
- * restated here. Copied from standalone/http/api-docs.ts (the `render` headers): the
+ * restated here. Copied from kernel/http/api-docs.ts (the `render` headers): the
  * page is self-contained — CSS, spec and bundle inline — so it needs nothing more.
  *
  * shortcut: read-only — "Try it out" calls the contract's `/api/...` paths, which Next

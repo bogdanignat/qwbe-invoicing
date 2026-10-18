@@ -25,7 +25,7 @@ x-postgres-environment: &postgres-environment
   PGUSER: qwbe
   # The application reads the password from this file, never from PGPASSWORD: an
   # environment variable travels into every child process and into `docker inspect`.
-  # Outside development `standalone/config.ts` refuses to boot when the file is
+  # Outside development `kernel/config.ts` refuses to boot when the file is
   # missing or empty, so this is fail-closed rather than best effort.
   PGPASSWORD_FILE: /run/secrets/pg_password
 

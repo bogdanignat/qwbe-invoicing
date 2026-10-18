@@ -17,9 +17,9 @@ const makeUnit = (root, path) => write(root, `${path}/qwbe-package.json`, "{}\n"
 test("reports a production unit without tests", () => {
   const root = fixture()
   try {
-    makeUnit(root, "cube/invoicing")
-    write(root, "cube/invoicing/index.ts")
-    assert.deepEqual(untestedUnits(root, ["cube"]).map((unit) => unit.id), ["cube/invoicing"])
+    makeUnit(root, "cubes/invoicing")
+    write(root, "cubes/invoicing/index.ts")
+    assert.deepEqual(untestedUnits(root, ["cubes"]).map((unit) => unit.id), ["cubes/invoicing"])
   } finally {
     rmSync(root, { recursive: true, force: true })
   }
@@ -28,15 +28,15 @@ test("reports a production unit without tests", () => {
 test("keeps recursively nested cube ownership independent", () => {
   const root = fixture()
   try {
-    makeUnit(root, "cube/invoicing")
-    write(root, "cube/invoicing/index.ts")
-    write(root, "cube/invoicing/index.test.ts")
-    makeUnit(root, "cube/invoicing/cubes/reporting")
-    write(root, "cube/invoicing/cubes/reporting/index.ts")
+    makeUnit(root, "cubes/invoicing")
+    write(root, "cubes/invoicing/index.ts")
+    write(root, "cubes/invoicing/index.test.ts")
+    makeUnit(root, "cubes/invoicing/cubes/reporting")
+    write(root, "cubes/invoicing/cubes/reporting/index.ts")
 
-    assert.deepEqual(inspectTestCoverage(root, ["cube"]), [
-      { id: "cube/invoicing", sourceCount: 1, testCount: 1 },
-      { id: "cube/invoicing/cubes/reporting", sourceCount: 1, testCount: 0 },
+    assert.deepEqual(inspectTestCoverage(root, ["cubes"]), [
+      { id: "cubes/invoicing", sourceCount: 1, testCount: 1 },
+      { id: "cubes/invoicing/cubes/reporting", sourceCount: 1, testCount: 0 },
     ])
   } finally {
     rmSync(root, { recursive: true, force: true })

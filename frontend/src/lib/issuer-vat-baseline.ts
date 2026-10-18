@@ -9,7 +9,7 @@ import type { Issuer, VatConfiguration } from "./draft-models.ts"
  * The regime the settings form opens on, read against one single day.
  *
  * The issuer answer carries `currentVat`, but that is a snapshot the server
- * computed when it built the answer (`cube/invoicing/issuer/application/issuer-view.ts`),
+ * computed when it built the answer (`cubes/invoicing/issuer/application/issuer-view.ts`),
  * and the query client keeps it without refetching on focus. The form's own
  * `today` moves on; the snapshot does not. A tab left open across midnight then
  * holds two different days at once, and the disagreement is not cosmetic: the
