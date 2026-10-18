@@ -430,8 +430,8 @@ Minimum verification layers:
    login, readiness, issuance, proforma, storno, and PDF work; a disabled plugin's routes,
    OpenAPI entries are absent and `eFacturaStatus` is `null` with e-Factura off; re-enabling
    keeps its data and idempotency; an unknown name in `QWBE_PLUGINS` refuses start
-   (`kernel/plugins.test.ts`, `kernel/http/plugins-http.test.ts`). That the UI sends no
-   request to a disabled plugin is the frontend's to prove and is not covered here yet;
+   (`kernel/plugins.test.ts`, `kernel/http/plugins-http.test.ts`). The UI sends no request
+   to a disabled plugin and hides its actions (`frontend/src/hooks/plugins-off.test.ts`);
 7. package manifest tests: every declared unit exists, no unit is undeclared or duplicated,
    a missing manifest or zero units fails;
 8. decoupling: disabling a plugin leaves the host and every required cube operational;

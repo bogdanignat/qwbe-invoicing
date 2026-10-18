@@ -36,6 +36,7 @@ Deciziile luate în timpul implementării se adaugă dedesubt.
 | 11 | B1 și B2 se fac într-un singur pas. | Manifestul unic listează `invoicing/payments` și `invoicing/efactura`, căi care apar abia după mutare. Separat, unul dintre pași ar lăsa gate-urile roșii. |
 | 12 | Manifestul de pachet stă la rădăcina repo-ului, numit `invoicing-pack`, `kind: "plugin"`, cu 11 unități. Manifestele din fiecare director dispar. | E forma din crm-pack: un singur inventar, judecat de gate-uri. |
 | 13 | Documentația (A) și restructurarea (B) rulează în paralel, pe fișiere separate. | Câștig de timp fără conflicte: A atinge doar FOUNDATION/README/PRODUCT și nu rulează containerul de verificare. |
+| 14 | `.claude/CLAUDE.md` și `.architecture/contract.json` (locale, în afara git-ului proiectului) se actualizează după merge. | Descriu `main`; schimbate înainte, ar minți despre codul din `main`. |
 | 15 | **C (T-1880) anulat:** mapperele e-Factura rămân în `kernel/efactura/`, ca adaptor de host. | Pluginul efactura are 37.340 de caractere din bugetul de 40.000 pe unitate, iar mapperele mai aduc ~9.800. Ca să încapă, ar fi trebuit un cub-copil artificial, doar pentru bani. Aplicația are oricum toată logica; kernelul face parte din ea. Când pluginul e oprit, rutele XML nu se montează, deci mapperul nu e apelat. |
 | 16 | O regulă de gate interzice unităților `required: true` să importe unități `required: false`. | Fără ea, primul import din nucleu spre un plugin ar rupe oprirea lui, fără ca vreun test să pice (review runda 1). |
 | 17 | Gate-urile recunosc un cub prin încărcarea `index.ts` și verificarea exportului `cube`, nu după text. | O singură definiție de „cub” în toate gate-urile, care prinde și formele reexportate. Gate-urile rulează doar pe codul nostru, în containerul de verificare. |
@@ -46,4 +47,18 @@ Deciziile luate în timpul implementării se adaugă dedesubt.
 | 22 | Sesiunea (GET și login) întoarce `plugins`. Decodorul din frontend e strict: dacă lista lipsește, sesiunea e invalidă; nu se presupune „totul activ”. | E fail-closed. Frontend-ul și backend-ul se livrează împreună în același compose, deci nu pot rula versiuni amestecate. |
 | 23 | Cu efactura oprit, coloana e-Factura dispare din registru, iar butonul XML dispare de pe factură și de pe storno. Cu payments oprit, `PaymentsSection` dispare și nicio interogare de plăți nu mai pleacă. | Ce n-a apucat utilizatorul să vadă nu-i lipsește. Iar la un plugin oprit nu pleacă nicio cerere care ar primi 404. |
 | 24 | Am validat XML-urile cu validatorul public ANAF (`webservicesp.anaf.ro/prod/FCTEL/rest/validare`), dar doar cu fixture-urile sintetice: toate 10 au ieșit `ok` (8 FACT1 și 2 FCN). Din aplicația pornită am verificat doar exportul. | Regula din `docs/EFACTURA.md`: la un serviciu terț ajung numai date inventate. Baza dev poate conține profilul real al emitentului. |
-| 14 | `.claude/CLAUDE.md` și `.architecture/contract.json` (locale, în afara git-ului proiectului) se actualizează după merge. | Descriu `main`; schimbate înainte, ar minți despre codul din `main`. |
+| 25 | Verificarea cap-coadă a rulat pe volume dev noi (`*-t1876`). Volumele tale vechi au rămas neatinse. | Baza veche nu mai trece de migrare după redenumirea `standalone` → `kernel` din PR #52 (T-1874). Regula proiectului cere recrearea ei, dar asta șterge date, așa că decizia rămâne la tine. |
+
+## Verificarea finală (2026-10-18)
+
+- `scripts/verify-docker.sh verify` a ieșit verde: 1183 de teste, iar gate-urile de pachet, teste, mărime și granițe au trecut.
+- Am rulat aplicația cap-coadă pe stack-ul dev, cu o bază nouă și date inventate:
+  - pașii: emitent, client, factura E2E 1 (1916,01 RON), plata de 500,00, storno-ul E2E 2;
+  - ambele XML-uri au primit `{"stare":"ok"}` de la validatorul ANAF: factura pe FACT1, storno-ul (CreditNote) pe FCN;
+  - toate cele 10 fixture-uri sintetice au primit și ele `ok`.
+- Pluginurile pe aplicația pornită:
+  - `QWBE_PLUGINS=payments`: XML-ul dă 404, iar `eFacturaStatus` e `null`;
+  - `QWBE_PLUGINS=` (gol): plățile dau 404, storno-ul merge;
+  - `QWBE_PLUGINS=bogus`: aplicația refuză pornirea;
+  - la revenirea fără variabilă, plata de 500,00 era încă acolo.
+- De știut: PDF-ul facturii se generează cu `POST /invoices/{id}/pdf` înainte de primul GET, la fel ca pe `main`.

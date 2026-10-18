@@ -620,8 +620,9 @@ scripts/verify-docker.sh down                    # stops both rigs; removes no v
 ```
 
 The gates keep the core inside the QWBE cube contract: no host or infrastructure imports
-from `cubes/`, no imports between separate cube trees and none past a unit's `index.ts`
-inside the invoicing tree, size caps per file and per unit, a test next to every
+from `cubes/`, no imports between separate cube trees, inside the invoicing tree a child
+enters a sibling or a child only through its `index.ts` (it may use its ancestors' modules),
+no required cube imports a plugin, size caps per file and per unit, a test next to every
 cube. A change that breaks a gate is not mergeable.
 
 ### UI theme and dependency policy

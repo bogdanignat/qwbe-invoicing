@@ -32,7 +32,7 @@ answers with `400` and the list of limits it breaks.
 | `cubes/invoicing/efactura/ubl.ts`, `ubl-party.ts` | the UBL document and party builders, in `xsd:sequence` order |
 | `cubes/invoicing/efactura/profile.ts` | the CIUS-RO constants, injected rather than hard-coded |
 | `kernel/efactura/efactura-mapper.ts` | the host translation from `IssuedInvoice` / `CorrectionDocument` |
-| `kernel/api/api.ts` — `efacturaXml` | renders the download; a mapping refusal travels as the list of reasons, not as a 500 |
+| `kernel/api/handlers-efactura.ts` (routes), `kernel/api/api-responses.ts` — `efacturaXml` | renders the download, mounted only with the e-Factura plugin enabled; a mapping refusal travels as the list of reasons, not as a 500 |
 | `cubes/invoicing/efactura/fixtures.test-support.ts` | the synthetic documents, all invented |
 
 The generator never imports the invoicing cube, and the mapper is the only code
