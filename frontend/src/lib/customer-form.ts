@@ -61,12 +61,11 @@ export const customerFormOf = (customer: Customer): CustomerForm => ({
 })
 
 /**
- * A CUI keeps its digits once the typed `RO` prefix is dropped; a CNP is digits
- * only. The second trim catches the space in a pasted `RO 12345674`, which the
- * shared normalizer leaves behind after dropping the prefix.
+ * A CUI keeps its digits once the typed `RO` prefix (and a pasted space after
+ * it) is dropped; a CNP is digits only.
  */
 export const normalizeCustomerIdentifier = (partyType: PartyType, value: string): string =>
-  partyType === "company" ? normalizeRomanianCui(value).trim() : value.replace(/\D/gu, "")
+  partyType === "company" ? normalizeRomanianCui(value) : value.replace(/\D/gu, "")
 
 export const switchCustomerPartyType = (form: CustomerForm, partyType: PartyType): CustomerForm => ({
   ...form,
