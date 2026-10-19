@@ -110,7 +110,7 @@ void test("stores party addresses and buyer VAT status in strict columns, with d
     await sql.exec(`
       INSERT INTO issuers(organization_id,legal_name,tax_identifier,country_code,city,street,county,sector,postal_code,
         default_currency,default_payment_term_days,legal_form,trade_registry_number,iban,bank_name,social_capital)
-        VALUES('org-1','Furnizor SRL','12345674','RO','București','Strada 1','RO-B',1,NULL,'RON',15,'srl','J40/1/2020','','','200.00');
+        VALUES('org-1','Furnizor SRL','12345674','RO','București','Strada 1','RO-B',1,NULL,'RON',15,'srl','J40/1/2020','','',20000);
       INSERT INTO document_series VALUES('org-1','invoice','INV');
       INSERT INTO customers(id,organization_id,legal_name,tax_identifier,country_code,city,street,county,sector,postal_code,party_type,vat_registered)
         VALUES('customer-1','org-1','Client SRL','87654329','RO','Iași','Strada 2','RO-IS',NULL,NULL,'company',1);
@@ -156,7 +156,7 @@ void test("keeps document notes optional and bounded, and guarded by the immutab
     await sql.exec(`
       INSERT INTO issuers(organization_id,legal_name,tax_identifier,country_code,city,street,county,sector,postal_code,default_currency,default_payment_term_days,
         legal_form,trade_registry_number,iban,bank_name,social_capital)
-        VALUES('org-1','Furnizor SRL','12345674','RO','Iași','Strada 1','RO-IS',NULL,NULL,'RON',15,'srl','J22/123/2020','','','1000.00');
+        VALUES('org-1','Furnizor SRL','12345674','RO','Iași','Strada 1','RO-IS',NULL,NULL,'RON',15,'srl','J22/123/2020','','',100000);
       INSERT INTO document_series VALUES('org-1','invoice','INV'),('org-1','proforma','PRO');
       INSERT INTO invoice_drafts(id,organization_id,customer_id,customer_party_type,customer_legal_name,customer_tax_identifier,
         customer_country_code,customer_city,customer_street,customer_county,customer_sector,customer_postal_code,customer_vat_registered,
@@ -176,19 +176,19 @@ void test("keeps document notes optional and bounded, and guarded by the immutab
 })
 
 // Rules the storage enforces on its own, whatever the application sends: a
-// negative payment term, a price with more than two decimals, and an issued
-// invoice whose only mutable fact is its e-Factura status.
-void test("refuses negative payment terms and over-precise preset prices, and lets an issued invoice change only its e-Factura status", async () => {
+// negative payment term, a preset price that is negative or not whole bani, and
+// an issued invoice whose only mutable fact is its e-Factura status.
+void test("refuses negative payment terms and invalid preset prices, and lets an issued invoice change only its e-Factura status", async () => {
   await withMigrated("baseline_rules", async ({ sql }) => {
     await sql.exec(`
       INSERT INTO issuers(organization_id,legal_name,tax_identifier,country_code,city,street,county,sector,postal_code,default_currency,default_payment_term_days,
         legal_form,trade_registry_number,iban,bank_name,social_capital)
-        VALUES('org-1','Furnizor SRL','12345674','RO','Iași','Strada 1','RO-IS',NULL,NULL,'RON',15,'srl','J22/123/2020','','','1000.00');
+        VALUES('org-1','Furnizor SRL','12345674','RO','Iași','Strada 1','RO-IS',NULL,NULL,'RON',15,'srl','J22/123/2020','','',100000);
       INSERT INTO document_series VALUES('org-1','invoice','INV');
       INSERT INTO customers(id,organization_id,legal_name,tax_identifier,country_code,city,street,county,sector,postal_code,party_type,vat_registered,default_payment_term_days)
         VALUES('customer-1','org-1','Client SRL','87654329','RO','Iași','Strada 2','RO-IS',NULL,NULL,'company',1,30);
       INSERT INTO product_presets(id,organization_id,description,unit_price,unit_code,unit_name)
-        VALUES('preset-1','org-1','Servicii','100.00','C62','unitate');
+        VALUES('preset-1','org-1','Servicii',10000,'C62','unitate');
       INSERT INTO invoice_drafts(id,organization_id,customer_id,customer_party_type,customer_legal_name,customer_tax_identifier,
         customer_country_code,customer_city,customer_street,customer_county,customer_sector,customer_postal_code,customer_vat_registered,
         series,issue_date,due_date,currency,status)
@@ -202,23 +202,24 @@ void test("refuses negative payment terms and over-precise preset prices, and le
         VALUES('invoice-1','draft-1','org-1',2026,'invoice','INV',1,'2026-09-01',NULL,'2026-09-01T10:00:00.000Z','RON',
         'Furnizor SRL','12345674','RO','Iași','Strada 1','RO-IS',NULL,NULL,
         'Client SRL','87654329','RO','Iași','Strada 2','RO-IS',NULL,NULL,
-        '100.00','21.00','121.00','company',1,'srl','J22/123/2020','','','1000.00','operator',1);
+        10000,2100,12100,'company',1,'srl','J22/123/2020','','',100000,'operator',1);
     `)
     const negativeTerm = await sql.rejects("UPDATE customers SET default_payment_term_days=-1 WHERE id='customer-1'")
     assert.equal(negativeTerm.code, "23514")
     assert.equal(negativeTerm.constraint, "customers_payment_term_non_negative")
     assert.equal(await sql.scalar("SELECT default_payment_term_days FROM customers WHERE id='customer-1'"), 30)
-    for (const price of ["1.001", "1.0", "1", "-1.00", "1.00.00"]) {
-      const failure = await sql.rejects(`INSERT INTO product_presets(id,organization_id,description,unit_price,unit_code,unit_name)
-        VALUES('bad','org-1','Bad',$1,'C62','unitate')`, [price])
-      assert.equal(failure.code, "23514", price)
-      assert.equal(failure.constraint, "product_presets_unit_price_shape", price)
-    }
+    const badPrice = (price: string) => sql.rejects(`INSERT INTO product_presets(id,organization_id,description,unit_price,unit_code,unit_name)
+      VALUES('bad','org-1','Bad',$1,'C62','unitate')`, [price])
+    const negative = await badPrice("-1")
+    assert.equal(negative.code, "23514")
+    assert.equal(negative.constraint, "product_presets_unit_price_nonnegative")
+    // The column holds whole bani: a decimal string is a type error, not a value.
+    for (const price of ["1.00", "1.5", "1e2", ""]) assert.equal((await badPrice(price)).code, "22P02", price)
     assert.equal(Number(await sql.scalar("SELECT count(*) FROM product_presets")), 1)
 
     assert.equal(await sql.rowCount("UPDATE issued_invoices SET e_factura_status='pending' WHERE id='invoice-1'"), 1)
     assert.equal(await sql.scalar("SELECT e_factura_status FROM issued_invoices WHERE id='invoice-1'"), "pending")
-    for (const change of ["issuer_county='RO-CJ'", "customer_legal_name='Alt client'", "total_including_tax='1.00'", "notes='Adaugata'"]) {
+    for (const change of ["issuer_county='RO-CJ'", "customer_legal_name='Alt client'", "total_including_tax=100", "notes='Adaugata'"]) {
       const failure = await sql.rejects(`UPDATE issued_invoices SET ${change} WHERE id='invoice-1'`)
       assert.equal(failure.code, "23514", change)
       assert.match(failure.message, /issued invoices are immutable except e_factura_status/u, change)
@@ -235,6 +236,6 @@ void test("refuses negative payment terms and over-precise preset prices, and le
     }
     assert.deepEqual(await sql.one(`SELECT issuer_county,customer_legal_name,total_including_tax,notes,e_factura_status
       FROM issued_invoices WHERE id='invoice-1'`),
-      { issuer_county: "RO-IS", customer_legal_name: "Client SRL", total_including_tax: "121.00", notes: null, e_factura_status: "pending" })
+      { issuer_county: "RO-IS", customer_legal_name: "Client SRL", total_including_tax: "12100", notes: null, e_factura_status: "pending" })
   })
 })

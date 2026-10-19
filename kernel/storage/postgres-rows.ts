@@ -9,12 +9,14 @@ import type { QueryValue } from "./postgres-sql.ts"
  * What the driver hands back, and why each decoder looks the way it does
  * (driver probe g10, g11): `text` columns arrive as strings, `integer` (int4)
  * as numbers, and `bigint` (int8) as a STRING — `pg` refuses to lose precision
- * silently. No global type parser is installed, so the two session epochs are
- * decoded explicitly by `epoch` below and every other column keeps the driver's
- * own representation.
+ * silently. No global type parser is installed, so the int8 columns are decoded
+ * explicitly — the two session epochs by `epoch` below, money by
+ * `postgres-money.ts` — and every other column keeps the driver's own
+ * representation.
  *
- * Money and dates are TEXT on both engines, so they decode with `text`: exactly
- * the characters the writer bound, never a float.
+ * Dates, quantities and VAT rates are TEXT, so they decode with `text`: exactly
+ * the characters the writer bound. Money is BIGINT in bani and never becomes a
+ * float on the way through.
  */
 
 export type Row = Readonly<Record<string, unknown>>

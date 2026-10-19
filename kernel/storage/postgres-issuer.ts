@@ -1,6 +1,7 @@
 import type { VatConfiguration } from "../../cubes/invoicing/index.ts"
 import type { IssuerTransaction } from "../../cubes/invoicing/issuer/index.ts"
 import { read, write } from "./postgres-errors.ts"
+import { optionalMoneyValue } from "./postgres-money.ts"
 import { addressColumns, addressValues, firstRow, integer, optionalText, text } from "./postgres-rows.ts"
 import { assignExcluded, insertStatement, pairs } from "./postgres-sql.ts"
 import { vatTreatment, vatTreatmentFrom } from "./postgres-document-lines.ts"
@@ -18,7 +19,7 @@ export const issuerTransactionAdapter = (client: TransactionClient): IssuerTrans
   saveIssuer: (issuer) => write("save issuer", async () => {
     const statement = insertStatement("issuers", pairs(issuerTableColumns, [
       issuer.organizationId, issuer.name, issuer.fiscalIdentifier, ...addressValues(issuer.address),
-      issuer.legalForm, issuer.tradeRegistryNumber, issuer.iban, issuer.bankName, issuer.socialCapital,
+      issuer.legalForm, issuer.tradeRegistryNumber, issuer.iban, issuer.bankName, optionalMoneyValue(issuer.socialCapital),
       issuer.defaultCurrency, issuer.defaultPaymentTermDays,
       issuer.branding === null ? null : JSON.stringify(issuer.branding),
     ]))

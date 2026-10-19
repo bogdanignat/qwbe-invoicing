@@ -4,7 +4,10 @@ import { createCatalogOperations, type CatalogOperations, type CatalogTransactio
 import { PermissionDenied, type InvoicingFailure } from "../contracts/failures.ts"
 import type { Clock, IdGenerator, RequestContext, RequestContextProvider, TransactionalStore } from "../contracts/host.ts"
 import { invoicingPermissions } from "../contracts/permissions.ts"
-import { createCorrectionOperations, createInvoiceRegisterOperations, type CorrectionOperations, type CorrectionsTransaction, type InvoiceRegisterOperations } from "../corrections/index.ts"
+import {
+  createCorrectionOperations, createInvoiceRegisterOperations, createRevenueReportOperations,
+  type CorrectionOperations, type CorrectionsTransaction, type InvoiceRegisterOperations, type RevenueReportOperations,
+} from "../corrections/index.ts"
 import { createCustomerOperations, type CustomerOperations, type CustomersTransaction } from "../customers/index.ts"
 import { createDraftOperations, type DraftOperations } from "../drafts/index.ts"
 import { createIssuanceOperations, type IssuanceOperations, type ProformaTransaction } from "../issuance/index.ts"
@@ -22,7 +25,7 @@ export interface InvoicingDependencies {
   readonly cubeIdentity: string
 }
 
-export interface InvoicingService extends IssuerOperations, CustomerOperations, CatalogOperations, DraftOperations, IssuanceOperations, CorrectionOperations, InvoiceRegisterOperations {}
+export interface InvoicingService extends IssuerOperations, CustomerOperations, CatalogOperations, DraftOperations, IssuanceOperations, CorrectionOperations, InvoiceRegisterOperations, RevenueReportOperations {}
 
 // Composition root: every component receives the same dependencies, permission names and
 // authorization check, and the service is the union of their operations.
@@ -42,6 +45,7 @@ export const createInvoicingService = (dependencies: InvoicingDependencies): Inv
     ...createIssuanceOperations(dependencies, permissions, authorized),
     ...createCorrectionOperations(dependencies, permissions, authorized),
     ...createInvoiceRegisterOperations(dependencies, permissions, authorized),
+    ...createRevenueReportOperations(dependencies, permissions, authorized),
   }
 }
 

@@ -167,6 +167,17 @@ void test("a freshly migrated database matches the migration contract", async ()
   })
 })
 
+// The money type is part of the contract: a database still holding the earlier
+// TEXT money is drift to recreate, never something the BIGINT decoder reads.
+void test("a money column left as TEXT is drift", async () => {
+  await withMigrated("drift_money", async ({ sql, pool }) => {
+    await tamper(sql, ["ALTER TABLE correction_documents ALTER COLUMN total_including_tax TYPE TEXT"])
+    resetFingerprintCache()
+    assert.deepEqual(driftedTables(await schemaDrift(pool)), ["correction_documents"])
+    assert.equal(await databaseReady(pool), false)
+  })
+})
+
 void test("a database part-way through the contract is pending, not drifted", async () => {
   await withEmpty("drift_partial", async (fixture) => {
     assert.deepEqual(await seedThrough(fixture, "invoicing/invoicing-001-baseline"), [
@@ -217,7 +228,7 @@ void test("a baseline the ledger does not record is refused without changing sta
       INSERT INTO issuers(organization_id,legal_name,tax_identifier,country_code,city,street,county,default_currency,
         default_payment_term_days,legal_form,trade_registry_number,iban,bank_name,social_capital)
         VALUES('org-legacy','Exemplu SRL','12345674','RO','Botoșani','Strada Mare 1','RO-BT','RON',15,
-          'srl','J07/1/2020','RO49AAAA1B31007593840000','Banca Română','1000.00');
+          'srl','J07/1/2020','RO49AAAA1B31007593840000','Banca Română',100000);
       INSERT INTO issuer_tax_configurations(organization_id,code,category,rate,effective_from)
         VALUES('org-legacy','RO_STANDARD','S','21.00','2026-01-01');
     `)

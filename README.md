@@ -57,8 +57,9 @@ a rewrite.
   `iban`, `bankName`; empty strings allow an incomplete profile to be saved.
   Issuing either invoices or proformas requires a trade register number for both
   forms (a product rule for PFA), and social capital for SRL. IBAN and bank are optional.
-  Capital is exact nonnegative RON text: at most 18 integer digits and two decimals,
-  normalized to two decimal places without floating-point conversion. This is not
+  Capital is exact nonnegative RON text: at most 16 integer digits and two decimals,
+  so it fits the BIGINT column in bani, normalized to two decimal places without
+  floating-point conversion. This is not
   a check of statutory minimum capital. RegCom validation accepts legacy and current
   ONRC shapes, not registry existence; IBAN validation checks structure, mod-97 and
   the Romanian 24-character length, not account existence or a complete foreign-country registry.
@@ -434,6 +435,7 @@ handler on shutdown.
 | Issue | `POST /api/invoices`, `POST /api/drafts/:id/issue` |
 | Invoices | `GET /api/invoices`, `GET /api/invoices/:id`, `POST`, `GET /api/invoices/:id/pdf` |
 | Invoice register | `GET /api/invoice-register` — paged invoices and storno documents |
+| Reports | `GET /api/reports/revenue?from&to`; `GET /api/reports/collections?from&to&status` (payments plugin) |
 | Payments | `GET`, `POST /api/invoices/:id/payments`, `POST /api/invoices/:id/payments/:paymentId/reversal` |
 | Corrections | `GET`, `POST /api/invoices/:id/corrections`, `GET /api/corrections/:id` |
 | Proformas | `POST /api/proformas`, `POST /api/drafts/:id/proformas`, `GET /api/proformas`, `GET /api/proformas/:id`, `POST /api/proformas/:id/invoice`, `POST`, `GET /api/proformas/:id/pdf` |
@@ -503,6 +505,13 @@ use a fresh `DATA_DIR` — otherwise stop the application and drop and recreate 
 database explicitly, keeping the secret files. Then run `migrate --json`,
 `migrate --apply --json`, a repeated dry-run and `doctor --json`. There is no backfill
 and no legacy-snapshot fallback.
+
+Money columns are `BIGINT` in bani (minor units): `123.45` RON is stored as `12345`,
+a storno total as a negative integer, an absent social capital as `NULL`. The API, the
+domain, the PDF and e-Factura keep two-decimal strings; the one conversion is
+`kernel/storage/postgres-money.ts`, without floating point. Quantities (four decimals)
+and VAT rates stay `TEXT`. The historical probes (`probes/pg-schema-*.mjs`) and the
+SQLite captures in `kernel/parity/` describe the earlier TEXT money schema.
 
 Registries (`GET /api/customers`, `/api/product-presets`, `/api/drafts`, `/api/invoice-register`, `/api/invoices`, `/api/proformas`)
 are paged: the response is `{ "items": [...], "nextCursor": "..." | null }`, `?limit=` takes 1 to 200

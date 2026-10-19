@@ -1,5 +1,6 @@
 import { useId } from "react"
 
+import { ChoiceGroup } from "./ui/ChoiceGroup.tsx"
 import type { RegisterFilter, RegisterKindFilter } from "../lib/invoice-register-projection.ts"
 
 const kinds: ReadonlyArray<{ readonly value: RegisterKindFilter; readonly label: string }> = [
@@ -14,27 +15,10 @@ interface RegisterFiltersProps {
   readonly onSearchChange: (search: string) => void
 }
 
-/**
- * The kind choice is a radio group, not a select: three mutually exclusive
- * options, each reachable with one key press and announced as a group.
- */
 export const RegisterFilters = ({ filter, onKindChange, onSearchChange }: RegisterFiltersProps) => {
   const searchId = useId()
-  const groupName = useId()
   return <div className="filters">
-    <fieldset className="filter-kinds">
-      <legend>Tip document</legend>
-      {kinds.map((kind) => <label key={kind.value} className="filter-choice">
-        <input
-          type="radio"
-          name={groupName}
-          value={kind.value}
-          checked={filter.kind === kind.value}
-          onChange={() => { onKindChange(kind.value) }}
-        />
-        {kind.label}
-      </label>)}
-    </fieldset>
+    <ChoiceGroup legend="Tip document" choices={kinds} value={filter.kind} onChange={onKindChange} />
     <div className="filter-search">
       <label htmlFor={searchId}>Caută după număr sau client</label>
       <input

@@ -9,7 +9,7 @@ import { CIUS_TEXT_LIMITS } from "../../lib/cius-text-limits.ts"
 import { Select } from "../ui/Select.tsx"
 import { ISSUER_FORM, type RegistryFieldAria } from "../../lib/registry-fields.ts"
 import { FISCAL_IDENTIFIER_MAX_LENGTH, type IssuerField } from "../../lib/issuer-payload.ts"
-import { BANK_NAME_MAX_CODE_POINTS, TRADE_REGISTRY_MAX_LENGTH } from "../../lib/issuer-legal.ts"
+import { BANK_NAME_MAX_CODE_POINTS, SOCIAL_CAPITAL_MAX_LENGTH, TRADE_REGISTRY_MAX_LENGTH } from "../../lib/issuer-legal.ts"
 import { romanianCuiPattern } from "../../lib/vat-defaults.ts"
 import { legalFormValue } from "../../lib/issuer-form.ts"
 import type { IssuerSettingsForm } from "../../lib/issuer-form.ts"
@@ -67,7 +67,7 @@ export const IssuerIdentityFields = (props: IssuerIdentityFieldsProps) => {
     </Field>
     <Field label="Capital social (RON)" optional>
       <Input disabled={disabled} value={form.socialCapital} {...aria("socialCapital")} inputMode="decimal"
-        maxLength={21} placeholder="200.00" title="Necesar la emitere pentru SRL"
+        maxLength={SOCIAL_CAPITAL_MAX_LENGTH} placeholder="200.00" title="Necesar la emitere pentru SRL"
         onChange={(event) => { props.onChange({ socialCapital: event.currentTarget.value }) }} />
       <FieldIssue issue={issue} field="socialCapital" form={ISSUER_FORM} />
     </Field>

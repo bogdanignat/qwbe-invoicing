@@ -1,4 +1,5 @@
 import { validateVatTreatment, type DraftLine, type VatBreakdown } from "../../cubes/invoicing/index.ts"
+import { money, moneyValue } from "./postgres-money.ts"
 import { nullableText, text, type Row } from "./postgres-rows.ts"
 import { insertStatement, pairs, type QueryValue } from "./postgres-sql.ts"
 import type { TransactionClient } from "./postgres-transaction.ts"
@@ -33,10 +34,10 @@ export const lineFrom = (value: Row): DraftLine => {
   const treatment = vatTreatmentFrom(value, "tax_code", "tax_rate", "tax_category")
   return {
     id: text(value, "id"), description: text(value, "description"), quantity: text(value, "quantity"),
-    unitPrice: text(value, "unit_price"), unitOfMeasure: { code: text(value, "unit_code"), name: text(value, "unit_name") },
+    unitPrice: money(value, "unit_price"), unitOfMeasure: { code: text(value, "unit_code"), name: text(value, "unit_name") },
     vatRateCode: treatment.code, vatRate: treatment.rate, vatCategoryCode: treatment.vatCategoryCode,
-    vatExemptionReason: treatment.vatExemptionReason, totalExcludingVat: text(value, "total_excluding_tax"),
-    vatAmount: text(value, "tax_amount"), totalIncludingVat: text(value, "total_including_tax"),
+    vatExemptionReason: treatment.vatExemptionReason, totalExcludingVat: money(value, "total_excluding_tax"),
+    vatAmount: money(value, "tax_amount"), totalIncludingVat: money(value, "total_including_tax"),
   }
 }
 
@@ -54,9 +55,9 @@ export const lineColumns = [
 ] as const
 
 export const lineValues = (position: number, line: DraftLine): ReadonlyArray<QueryValue> => [
-  position, line.description, line.quantity, line.unitPrice, line.unitOfMeasure.code, line.unitOfMeasure.name,
+  position, line.description, line.quantity, moneyValue(line.unitPrice), line.unitOfMeasure.code, line.unitOfMeasure.name,
   line.vatRateCode, line.vatCategoryCode, line.vatRate, line.vatExemptionReason,
-  line.totalExcludingVat, line.vatAmount, line.totalIncludingVat,
+  moneyValue(line.totalExcludingVat), moneyValue(line.vatAmount), moneyValue(line.totalIncludingVat),
 ]
 
 export const saveLines = async (
@@ -98,7 +99,8 @@ export const breakdownColumns = [
 ] as const
 
 export const breakdownValues = (position: number, tax: VatBreakdown): ReadonlyArray<QueryValue> => [
-  position, tax.code, tax.vatCategoryCode, tax.rate, tax.vatExemptionReason, tax.vatBaseAmount, tax.vatAmount,
+  position, tax.code, tax.vatCategoryCode, tax.rate, tax.vatExemptionReason,
+  moneyValue(tax.vatBaseAmount), moneyValue(tax.vatAmount),
 ]
 
 export const breakdownFrom = (value: Row): VatBreakdown => {
@@ -106,7 +108,7 @@ export const breakdownFrom = (value: Row): VatBreakdown => {
   return {
     code: treatment.code, rate: treatment.rate, vatCategoryCode: treatment.vatCategoryCode,
     vatExemptionReason: treatment.vatExemptionReason,
-    vatBaseAmount: text(value, "taxable_amount"), vatAmount: text(value, "tax_amount"),
+    vatBaseAmount: money(value, "taxable_amount"), vatAmount: money(value, "tax_amount"),
   }
 }
 

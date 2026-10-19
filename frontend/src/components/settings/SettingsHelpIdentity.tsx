@@ -10,7 +10,7 @@ export const SettingsHelpIdentity = () => <>
       <div><dt>CUI / identificator fiscal</dt><dd>Poate fi introdus cu sau fără prefixul „RO”. Prefixul introdus este eliminat, nu modifică regimul TVA, iar cifra de control este verificată la salvare.</dd></div>
       <div><dt>Formă juridică</dt><dd>Alege explicit SRL sau PFA. Aplicația nu presupune automat o formă juridică pentru un profil nou.</dd></div>
       <div><dt>Nr. Registrul Comerțului</dt><dd>Acceptă formatul clasic, de exemplu „J40/1234/2020”, sau identificatorul nou format din J/F și 13 cifre. Poți salva temporar câmpul gol, dar emiterea cere această informație.</dd></div>
-      <div><dt>Capital social</dt><dd>Sumă în RON, cu maximum 18 cifre întregi și două zecimale. Este necesară la emitere pentru SRL, nu și pentru PFA.</dd></div>
+      <div><dt>Capital social</dt><dd>Sumă în RON, cu maximum 16 cifre întregi și două zecimale. Este necesară la emitere pentru SRL, nu și pentru PFA.</dd></div>
       <div><dt>IBAN și bancă</dt><dd>Sunt opționale. Spațiile din IBAN sunt eliminate la salvare, literele devin majuscule și cifra de control este verificată.</dd></div>
       <div><dt>Județ și cod poștal</dt><dd>Județul este obligatoriu, codul poștal este opțional; ambele completează adresa fiscală afișată în documentele emise.</dd></div>
     </dl>

@@ -33,10 +33,10 @@ const setup = async () => {
 void test("issuer configuration normalizes all company fields exactly and accepts incomplete profiles", async () => {
   const { service } = await setup()
   const saved = await Effect.runPromise(service.configureIssuer({ ...input, tradeRegistryNumber: " j40/123/2020 ",
-    socialCapital: "009007199254740993.1", iban: " ro49 aaaa 1b31 0075 9384 0000 ", bankName: " Bancă Știință " }))
+    socialCapital: "0900719925474099.1", iban: " ro49 aaaa 1b31 0075 9384 0000 ", bankName: " Bancă Știință " }))
   assert.equal(saved.legalForm, "srl")
   assert.equal(saved.tradeRegistryNumber, "J40/123/2020")
-  assert.equal(saved.socialCapital, "9007199254740993.10")
+  assert.equal(saved.socialCapital, "900719925474099.10")
   assert.equal(saved.iban, "RO49AAAA1B31007593840000")
   assert.equal(saved.bankName, "Bancă Știință")
   assert.deepEqual(await Effect.runPromise(service.getIssuer()), saved)
@@ -50,7 +50,7 @@ void test("invalid issuer details fail validation without overwriting the profil
   const before = structuredClone(state.issuers)
   for (const patch of [
     { legalForm: "sa" }, { legalForm: undefined }, { tradeRegistryNumber: "invalid" }, { tradeRegistryNumber: "J40/1/2020\u0000" },
-    { socialCapital: "1.001" }, { socialCapital: "-1" }, { socialCapital: "1e3" }, { socialCapital: "9".repeat(19) },
+    { socialCapital: "1.001" }, { socialCapital: "-1" }, { socialCapital: "1e3" }, { socialCapital: "9".repeat(17) },
     { iban: "RO48AAAA1B31007593840000" }, { bankName: "Bank\u200bName" }, { bankName: "x".repeat(121) },
   ]) {
     const result = await Effect.runPromise(Effect.either(service.configureIssuer({ ...input, ...patch } as ConfigureIssuerInput)))

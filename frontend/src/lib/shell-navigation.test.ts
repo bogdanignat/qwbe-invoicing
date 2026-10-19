@@ -8,10 +8,11 @@ import { activeShellSection, SHELL_LINKS, shellNavigation } from "./shell-naviga
  * what it calls current are checked as data — no markup involved.
  */
 
-void test("the sidebar offers the five canonical sections, each exactly once", () => {
+void test("the sidebar offers home first, then the five canonical sections, each exactly once", () => {
   assert.deepEqual(SHELL_LINKS.map((link) => link.href), [
-    "/invoices", "/proformas", "/customers", "/products", "/settings",
+    "/", "/invoices", "/proformas", "/customers", "/products", "/settings",
   ])
+  assert.equal(SHELL_LINKS[0]?.label, "Acasă")
   assert.equal(new Set(SHELL_LINKS.map((link) => link.section)).size, SHELL_LINKS.length)
   assert.equal(SHELL_LINKS.every((link) => link.label !== ""), true)
 })
@@ -19,7 +20,14 @@ void test("the sidebar offers the five canonical sections, each exactly once", (
 void test("a document under a section keeps that section current", () => {
   assert.equal(activeShellSection("/invoices/inv-1"), "invoices")
   assert.equal(activeShellSection("/proformas/new"), "proformas")
-  assert.equal(activeShellSection("/"), "")
+  assert.equal(activeShellSection("/"), "home")
+  assert.equal(activeShellSection(""), "home")
+})
+
+void test("the dashboard at / marks Acasă current, and nothing else", () => {
+  assert.deepEqual(shellNavigation("/", true).filter((item) => item.current).map((item) => item.label), ["Acasă"])
+  // A section's own paths never mark home as well.
+  assert.deepEqual(shellNavigation("/invoices/inv-1", true).filter((item) => item.current).map((item) => item.href), ["/invoices"])
 })
 
 void test("exactly one link is current, and it is the one the path is in", () => {

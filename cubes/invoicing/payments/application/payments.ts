@@ -4,6 +4,7 @@ import { ValidationFailure, type PaymentsFailure } from "../contracts/failures.t
 import { legacyPaymentsPermissions, paymentsPermissions } from "../contracts/permissions.ts"
 import { formatMinor, moneyMinor, validateRecordPaymentInput, type Idempotent, type Payment, type RecordPaymentInput } from "../domain/payments.ts"
 import { findReplay, idempotencyRecord, validateAttempt } from "./idempotency.ts"
+import { createCollectionsReport } from "./collections.ts"
 import { createReversePayment } from "./reversals.ts"
 import { createAuthorize, missingInvoice, recordAuditEvent, replayed, summarize, type InvoicePaymentSummary, type PaymentsDependencies, type RecordPaymentResult } from "./support.ts"
 
@@ -46,7 +47,10 @@ export const createPaymentsService = (dependencies: PaymentsDependencies) => {
       return { invoiceId, ...summarize(invoice, payments, now), payments }
     }))
   })
-  return { recordPayment, reversePayment: createReversePayment(dependencies, authorized), listPayments }
+  return {
+    recordPayment, reversePayment: createReversePayment(dependencies, authorized), listPayments,
+    getCollectionsReport: createCollectionsReport(dependencies, authorized),
+  }
 }
 export type PaymentsService = ReturnType<typeof createPaymentsService>
 export type { InvoicePaymentSummary, PaymentsDependencies, RecordPaymentResult } from "./support.ts"

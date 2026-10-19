@@ -3,6 +3,7 @@ import type {
 } from "../../cubes/invoicing/corrections/index.ts"
 import type { EFacturaStatus, PageQuery } from "../../cubes/invoicing/index.ts"
 import { read } from "./postgres-errors.ts"
+import { money } from "./postgres-money.ts"
 import { integer, nullableText, text, type Row } from "./postgres-rows.ts"
 import { fragments, rowsWanted, type SqlFragment } from "./postgres-sql.ts"
 import { sourceFilter } from "./postgres-document-query.ts"
@@ -20,7 +21,7 @@ const statusFrom = (value: Row): EFacturaStatus => {
 const registerRowFrom = (value: Row): InvoiceRegisterRow => {
   const common = { id: text(value, "id"), series: text(value, "series"), number: integer(value, "number"),
     issueDate: text(value, "issue_date"), customer: { name: text(value, "customer_name") },
-    currency: text(value, "currency"), totalIncludingVat: text(value, "total_including_tax") }
+    currency: text(value, "currency"), totalIncludingVat: money(value, "total_including_tax") }
   const kind = text(value, "kind")
   if (kind === "invoice") {
     return { kind, ...common, dueDate: nullableText(value, "due_date"), eFacturaStatus: statusFrom(value) }

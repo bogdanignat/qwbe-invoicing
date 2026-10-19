@@ -21,6 +21,11 @@ const transaction: PaymentsTransaction = {
   appendAuditEvent: ({ action, actorId, organizationId, targetId, reason }) => Effect.sync(() => {
     auditEvents.push({ action, actorId, organizationId, targetId, ...(reason === undefined ? {} : { reason }) })
   }),
+  aggregateCollections: (organizationId) => Effect.succeed({ months: [], collected: organizationId === "org-1" ? "12.00" : "0.00" }),
+  listCollectionInvoices: (organizationId) => Effect.succeed(organizationId === invoice.organizationId ? [{
+    id: invoice.id, series: "QWBE", number: 1, issueDate: "2026-09-01", dueDate: invoice.dueDate,
+    customer: { name: "Client SRL" }, totalIncludingVat: invoice.totalIncludingVat, paidAmount: "12.00",
+  }] : []),
 }
 let keyCounter = 0
 const idempotent = <Input>(request: Input, key = `key-${String(++keyCounter)}`) => ({ request, idempotency: { key, fingerprint: `sha256:${"0".repeat(64)}` } })
@@ -93,6 +98,7 @@ void test("rolls payment and idempotency back when the audit append fails", asyn
         findIdempotencyRecord: (organizationId, key) => Effect.succeed(workingRecords.get(`${organizationId}:${key}`)),
         saveIdempotencyRecord: (record) => Effect.sync(() => { workingRecords.set(`${record.organizationId}:${record.key}`, record) }),
         appendAuditEvent: () => Effect.fail(new DomainConflict({ code: "forced_audit_failure", message: "forced" })),
+        aggregateCollections: () => Effect.die("not used"), listCollectionInvoices: () => Effect.die("not used"),
       }
       return Effect.tap(use(tx), () => Effect.sync(() => {
         for (const [id, payment] of workingPayments) persistedPayments.set(id, payment)
@@ -120,4 +126,17 @@ void test("accepts legacy invoicing payment permissions during host upgrades", a
   })))
   assert.equal(recorded.payment.amount, "10.00")
   assert.equal((await Effect.runPromise(service("org-1", ["invoicing:read"]).listPayments(invoice.id))).payments.length, 1)
+})
+void test("collections report validates the period, authorizes payments or legacy read, and stays in its organization", async () => {
+  const period = { from: "2026-09-01", to: "2026-09-30", status: "all" } as const
+  const report = await Effect.runPromise(service("org-1", ["payments:read"]).getCollectionsReport(period))
+  assert.deepEqual([report.collected, report.months, report.invoices.count], ["12.00", [{ month: "2026-09", collected: "0.00" }], 1])
+  // The clock says 2026-09-10 and the invoice is due on the 15th: partially paid, not overdue yet.
+  assert.deepEqual(report.invoices.items.map(({ status, paidAmount, remainingAmount }) => ({ status, paidAmount, remainingAmount })),
+    [{ status: "partially_paid", paidAmount: "12.00", remainingAmount: "88.00" }])
+  assert.equal((await Effect.runPromise(service("org-1", ["invoicing:read"]).getCollectionsReport(period))).invoices.count, 1)
+  assert.equal((await Effect.runPromise(service("org-2", ["payments:read"]).getCollectionsReport(period))).invoices.count, 0)
+  assert.equal(await Effect.runPromise(Effect.flip(service("org-1", ["payments:payment.record"]).getCollectionsReport(period))) instanceof PermissionDenied, true)
+  const invalid = await Effect.runPromise(Effect.flip(service("org-1", []).getCollectionsReport({ ...period, from: "2026-10-01" })))
+  assert.deepEqual(invalid._tag === "ValidationFailure" ? invalid.issues : invalid, ["from must not be after to"])
 })

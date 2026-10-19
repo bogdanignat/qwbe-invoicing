@@ -2,7 +2,8 @@ import { Effect } from "effect"
 
 import { PermissionDenied, ResourceNotFound, type PaymentsFailure } from "../contracts/failures.ts"
 import type { Clock, IdGenerator, RequestContext, RequestContextProvider, TransactionalStore } from "../contracts/host.ts"
-import { derivePaymentStatus, formatMinor, moneyMinor, sumPaymentsMinor, type Payment, type PaymentStatus } from "../domain/payments.ts"
+import { calendarDate, moneyMinor, type Payment } from "../domain/payments.ts"
+import { paymentAmounts, sumPaymentsMinor, type PaymentAmounts } from "../domain/settlement.ts"
 import type { AuditEvent, InvoiceSnapshot, PaymentsTransaction } from "./ports.ts"
 
 export interface PaymentsDependencies {
@@ -12,7 +13,6 @@ export interface PaymentsDependencies {
   readonly store: TransactionalStore<PaymentsTransaction>
   readonly cubeIdentity: string
 }
-export type PaymentAmounts = { readonly status: PaymentStatus; readonly paidAmount: string; readonly remainingAmount: string }
 export type RecordPaymentResult = PaymentAmounts & { readonly payment: Payment }
 export type InvoicePaymentSummary = PaymentAmounts & { readonly invoiceId: string; readonly payments: ReadonlyArray<Payment> }
 
@@ -24,13 +24,9 @@ export const createAuthorize = (dependencies: PaymentsDependencies): Authorize =
       ? Effect.succeed(context)
       : Effect.fail(new PermissionDenied({ permission })))
 
-export const summarize = (invoice: InvoiceSnapshot, payments: ReadonlyArray<Payment>, now: Date): PaymentAmounts => {
-  const paid = sumPaymentsMinor(payments); const remaining = moneyMinor(invoice.totalIncludingVat) - paid
-  return {
-    status: derivePaymentStatus({ totalIncludingVat: invoice.totalIncludingVat, dueDate: invoice.dueDate, payments, now }),
-    paidAmount: formatMinor(paid < 0n ? 0n : paid), remainingAmount: formatMinor(remaining < 0n ? 0n : remaining),
-  }
-}
+export const summarize = (invoice: InvoiceSnapshot, payments: ReadonlyArray<Payment>, now: Date): PaymentAmounts => paymentAmounts({
+  total: moneyMinor(invoice.totalIncludingVat), paid: sumPaymentsMinor(payments), dueDate: invoice.dueDate, today: calendarDate(now),
+})
 export const recordAuditEvent = (
   transaction: PaymentsTransaction, context: RequestContext, dependencies: PaymentsDependencies, occurredAt: Date,
   event: Pick<AuditEvent, "action" | "targetKind" | "targetId" | "reason">,

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react"
 
 import { useAuth } from "./auth-context.ts"
 import { useInvoicingClients } from "./use-invoicing-clients.ts"
-import { invoiceRegisterQueryKey } from "./use-invoice-register.ts"
+import { invalidateIssuedDocuments } from "./report-queries.ts"
 import { draftsQueryKey, draftQueryKey } from "./use-drafts.ts"
 import { createOperationLifetime } from "../lib/authoring-operation-lifetime.ts"
 import { lifetimeMountEffect, lifetimeRequestsEffect } from "../lib/authoring-lifetime-wiring.ts"
@@ -84,14 +84,14 @@ export const useInvoiceIssuance = (input: InvoiceIssuanceInput): InvoiceIssuance
         if (draftId !== undefined) {
           queryClient.removeQueries({ queryKey: draftQueryKey(draftId), exact: true })
         }
-        void queryClient.invalidateQueries({ queryKey: invoiceRegisterQueryKey })
+        invalidateIssuedDocuments(queryClient)
         void queryClient.invalidateQueries({ queryKey: draftsQueryKey })
         void queryClient.invalidateQueries({ queryKey: ["invoice", invoice.id] })
       },
       onOutcomeUnknown: (draftId) => {
         // The invoice may already exist: the registries are refreshed so the
         // user can check the outcome instead of trusting a lost answer.
-        void queryClient.invalidateQueries({ queryKey: invoiceRegisterQueryKey })
+        invalidateIssuedDocuments(queryClient)
         void queryClient.invalidateQueries({ queryKey: draftsQueryKey })
         if (draftId !== undefined) {
           void queryClient.invalidateQueries({ queryKey: draftQueryKey(draftId) })

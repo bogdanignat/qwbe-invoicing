@@ -21,8 +21,8 @@ export const normalizeIssuerDetails = (input: CompanyDetails): CompanyDetails =>
   const rawCapital = text(input.socialCapital, "socialCapital").trim()
   let socialCapital = ""
   if (rawCapital !== "") {
-    const match = /^(\d{1,18})(?:\.(\d{1,2}))?$/.exec(rawCapital)
-    if (match === null) return fail("socialCapital must be nonnegative RON with at most 18 integer digits and 2 decimals")
+    const match = /^(\d{1,16})(?:\.(\d{1,2}))?$/.exec(rawCapital)
+    if (match === null) return fail("socialCapital must be nonnegative RON with at most 16 integer digits and 2 decimals")
     socialCapital = `${(match[1] as string).replace(/^0+(?=\d)/, "")}.${(match[2] ?? "").padEnd(2, "0")}`
   }
   const iban = text(input.iban, "iban").replace(/\s/gu, "").toUpperCase()

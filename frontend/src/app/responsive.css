@@ -15,7 +15,8 @@
   td { display: grid; gap: .1rem; padding: .3rem 0; border: 0; }
   td::before { content: attr(data-label); color: var(--color-invoice-muted); font-size: .72rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
   td.numeric { text-align: left; }
-  .badge.storno { justify-self: start; }
+  /* A stacked cell is a grid: a badge in it keeps its own width instead of filling the row. */
+  td .badge, .badge.storno { justify-self: start; }
   .section-heading, .page-header { flex-direction: column; align-items: flex-start; }
   .totals { justify-content: flex-start; }
 }

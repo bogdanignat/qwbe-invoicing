@@ -36,29 +36,29 @@ void test("020 enforces canonical S/O treatment tuples in every persistent VAT t
       const lineInserts = [
         [`INSERT INTO draft_lines(id,draft_id,line_position,description,quantity,unit_price,unit_code,unit_name,
           tax_code,tax_category,tax_rate,vat_exemption_reason,total_excluding_tax,tax_amount,total_including_tax)
-          VALUES('bad-draft','missing',0,'X','1.0000','1.00','C62','unitate','RO_STANDARD','E','21.00',NULL,'1.00','0.21','1.21')`,
+          VALUES('bad-draft','missing',0,'X','1.0000',100,'C62','unitate','RO_STANDARD','E','21.00',NULL,100,21,121)`,
           "draft_lines_tax_matrix"],
         [`INSERT INTO issued_lines(id,invoice_id,line_position,description,quantity,unit_price,unit_code,unit_name,
           tax_code,tax_category,tax_rate,vat_exemption_reason,total_excluding_tax,tax_amount,total_including_tax)
-          VALUES('bad-issued','missing',0,'X','1.0000','1.00','C62','unitate','RO_STANDARD','E','21.00',NULL,'1.00','0.21','1.21')`,
+          VALUES('bad-issued','missing',0,'X','1.0000',100,'C62','unitate','RO_STANDARD','E','21.00',NULL,100,21,121)`,
           "issued_lines_tax_matrix"],
         [`INSERT INTO proforma_lines(id,proforma_id,organization_id,line_position,description,quantity,unit_price,unit_code,unit_name,
           tax_code,tax_category,tax_rate,vat_exemption_reason,total_excluding_tax,tax_amount,total_including_tax)
-          VALUES('bad-proforma','missing','org',0,'X','1.0000','1.00','C62','unitate','RO_STANDARD','E','21.00',NULL,'1.00','0.21','1.21')`,
+          VALUES('bad-proforma','missing','org',0,'X','1.0000',100,'C62','unitate','RO_STANDARD','E','21.00',NULL,100,21,121)`,
           "proforma_lines_tax_matrix"],
         [`INSERT INTO correction_lines(id,correction_id,line_position,description,quantity,unit_price,unit_code,unit_name,
           tax_code,tax_category,tax_rate,vat_exemption_reason,total_excluding_tax,tax_amount,total_including_tax)
-          VALUES('bad-correction','missing',0,'X','1.0000','-1.00','C62','unitate','RO_STANDARD','E','21.00',NULL,'-1.00','-0.21','-1.21')`,
+          VALUES('bad-correction','missing',0,'X','-1.0000',100,'C62','unitate','RO_STANDARD','E','21.00',NULL,-100,-21,-121)`,
           "correction_lines_tax_matrix"],
       ] as const
       for (const [statement, constraint] of lineInserts) await refusedBy(scoped, statement, constraint)
 
       const breakdownInserts = [
-        [`INSERT INTO issued_tax_breakdown VALUES('missing',0,'RO_NON_VAT','E','0.00',NULL,'1.00','0.00')`,
+        [`INSERT INTO issued_tax_breakdown VALUES('missing',0,'RO_NON_VAT','E','0.00',NULL,100,0)`,
           "issued_tax_breakdown_tax_matrix"],
-        [`INSERT INTO proforma_tax_breakdown VALUES('missing','org',0,'RO_NON_VAT','E','0.00',NULL,'1.00','0.00')`,
+        [`INSERT INTO proforma_tax_breakdown VALUES('missing','org',0,'RO_NON_VAT','E','0.00',NULL,100,0)`,
           "proforma_tax_breakdown_tax_matrix"],
-        [`INSERT INTO correction_tax_breakdown VALUES('missing',0,'RO_NON_VAT','E','0.00',NULL,'-1.00','-0.00')`,
+        [`INSERT INTO correction_tax_breakdown VALUES('missing',0,'RO_NON_VAT','E','0.00',NULL,-100,0)`,
           "correction_tax_breakdown_tax_matrix"],
       ] as const
       for (const [statement, constraint] of breakdownInserts) await refusedBy(scoped, statement, constraint)
@@ -68,24 +68,25 @@ void test("020 enforces canonical S/O treatment tuples in every persistent VAT t
       // `O`, and the database is the last place that can still say so.
       await refusedBy(scoped, `INSERT INTO correction_tax_breakdown
         (correction_id,line_position,tax_code,category,rate,vat_exemption_reason,taxable_amount,tax_amount)
-        VALUES('missing',1,'RO_NON_VAT','E','0.00',$1,'-1.00','-0.00')`, "correction_tax_breakdown_tax_matrix", [reason])
+        VALUES('missing',1,'RO_NON_VAT','E','0.00',$1,-100,0)`, "correction_tax_breakdown_tax_matrix", [reason])
       await refusedBy(scoped, `INSERT INTO correction_tax_breakdown
         (correction_id,line_position,tax_code,category,rate,vat_exemption_reason,taxable_amount,tax_amount)
-        VALUES('missing',2,'RO_NON_VAT','O','0.00',NULL,'-1.00','-0.00')`, "correction_tax_breakdown_tax_matrix")
+        VALUES('missing',2,'RO_NON_VAT','O','0.00',NULL,-100,0)`, "correction_tax_breakdown_tax_matrix")
       await refusedBy(scoped, `INSERT INTO issuer_tax_configurations
         (organization_id,code,category,rate,vat_exemption_reason,effective_from)
         VALUES('missing','RO_NON_VAT','E','0.00',NULL,'2026-01-01')`, "issuer_tax_configurations_rate_matrix")
 
       await scoped.exec(`INSERT INTO correction_lines(id,correction_id,line_position,description,quantity,unit_price,unit_code,unit_name,
         tax_code,tax_category,tax_rate,vat_exemption_reason,total_excluding_tax,tax_amount,total_including_tax)
-        VALUES('valid-zero','missing',0,'X','1.0000','-1.00','C62','unitate','RO_NON_VAT','O','0.00','${reason}','-1.00','-0.00','-1.00')`)
+        VALUES('valid-zero','missing',0,'X','-1.0000',100,'C62','unitate','RO_NON_VAT','O','0.00','${reason}',-100,0,-100)`)
       await scoped.exec(`INSERT INTO correction_tax_breakdown
         (correction_id,line_position,tax_code,category,rate,vat_exemption_reason,taxable_amount,tax_amount)
-        VALUES('missing',0,'RO_NON_VAT','O','0.00','${reason}','-1.00','-0.00')`)
+        VALUES('missing',0,'RO_NON_VAT','O','0.00','${reason}',-100,0)`)
     })
-    // Read outside the replica session: the row survived its own transaction and
-    // the negative zero is still the characters the writer bound.
-    assert.equal(await sql.scalar("SELECT tax_amount FROM correction_lines WHERE id='valid-zero'"), "-0.00")
+    // Read outside the replica session: the row survived its own transaction, and
+    // the storno total is a negative integer in bani next to a zero VAT amount.
+    assert.deepEqual(await sql.one("SELECT total_excluding_tax,tax_amount FROM correction_lines WHERE id='valid-zero'"),
+      { total_excluding_tax: "-100", tax_amount: "0" })
 
     for (const table of ["issuer_tax_configurations", "draft_lines", "issued_lines", "issued_tax_breakdown",
       "proforma_lines", "proforma_tax_breakdown", "correction_lines", "correction_tax_breakdown"]) {
@@ -106,12 +107,13 @@ void test("020 enforces canonical S/O treatment tuples in every persistent VAT t
       )
       assert.deepEqual(columns, [{ column_name: "vat_exemption_reason", data_type: "text", is_nullable: "YES" }], table)
     }
-    // What `STRICT` was protecting here: money is characters, not a numeric the
-    // engine may normalise, so `-0.00` above could be read back unchanged.
-    const money = await sql.query<{ readonly data_type: string }>(
+    // Money is whole bani, so no numeric the engine may normalise; the VAT rate
+    // is still characters, compared by the matrix exactly as bound.
+    const typeOf = (names: string) => sql.query<{ readonly data_type: string }>(
       `SELECT DISTINCT data_type FROM information_schema.columns
-       WHERE table_schema = 'public' AND column_name IN ('tax_amount','taxable_amount','total_including_tax','rate','tax_rate')`,
+       WHERE table_schema = 'public' AND column_name IN (${names})`,
     )
-    assert.deepEqual(money, [{ data_type: "text" }])
+    assert.deepEqual(await typeOf("'tax_amount','taxable_amount','total_including_tax'"), [{ data_type: "bigint" }])
+    assert.deepEqual(await typeOf("'rate','tax_rate'"), [{ data_type: "text" }])
   })
 })

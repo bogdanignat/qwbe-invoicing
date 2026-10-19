@@ -21,6 +21,18 @@ import type { DocumentCursor, DraftCursor, NameCursor, PageQuery } from "./ports
 
 const sameSource = (value: { readonly source?: { readonly app: string; readonly kind: string; readonly id: string } }, source: { readonly app: string; readonly kind: string; readonly id: string } | undefined): boolean =>
   source === undefined || (value.source?.app === source.app && value.source.kind === source.kind && value.source.id === source.id)
+const bani = (amount: string): bigint => (amount.startsWith("-") ? -1n : 1n) * BigInt(amount.replace(/[-.]/gu, ""))
+const decimal = (value: bigint): string => {
+  const digits = (value < 0n ? -value : value).toString().padStart(3, "0")
+  return `${value < 0n ? "-" : ""}${digits.slice(0, -2)}.${digits.slice(-2)}`
+}
+interface RevenueDocument { readonly kind: "invoice" | "correction"; readonly issueDate: string; readonly totalExcludingVat: string; readonly totalIncludingVat: string }
+const revenueFigures = (documents: ReadonlyArray<RevenueDocument>) => ({
+  revenueExcludingVat: decimal(documents.reduce((total, document) => total + bani(document.totalExcludingVat), 0n)),
+  invoicedIncludingVat: decimal(documents.reduce((total, document) => total + bani(document.totalIncludingVat), 0n)),
+  invoiceCount: documents.filter((document) => document.kind === "invoice").length,
+  correctionCount: documents.filter((document) => document.kind === "correction").length,
+})
 const binaryTextCompare = (left: string, right: string): number => left < right ? -1 : left > right ? 1 : 0
 const paged = <Item, Key>(sorted: ReadonlyArray<Item>, page: PageQuery<Key>, isAfter: (item: Item, after: Key) => boolean): ReadonlyArray<Item> => {
   const after = page.after
@@ -217,6 +229,19 @@ export const memoryStore = (state: MemoryState): InvoicingDependencies["store"] 
           })
         return paged([...invoices, ...corrections].sort((a, b) => b.issueDate.localeCompare(a.issueDate)
           || b.number - a.number || binaryTextCompare(a.id, b.id) || binaryTextCompare(a.kind, b.kind)), page, afterRegister)
+      }),
+      aggregateRevenue: (organizationId, period) => Effect.sync(() => {
+        const inPeriod = (document: { readonly organizationId: string; readonly issueDate: string }) =>
+          document.organizationId === organizationId && document.issueDate >= period.from && document.issueDate <= period.to
+        const documents: ReadonlyArray<RevenueDocument> = [
+          ...[...working.issued.values()].filter(inPeriod).map((invoice) => ({ ...invoice, kind: "invoice" as const })),
+          ...[...working.corrections.values()].filter(inPeriod).map((correction) => ({ ...correction, kind: "correction" as const })),
+        ]
+        const months = [...new Set(documents.map((document) => document.issueDate.slice(0, 7)))].sort()
+        return {
+          months: months.map((month) => ({ month, ...revenueFigures(documents.filter((document) => document.issueDate.startsWith(month))) })),
+          totals: revenueFigures(documents),
+        }
       }),
       findIdempotencyRecord: (organizationId, key) => Effect.succeed(working.idempotency.get(`${organizationId}:${key}`)),
       saveIdempotencyRecord: (record) => Effect.sync(() => { working.idempotency.set(`${record.organizationId}:${record.key}`, record) }),

@@ -1,5 +1,6 @@
 import type { IssuedInvoice, Proforma } from "../../cubes/invoicing/index.ts"
 import { normalizeIssuerDetails, validateIssuerForIssuance } from "../../cubes/invoicing/issuer/index.ts"
+import { optionalMoney } from "./postgres-money.ts"
 import { booleanInteger, nullableText, partyFrom, type Row } from "./postgres-rows.ts"
 
 /** Issuer and branding decoding: pure row work, identical on both engines. */
@@ -14,7 +15,7 @@ export const issuerCompanyDetailsFrom = (value: Row, prefix: string, issued = tr
   }
   const stored: Parameters<typeof normalizeIssuerDetails>[0] = {
     legalForm: legalFormValue, tradeRegistryNumber: field("trade_registry_number"), iban: field("iban"),
-    bankName: field("bank_name"), socialCapital: field("social_capital"),
+    bankName: field("bank_name"), socialCapital: optionalMoney(value, `${prefix}social_capital`),
   }
   const normalized = normalizeIssuerDetails(stored)
   for (const name of Object.keys(normalized) as (keyof typeof normalized)[]) {

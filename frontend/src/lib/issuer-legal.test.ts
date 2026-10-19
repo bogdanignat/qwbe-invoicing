@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { bankNameValue, ibanValue, socialCapitalValue, tradeRegistryValue } from "./issuer-legal.ts"
+import { SOCIAL_CAPITAL_MAX_LENGTH, bankNameValue, ibanValue, socialCapitalValue, tradeRegistryValue } from "./issuer-legal.ts"
 
 void test("trade registry number — accepts both accepted forms, upper-cased and trimmed", () => {
   assert.deepEqual(tradeRegistryValue("  j12/1234/2020 "), { kind: "ready", value: "J12/1234/2020" })
@@ -28,14 +28,16 @@ void test("social capital — stores one capital for 200 and 200.00", () => {
   assert.deepEqual(socialCapitalValue("0200.00"), { kind: "ready", value: "200.00" })
   assert.deepEqual(socialCapitalValue("0"), { kind: "ready", value: "0.00" })
   assert.deepEqual(socialCapitalValue(""), { kind: "ready", value: "" })
+  assert.deepEqual(socialCapitalValue("9".repeat(16) + ".99"), { kind: "ready", value: `${"9".repeat(16)}.99` })
 })
 
 void test("social capital — refuses a sum that is not a non-negative RON amount", () => {
-  const message = "Capitalul social trebuie să fie o sumă RON nenegativă, cu maximum 18 cifre întregi și 2 zecimale."
+  const message = "Capitalul social trebuie să fie o sumă RON nenegativă, cu maximum 16 cifre întregi și 2 zecimale."
   assert.deepEqual(socialCapitalValue("-5"), { kind: "issue", message })
   assert.deepEqual(socialCapitalValue("200.005"), { kind: "issue", message })
   assert.deepEqual(socialCapitalValue("200,00"), { kind: "issue", message })
-  assert.deepEqual(socialCapitalValue("1".repeat(19)), { kind: "issue", message })
+  assert.deepEqual(socialCapitalValue("1".repeat(17)), { kind: "issue", message })
+  assert.equal(`${"9".repeat(16)}.99`.length, SOCIAL_CAPITAL_MAX_LENGTH)
 })
 
 void test("IBAN — checks the mod-97 digit over the whitespace-free value", () => {

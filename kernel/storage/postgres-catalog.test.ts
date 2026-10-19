@@ -69,7 +69,7 @@ void test("round-trips a preferred VAT rate code and stores its absence as NULL"
 
 void test("refuses an empty or over-long preferred VAT rate code at the table", () => withStore("catalog_check", async (_store, { sql }) => {
   const insert = `INSERT INTO product_presets(id,organization_id,description,unit_price,unit_code,unit_name,preferred_vat_rate_code)
-    VALUES($1,'org-a','Audit','10.00','C62','unitate',$2)`
+    VALUES($1,'org-a','Audit',1000,'C62','unitate',$2)`
   for (const [id, code] of [["empty", ""], ["long", "X".repeat(33)]] as const) {
     const failure = await sql.rejects(insert, [id, code])
     assert.equal(failure.code, "23514", id)

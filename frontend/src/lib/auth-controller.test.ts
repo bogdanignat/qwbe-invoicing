@@ -359,7 +359,7 @@ void test("route guards send authenticated unlock away and locked private routes
   }
   const onUnlock = harness(session)
   await onUnlock.controller.restore()
-  assert.deepEqual(onUnlock.navigation, ["/invoices"])
+  assert.deepEqual(onUnlock.navigation, ["/"])
 
   const onPrivateRoute = harness({
     ...session,
@@ -367,6 +367,27 @@ void test("route guards send authenticated unlock away and locked private routes
   }, "/invoices")
   await onPrivateRoute.controller.restore()
   assert.deepEqual(onPrivateRoute.navigation, ["/unlock"])
+})
+
+void test("unlocking lands on the dashboard at /, and the dashboard is a private route like any other", async () => {
+  const session: AuthSessionClient = {
+    restore: () => Promise.reject(new ApiFailure({ message: "expired", status: 401 })),
+    login: () => Promise.resolve(authenticated("csrf")),
+    logout: () => Promise.resolve(),
+  }
+  const onUnlock = harness(session)
+  await onUnlock.controller.login("token")
+  assert.deepEqual(onUnlock.navigation, ["/"])
+
+  // Already on the dashboard with a session: nothing to redirect.
+  const onDashboard = harness({ ...session, restore: () => Promise.resolve(authenticated("csrf")) }, "/")
+  await onDashboard.controller.restore()
+  assert.deepEqual(onDashboard.navigation, [])
+
+  // Locked on the dashboard: sent to unlock, exactly like /invoices.
+  const lockedDashboard = harness(session, "/")
+  await lockedDashboard.controller.restore()
+  assert.deepEqual(lockedDashboard.navigation, ["/unlock"])
 })
 
 // A download or any other mutation side effect reads `ownsEpoch` in its own

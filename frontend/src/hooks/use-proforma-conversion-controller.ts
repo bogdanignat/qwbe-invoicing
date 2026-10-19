@@ -7,7 +7,7 @@ import { useEffect, useState } from "react"
 import { useAuth } from "./auth-context.ts"
 import { useInvoicingClients } from "./use-invoicing-clients.ts"
 import { draftsQueryKey, draftQueryKey } from "./use-drafts.ts"
-import { invoiceRegisterQueryKey } from "./use-invoice-register.ts"
+import { invalidateIssuedDocuments } from "./report-queries.ts"
 import { staleProformaKeys } from "./proforma-query-keys.ts"
 import { lifetimeMountEffect, lifetimeRequestsEffect } from "../lib/authoring-lifetime-wiring.ts"
 import { createOperationLifetime } from "../lib/authoring-operation-lifetime.ts"
@@ -46,7 +46,7 @@ export const useProformaConversionController = (recovery: RecoveryPort): Proform
    */
   const refreshConverted = (proformaId: string): void => {
     staleProformas(proformaId)
-    void queryClient.invalidateQueries({ queryKey: invoiceRegisterQueryKey })
+    invalidateIssuedDocuments(queryClient)
     void queryClient.invalidateQueries({ queryKey: draftsQueryKey })
   }
   const [controller] = useState<ProformaConversionController>(() => createProformaConversionController({
@@ -70,7 +70,7 @@ export const useProformaConversionController = (recovery: RecoveryPort): Proform
         staleProformas(proformaId)
         void queryClient.invalidateQueries({ queryKey: draftsQueryKey })
         if (result.kind === "invoice") {
-          void queryClient.invalidateQueries({ queryKey: invoiceRegisterQueryKey })
+          invalidateIssuedDocuments(queryClient)
           router.push(`/invoices/${encodeURIComponent(result.invoice.id)}`)
           return
         }

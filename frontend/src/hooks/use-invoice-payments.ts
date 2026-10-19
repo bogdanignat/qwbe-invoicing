@@ -5,6 +5,7 @@ import { useRef, useState } from "react"
 
 import { useAuth } from "./auth-context.ts"
 import { invoicePaymentsQueries, type InvoicePaymentsModel, type PaymentWrite } from "./invoice-payments-query.ts"
+import { invalidateCollections } from "./report-queries.ts"
 import { retryAction } from "./use-document-detail.ts"
 import { useInvoicingClients } from "./use-invoicing-clients.ts"
 import { usePluginEnabled } from "./use-plugin-enabled.ts"
@@ -53,7 +54,11 @@ export const useInvoicePayments = (invoiceId: string): InvoicePaymentsModel | un
   const [idempotency] = useState(() => createOperationIdempotency())
   const [notice, setNotice] = useState<string | undefined>(undefined)
   const inFlight = useRef(false)
-  const refresh = (): void => { void queryClient.invalidateQueries({ queryKey: queries.ledger.queryKey }) }
+  // The dashboard's collections read the same ledger, so they go stale with it.
+  const refresh = (): void => {
+    void queryClient.invalidateQueries({ queryKey: queries.ledger.queryKey })
+    invalidateCollections(queryClient)
+  }
   const mutation = useMutation({
     mutationFn: async (write: PaymentWrite): Promise<PaymentWrite | undefined> => {
       const answer = await sessionWrite(auth,

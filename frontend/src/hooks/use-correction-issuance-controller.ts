@@ -6,7 +6,7 @@ import { useEffect, useState } from "react"
 
 import { useAuth } from "./auth-context.ts"
 import { useInvoicingClients } from "./use-invoicing-clients.ts"
-import { invoiceRegisterQueryKey } from "./use-invoice-register.ts"
+import { invalidateIssuedDocuments } from "./report-queries.ts"
 import { lifetimeMountEffect, lifetimeRequestsEffect } from "../lib/authoring-lifetime-wiring.ts"
 import { createOperationLifetime } from "../lib/authoring-operation-lifetime.ts"
 import { createCorrectionIssuanceController } from "../lib/correction-issuance-controller.ts"
@@ -37,7 +37,7 @@ export const useCorrectionIssuanceController = (recovery: RecoveryPort): Correct
    */
   const refreshInvoice = (invoiceId: string): void => {
     void queryClient.invalidateQueries({ queryKey: ["invoice", invoiceId] })
-    void queryClient.invalidateQueries({ queryKey: invoiceRegisterQueryKey })
+    invalidateIssuedDocuments(queryClient)
   }
   const [controller] = useState<CorrectionIssuanceController>(() => createCorrectionIssuanceController({
     client: {

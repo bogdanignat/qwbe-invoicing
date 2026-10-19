@@ -11,7 +11,10 @@ import type { NameCursor, PageQuery } from "../../cubes/invoicing/index.ts"
  * the composed statements.
  */
 
-/** Everything the adapters bind. Dates and money travel as TEXT, booleans as 0/1. */
+/**
+ * Everything the adapters bind. Dates travel as TEXT, booleans as 0/1, and money
+ * as the int8 value in bani written out as a string (`postgres-money.ts`).
+ */
 export type QueryValue = string | number | null
 
 export interface SqlFragment {

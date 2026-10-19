@@ -1,5 +1,6 @@
 import type { InvoicingTransaction, IssuedInvoiceSummary } from "../../cubes/invoicing/index.ts"
 import { read, write } from "./postgres-errors.ts"
+import { moneyValue, optionalMoneyValue } from "./postgres-money.ts"
 import { addressColumns, addressValues, booleanValue, firstRow } from "./postgres-rows.ts"
 import { fragments, insertStatement, pairs, rowsWanted } from "./postgres-sql.ts"
 import { breakdownColumns, breakdownValues, saveLines, vatTreatment } from "./postgres-document-lines.ts"
@@ -38,11 +39,11 @@ export const invoicesTransactionAdapter = (client: TransactionClient): InvoicesT
       invoice.series, invoice.number, invoice.issueDate, invoice.dueDate, invoice.issuedAt, invoice.currency,
       invoice.issuer.name, invoice.issuer.fiscalIdentifier, ...addressValues(invoice.issuer.address),
       invoice.issuer.legalForm, invoice.issuer.tradeRegistryNumber, invoice.issuer.iban,
-      invoice.issuer.bankName, invoice.issuer.socialCapital, booleanValue(invoice.issuer.vatRegistered),
+      invoice.issuer.bankName, optionalMoneyValue(invoice.issuer.socialCapital), booleanValue(invoice.issuer.vatRegistered),
       invoice.issuer.branding === null ? null : JSON.stringify(invoice.issuer.branding),
       invoice.customer.name, invoice.customer.fiscalIdentifier, invoice.customer.partyType,
       ...addressValues(invoice.customer.address), booleanValue(invoice.customer.vatRegistered),
-      invoice.totalExcludingVat, invoice.vatTotal, invoice.totalIncludingVat,
+      moneyValue(invoice.totalExcludingVat), moneyValue(invoice.vatTotal), moneyValue(invoice.totalIncludingVat),
       // `IssuedInvoice.eFacturaStatus` is required and non-nullable on the port,
       // so no cast and no default: a rename or a narrowing of the union has to
       // fail the typecheck here, not land as a runtime 23514 from the column's
