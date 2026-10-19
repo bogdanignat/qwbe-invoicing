@@ -74,12 +74,15 @@ export const createPostgresCompanyLookupStore = (pool: Pool, master: MasterKey |
       const change = settings.openapiKey
       if (change.kind === "set" && master === undefined) return Effect.fail(keyStorageUnavailable)
       const ciphertext = change.kind === "set" && master !== undefined ? sealKey(master, settings.organizationId, change.key) : null
+      // A kept key is read into the proposed row itself: PostgreSQL checks the row's CHECKs
+      // before ON CONFLICT, so a NULL there would refuse `openapi` even with a key stored.
       return transaction((client) => write("save company lookup settings", async () => {
         await client.query(
           `INSERT INTO company_lookup_settings (organization_id, provider, openapi_key_ciphertext, updated_at, updated_by)
-            VALUES ($1, $2, $3, $4, $5)
+            VALUES ($1, $2, CASE WHEN $6 = 'keep'
+              THEN (SELECT openapi_key_ciphertext FROM company_lookup_settings WHERE organization_id = $1) ELSE $3 END, $4, $5)
             ON CONFLICT (organization_id) DO UPDATE SET provider = EXCLUDED.provider,
-              openapi_key_ciphertext = CASE WHEN $6 = 'keep' THEN company_lookup_settings.openapi_key_ciphertext ELSE EXCLUDED.openapi_key_ciphertext END,
+              openapi_key_ciphertext = EXCLUDED.openapi_key_ciphertext,
               updated_at = EXCLUDED.updated_at, updated_by = EXCLUDED.updated_by`,
           [settings.organizationId, settings.provider, ciphertext, settings.updatedAt, settings.updatedBy, change.kind])
       }))

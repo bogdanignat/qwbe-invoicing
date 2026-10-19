@@ -43,6 +43,9 @@ void test("notFound is no company; an answer about another CUI or neither list i
   assert.equal(await Effect.runPromise(client(() => json({ found: [], notFound: [12345674] })).anaf.lookup({ ...request, cui: "12345674" })), undefined)
   assert.equal(await reason(client(() => json({ found: [company(1)], notFound: [] })).anaf.lookup({ ...request, cui: "12345674" })), "unavailable")
   assert.equal(await reason(client(() => json({ found: [], notFound: [] })).anaf.lookup({ ...request, cui: "12345674" })), "unavailable")
+  // The live service answers an unknown CUI with 404 and the same body (seen 2026-10-19).
+  assert.equal(await Effect.runPromise(client(() => json({ found: [], notFound: [12345674] }, 404)).anaf.lookup({ ...request, cui: "12345674" })), undefined)
+  assert.equal(await reason(client(() => json({ found: [company(12345674)], notFound: [] }, 404)).anaf.lookup({ ...request, cui: "12345674" })), "unavailable")
 })
 
 void test("every answer that is not usable data is unavailable, and quotes nothing of it", async () => {

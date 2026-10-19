@@ -12,8 +12,8 @@ UI: React 19 + TypeScript styled with Tailwind CSS 4, a Next.js 16 App Router ap
 Build an invoicing application that:
 
 - runs standalone: its own kernel, its own PostgreSQL, its own login and sessions;
-- is shaped as one QWBE plugin pack: `invoicing` is the main cube, `payments` and
-  `efactura` are plugins, i.e. optional child cubes enabled by configuration;
+- is shaped as one QWBE plugin pack: `invoicing` is the main cube, `payments`,
+  `efactura` and `company-lookup` are plugins, i.e. optional child cubes enabled by configuration;
 - copies from QWBE (`crm-pack`) only the package structure and the isolation, size, test,
   and boundary rules, not its runtime, installer, or persistence;
 - keeps its business logic unchanged when its host changes;
@@ -67,8 +67,14 @@ kernel                      composition root, own PostgreSQL, own login
 └── invoicing (required)
     ├── parties, customers, catalog, issuer, drafts, issuance, corrections, documents (required)
     ├── payments (plugin, required: false)
-    └── efactura (plugin, required: false)
+    ├── efactura (plugin, required: false)
+    └── company-lookup (plugin, required: false)
 ```
+
+`company-lookup` is the only unit that reaches outside the installation: with a provider
+switched on, the kernel's adapters (`kernel/company-lookup/`) ask ANAF or openapi.ro about a
+CUI or a name. The cube holds only the rules and the mapping; HTTP, the cache and the
+encryption of the openapi.ro key are the host's.
 
 The mother installs, mounts, or hosts nothing of this application, and invoicing data
 never moves into its database. If a mother is connected later, it is an external caller of
@@ -121,6 +127,7 @@ invoicing:proforma.issue
 invoicing:settings.manage
 payments:read
 payments:payment.record
+company-lookup:company.lookup
 ```
 
 Each manifest uses its literal leaf identity as prefix. Payments keeps the `payments:*`
@@ -128,7 +135,9 @@ prefix and the legacy aliases `invoicing:read` and `invoicing:payment.record` un
 `invoicing/`, so grants and migration ledger keys do not change. When the
 payments plugin is off its routes are not mounted and the kernel grants no `payments:*`
 permission; `invoicing:read` stays, because it is the invoicing base permission. e-Factura
-declares no permission and needs none. Identity rebinding
+declares no permission and needs none. Company lookup declares `company-lookup:company.lookup`
+(asking a provider), granted only while the plugin is on; administering the integration
+takes the parent's existing `invoicing:settings.manage`, which the host passes in. Identity rebinding
 under another mounted name is outside the direction (decision 8 in section 16); the
 prefixes are local and differ from the full-identity prefix `qwbe-core` would require
 (section 13).
@@ -254,7 +263,8 @@ This is lint isolation, not a security sandbox. Process-level isolation remains 
 
 The isolation unit is a top-level cube together with its child cubes, as in the mother's
 `no-cube-to-cube` rule (which captures only the first path segment under `cubes/`).
-`invoicing`, `payments`, and `efactura` form one tree: `cubes/invoicing/{payments,efactura}`.
+`invoicing`, `payments`, `efactura` and `company-lookup` form one tree:
+`cubes/invoicing/{payments,efactura,company-lookup}`.
 They are no longer separate trees that may not import each other.
 `probes/boundary-rules.mjs` keeps the separate-tree refusal and its tests on synthetic
 top-level trees, even though the application has a single tree.
@@ -303,7 +313,7 @@ References to global accounts, organizations, contacts, products, or documents s
 
 ### Schema baselines during development
 
-While the project is in development (the "STADIU" section of `CLAUDE.md`), every cube owns exactly one migration, `<cube>-001-baseline`, holding the current definition of the tables its manifest declares, with their indexes and triggers; `kernel/storage/schema-baseline.test.ts` asserts that each baseline creates exactly the declared tables. A schema change edits the owning baseline instead of adding a migration. A database created from an earlier baseline is drift: `migrate` refuses it before writing and `doctor` reports it, and the answer is to recreate the database, which drops its data. The migrator never deletes a database itself. The runner applies the foundation scope once and then each cube's migrations in cube order—customers, catalog, issuer, invoicing, payments, in one PostgreSQL database—with a cube whose tables others reference first, never sorted by name. The foundation scope is the host's: it owns `qwbe_abort()`, the single trigger function every refusal trigger calls, so the cube baselines are no longer self-sufficient SQL (`.architecture/contract.json`, kept in personal-hub, local copy ignored by git; decision `functii-de-trigger-in-scope-foundation`). Numbered incremental migrations (`<cube>-002-...`) return only when the development stage ends. The immutability triggers are part of the baselines, and `kernel/ops/kernel.test.ts` still asserts that every one of them exists after migration.
+While the project is in development (the "STADIU" section of `CLAUDE.md`), every cube owns exactly one migration, `<cube>-001-baseline`, holding the current definition of the tables its manifest declares, with their indexes and triggers; `kernel/storage/schema-baseline.test.ts` asserts that each baseline creates exactly the declared tables. A schema change edits the owning baseline instead of adding a migration. A database created from an earlier baseline is drift: `migrate` refuses it before writing and `doctor` reports it, and the answer is to recreate the database, which drops its data. The migrator never deletes a database itself. The runner applies the foundation scope once and then each cube's migrations in cube order—customers, catalog, issuer, invoicing, payments, documents, company-lookup, in one PostgreSQL database—with a cube whose tables others reference first, never sorted by name. The foundation scope is the host's: it owns `qwbe_abort()`, the single trigger function every refusal trigger calls, so the cube baselines are no longer self-sufficient SQL (`.architecture/contract.json`, kept in personal-hub, local copy ignored by git; decision `functii-de-trigger-in-scope-foundation`). Numbered incremental migrations (`<cube>-002-...`) return only when the development stage ends. The immutability triggers are part of the baselines, and `kernel/ops/kernel.test.ts` still asserts that every one of them exists after migration.
 
 ## 8. Events are not workflows
 
@@ -413,7 +423,9 @@ The same holds for `cubes/invoicing/efactura`. The mappers from invoicing's mode
 e-Factura document stay in `kernel/efactura/` as a host adapter: the plugin uses 37,340 of
 its 40,000 code characters and the mappers would add about 9,800, which only an artificial
 child cube could absorb. With e-Factura off the XML routes are not mounted, so the mappers
-are never called.
+are never called. `cubes/invoicing/company-lookup` follows the same split from the start: the
+cube keeps the settings rules, the CUI/name thresholds and the pure mapping of each provider's
+answer; the HTTP clients, the lookup cache and the key cipher live in `kernel/company-lookup/`.
 
 ## 11. Tests and verification
 
@@ -426,9 +438,11 @@ Minimum verification layers:
 3. authentication and permission refusal tests;
 4. store ownership and restart persistence tests;
 5. event declaration and payload decoding tests;
-6. plugin selection tests for all four `payments`/`efactura` combinations: the app boots,
+6. plugin selection tests for all four `payments`/`efactura` combinations, with
+   `company-lookup` on in two of them and off in the other two: the app boots,
    login, readiness, issuance, proforma, storno, and PDF work; a disabled plugin's routes,
-   OpenAPI entries are absent and `eFacturaStatus` is `null` with e-Factura off; re-enabling
+   OpenAPI entries are absent (company lookup included, `kernel/api/company-lookup-api.test.ts`)
+   and `eFacturaStatus` is `null` with e-Factura off; re-enabling
    keeps its data and idempotency; an unknown name in `QWBE_PLUGINS` refuses start
    (`kernel/plugins.test.ts`, `kernel/http/plugins-http.test.ts`). The UI sends no request
    to a disabled plugin and hides its actions (`frontend/src/hooks/plugins-off.test.ts`);
@@ -482,13 +496,13 @@ Sources: QWBE root `package.json`, `core/package.json`, and `core/tsconfig.json`
 The package copies the `crm-pack` structure: one plugin pack, a parent with children.
 
 - One `qwbe-package.json` at the package root, which is the repository root:
-  `name: "invoicing-pack"`, `kind: "plugin"`, and a `cubes` array listing all 11 units,
+  `name: "invoicing-pack"`, `kind: "plugin"`, and a `cubes` array listing all 12 units,
   `invoicing` and `invoicing/<child>`, plugins included. There are no per-directory manifests.
 - The inventory is static. Neither the gates nor the migrations filter it by configuration;
   migrations always run for every unit, so a disabled plugin keeps its schema and data.
 - Each unit's `manifest` declares `name` (equal to its path leaf), `parent` for children,
-  and `required`: `true` for `invoicing` and its eight components, `false` for `payments`
-  and `efactura`. The field has the `qwbe-core` manifest shape; the semantics are this
+  and `required`: `true` for `invoicing` and its eight components, `false` for `payments`,
+  `efactura` and `company-lookup`. The field has the `qwbe-core` manifest shape; the semantics are this
   kernel's own.
 - `QWBE_PLUGINS` selects the plugins at start (`kernel/config.ts`, `kernel/plugins.ts`):
   absent means every plugin, empty means none, any name that is not a plugin refuses start,
@@ -524,7 +538,7 @@ This is the shape the repository has; a new directory appears only when a file n
 ```text
 qwbe-invoicing/
 ├── FOUNDATION.md
-├── qwbe-package.json           invoicing-pack, kind "plugin", all 11 units
+├── qwbe-package.json           invoicing-pack, kind "plugin", all 12 units
 ├── qwbe.config.json            gate roots and caps
 ├── package.json
 ├── pnpm-lock.yaml
@@ -544,7 +558,8 @@ qwbe-invoicing/
 │       ├── corrections/        storno documents
 │       ├── documents/          rendered artifacts
 │       ├── payments/           plugin: payment records and derived payment status
-│       └── efactura/           plugin: RO e-Factura UBL, CIUS-RO limits, EN 16931 validation
+│       ├── efactura/           plugin: RO e-Factura UBL, CIUS-RO limits, EN 16931 validation
+│       └── company-lookup/     plugin: company lookup settings, thresholds, ANAF/openapi.ro mapping
 ├── kernel/                     kernel and adapters
 │   ├── config.ts, failure-log.ts
 │   ├── http/                   server, security headers, readiness, API docs
@@ -553,6 +568,7 @@ qwbe-invoicing/
 │   ├── storage/                PostgreSQL pool and store, row mappers, migration runner, schema fingerprint
 │   ├── documents/              PDF renderer, artifact store and recovery, fonts
 │   ├── efactura/               host mapping into the e-Factura plugin
+│   ├── company-lookup/         ANAF and openapi.ro clients, lookup cache, openapi.ro key cipher
 │   ├── ops/                    CLI, backup, restore
 │   └── parity/                 SQLite baseline fixtures for the PostgreSQL schema gate
 ├── frontend/                   browser UI: Next App Router, BFF under /api/qwbe

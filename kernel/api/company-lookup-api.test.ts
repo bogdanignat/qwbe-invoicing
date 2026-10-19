@@ -58,6 +58,9 @@ void test("company lookup settings: write-only key, encrypted at rest, refused w
       assert.deepEqual((await call("GET", "/settings/company-lookup")).body, saved.body)
       assert.deepEqual((await call("PUT", "/settings/company-lookup", { provider: "anaf" })).body,
         { provider: "anaf", openapiKeyConfigured: true, openapiKeyLast4: "wxyz" }, "kept without being read")
+      const switched = await call("PUT", "/settings/company-lookup", { provider: "openapi" })
+      assert.deepEqual([switched.status, switched.body], [200, { provider: "openapi", openapiKeyConfigured: true, openapiKeyLast4: "wxyz" }],
+        "switched to openapi.ro on the key already stored")
       assert.deepEqual((await call("PUT", "/settings/company-lookup", { provider: "anaf", clearOpenapiKey: true })).body,
         { provider: "anaf", openapiKeyConfigured: false, openapiKeyLast4: null })
     } finally { await rig.dispose() }

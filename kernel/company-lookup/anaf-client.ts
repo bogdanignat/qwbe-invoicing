@@ -52,10 +52,11 @@ export const createAnafClient = (options: AnafOptions): CompanyLookupProviders["
       headers: { "content-type": "application/json", accept: "application/json" },
       body: JSON.stringify([{ cui: Number(cui), data: bucharestDay.format(now()) }]),
     })).pipe(Effect.flatMap((reply): Effect.Effect<AnafCompany | undefined, ProviderFailure> => {
-      if (reply.status !== 200) return Effect.fail(unavailable())
+      // ANAF answers an unknown CUI with 404 and the usual body: `{found: [], notFound: [cui]}`.
+      if (reply.status !== 200 && reply.status !== 404) return Effect.fail(unavailable())
       return Effect.flatMap(decoded(Answer, reply.text), ({ found, notFound }) => {
-        const company = found[0]
-        if (company === undefined) return notFound.length > 0 ? Effect.succeed(undefined) : Effect.fail(unavailable())
+        const company = reply.status === 200 ? found[0] : undefined
+        if (company === undefined) return found.length === 0 && notFound.length > 0 ? Effect.succeed(undefined) : Effect.fail(unavailable())
         // An answer about another CUI is not an answer to this question.
         return company.date_generale.cui === Number(cui) ? Effect.succeed(company) : Effect.fail(unavailable())
       })

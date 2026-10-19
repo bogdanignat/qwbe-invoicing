@@ -84,6 +84,7 @@ Every cube use-case is an `Effect` and has a 1:1 authenticated HTTP endpoint. Au
 - `POST /api/invoices/:id/payments` (record payment; requires `Idempotency-Key`) / `POST /api/invoices/:id/payments/:paymentId/reversal` (reverse one payment in full with an immutable counter-row; requires `Idempotency-Key`, optional `reason`) / `GET /api/invoices/:id/payments` (list payments with derived status `unpaid`/`partially_paid`/`paid`/`overpaid`/`overdue`, `paidAmount`/`remainingAmount`)
 - `POST /api/invoices/:id/corrections` (storno fiscal — creează document nou imuabil cu referință la factura originală, motiv obligatoriu; cantitate negativă, preț unitar pozitiv, totaluri negative; XML-ul e-Factura e CreditNote cu valori pozitive) / `GET /api/invoices/:id/corrections` / `GET /api/corrections/:id` — după emitere nu se mai editează factura, doar storno
 - Issued invoices have no `DELETE` endpoint and allocated invoice numbers are never reused; mistakes are handled through correction documents
+- `GET|PUT /api/settings/company-lookup` (`settings.manage`; `provider` `none`/`anaf`/`openapi`, write-only `openapiKey`, `clearOpenapiKey`; answers only `openapiKeyLast4`) / `GET /api/company-lookup/availability` / `POST /api/company-lookup/lookup` `{cui}` / `POST /api/company-lookup/search` `{q}` — the `company-lookup` plugin (404 when it is off); a CUI under 4 digits or with a wrong check digit and a name under 6 letters answer 400 without asking ANAF or openapi.ro
 
 T-1069 proforma route inventory (seven authenticated routes):
 
