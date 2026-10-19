@@ -23,7 +23,7 @@ void test("a target that a URL parser would rewrite is refused before it is clas
   }
 })
 
-void test("more encoding layers than the BFF decoded are refused, not passed on", () => {
+void test("a segment still changing after the last decoding is refused, not passed on", () => {
   // Five layers of `%25` over `.`: still changing after the fourth decoding.
   assert.equal(requestTarget("/api/%25252525252e"), undefined)
 })

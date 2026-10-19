@@ -651,6 +651,40 @@ empty target database.
 
 ## Security model
 
+Three settings decide who can reach the application and what it believes about a
+request. All three are read once at startup; a malformed value stops it instead of
+being ignored.
+
+- **`PUBLIC_ORIGIN`: the one origin the application answers on.** Scheme and host
+  exactly as users type them, e.g. `https://invoice.example.com`. The kernel serves the
+  UI, `/api` and the Swagger page only on it: a request whose `Host` (or, when the proxy
+  sends them, `X-Forwarded-Host`/`-Proto`) names anything else is refused with 400, and a
+  write (`POST`, `PUT`, `PATCH`, `DELETE`, the login included) whose `Origin` is not
+  exactly this value with 403. That is what makes the session cookie useless to another
+  site and a DNS-rebinding page useless against the server; it also means the reverse
+  proxy must pass the public `Host` through unchanged. The scheme decides the cookie:
+  an `https` origin (or `NODE_ENV=production`) marks it `Secure`. Only the
+  `/health/*` checks answer on any Host, for the container healthcheck.
+- **`QWBE_TRUSTED_PROXY`: whose `X-Forwarded-For` is believed.** It matters for one
+  thing, the login throttle, which keys failed unlocks on the client address. Unset,
+  nobody's forwarded header is read and the address is the TCP peer: behind a proxy
+  that is the proxy itself, so every client shares one throttle bucket and a stranger's
+  failed attempts slow everyone down. Set it to the proxy's fixed address or network
+  (`172.18.0.0/16`, the Compose network of the bundled Caddy) only when that proxy
+  overwrites `X-Forwarded-For` for the clients in front of it, as Caddy and Traefik do;
+  a proxy that appends what the client sent would let anyone pick their own bucket.
+  `/0` ranges are refused.
+- **`QWBE_BEARER_API`: whether the API token is accepted on the public listener.**
+  `off` by default: the browser never needs it (it exchanges the token once for a
+  session, below), so any `Authorization` header is refused with 400 and the token
+  cannot be guessed against the public origin. `on` serves the Bearer API on the same
+  origin, for scripts and integrations; such a caller meets the same edge as the browser
+  (the Host of `PUBLIC_ORIGIN`, `Origin` on every write, no session cookie alongside the
+  token) and the same throttle. Without it, the operator's interface is the CLI inside
+  the container (`docker compose exec app node bin/qwbe-invoicing.ts …`).
+
+The rest of the model:
+
 - The single API token is the shared owner/admin credential for the installation. Every
   holder receives owner access as actor `kernel-owner`; standalone mode has no users or
   separate authorization levels yet. The token is read from a file, never printed and never
@@ -754,11 +788,13 @@ throwaway cluster on tmpfs that publishes no port and references no application 
 ```bash
 scripts/verify-docker.sh install                 # dependencies into the named volumes, frozen
 scripts/verify-docker.sh verify                  # pnpm verify: runtime gate, lint, typecheck,
-                                                 # tests, frontend build, package/
+                                                 # tests, frontend build, the kernel probe
+                                                 # (probes/app-runtime*.mjs), package/
                                                  # test/size/boundary gates
 scripts/verify-docker.sh test                    # pnpm test only — the fast loop
 scripts/verify-docker.sh test "node --test kernel/storage/pagination.test.ts"
 scripts/verify-docker.sh down                    # stops both rigs; removes no volume
+scripts/smoke-image.sh                           # the shipped image on its own compose project
 ```
 
 The gates keep the core inside the QWBE cube contract: no host or infrastructure imports

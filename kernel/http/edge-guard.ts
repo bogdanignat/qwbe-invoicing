@@ -5,8 +5,9 @@ import { sessionCookieValues } from "../auth/browser-session-helpers.ts"
 /**
  * The public edge, decided once per request before anything else runs: before
  * the branch on the path, before readiness, before the body is read and before
- * an authentication mechanism is chosen. What the BFF used to enforce in front
- * of the kernel, the kernel now enforces itself.
+ * an authentication mechanism is chosen. The kernel is the first application
+ * code a request meets behind the TLS proxy, so it does not trust the proxy to
+ * have checked the identity headers: it pins them to `PUBLIC_ORIGIN` itself.
  */
 export interface EdgePolicy {
   /** The canonical public origin (`PUBLIC_ORIGIN`). Host and Origin are pinned to it. */
@@ -47,7 +48,7 @@ const forwardedMatches = (value: string | undefined, expected: string): boolean 
   value === undefined || (!value.includes(",") && value.trim() === expected)
 
 /** The Docker healthcheck calls `http://127.0.0.1:3000/health/ready`: no public Host. */
-export const healthPath = (path: string): boolean => path === "/healthz" || path.startsWith("/health/")
+export const healthPath = (path: string): boolean => path.startsWith("/health/")
 
 const refuse = (status: 400 | 403, error: string): EdgeRefusal => ({ status, error })
 

@@ -65,7 +65,7 @@ fără CRUD masterdata, fără CUI lookup, fără proforme UI, fără SSR forms.
   restrictions, issue retry same key/payload schimbat/doubleclick, late save/issue/delete după
   logout/unmount/reauth fără writes/cache/navigation. Extend `probes/frontend-runtime.mjs` cu
   passthrough `idempotency-key` (+ contract real BFF dacă fezabil). `pnpm verify` complet +
-  `git diff --check`. `docs/NEXT_PREVIEW.md` milestone + gaps exacte. Fără browser aici.
+  `git diff --check`. `docs/NEXT_PREVIEW.md` (șters la T-1910) milestone + gaps exacte. Fără browser aici.
 
 ## Progres
 - [x] Context citit: CLAUDE.md, rules INDEX, cache react19, react-patterns ref, plan review Fable
@@ -74,7 +74,7 @@ fără CRUD masterdata, fără CUI lookup, fără proforme UI, fără SSR forms.
 - [x] Pas 3: controllere pure (operation-idempotency, draft-save + reconciliation, issuance)
 - [x] Pas 4: hooks (page/session/draft/issuance/drafts/idempotency)
 - [x] Pas 5: UI (ui primitives, authoring components, views, routes, /invoices CTA + drafts)
-- [x] Pas 6: teste pure (173 frontend lib tests) + probe idempotency-key + NEXT_PREVIEW
+- [x] Pas 6: teste pure (173 frontend lib tests) + probe idempotency-key + NEXT_PREVIEW (șters la T-1910)
 - [x] pnpm verify verde (exit 0; log: /tmp/t1400-verify4.log) + git diff --check curat
 - [x] Review Fable (`/tmp/react-review.OSabY4/review.md`, changes_requested): toate cele 8
   findinguri (1 high, 4 medium, 3 low) verificate pe cod curent — HIGH (issuance blocat de

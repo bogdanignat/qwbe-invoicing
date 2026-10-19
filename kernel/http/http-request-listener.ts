@@ -24,16 +24,16 @@ interface HttpResponse {
 
 export const route = (method: string | undefined, path: string, ready: boolean): HttpResponse => {
   if (method !== "GET") return { status: 405, body: { status: "method_not_allowed" } }
-  if (path === "/health/live" || path === "/healthz") return { status: 200, body: { status: "live" } }
+  if (path === "/health/live") return { status: 200, body: { status: "live" } }
   if (path === "/health/ready") return ready ? { status: 200, body: { status: "ready" } } : { status: 503, body: { status: "not_ready" } }
   return { status: 404, body: { status: "not_found" } }
 }
 
 /**
  * Which paths are allowed to pay for a readiness evaluation. Only
- * `/health/ready` is: liveness (`/health/live` and its alias `/healthz`), the
- * UI and the 404/405 answers are decided without touching the database, so a slow or absent server cannot turn a liveness probe into a
- * restart loop. `route` stays synchronous and the caller passes `false` for the
+ * `/health/ready` is: liveness (`/health/live`), the UI and the 404/405 answers
+ * are decided without touching the database, so a slow or absent server cannot
+ * turn a liveness probe into a restart loop. `route` stays synchronous and the caller passes `false` for the
  * paths that never consult readiness.
  */
 const needsReadiness = (path: string): boolean => path === "/health/ready"

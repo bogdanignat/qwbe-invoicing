@@ -3,9 +3,10 @@ import type { Duplex } from "node:stream"
 /**
  * The headers every answer of the kernel carries: API JSON, PDFs, the docs page,
  * the redirect to `/unlock`, every refusal and the transport errors Node raises
- * before a request exists. Values from `frontend/src/lib/security-headers.ts`,
- * without the nonce: nothing the kernel serves needs an inline script or style.
- * The docs page is the one exception, and it overrides only the CSP.
+ * before a request exists, and the UI too: its pages and assets. No nonce and no
+ * `'unsafe-inline'`: the Vite build inlines nothing (every script, stylesheet
+ * and image is its own file) and the logo preview is a `data:` image. The docs
+ * page is the one exception, and it overrides only the CSP.
  */
 export const contentSecurityPolicy = [
   "default-src 'none'",

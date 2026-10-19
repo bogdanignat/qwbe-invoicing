@@ -31,6 +31,31 @@ Host/UI refactors must also preserve the HTTP contract and runtime error/idempot
 mapping, transaction behavior, session lifetime and PDF assets. Verify browser flows
 on an isolated fixture and smoke-test the built runtime, not a live data volume.
 
+`pnpm verify` includes `pnpm test:app:runtime` (`probes/app-runtime*.mjs`): after the
+frontend build it runs the real CLI, `migrate --apply` and then `serve` with the built
+`frontend/dist` as `QWBE_UI_DIR`, on a fresh database of the verifier's PostgreSQL, and
+checks over HTTP the login, resume, CSRF, logout and refused replay, the session cookie
+attributes, the Host, Origin and `Authorization` refusals, the security headers on the
+SPA, its assets and the errors, the deep-link fallback, the missing-asset 404, `GET /api`
+without a session, and a PDF and an e-Factura XML download.
+
+The verifier never runs the shipped image. Before a release, smoke-test it:
+
+```bash
+scripts/smoke-image.sh          # SMOKE_PORT (default 3199) must be free on 127.0.0.1
+```
+
+It builds `qwbe-invoicing:smoke` from the `Dockerfile` and starts `compose.prod.yaml` +
+`compose.loopback.yaml` as the separate Compose project `qwbe-smoke`, with a temporary
+`.env` made from `.env.example` and secrets made by `scripts/init-secrets.sh`. It checks
+that `migrate` exits 0, `/health/ready` answers 200, `/` is the SPA with the CSP, a
+hashed asset is `immutable`, and the login on the configured origin answers a `Secure`
+session cookie that resumes. At exit, whatever the result, it runs `down -v` on that
+project and removes the temporary directory. `compose.prod.yaml` names its volumes
+`qwbe-invoicing-*`, which on a development host are the local stack's: the script renames
+them to `qwbe-smoke-*` with an override and refuses to start if any volume of the project
+would not be one of those, so `down -v` cannot reach another stack's data.
+
 `pnpm gate:boundaries` checks all of `frontend/src` alongside the cube and host trees.
 It runs in `pnpm verify`, also used by the release CI verification job. Frontend source
 dependencies follow this matrix:
@@ -41,13 +66,18 @@ dependencies follow this matrix:
 | `hooks/` | `lib/`, `hooks/` |
 | `components/` | `lib/`, `hooks/`, `components/` |
 | `views/` | `lib/`, `hooks/`, `components/`, `views/` |
+| `routes/` | `lib/`, `hooks/`, `components/`, `views/`, `routes/` |
 
-`app/` and `proxy.ts` compose the layers, never the reverse. Type-only imports,
+The entrypoint `main.tsx` and the generated `routeTree.gen.ts` compose the layers, and
+no layer imports them or any other file outside the five folders. Type-only imports,
 re-exports and dynamic imports follow the same rules, and cycles are forbidden.
-Browser layers cannot import `lib/server/` or Node core modules; under `app/` only
-`route.ts` files may import `lib/server/`. Frontend source cannot import `cubes/`,
-`kernel/`, `probes/`, `bin/`, `scripts/`, `frontend/scripts/` or the Next build
-output, and the backend cannot import `frontend/`. The CLI fixture tests in
+Everything under `frontend/src` is browser code (only the `*.test.ts` files next to it
+run in Node): no Node core module, no `frontend/vite.config.ts` or other config file in
+`frontend/`, no `frontend/scripts/` and no build-time package (`vite`, `@vitejs/*`,
+`@tailwindcss/vite`, `@tanstack/router-plugin`, `@tanstack/router-generator`), directly
+or through another module. Frontend source cannot import `cubes/`, `kernel/`, `probes/`,
+`bin/`, `scripts/` or the Vite build output in `frontend/dist`, and the backend cannot
+import `frontend/`. The CLI fixture tests in
 `probes/frontend-boundary-gate.test.mjs` exercise allowed edges and rejected violations;
 no size thresholds or cube rules are relaxed.
 

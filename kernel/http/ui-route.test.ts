@@ -115,9 +115,8 @@ void test("the API and the health checks come before the build, even when it has
     assert.deepEqual(JSON.parse((await call(server, { path: "/api/customers" })).body), { ok: true })
     assert.equal(server.seen.length, 1)
     assert.deepEqual(JSON.parse((await call(server, { path: "/health/live" })).body), { status: "live" })
-    assert.deepEqual(JSON.parse((await call(server, { path: "/healthz" })).body), { status: "live" })
     assert.equal((await call(server, { path: "/api" })).status, 303)
-    for (const path of ["/API/x", "/apix", "/health", "/Health/live"]) {
+    for (const path of ["/API/x", "/apix", "/health", "/healthz", "/Health/live"]) {
       const reply = await call(server, { path })
       assert.equal(reply.status, 404, path)
       assert.notEqual(reply.body, fakeIndex, path)

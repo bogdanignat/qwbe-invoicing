@@ -5,10 +5,10 @@
  * after parsing is not the path that was asked for. The kernel classifies the
  * raw path instead, and refuses the shapes that normalisation would rewrite.
  *
- * Ported from the BFF's `proxy-path.ts`: a segment is refused when it is `.` or
- * `..`, holds a backslash or a control character, or becomes one of those after
- * up to four decodings. Encoded IDs stay intact (`customer%2F1`, `v%25`): only
- * what they decode to is judged, never the fact that they are encoded.
+ * A segment is refused when it is `.` or `..`, holds a backslash or a control
+ * character, or becomes one of those after up to four decodings. Encoded IDs
+ * stay intact (`customer%2F1`, `v%25`): only what they decode to is judged,
+ * never the fact that they are encoded.
  *
  * The API router (find-my-way-ts) matches a different string than the one sent:
  * it cuts the path at `;`, decodes every escape `decodeURI` decodes, ignores a

@@ -30,6 +30,6 @@ void test("the upgrade backs up with the running version before the new one is p
   }
 })
 
-void test("health is checked on /health/ready, never on the /healthz alias", () => {
+void test("health is checked on /health/ready, never on /healthz (the kernel has no such path)", () => {
   for (const name of runbooks) assert.doesNotMatch(source(name), /\/healthz\b/u, name)
 })

@@ -8,7 +8,9 @@ Traefik routes `invoice.test` straight to it; no port is published.
 
 > Runtime: every request is an `Effect`. The kernel authenticates (`Bearer` → `RequestContext`), injects `Clock`/`IdGenerator`/`TransactionalStore`, and runs the cube service `Effect` via `Effect.runPromise(Effect.either(...))`. Failures are typed (`ValidationFailure` → 400, `PermissionDenied` → 403, `ResourceNotFound` → 404, `DomainConflict` → 409).
 
-## First setup on microq
+## First setup on the dev host
+
+The dev host is the machine that runs Docker and Warden.
 
 ```bash
 pnpm local:setup             # dry-run
@@ -21,6 +23,12 @@ docker compose ps
 curl --fail --cacert ~/.warden/ssl/rootca/certs/ca.cert.pem https://invoice.test/health/ready
 docker compose exec app wget -qO- http://127.0.0.1:3000/health/ready
 ```
+
+A checkout whose stack still runs the earlier two-service layout (a separate `frontend`
+container in front of the kernel) moves to the single image with
+`docker compose up -d --build --remove-orphans`: the orphan container is removed and the
+volumes stay. If `migrate` then refuses the database as drift, the baseline changed
+since the cluster was created; see README, "Schema during development".
 
 `scripts/init-secrets.sh` creates the three secret files once and keeps them on every
 later run. Never regenerate `.local/pg-password` after the
@@ -170,14 +178,14 @@ When connecting over Tailscale instead, use:
 <dev-host-tailscale-ip> invoice.test
 ```
 
-Copy the **public** Warden root CA from microq and trust it as a local development CA:
+Copy the **public** Warden root CA from the dev host and trust it as a local development CA:
 
 ```text
 ~/.warden/ssl/rootca/certs/ca.cert.pem
 ```
 
 Do not copy anything from `~/.warden/ssl/rootca/private/`. After the CA is trusted,
-open `https://invoice.test`. The leaf certificate remains on microq and is served by
+open `https://invoice.test`. The leaf certificate remains on the dev host and is served by
 Warden Traefik.
 
 ## Operational checks

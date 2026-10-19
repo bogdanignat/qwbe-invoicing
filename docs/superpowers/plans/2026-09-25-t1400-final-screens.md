@@ -141,7 +141,7 @@ Repo: ~/projects/invoicing-qwbe, main 24580b8 (curat). Branch nou:
 - Browser smoke per ecran: desktop + mobile 320/390, auth flow, erori 4xx/5xx afișate,
   F5 în mijlocul unei scrieri (jurnalul trebuie să ofere retrimitere, nu al doilea document).
 - Review react-review pe diff după fiecare etapă, Etapa 0 inclusă (executor Opus).
-- `docs/NEXT_PREVIEW.md` actualizat în aceeași etapă cu ecranele migrate.
+- `docs/NEXT_PREVIEW.md` (șters la T-1910) actualizat în aceeași etapă cu ecranele migrate.
 
 ## Nu atingem
 - Backend (endpoints există). Legacy Vite nu se șterge; cutover separat, după Etapa D.

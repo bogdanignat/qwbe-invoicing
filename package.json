@@ -11,6 +11,7 @@
   "scripts": {
     "app": "node bin/qwbe-invoicing.ts",
     "build:frontend": "pnpm --filter @qwbe/invoicing-frontend build",
+    "test:app:runtime": "node --test --test-timeout=180000 probes/app-runtime.mjs probes/app-runtime-session.mjs",
     "local:setup": "node scripts/local-warden.mjs",
     "test": "node --test --test-concurrency=4 --test-timeout=120000 \"cubes/**/*.test.ts\" \"kernel/**/*.test.ts\" \"frontend/src/**/*.test.ts\" \"probes/**/*.test.mjs\"",
     "typecheck": "tsc -p tsconfig.json && pnpm --filter @qwbe/invoicing-frontend typecheck",
@@ -20,7 +21,7 @@
     "gate:test": "node probes/test-gate.mjs",
     "gate:size": "node probes/size-gate.mjs",
     "gate:boundaries": "node probes/boundary-gate.mjs",
-    "verify": "pnpm gate:runtime && pnpm lint && pnpm typecheck && pnpm test && pnpm build:frontend && pnpm gate:package && pnpm gate:test && pnpm gate:size && pnpm gate:boundaries"
+    "verify": "pnpm gate:runtime && pnpm lint && pnpm typecheck && pnpm test && pnpm build:frontend && pnpm test:app:runtime && pnpm gate:package && pnpm gate:test && pnpm gate:size && pnpm gate:boundaries"
   },
   "dependencies": {
     "@effect/platform": "0.96.1",

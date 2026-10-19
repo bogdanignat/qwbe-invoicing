@@ -47,13 +47,15 @@ void test("Host and X-Forwarded-Host/Proto are pinned to PUBLIC_ORIGIN outside t
 void test("the Docker healthcheck reaches liveness and readiness on the internal address", async () => {
   await withServer(async (server) => {
     const internal = { host: `127.0.0.1:${String(server.port)}` }
-    for (const path of ["/health/live", "/healthz", "/health/ready"]) {
+    for (const path of ["/health/live", "/health/ready"]) {
       assert.equal((await call(server, { path, headers: internal })).status, 200, path)
     }
-    assert.deepEqual(JSON.parse((await call(server, { path: "/healthz", headers: internal })).body), { status: "live" })
+    assert.deepEqual(JSON.parse((await call(server, { path: "/health/live", headers: internal })).body), { status: "live" })
+    // No alias outside /health/: `/healthz` is pinned like any other path.
+    refused(await call(server, { path: "/healthz", headers: internal }), 400, "invalid_host")
     // Exempt from pinning, not from the target check: a traversal that a URL
     // parser would turn into a health path is refused, never classified.
-    for (const path of ["/api/../health/live", "/api/%2e%2e/health/live", "/x/%252e%252e/healthz", "//health/live"]) {
+    for (const path of ["/api/../health/live", "/api/%2e%2e/health/live", "/x/%252e%252e/health/live", "//health/live"]) {
       refused(await call(server, { path, headers: internal }), 400, "invalid_request_target")
     }
   })

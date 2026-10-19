@@ -285,9 +285,9 @@ for the one that arrives over HTTP.
 ## What is still unverified
 
 - The official `ro16931-ubl-1.0.9` package is **not** reachable over HTTP from
-  here (`mfinante.gov.ro` resets the connection, repeatedly, across sessions),
-  but the extracted copy in the project's Drive materials is readable locally at
-  `~/gdrive/PROIECTE DEVELOPMENT/RO_E_FACTURA/ro16931-ubl-1.0.9`. The national
+  here (`mfinante.gov.ro` resets the connection, repeatedly, across sessions);
+  the national rules were read from an extracted copy of that package kept
+  outside this repository. The national
   rules in `cius-limits.ts` were read from its flattened
   `preprocessed/ROeFactura-UBL-validation-Invoice_v1.0.8.sch`; the EN 16931
   rules still come from the abstract model files and the validator's own

@@ -14,7 +14,7 @@ void test("liveness never depends on readiness", () => {
   // `route` is given `false` for every path that is not /health/ready, because
   // the listener does not evaluate readiness for them.
   assert.deepEqual(route("GET", "/health/live", false), { status: 200, body: { status: "live" } })
-  assert.equal(route("GET", "/healthz", false).status, 200)
+  assert.equal(route("GET", "/healthz", false).status, 404)
   assert.equal(route("GET", "/health/ready", false).status, 503)
   assert.equal(route("GET", "/health/ready", true).status, 200)
 })
