@@ -2,17 +2,15 @@
 
 import { Button } from "../Button.tsx"
 import { CustomerAddressFields } from "./CustomerAddressFields.tsx"
+import { CustomerIdentityFields } from "./CustomerIdentityFields.tsx"
 import { ErrorAlert } from "../AsyncState.tsx"
 import { Field } from "../ui/Field.tsx"
 import { FieldIssue } from "./FieldIssue.tsx"
 import { Input } from "../ui/Input.tsx"
-import { CIUS_TEXT_LIMITS } from "../../lib/cius-text-limits.ts"
-import { identifierLabel } from "../../lib/document-authoring-transitions.ts"
 import { useEditorHeadingFocus } from "../../hooks/use-editor-heading-focus.ts"
 import { useRefusedFieldFocus } from "../../hooks/use-refused-field-focus.ts"
 import { CUSTOMER_FORM, registryFieldAria } from "../../lib/registry-fields.ts"
-import { identifierMaxLength, type CustomerField } from "../../lib/customer-payload.ts"
-import { romanianCuiPattern } from "../../lib/vat-defaults.ts"
+import type { CustomerField } from "../../lib/customer-payload.ts"
 import type { CustomerForm } from "../../lib/customer-form.ts"
 import type { PartyType } from "../../lib/document-authoring-form-model.ts"
 import type { RegistryEditorIssue } from "../../hooks/use-registry-editor.ts"
@@ -33,7 +31,7 @@ interface CustomerEditorSectionProps {
   readonly onClose: () => void
 }
 
-/** The customer editor: the party, its fiscal identifier, its address and the payment term. */
+/** The customer editor: the party, its identity (completable from a CUI), its address and the payment term. */
 export const CustomerEditorSection = (props: CustomerEditorSectionProps) => {
   const { editingId, form, issue, pending } = props
   const headingRef = useEditorHeadingFocus(editingId ?? "new")
@@ -54,24 +52,8 @@ export const CustomerEditorSection = (props: CustomerEditorSectionProps) => {
           <label><input type="radio" name="customerPartyType" value="individual" checked={!company} disabled={pending}
             onChange={() => { props.onPartyTypeChange("individual") }} /><span>Persoană fizică (PF)</span></label>
         </div></fieldset>
-        <Field label={company ? "Denumire" : "Nume complet"} required>
-          <Input required disabled={pending} value={form.name} maxLength={CIUS_TEXT_LIMITS.partyName} {...aria("name")}
-            onChange={(event) => { props.onChange({ name: event.currentTarget.value }) }} />
-          <FieldIssue issue={issue} field="name" form={CUSTOMER_FORM} />
-        </Field>
-        <Field label={identifierLabel(form.partyType)} optional={!company} required={company}>
-          <Input value={form.fiscalIdentifier} required={company} disabled={pending}
-            maxLength={identifierMaxLength(form.partyType)} {...aria("fiscalIdentifier")}
-            pattern={company ? romanianCuiPattern : "(?:[0-9]{13})?"}
-            inputMode={company ? "text" : "numeric"}
-            title={company ? "CUI românesc numeric; prefixul RO introdus este eliminat" : "CNP valid din 13 cifre sau câmp gol"}
-            onChange={(event) => { props.onIdentifierChange(event.currentTarget.value) }} />
-          <FieldIssue issue={issue} field="fiscalIdentifier" form={CUSTOMER_FORM} />
-        </Field>
-        {company
-          ? <label className="checkbox-label"><input type="checkbox" checked={form.vatRegistered} disabled={pending}
-            onChange={(event) => { props.onChange({ vatRegistered: event.currentTarget.checked }) }} /> Client înregistrat în scopuri de TVA</label>
-          : null}
+        <CustomerIdentityFields form={form} editingId={editingId} disabled={pending} issue={issue} aria={aria}
+          onChange={props.onChange} onIdentifierChange={props.onIdentifierChange} />
         <CustomerAddressFields form={form} disabled={pending} sectorRequired={props.sectorRequired}
           issue={issue} aria={aria} onChange={props.onChange} onCountyChange={props.onCountyChange} />
         <Field label="Termen de plată (zile)" optional>

@@ -73,7 +73,9 @@ services:
       DATA_DIR: /data
       ORGANIZATION_ID: ${ORGANIZATION_ID:-local-organization}
       AUTH_TOKEN_FILE: /run/secrets/api_token
-      # Optional plugins, comma-separated (`payments`, `efactura`). Passed through
+      # The master key that encrypts the openapi.ro key at rest (company-lookup).
+      COMPANY_LOOKUP_KEY_FILE: /run/secrets/company_lookup_key
+      # Optional plugins, comma-separated (`payments`, `efactura`, `company-lookup`). Passed through
       # only when set: unset means every plugin runs, empty means none. Restart to apply.
       QWBE_PLUGINS:
       # `backup` and `restore` stage into a `mkdtemp` under TMPDIR, and the archive
@@ -83,6 +85,7 @@ services:
     secrets:
       - api_token
       - pg_password
+      - company_lookup_key
     depends_on:
       db:
         condition: service_healthy
@@ -138,6 +141,8 @@ secrets:
     file: ${AUTH_TOKEN_PATH:-./.local/api-token}
   pg_password:
     file: ${PG_PASSWORD_PATH:-./.local/pg-password}
+  company_lookup_key:
+    file: ${COMPANY_LOOKUP_KEY_PATH:-./.local/company-lookup-key}
 
 networks:
   warden:

@@ -9,6 +9,8 @@ import { createDraftsClient } from "../lib/drafts-client.ts"
 import type { DraftsClient } from "../lib/drafts-client.ts"
 import { createAuthoringReferenceClient } from "../lib/authoring-reference-client.ts"
 import type { AuthoringReferenceClient } from "../lib/authoring-reference-client.ts"
+import { createCompanyLookupClient } from "../lib/company-lookup-client.ts"
+import type { CompanyLookupClient } from "../lib/company-lookup-client.ts"
 import { createPaymentsClient } from "../lib/payments-client.ts"
 import type { PaymentsClient } from "../lib/payments-client.ts"
 import { createProformaReplayClient } from "../lib/proforma-replay-client.ts"
@@ -46,6 +48,8 @@ export interface InvoicingClients {
   readonly payments: PaymentsClient
   /** The dashboard's revenue and collections reports. */
   readonly reports: ReportsClient
+  /** The company-lookup plugin's routes; only a caller that checked the session's plugins asks them. */
+  readonly companyLookup: CompanyLookupClient
 }
 
 export const useInvoicingClients = (): InvoicingClients => {
@@ -61,5 +65,6 @@ export const useInvoicingClients = (): InvoicingClients => {
     settings: createSettingsClient(transport),
     payments: createPaymentsClient(transport),
     reports: createReportsClient(transport),
+    companyLookup: createCompanyLookupClient(transport),
   }), [transport])
 }

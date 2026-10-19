@@ -1,6 +1,8 @@
 "use client"
 
 import type { InvoiceAuthoringForm, PartyType } from "../../lib/invoice-authoring-model.ts"
+import { CompanyNameField } from "../company-lookup/CompanyNameField.tsx"
+import { CompanyProposalCard } from "../company-lookup/CompanyProposalCard.tsx"
 import { Field } from "../ui/Field.tsx"
 import { Input } from "../ui/Input.tsx"
 import { CIUS_TEXT_LIMITS } from "../../lib/cius-text-limits.ts"
@@ -8,6 +10,8 @@ import { Select } from "../ui/Select.tsx"
 import { identifierLabel } from "../../lib/document-authoring-transitions.ts"
 import { ROMANIAN_COUNTIES } from "../../lib/romanian-counties.ts"
 import { romanianCuiPattern } from "../../lib/vat-defaults.ts"
+import { oneTimeBuyerFill } from "../../lib/company-proposal-fill.ts"
+import { useCompanyLookup } from "../../hooks/use-company-lookup.ts"
 
 interface BuyerOneTimeFieldsProps {
   readonly form: InvoiceAuthoringForm
@@ -20,25 +24,27 @@ interface BuyerOneTimeFieldsProps {
   readonly onSectorChange: (sector: string) => void
 }
 
-/** The one-time (ad-hoc) buyer: a party typed on this document and never written to a registry. */
+/** The one-time (ad-hoc) buyer: a party typed on this document and never written to a registry; a company can be completed from its CUI. */
 export const BuyerOneTimeFields = (props: BuyerOneTimeFieldsProps) => {
   const { form, disabled, sectorRequired } = props
+  const { lookup, nameRef } = useCompanyLookup(form.partyType, form.partyType === "company")
   const fiscalIdentifier = form.partyType === "company" ? form.companyTaxIdentifier : form.individualTaxIdentifier
   return <div className="form-grid">
     <fieldset className="segmented-fieldset span-two"><legend>Tip persoană</legend><div className="segmented-control">
       <label><input type="radio" name="partyType" value="company" checked={form.partyType === "company"} disabled={disabled} onChange={() => { props.onPartyTypeChange("company") }} /><span>Persoană juridică (PJ)</span></label>
       <label><input type="radio" name="partyType" value="individual" checked={form.partyType === "individual"} disabled={disabled} onChange={() => { props.onPartyTypeChange("individual") }} /><span>Persoană fizică (PF)</span></label>
     </div></fieldset>
-    <Field label={form.partyType === "company" ? "Denumire" : "Nume complet"} required>
-      <Input required disabled={disabled} value={form.name} maxLength={CIUS_TEXT_LIMITS.partyName} onChange={(event) => { props.onChange({ name: event.currentTarget.value }) }} />
-    </Field>
+    <CompanyNameField lookup={lookup} inputRef={nameRef} label={form.partyType === "company" ? "Denumire" : "Nume complet"} value={form.name}
+      disabled={disabled} maxLength={CIUS_TEXT_LIMITS.partyName} onChange={(name) => { props.onChange({ name }) }} />
     <Field label={identifierLabel(form.partyType)} optional={form.partyType === "individual"} required={form.partyType === "company"}>
       <Input value={fiscalIdentifier} required={form.partyType === "company"} disabled={disabled}
         pattern={form.partyType === "company" ? romanianCuiPattern : "(?:[0-9]{13})?"} maxLength={13}
         title={form.partyType === "company" ? "CUI românesc numeric; prefixul RO introdus este eliminat" : "CNP valid din 13 cifre sau câmp gol"}
         inputMode={form.partyType === "individual" ? "numeric" : "text"}
-        onChange={(event) => { props.onFiscalIdentifierChange(event.currentTarget.value) }} />
+        onChange={(event) => { props.onFiscalIdentifierChange(event.currentTarget.value); lookup.typeCui(event.currentTarget.value) }} />
     </Field>
+    <CompanyProposalCard lookup={lookup} vat="suggested" disabled={disabled}
+      onApply={(proposal) => { props.onChange(oneTimeBuyerFill(form, proposal)) }} />
     {form.partyType === "company"
       ? <label className="checkbox-label"><input type="checkbox" checked={form.vatRegistered} disabled={disabled} onChange={(event) => { props.onChange({ vatRegistered: event.currentTarget.checked }) }} /> Cumpărător înregistrat în scopuri de TVA</label>
       : null}

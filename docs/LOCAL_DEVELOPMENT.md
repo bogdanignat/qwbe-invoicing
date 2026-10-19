@@ -16,7 +16,8 @@ mkdir -p .local && chmod 700 .local
 umask 077
 openssl rand -hex 32 > .local/api-token
 openssl rand -hex 32 > .local/pg-password        # the operator creates it; see below
-chmod 600 .local/api-token .local/pg-password
+openssl rand -hex 32 > .local/company-lookup-key # encrypts the openapi.ro key at rest
+chmod 600 .local/api-token .local/pg-password .local/company-lookup-key
 docker compose build
 docker compose up -d
 docker compose ps
@@ -24,9 +25,11 @@ curl --fail --cacert ~/.warden/ssl/rootca/certs/ca.cert.pem https://invoice.test
 docker compose exec app wget -qO- http://127.0.0.1:3000/health/ready
 ```
 
-Create the two secret files once. Never regenerate `.local/pg-password` after the
+Create the three secret files once. Never regenerate `.local/pg-password` after the
 cluster exists (PostgreSQL keeps the first password and `migrate` then fails with
 `password authentication failed`), and never regenerate an existing `.local/api-token`.
+A new `.local/company-lookup-key` makes a stored openapi.ro key unreadable: the
+provider reads as off until the key is entered again in Setări → Integrări.
 To change the password, or to start over, see README, [Database
 password](../README.md#database-password).
 
@@ -83,6 +86,7 @@ Every cube use-case is an `Effect` and has a 1:1 authenticated HTTP endpoint. Au
 - `POST /api/invoices/:id/payments` (record payment; requires `Idempotency-Key`) / `POST /api/invoices/:id/payments/:paymentId/reversal` (reverse one payment in full with an immutable counter-row; requires `Idempotency-Key`, optional `reason`) / `GET /api/invoices/:id/payments` (list payments with derived status `unpaid`/`partially_paid`/`paid`/`overpaid`/`overdue`, `paidAmount`/`remainingAmount`)
 - `POST /api/invoices/:id/corrections` (storno fiscal — creează document nou imuabil cu referință la factura originală, motiv obligatoriu; cantitate negativă, preț unitar pozitiv, totaluri negative; XML-ul e-Factura e CreditNote cu valori pozitive) / `GET /api/invoices/:id/corrections` / `GET /api/corrections/:id` — după emitere nu se mai editează factura, doar storno
 - Issued invoices have no `DELETE` endpoint and allocated invoice numbers are never reused; mistakes are handled through correction documents
+- `GET|PUT /api/settings/company-lookup` (`settings.manage`; `provider` `none`/`anaf`/`openapi`, write-only `openapiKey`, `clearOpenapiKey`; answers only `openapiKeyLast4`) / `GET /api/company-lookup/availability` / `POST /api/company-lookup/lookup` `{cui}` / `POST /api/company-lookup/search` `{q}` — the `company-lookup` plugin (404 when it is off); a CUI under 4 digits or with a wrong check digit and a name under 6 letters answer 400 without asking ANAF or openapi.ro
 
 T-1069 proforma route inventory (seven authenticated routes):
 

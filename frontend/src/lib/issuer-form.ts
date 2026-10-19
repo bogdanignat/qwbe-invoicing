@@ -99,7 +99,7 @@ export const issuerSectorRequired = (form: IssuerSettingsForm): boolean => count
  */
 export const changeIssuerIdentifier = (form: IssuerSettingsForm, value: string): IssuerSettingsForm => ({
   ...form,
-  fiscalIdentifier: normalizeRomanianCui(value).trim(),
+  fiscalIdentifier: normalizeRomanianCui(value),
 })
 
 /** Choosing a regime dates the change today, as the legacy screen did. */

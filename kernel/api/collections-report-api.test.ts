@@ -65,7 +65,7 @@ void test("collections report: payments by payment date, invoices of the period 
     assert.equal((await api.get(quarter, as(["payments:payment.record", "invoicing:issue"]))).status, 403)
     assert.equal((await api.get(quarter, as(["invoicing:read"]))).status, 200)
 
-    const off = await api.get(quarter, api.runtime("org-1", { payments: false, efactura: true }))
+    const off = await api.get(quarter, api.runtime("org-1", { payments: false, efactura: true, "company-lookup": true }))
     assert.equal(off.status, 404)
   })
 })

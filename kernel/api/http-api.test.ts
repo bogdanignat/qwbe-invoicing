@@ -5,7 +5,9 @@ import { HttpApi, OpenApi } from "@effect/platform"
 import { Schema, SchemaAST } from "effect"
 
 import { makeApiDocsResponse } from "../http/api-docs.ts"
-import { activeHttpApi, applicationHttpApi, efacturaHttpApi, operationNames, paymentsHttpApi } from "./http-api.ts"
+import {
+  activeHttpApi, companyLookupHttpApi, efacturaHttpApi, handlerHttpApi, operationNames, paymentsHttpApi,
+} from "./http-api.ts"
 import * as S from "./http-schemas.ts"
 import { allPlugins } from "../plugins.ts"
 
@@ -25,21 +27,25 @@ const inventory = [
   "POST /api/proformas", "POST /api/proformas/:id/invoice", "POST /api/proformas/:id/draft-invoice",
   "POST /api/proformas/:proformaId/pdf", "GET /api/proformas/:proformaId/pdf", "GET /api/corrections/:id/pdf",
   "GET /api/session", "POST /api/session", "DELETE /api/session",
+  "GET /api/settings/company-lookup", "PUT /api/settings/company-lookup", "GET /api/company-lookup/availability",
+  "POST /api/company-lookup/lookup", "POST /api/company-lookup/search",
 ].sort()
 
 const paymentRoutes = ["GET /api/invoices/:invoiceId/payments", "POST /api/invoices/:invoiceId/payments",
   "POST /api/invoices/:invoiceId/payments/:paymentId/reversal", "GET /api/reports/collections"]
 const efacturaRoutes = ["GET /api/invoices/:id/efactura.xml", "GET /api/corrections/:id/efactura.xml"]
+const companyLookupRoutes = ["GET /api/settings/company-lookup", "PUT /api/settings/company-lookup",
+  "GET /api/company-lookup/availability", "POST /api/company-lookup/lookup", "POST /api/company-lookup/search"]
 
-void test("the contract with every plugin on exposes exactly the current 52 operations", () => {
+void test("the contract with every plugin on exposes exactly the current 57 operations", () => {
   const applicationRoutes: Array<{ readonly method: string, readonly operationId: string, readonly path: string }> = []
   HttpApi.reflect(activeHttpApi(allPlugins), { onGroup() {}, onEndpoint({ endpoint }) {
     applicationRoutes.push({ method: endpoint.method, operationId: endpoint.name, path: endpoint.path })
   } })
-  assert.equal(operationNames.length, 52)
-  assert.equal(new Set(operationNames).size, 52)
-  assert.equal(applicationRoutes.length, 52)
-  assert.equal(new Set(applicationRoutes.map((route) => route.operationId)).size, 52)
+  assert.equal(operationNames.length, 57)
+  assert.equal(new Set(operationNames).size, 57)
+  assert.equal(applicationRoutes.length, 57)
+  assert.equal(new Set(applicationRoutes.map((route) => route.operationId)).size, 57)
   assert.ok(operationNames.includes("listVatRegimes"))
   assert.deepEqual(applicationRoutes.map((route) => `${route.method} ${route.path}`).sort(), inventory)
   assert.equal(applicationRoutes.some((route) => route.path === "/api"), false)
@@ -50,12 +56,13 @@ void test("a plugin that is off leaves the contract and keeps every other operat
   assert.deepEqual([all["/api/invoices/{invoiceId}/payments"]?.get?.operationId, all["/api/invoices/{invoiceId}/payments"]?.get?.tags],
     ["invoicing.listPayments", ["invoicing"]])
   assert.equal(all["/api/invoices/{id}/efactura.xml"]?.get?.operationId, "invoicing.downloadInvoiceEFactura")
-  for (const plugins of [{ payments: false, efactura: true }, { payments: true, efactura: false }, { payments: false, efactura: false }]) {
+  for (const plugins of [{ payments: false, efactura: true, "company-lookup": true }, { payments: true, efactura: false, "company-lookup": true },
+    { payments: false, efactura: false, "company-lookup": false }, { payments: true, efactura: true, "company-lookup": false }]) {
     const spec = OpenApi.fromApi(activeHttpApi(plugins))
     const routes = Object.entries(spec.paths).flatMap(([path, item]) => Object.entries(item).map(([method, operation]) =>
       ({ path, method, route: `${method.toUpperCase()} ${path.replace(/\{(\w+)\}/g, ":$1")}`, operation })))
     const expected = inventory.filter((route) => (plugins.payments || !paymentRoutes.includes(route))
-      && (plugins.efactura || !efacturaRoutes.includes(route)))
+      && (plugins.efactura || !efacturaRoutes.includes(route)) && (plugins["company-lookup"] || !companyLookupRoutes.includes(route)))
     assert.deepEqual(routes.map(({ route }) => route).sort(), expected, JSON.stringify(plugins))
     const full = OpenApi.fromApi(activeHttpApi(allPlugins))
     for (const { path, method, route, operation } of routes) {
@@ -77,9 +84,10 @@ const declaredErrors = (api: HttpApi.HttpApi.Any): ReadonlyArray<SchemaAST.AST> 
   return errors
 }
 
-void test("every error a plugin endpoint declares is one the core API encodes", () => {
-  const core = new Set(declaredErrors(applicationHttpApi))
-  for (const plugin of [paymentsHttpApi, efacturaHttpApi]) {
+void test("every error a plugin endpoint declares is one the handler's API encodes", () => {
+  const apiLevel = (handlerHttpApi as unknown as HttpApi.HttpApi.AnyWithProps).errorSchema.ast
+  const core = new Set([...declaredErrors(handlerHttpApi), ...SchemaAST.isUnion(apiLevel) ? apiLevel.types : [apiLevel]])
+  for (const plugin of [paymentsHttpApi, efacturaHttpApi, companyLookupHttpApi]) {
     const unknown = declaredErrors(plugin).filter((error) => !core.has(error))
     assert.deepEqual(unknown.map(String), [])
   }
@@ -288,7 +296,7 @@ void test("OpenAPI 3.1 mirrors paths, PDF encoding, and authentication metadata"
     for (const operation of Object.values(item)) {
       for (const [status, response] of Object.entries(operation.responses)) {
         const json = JSON.stringify(response)
-        for (const tag of ["ValidationFailure", "invalid_json", "invalid_credentials", "AuthenticationRequired", "PermissionDenied", "DocumentsPermissionDenied", "csrf_validation_failed", "origin_not_allowed", "ResourceNotFound", "DocumentNotFound", "DomainConflict", "ArtifactConflict", "request_body_too_large", "too_many_attempts", "PersistenceFailure", "DocumentPersistenceFailure", "DocumentRenderingFailure", "internal_failure", "OrganizationContextMissing", "not_ready"]) {
+        for (const tag of ["ValidationFailure", "invalid_json", "invalid_credentials", "AuthenticationRequired", "PermissionDenied", "DocumentsPermissionDenied", "csrf_validation_failed", "origin_not_allowed", "ResourceNotFound", "DocumentNotFound", "DomainConflict", "ArtifactConflict", "request_body_too_large", "too_many_attempts", "PersistenceFailure", "DocumentPersistenceFailure", "DocumentRenderingFailure", "internal_failure", "OrganizationContextMissing", "not_ready", "ProviderFailure"]) {
           if (!json.includes(tag)) continue
           const statuses = tagStatuses.get(tag) ?? new Set<string>()
           statuses.add(status)
@@ -304,7 +312,7 @@ void test("OpenAPI 3.1 mirrors paths, PDF encoding, and authentication metadata"
     DocumentNotFound: ["404"], DomainConflict: ["409"], ArtifactConflict: ["409"],
     request_body_too_large: ["413"], too_many_attempts: ["429"], PersistenceFailure: ["500"], DocumentPersistenceFailure: ["500"],
     DocumentRenderingFailure: ["500"], internal_failure: ["500"], OrganizationContextMissing: ["503"],
-    not_ready: ["503"],
+    not_ready: ["503"], ProviderFailure: ["429", "502", "503"],
   }
   for (const [tag, statuses] of Object.entries(expectedTagStatuses)) {
     assert.deepEqual([...tagStatuses.get(tag) ?? []].sort(), [...statuses].sort(), tag)

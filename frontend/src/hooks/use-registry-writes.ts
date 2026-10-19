@@ -4,7 +4,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useState } from "react"
 
 import { useAuth } from "./auth-context.ts"
-import { registryWriteOutcome } from "../lib/registry-write-outcome.ts"
+import { sessionWrite } from "../lib/session-write.ts"
 import type { RegistryWrite } from "../lib/registry-feedback.ts"
 
 /**
@@ -20,7 +20,7 @@ import type { RegistryWrite } from "../lib/registry-feedback.ts"
  * The session is still checked on both ends: no token means the request never
  * leaves, and an answer that arrives after a logout (or after another session
  * took over) leaves neither a notice, nor a refetch, nor an error behind —
- * `registryWriteOutcome` filters the rejection as well as the success.
+ * `sessionWrite` filters the rejection as well as the success.
  */
 export interface RegistryWriteRequest {
   readonly write: RegistryWrite
@@ -48,12 +48,8 @@ export const useRegistryWrites = (
   const [message, setMessage] = useState<string | undefined>(undefined)
   const mutation = useMutation({
     mutationFn: async (request: RegistryWriteRequest): Promise<RegistryWriteRequest | undefined> => {
-      const csrfToken = auth.csrfToken()
-      if (csrfToken === undefined) throw new Error(SESSION_CLOSED)
-      const epoch = auth.epoch()
-      // Both ends of the answer are filtered by the epoch, not only the
-      // successful one: `registry-write-outcome.ts` holds the rule and its test.
-      return await registryWriteOutcome(request, () => request.run(csrfToken), () => auth.ownsEpoch(epoch))
+      const answer = await sessionWrite(auth, request.run, SESSION_CLOSED)
+      return answer === undefined ? undefined : request
     },
     onSuccess: (request) => {
       if (request === undefined) return

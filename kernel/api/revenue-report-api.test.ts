@@ -50,7 +50,7 @@ void test("revenue report nets invoices and corrections by issue month on Postgr
     assert.equal((await api.get("/api/reports/revenue?from=2024-01-01&to=2026-12-31")).status, 200)
     // The report is invoicing's own: it answers with the payments plugin off.
     assert.equal((await api.get("/api/reports/revenue?from=2026-07-01&to=2026-09-30",
-      api.runtime("org-1", { payments: false, efactura: false }))).status, 200)
+      api.runtime("org-1", { payments: false, efactura: false, "company-lookup": false }))).status, 200)
 
     const url = "/api/reports/revenue?from=2026-07-01&to=2026-09-30"
     assert.equal((await handleApiRequest({ method: "GET", url, authorization: undefined, body: undefined }, api.runtime())).status, 401)

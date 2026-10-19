@@ -25,7 +25,7 @@ export const SHELL_LINKS: ReadonlyArray<ShellLink> = [
   { href: "/proformas", section: "proformas", label: "Proforme", icon: "▧" },
   { href: "/customers", section: "customers", label: "Clienți", icon: "♙" },
   { href: "/products", section: "products", label: "Catalog", icon: "◇" },
-  { href: "/settings", section: "settings", label: "Setări firmă", icon: "⚙" },
+  { href: "/settings", section: "settings", label: "Setări", icon: "⚙" },
 ]
 
 /** The first path segment: `/invoices/inv-1` is still the invoices section, and `/` is home. */

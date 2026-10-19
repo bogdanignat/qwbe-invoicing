@@ -6,8 +6,7 @@ import { useState } from "react"
 import { useAuth } from "./auth-context.ts"
 import { useInvoicingClients } from "./use-invoicing-clients.ts"
 import { registryLoad, registryReload, type RegistryLoad } from "../lib/registry-load.ts"
-import { registryWriteOutcome } from "../lib/registry-write-outcome.ts"
-import { requireCsrf } from "../lib/require-csrf.ts"
+import { sessionWrite } from "../lib/session-write.ts"
 import {
   documentSeriesNotice, documentSeriesPayload, newDocumentSeriesForm,
   type DocumentSeriesField, type DocumentSeriesForm,
@@ -22,7 +21,7 @@ import type { RegistryEditorIssue } from "./use-registry-editor.ts"
  * Configuring a series is add-only, so there is no editor state to keep — one
  * form, cleared after the series it created is in the list. The alphabet and the
  * duplicate check are `document-series-form.ts`; the ownership filter is the
- * same `registryWriteOutcome` the master-data writes use, so an answer that
+ * same `sessionWrite` the master-data writes use, so an answer that
  * arrives after the session ended leaves neither a notice nor a refetch behind.
  */
 export interface DocumentSeriesModel {
@@ -39,12 +38,12 @@ export interface DocumentSeriesModel {
 }
 
 export const useDocumentSeries = (): DocumentSeriesModel => {
-  const { status, csrfToken, epoch, ownsEpoch } = useAuth()
+  const auth = useAuth()
   const clients = useInvoicingClients()
   const queryClient = useQueryClient()
   const list = useQuery({
     queryKey: ["document-series"],
-    enabled: status === "authenticated",
+    enabled: auth.status === "authenticated",
     queryFn: ({ signal }) => clients.reference.listDocumentSeries(signal),
   })
   const [form, setForm] = useState<DocumentSeriesForm>(newDocumentSeriesForm)
@@ -52,17 +51,8 @@ export const useDocumentSeries = (): DocumentSeriesModel => {
   const [notice, setNotice] = useState<string | undefined>(undefined)
   const add = useMutation({
     mutationFn: async (request: { readonly payload: DocumentSeriesInput }) => {
-      const token = requireCsrf(csrfToken())
-      const session = epoch()
-      let created: DocumentSeries | undefined
-      const owned = await registryWriteOutcome(
-        request,
-        async () => {
-          created = await clients.settings.createDocumentSeries(token, request.payload)
-        },
-        () => ownsEpoch(session),
-      )
-      return owned === undefined ? undefined : created
+      const answer = await sessionWrite(auth, (token) => clients.settings.createDocumentSeries(token, request.payload))
+      return answer?.value
     },
     onSuccess: (created) => {
       if (created === undefined) return

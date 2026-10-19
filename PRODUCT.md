@@ -11,8 +11,8 @@ Architecture companion: [`FOUNDATION.md`](./FOUNDATION.md)
 QWBE Invoicing is a self-hosted invoicing application that:
 
 - runs as a useful standalone product;
-- is shaped as one QWBE plugin pack, `invoicing` with `payments` and `efactura` as
-  optional plugins (`required: false`, active by default; `QWBE_PLUGINS` switches them off
+- is shaped as one QWBE plugin pack, `invoicing` with `payments`, `efactura` and
+  `company-lookup` as optional plugins (`required: false`, active by default; `QWBE_PLUGINS` switches them off
   at startup, and a plugin that is off keeps its data), while the QWBE mother installs nothing;
 - is distributed primarily as versioned Docker images and a Docker Compose bundle;
 - issues and preserves Romanian invoices without implementing direct ANAF transport in the first release;
@@ -241,6 +241,35 @@ Required protections include:
 
 No blockchain is required. Integrity, reproducible snapshots, hashes, access
 controls, and an append-oriented audit history provide the required product trail.
+
+### 3.11 Company details from a CUI or a name (optional)
+
+Typing a company's details by hand is slow and error-prone. With the `company-lookup`
+plugin, the customer form, the one-time buyer on a document and the issuer settings
+propose them from the CUI:
+
+- **Settings → Integrations** has one switch per provider: **ANAF** (free, no key, CUI
+  only) and **openapi.ro** (needs the user's openapi.ro key, and also suggests companies
+  by name). At most one is on; switching one on switches the other off; both may be off.
+  openapi.ro cannot be switched on before its key is saved, and deleting the key switches
+  it off. The key is write-only: once saved, only its last four characters are shown, and it
+  can be replaced or deleted, never read back. Addresses and limits are fixed, not settings.
+- A lookup starts on its own, for companies only (not natural persons), once the CUI has at
+  least 4 digits and a valid check digit. With openapi.ro, typing at least 6 letters in the
+  name offers matching companies; picking one looks its CUI up.
+- The answer is a proposal, never an edit: a card says “Am găsit: name, county” with a
+  **Completează** button, and the form changes only on that click. It warns when the
+  company is struck off or declared fiscally inactive.
+- ANAF gives a structured address (county, Bucharest sector, locality, street and number,
+  postal code), which fills the address fields. openapi.ro gives one address line: only the
+  county and postal code are filled, the line is shown for the user to copy the rest.
+- A customer gets the provider's VAT status as a suggested, editable checkbox. The issuer
+  gets the trade register number too, but its VAT regime is never changed from a lookup; the
+  provider's VAT status is shown only as information.
+- There is no request quota of our own. When openapi.ro says its quota is used up, the form
+  says so and stays usable by hand. An answer is kept in memory for 24 hours (until a restart), so asking again does not
+  spend a request. With the plugin off, or with no provider switched on, no request leaves
+  the installation and the forms show nothing extra.
 
 ## 4. Additional document workflows
 

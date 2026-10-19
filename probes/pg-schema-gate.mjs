@@ -182,24 +182,27 @@ const main = async () => {
     // -------------------------------------------------- inventory parity
     const golden = JSON.parse(readFileSync(new URL("../kernel/parity/sqlite-baseline-objects.json",
       import.meta.url), "utf8"))
-    const goldenTables = golden.plans.flatMap((plan) => plan.tables.map(({ name }) => name)).sort()
+    // Tables born after the SQLite capture have no golden counterpart; each is named here.
+    const postCaptureTables = ["company_lookup_settings"]
+    const goldenTables = [...golden.plans.flatMap((plan) => plan.tables.map(({ name }) => name)), ...postCaptureTables].sort()
     const goldenIndexes = golden.plans.flatMap((plan) => plan.explicitIndexes.map(({ name }) => name)).sort()
     const liveTables = inventoryA.filter((entry) => entry.startsWith("table "))
       .map((entry) => entry.split(" ")[1]).sort()
     const liveIndexes = inventoryA.filter((entry) => entry.startsWith("index "))
       .map((entry) => entry.split(" ")[1]).sort()
 
-    check("26 domain tables, the same names as the SQLite baseline", () => {
+    check("27 domain tables: the SQLite baseline's 26 and company_lookup_settings", () => {
       assert.deepEqual(liveTables, goldenTables)
-      assert.equal(liveTables.length, 26)
+      assert.equal(liveTables.length, 27)
     })
     check("30 explicit indexes, the same names as the SQLite baseline", () => {
       assert.deepEqual(liveIndexes, goldenIndexes)
       assert.equal(liveIndexes.length, 30)
     })
-    check("60 triggers, 98 named checks, 7 functions", () => {
+    // 98 checks from the SQLite capture, plus the three of company_lookup_settings.
+    check("60 triggers, 101 named checks, 7 functions", () => {
       assert.equal(countOf(inventoryA, "trigger"), 60)
-      assert.equal(countOf(inventoryA, "check"), 98)
+      assert.equal(countOf(inventoryA, "check"), 101)
       assert.equal(countOf(inventoryA, "function"), 7)
     })
     check("every check constraint is named and within 63 characters", () => {
@@ -327,6 +330,7 @@ const main = async () => {
       assert.equal(byScope.catalog.ok, true, "catalog stands alone")
       assert.equal(byScope.issuer.ok, true, "issuer stands alone")
       assert.equal(byScope.kernel.ok, true, "kernel sessions stand alone")
+      assert.equal(byScope["company-lookup"].ok, true, "company-lookup settings stand alone")
       assert.equal(byScope.invoicing.ok, false, "invoicing needs issuers, customers and the foundation")
       assert.equal(byScope.payments.ok, false, "payments needs issued_invoices and the foundation")
       assert.equal(byScope.documents.ok, false, "documents needs the foundation function")

@@ -9,12 +9,13 @@ import { failureMiddleware, finalMiddleware, methodFallbackLayer } from "./api-r
 import { pdfResponse } from "./api-responses.ts"
 import { createUseServices } from "./api-services.ts"
 import { invoicingGroup } from "./api-invoicing-group.ts"
+import { companyLookupGroup } from "./handlers-company-lookup.ts"
 import { efacturaGroup } from "./handlers-efactura.ts"
 import { paymentsGroup } from "./handlers-payments.ts"
 import { sessionsGroup } from "./api-session-group.ts"
 import type { ApiRuntime } from "./api-types.ts"
 import { documentHandlers } from "./handlers-documents.ts"
-import { applicationHttpApi } from "./http-api.ts"
+import { applicationHttpApi, handlerHttpApi } from "./http-api.ts"
 
 export type { ApiRuntime } from "./api-types.ts"
 export interface ApiHandler { readonly handle: (request: Request) => Promise<Response>; readonly dispose: () => Promise<void> }
@@ -41,10 +42,11 @@ export const createApiHandler = (runtime: ApiRuntime): ApiHandler => {
   const plugins = [
     ...(runtime.plugins.payments ? [paymentsGroup(runtime)] : []),
     ...(runtime.plugins.efactura ? [efacturaGroup(runtime)] : []),
+    ...(runtime.plugins["company-lookup"] ? [companyLookupGroup(runtime)] : []),
   ]
   const groups = Layer.mergeAll(invoicingGroup(runtime), documentsGroup(runtime), sessionsGroup(runtime), ...plugins)
   const routes = methodFallbackLayer.pipe(Layer.provideMerge(groups))
-  const api = HttpApiBuilder.api(applicationHttpApi).pipe(
+  const api = HttpApiBuilder.api(handlerHttpApi).pipe(
     Layer.provide(routes), Layer.provide(authenticationLayer(runtime)), Layer.provide(sessionAuthenticationLayer(runtime)),
   )
   const layer = Layer.mergeAll(api, failureMiddleware.pipe(Layer.provide(HttpApiBuilder.Middleware.layer)), HttpServer.layerContext)

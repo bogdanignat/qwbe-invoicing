@@ -1,3 +1,4 @@
+import { cube as companyLookup } from "../cubes/invoicing/company-lookup/index.ts"
 import { cube as efactura } from "../cubes/invoicing/efactura/index.ts"
 import { cube as payments } from "../cubes/invoicing/payments/index.ts"
 
@@ -6,7 +7,7 @@ import { cube as payments } from "../cubes/invoicing/payments/index.ts"
  * `qwbe-package.json` declares and holds this list equal to the ones whose
  * manifest says `required: false`.
  */
-export const optionalPlugins: ReadonlyArray<string> = [payments, efactura].map((cube) => cube.manifest.name)
+export const optionalPlugins: ReadonlyArray<string> = [payments, efactura, companyLookup].map((cube) => cube.manifest.name)
 
 /**
  * Which optional plugins this installation runs. Read once, at startup, from
@@ -16,15 +17,16 @@ export const optionalPlugins: ReadonlyArray<string> = [payments, efactura].map((
 export interface PluginSelection {
   readonly payments: boolean
   readonly efactura: boolean
+  readonly "company-lookup": boolean
 }
 
-export const allPlugins: PluginSelection = { payments: true, efactura: true }
+export const allPlugins: PluginSelection = { payments: true, efactura: true, "company-lookup": true }
 
 export type PluginName = keyof PluginSelection
 
 /** The active plugins, by name, in manifest order: what a browser session is told it may use. */
 export const activePluginNames = (selection: PluginSelection): ReadonlyArray<PluginName> =>
-  (["payments", "efactura"] as const).filter((name) => selection[name])
+  (["payments", "efactura", "company-lookup"] as const).filter((name) => selection[name])
 
 /**
  * Absent: every optional plugin. Empty: none. A comma-separated list, spaces
@@ -38,5 +40,9 @@ export const parsePlugins = (value: string | undefined): PluginSelection => {
   if (unknown.length > 0) {
     throw new Error(`QWBE_PLUGINS names unknown plugins: ${unknown.join(", ")} (known: ${optionalPlugins.join(", ")})`)
   }
-  return { payments: names.includes(payments.manifest.name), efactura: names.includes(efactura.manifest.name) }
+  return {
+    payments: names.includes(payments.manifest.name),
+    efactura: names.includes(efactura.manifest.name),
+    "company-lookup": names.includes(companyLookup.manifest.name),
+  }
 }
