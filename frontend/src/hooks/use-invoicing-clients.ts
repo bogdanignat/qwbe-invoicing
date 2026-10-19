@@ -9,6 +9,8 @@ import { createDraftsClient } from "../lib/drafts-client.ts"
 import type { DraftsClient } from "../lib/drafts-client.ts"
 import { createAuthoringReferenceClient } from "../lib/authoring-reference-client.ts"
 import type { AuthoringReferenceClient } from "../lib/authoring-reference-client.ts"
+import { createCompanyLookupClient } from "../lib/company-lookup-client.ts"
+import type { CompanyLookupClient } from "../lib/company-lookup-client.ts"
 import { createPaymentsClient } from "../lib/payments-client.ts"
 import type { PaymentsClient } from "../lib/payments-client.ts"
 import { createProformaReplayClient } from "../lib/proforma-replay-client.ts"
@@ -42,6 +44,8 @@ export interface InvoicingClients {
   readonly settings: SettingsClient
   /** An issued invoice's payment ledger: the summary and its two writes. */
   readonly payments: PaymentsClient
+  /** The company-lookup plugin's routes; only a caller that checked the session's plugins asks them. */
+  readonly companyLookup: CompanyLookupClient
 }
 
 export const useInvoicingClients = (): InvoicingClients => {
@@ -56,5 +60,6 @@ export const useInvoicingClients = (): InvoicingClients => {
     proformaReplay: createProformaReplayClient(transport),
     settings: createSettingsClient(transport),
     payments: createPaymentsClient(transport),
+    companyLookup: createCompanyLookupClient(transport),
   }), [transport])
 }
