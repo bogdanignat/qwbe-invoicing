@@ -10,6 +10,8 @@ import type { RuntimeConfig } from "../config.ts"
 import { createLoginThrottle, type SecurityLogger } from "../auth/login-throttle.ts"
 import { artifactsDirectoryReady, databaseReady } from "../storage/migrations.ts"
 import { cachedReadiness, readinessIntervalMs } from "./readiness.ts"
+import { assertServableOrigin, edgePolicyFor, hardenTransport } from "./edge-server.ts"
+import type { EdgePolicy } from "./edge-guard.ts"
 import { createRequestListener } from "./http-request-listener.ts"
 
 export { route } from "./http-request-listener.ts"
@@ -29,6 +31,8 @@ export interface ServerDependencies {
   readonly securityLogger?: SecurityLogger
   readonly peerKey?: (request: IncomingMessage) => string | undefined
   readonly apiHandlerFactory?: typeof createApiHandler
+  /** The request deadline, 30 s unless a test shortens it. */
+  readonly requestDeadlineMs?: number
 }
 export interface RunningServer {
   readonly server: Server
@@ -90,6 +94,7 @@ export const startServer = async (
   renderApiDocs: () => Promise<ApiDocsResponse> = apiDocsResponse(config.plugins),
   dependencies: ServerDependencies = {},
 ): Promise<RunningServer> => {
+  assertServableOrigin(config)
   const ready = isReady ?? cachedReadiness(
     applicationReady(config, pool, dependencies.barrierHeld ?? (() => false)),
     readinessIntervalMs,
@@ -106,6 +111,7 @@ export const startServer = async (
   let disposePromise: Promise<void> | undefined
   const dispose = () => disposePromise ??= api.dispose()
   let closePromise: Promise<void> | undefined
+  let edge: EdgePolicy | undefined
   const server = createServer(createRequestListener({
     authenticate,
     browserSession,
@@ -113,8 +119,14 @@ export const startServer = async (
     api,
     isReady: ready,
     renderApiDocs,
+    edge: () => edge,
+    trustedProxies: config.trustedProxies,
+    ...(dependencies.requestDeadlineMs === undefined ? {} : { deadlineMs: dependencies.requestDeadlineMs }),
     ...(dependencies.peerKey === undefined ? {} : { peerKey: dependencies.peerKey }),
   }))
+  hardenTransport(server)
+  // Set synchronously on `listening`, before the first connection can be read.
+  server.once("listening", () => { edge = edgePolicyFor(config, server.address()) })
   const close = (): Promise<void> => closePromise ??= (async () => {
     try {
       if (server.listening) await new Promise<void>((resolve, reject) => server.close((error) => {

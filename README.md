@@ -343,6 +343,9 @@ Everything is configured through environment variables, read once at startup.
 | `ORGANIZATION_ID` | none | the legal entity this installation serves; every record is scoped to it |
 | `AUTH_TOKEN_FILE` | none | path to the file holding the API bearer token (the Compose secret mounts it at `/run/secrets/api_token`) |
 | `COMPANY_LOOKUP_KEY_FILE` | none | path to the company-lookup master key: 32 bytes as 64 hex characters (`openssl rand -hex 32`), mounted at `/run/secrets/company_lookup_key`. It encrypts the openapi.ro key at rest (AES-256-GCM). Unset: storing an openapi.ro key is refused (409 `company_lookup_key_storage_unavailable`) and everything else runs; set but unreadable or malformed: the application does not start. A different key makes the stored openapi.ro key unreadable: the provider reads as off until the key is entered again |
+| `PUBLIC_ORIGIN` | none | the canonical public origin, e.g. `https://invoice.example.com` (scheme and host, no path or trailing slash). `Host`, `X-Forwarded-Host`/`-Proto` and, on unsafe methods, `Origin` must match it, otherwise 400/403. Validated whenever it is set; required only to serve in production (`migrate`, `backup`, `restore` and `doctor` run without it). Outside production it may be left out only when `HOST` is a loopback address, and the origin is then the address the server listens on. The Compose files set it to the frontend's origin, which the BFF rewrites both headers to |
+| `QWBE_BEARER_API` | `off` | `on` serves the Bearer API on the same listener as the browser. Off, any `Authorization` header (empty included) is refused with 400. On, a request carrying both `Authorization` and a session cookie is still refused, and an unsafe request still needs `Origin: <PUBLIC_ORIGIN>`. Any other value stops the application at startup |
+| `QWBE_TRUSTED_PROXY` | none | the reverse proxies whose `X-Forwarded-For` keys the login throttle, comma-separated addresses or CIDR ranges (`172.18.0.0/16`, `fd00::/8`). Only a request whose socket peer is in the list is keyed on the right-most forwarded address that is not itself listed; everyone else keeps the socket address, whatever they forward. From a listed proxy, a repeated or malformed `X-Forwarded-For` answers 400, and a missing one, or one whose every address is listed, keys on the proxy. An unreadable entry or a `/0` range stops the application at startup. Set it to the proxy's fixed address (or its network) only when that proxy overwrites `X-Forwarded-For` for untrusted clients, as Caddy and Traefik do by default; the Compose files do not set it, because the Next BFF in front of the kernel today does not forward the header |
 | `QWBE_PLUGINS` | absent: every plugin | the optional plugins to run, comma-separated: `payments`, `efactura`, `company-lookup`. Absent runs all three; empty (`QWBE_PLUGINS=`) runs none; an unknown name stops the application at startup with an error naming the known plugins. Spaces are ignored and duplicates tolerated; a change takes a restart. A plugin that is off has no route (404), no OpenAPI entry and, for payments, no `payments:*` grant; with e-Factura off every invoice response says `eFacturaStatus: null`; with company lookup off the forms show no lookup and no request leaves for ANAF or openapi.ro. Migrations, tables and data stay, so switching a plugin back on finds its records (and its company-lookup settings) |
 
 Variables used only by the Compose files, in `.env`:
@@ -414,9 +417,22 @@ the backup taken before the upgrade, then start the previous image. The full pro
 
 ## API
 
-Authenticated routes live under `/api` and require `Authorization: Bearer <token>`.
+Authenticated routes live under `/api` and require `Authorization: Bearer <token>`
+(with `QWBE_BEARER_API=on`, see Configuration) or the browser session.
 This API is internal: it is reached through `docker compose exec app …` or the Compose
 network, not through the public origin, whose BFF only forwards the browser session.
+A Bearer call sends the Host of `PUBLIC_ORIGIN` (the kernel answers 400 to any other),
+and an unsafe method also sends `Origin: <PUBLIC_ORIGIN>` (403 without it). Locally, with
+`QWBE_BEARER_API=on` exported before `docker compose up -d`:
+
+```bash
+docker compose exec app sh -c 'wget -qO- --header "Host: invoice.test" \
+  --header "Authorization: Bearer $(cat /run/secrets/api_token)" http://127.0.0.1:3000/api/customers'
+docker compose exec app sh -c 'wget -qO- --header "Host: invoice.test" --header "Origin: https://invoice.test" \
+  --header "Authorization: Bearer $(cat /run/secrets/api_token)" --header "Content-Type: application/json" \
+  --post-data "{\"documentType\":\"invoice\",\"series\":\"QWBE\"}" http://127.0.0.1:3000/api/document-series'
+```
+
 The authenticated Swagger page at the backend's `/api` is not reachable through the
 public origin (the BFF forwards only `/api/qwbe/<path>`); the OpenAPI 3.1 document is
 generated from the same Effect `HttpApi` contract served by `HttpApiBuilder`.
@@ -440,7 +456,7 @@ handler on shutdown.
 | Corrections | `GET`, `POST /api/invoices/:id/corrections`, `GET /api/corrections/:id` |
 | Proformas | `POST /api/proformas`, `POST /api/drafts/:id/proformas`, `GET /api/proformas`, `GET /api/proformas/:id`, `POST /api/proformas/:id/invoice`, `POST`, `GET /api/proformas/:id/pdf` |
 | Company lookup | `GET`, `PUT /api/settings/company-lookup` (`settings.manage`; the openapi.ro key is write-only, answered only as `openapiKeyLast4`), `GET /api/company-lookup/availability`, `POST /api/company-lookup/lookup` `{cui}`, `POST /api/company-lookup/search` `{q}` (`company-lookup:company.lookup`) |
-| Health | `GET /health/live`, `GET /health/ready` (no auth) |
+| Health | `GET /health/live` (alias `GET /healthz`), `GET /health/ready` (no auth; the only paths exempt from `PUBLIC_ORIGIN` pinning, for the container healthcheck) |
 
 Issuer configuration accepts `vatChange: { registered, effectiveFrom }` for VAT
 registration, or `{ registered: false, effectiveFrom, nonVatBasis: "article_310" }`
@@ -572,7 +588,9 @@ empty target database.
   never reaches browser JavaScript, storage or the URL. State-changing requests carry a
   per-session CSRF token.
 - Failed browser unlocks and failed Bearer authentication are throttled in memory by the
-  normalized direct socket peer address; forwarded headers are not trusted. The protection
+  normalized socket peer address, or, when that peer is listed in `QWBE_TRUSTED_PROXY`, by the
+  right-most `X-Forwarded-For` address that is not a listed proxy; nobody else's forwarded
+  headers are read. The protection
   is instance-local. The first five failures have no cooldown; from the sixth failure,
   cooldowns are 1, 2, 4, 8, 16 and then at most 30 seconds.
   Entries expire after 15 minutes of inactivity, are capped at 10,000 with LRU eviction and
@@ -580,11 +598,25 @@ empty target database.
   requests are unaffected. Valid traffic is unaffected in normal state, but a valid Bearer
   request can receive `429 {"error":"too_many_attempts"}` with `Retry-After` while its shared
   peer is cooling down.
-- NATs and proxies aggregate callers under one peer, creating an explicit risk of temporary
-  shared lockout; there is no trusted-proxy configuration. Throttle logs contain neither
+- NATs, and proxies that are not listed in `QWBE_TRUSTED_PROXY`, aggregate callers under one
+  peer, creating an explicit risk of temporary shared lockout: behind Caddy or Traefik without
+  it, a stranger's failed unlocks lock everyone out for the cooldown. Throttle logs contain neither
   secrets nor raw IP addresses and emit at most once per key per cooldown interval. This is
   login-throttling, not complete DDoS protection; enforce broad request-rate and network
   controls at the reverse proxy.
+- The kernel guards its own edge, before routing, readiness, the body or any credential:
+  the raw request-target is refused when it holds `.`/`..` segments, backslashes or control
+  characters (also after repeated decoding); `Host` and `X-Forwarded-Host`/`-Proto` are pinned
+  to `PUBLIC_ORIGIN` (health paths exempt); duplicate identity headers, an empty or repeated
+  `qwbe_session` cookie and, unless `QWBE_BEARER_API=on`, any `Authorization` header answer
+  400; every unsafe method, Bearer and login included, needs `Origin` equal to
+  `PUBLIC_ORIGIN` (403). Every answer, errors and the `/api` → `/unlock` redirect included,
+  carries a strict CSP (`default-src 'none'`, no inline), COOP, `Permissions-Policy`,
+  `Referrer-Policy: no-referrer` and `nosniff`; API answers are `no-store`. Each request has a
+  30-second deadline covering body, readiness, handler and response (504 `upstream_timeout`);
+  the handler is interrupted on the deadline or when the client disconnects. An interrupted
+  mutation is not rolled back once it has committed: the client simply does not learn its
+  outcome.
 - Issued documents are immutable; PDFs are content-addressed and verified on read.
 - Company lookup: the openapi.ro key is write-only. It is stored encrypted (AES-256-GCM
   under the master key from `COMPANY_LOOKUP_KEY_FILE`, bound to the organization) and never

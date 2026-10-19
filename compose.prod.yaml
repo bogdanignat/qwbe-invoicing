@@ -98,6 +98,13 @@ services:
       # Optional plugins, comma-separated (`payments`, `efactura`, `company-lookup`). Passed through
       # only when set: unset means every plugin runs, empty means none. Restart to apply.
       QWBE_PLUGINS:
+      # Off unless exported as `on`: the Bearer API on the kernel's listener (README, Configuration).
+      QWBE_BEARER_API:
+      # Unset trusts no proxy's X-Forwarded-For (README, Configuration). Passed through only when set.
+      QWBE_TRUSTED_PROXY:
+      # Required to serve in production: the kernel pins Host, X-Forwarded-* and Origin to it.
+      # The same value as the frontend's FRONTEND_ORIGIN (the BFF rewrites both headers to it).
+      PUBLIC_ORIGIN: ${FRONTEND_ORIGIN:?Set FRONTEND_ORIGIN to the public https origin, e.g. https://invoice.example.com}
       # `backup` and `restore` stage into a `mkdtemp` under TMPDIR and the archive
       # bounds allow 1 GiB expanded, so staging is a disk volume and not the small
       # tmpfs below: a 1 GiB staging tree in `/tmp` would be 1 GiB of RAM.

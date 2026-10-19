@@ -258,10 +258,13 @@ void test("serve cuts a request that never finishes its body and still shuts dow
     const socketClosed = new Promise<void>((resolve) => { opened.once("close", () => { resolve() }) })
     await new Promise<void>((resolve) => { opened.once("connect", () => { resolve() }) })
     // The body is read before authentication, so no credential is needed to
-    // leave a request waiting on it: 1000 bytes announced, one sent.
+    // leave a request waiting on it: 1000 bytes announced, one sent. Host and
+    // Origin are the loopback origin the server pins, or the edge would refuse
+    // the request before it ever reached the body.
     socket.write([
       "POST /api/invoices HTTP/1.1",
-      "Host: 127.0.0.1",
+      `Host: 127.0.0.1:${String(port)}`,
+      `Origin: ${base}`,
       "Content-Type: application/json",
       "Content-Length: 1000",
       "",

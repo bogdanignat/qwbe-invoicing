@@ -3,17 +3,20 @@ import { Buffer } from "node:buffer"
 import test from "node:test"
 import { URL } from "node:url"
 
-import { abortAfterFirstChunk, createTlsMaterial, httpRequest, rawHttpRequest, sessionCookies, startBackendFixture,
+import { abortAfterFirstChunk, createTlsMaterial, httpRequest, rawHttpRequest, reservePort, sessionCookies, startBackendFixture,
   startFrontend, startTlsUpstreamFixture, startUpstreamFixture } from "./frontend-runtime-fixture.mjs"
 
 const json = (response) => JSON.parse(response.body.toString("utf8"))
 const canonicalHeaders = (origin, extra = {}) => ({ host: new URL(origin).host, ...extra })
 
 void test("standalone runtime preserves backend auth, request guards, methods, and page-only CSP", { timeout: 30_000 }, async () => {
-  const backend = await startBackendFixture()
+  // The kernel pins the BFF's public origin (the BFF rewrites Host and Origin to
+  // it), so the frontend's port is chosen before the backend starts.
+  const frontendPort = await reservePort()
+  const backend = await startBackendFixture({ publicOrigin: `http://127.0.0.1:${String(frontendPort)}` })
   let frontend
   try {
-    frontend = await startFrontend(backend.origin)
+    frontend = await startFrontend(backend.origin, { port: frontendPort })
     const headers = (extra = {}) => canonicalHeaders(frontend.origin, extra)
     const login = await httpRequest({ origin: frontend.origin, path: "/api/qwbe/session", method: "POST",
       headers: headers({ origin: frontend.origin, "content-type": "application/json" }),
@@ -67,7 +70,7 @@ void test("standalone runtime preserves backend auth, request guards, methods, a
     assert.equal(duplicateCookie.status, 400)
 
     for (const method of ["HEAD", "OPTIONS"]) {
-      const direct = await httpRequest({ origin: backend.origin, path: "/api/session", method })
+      const direct = await httpRequest({ origin: backend.origin, path: "/api/session", method, headers: headers() })
       const proxied = await httpRequest({ origin: frontend.origin, path: "/api/qwbe/session", method, headers: headers() })
       assert.equal(proxied.status, direct.status, `${method} status`)
       assert.equal(proxied.headers.allow, direct.headers.allow, `${method} allow`)

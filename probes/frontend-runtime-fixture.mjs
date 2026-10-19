@@ -93,8 +93,8 @@ const safeLogs = (value) => value
   .replaceAll(/[A-Za-z0-9_-]{64}/gu, "[redacted]")
   .slice(-maximumLogBytes)
 
-export const startFrontend = async (upstreamOrigin, { env = {} } = {}) => {
-  const port = await reservePort()
+export const startFrontend = async (upstreamOrigin, { env = {}, port: reserved } = {}) => {
+  const port = reserved ?? await reservePort()
   const origin = `http://127.0.0.1:${String(port)}`
   const child = spawn(process.execPath, ["--import", runtimeValidator, standaloneServer], {
     cwd: join(repositoryRoot, "frontend"),
@@ -148,7 +148,7 @@ export const startFrontend = async (upstreamOrigin, { env = {} } = {}) => {
  * token file is still a real 64-character secret on disk, mode 0600, because the
  * frontend under test logs in through it.
  */
-export const startBackendFixture = async () => {
+export const startBackendFixture = async ({ publicOrigin } = {}) => {
   const fixture = await migratedFixture("frontend_runtime")
   const token = "r".repeat(64)
   const tokenFile = join(fixture.dataDirectory, "api-token")
@@ -156,7 +156,7 @@ export const startBackendFixture = async () => {
   try {
     const backend = await startServer(
       fixture.config({ host: "127.0.0.1", port: 0, nodeEnvironment: "development", authTokenFile: tokenFile,
-        organizationId: "org-runtime" }),
+        organizationId: "org-runtime", publicOrigin }),
       fixture.pool,
       () => Promise.resolve(true),
     )

@@ -6,6 +6,7 @@ import { join } from "node:path"
 import test from "node:test"
 
 import { apiDocsResponse } from "./api-docs.ts"
+import { edgeRequest } from "./edge-transport.test-support.ts"
 import { startServer } from "./http.ts"
 import { allPlugins } from "../plugins.ts"
 import { withMigrated, type TestFixture } from "../storage/postgres-rig.test-support.ts"
@@ -22,7 +23,7 @@ void test("the HTTP host exchanges the API token for a cookie session", async ()
   writeFileSync(tokenFile, token, { mode: 0o600 })
   let docsAttempts = 0
   const running = await startServer(
-    fixture.config({ port: 0, authTokenFile: tokenFile }),
+    fixture.config({ port: 0, authTokenFile: tokenFile, bearerApi: true }),
     fixture.pool,
     () => Promise.resolve(true),
     async () => {
@@ -51,14 +52,26 @@ void test("the HTTP host exchanges the API token for a cookie session", async ()
 
     const resumed = await fetch(`${origin}/api/session`, { headers: { cookie } })
     assert.equal(resumed.status, 200)
-    const anonymousDocs = await fetch(`${origin}/api`)
-    assert.equal(anonymousDocs.status, 401)
-    const failedDocs = await fetch(`${origin}/api`, { headers: { cookie } })
+    // Without a session the docs page sends the browser to `/unlock` and clears
+    // whatever session cookie it had; a render failure stays a 500.
+    const anonymousDocs = await fetch(`${origin}/api`, { redirect: "manual" })
+    assert.equal(anonymousDocs.status, 303)
+    assert.equal(anonymousDocs.headers.get("location"), "/unlock")
+    assert.match(anonymousDocs.headers.get("set-cookie") ?? "", /^qwbe_session=; .*Max-Age=0/u)
+    const failedDocs = await fetch(`${origin}/api`, { headers: { cookie }, redirect: "manual" })
     assert.equal(failedDocs.status, 500)
     assert.deepEqual(await failedDocs.json(), { error: "internal_failure" })
     const docs = await fetch(`${origin}/api`, { headers: { cookie } })
     assert.equal(docs.status, 200)
     assert.match(docs.headers.get("content-type") ?? "", /^text\/html/)
+    // The Swagger page brings its own CSP (inline bundle) and keeps every other
+    // security header of the edge.
+    assert.match(docs.headers.get("content-security-policy") ?? "", /script-src 'unsafe-inline'/u)
+    assert.equal(docs.headers.get("cross-origin-opener-policy"), "same-origin")
+    assert.equal(docs.headers.get("referrer-policy"), "no-referrer")
+    assert.equal(docs.headers.get("permissions-policy"), "camera=(), microphone=(), geolocation=()")
+    assert.equal(docs.headers.get("x-content-type-options"), "nosniff")
+    assert.equal(docs.headers.get("cache-control"), "no-store")
     const docsHtml = await docs.text()
     assert.match(docsHtml, /SwaggerUIBundle/)
     assert.match(docsHtml, /QWBE Invoicing API/)
@@ -71,10 +84,14 @@ void test("the HTTP host exchanges the API token for a cookie session", async ()
       body: JSON.stringify({}),
     })
     assert.equal(rejectedWrite.status, 403)
+    // A session cookie beside a valid Bearer credential is refused outright,
+    // whichever of the two is valid: neither mechanism may be chosen for it.
     const bearerWithBadCookie = await fetch(`${origin}/api/customers`, {
       headers: { authorization: `Bearer ${token}`, cookie: `${cookie}x` },
     })
-    assert.equal(bearerWithBadCookie.status, 200)
+    assert.equal(bearerWithBadCookie.status, 400)
+    assert.deepEqual(await bearerWithBadCookie.json(), { error: "mixed_credentials" })
+    assert.equal((await fetch(`${origin}/api/customers`, { headers: { authorization: `Bearer ${token}` } })).status, 200)
     const logout = await fetch(`${origin}/api/session`, {
       method: "DELETE",
       headers: { cookie, origin, "x-csrf-token": loginBody.csrfToken },
@@ -92,51 +109,64 @@ void test("the HTTP host exchanges the API token for a cookie session", async ()
 /**
  * The shipped cookie policy, at the port, on a real database.
  *
- * `nodeEnvironment` is what decides the `Secure` attribute
- * (`kernel/auth/browser-session.ts`), and the only probe that drives a real
- * backend end to end speaks plain HTTP, so it has to run that backend as
- * `development`. Above the session unit the production attribute was therefore
- * asserted nowhere. Both answers are pinned here over the same plain-HTTP
- * transport, so the only thing that differs between them is the configuration.
+ * `Secure` follows production OR an HTTPS public origin
+ * (`kernel/auth/browser-session.ts`), for the issued cookie and the clearing
+ * one alike. Every case speaks plain HTTP to the same port, with the Host the
+ * configured origin pins, so the only thing that differs between them is the
+ * configuration.
  */
-const issuedSessionCookie = async (fixture: TestFixture, nodeEnvironment: string, token: string): Promise<string> => {
+interface CookiePolicy { readonly issued: string; readonly cleared: string }
+
+const sessionCookiePolicy = async (
+  fixture: TestFixture,
+  nodeEnvironment: string,
+  publicOrigin: string | undefined,
+  token: string,
+): Promise<CookiePolicy> => {
   const tokenFile = join(fixture.dataDirectory, "api-token")
   writeFileSync(tokenFile, token, { mode: 0o600 })
   const running = await startServer(
-    fixture.config({ port: 0, authTokenFile: tokenFile, nodeEnvironment }),
+    fixture.config({ port: 0, authTokenFile: tokenFile, nodeEnvironment, publicOrigin }),
     fixture.pool,
     () => Promise.resolve(true),
   )
   try {
     if (!running.server.listening) await once(running.server, "listening")
-    const address = running.server.address() as AddressInfo
-    const origin = `http://127.0.0.1:${String(address.port)}`
-    const login = await fetch(`${origin}/api/session`, {
-      method: "POST",
-      headers: { "content-type": "application/json", origin },
-      body: JSON.stringify({ token }),
-    })
+    const port = (running.server.address() as AddressInfo).port
+    const origin = publicOrigin ?? `http://127.0.0.1:${String(port)}`
+    const host = new URL(origin).host
+    const login = await edgeRequest(port, { method: "POST", path: "/api/session",
+      headers: { host, origin, "content-type": "application/json" }, body: JSON.stringify({ token }) })
     assert.equal(login.status, 200)
-    const setCookie = login.headers.get("set-cookie")
-    assert.ok(setCookie, "a successful login must issue the session cookie")
-    return setCookie
+    const issued = login.headers["set-cookie"]?.[0] ?? ""
+    assert.ok(issued, "a successful login must issue the session cookie")
+    const docs = await edgeRequest(port, { path: "/api", headers: { host, cookie: `qwbe_session=${"x".repeat(43)}` } })
+    assert.equal(docs.status, 303)
+    const cleared = docs.headers["set-cookie"]?.[0] ?? ""
+    assert.match(cleared, /^qwbe_session=; .*Max-Age=0/u)
+    return { issued, cleared }
   } finally {
     await running.close()
   }
 }
 
-void test("a production host marks the session cookie Secure, a development host does not", async () => {
+void test("production or an HTTPS public origin marks the session cookies Secure, a plain development host does not", async () => {
   await withMigrated("http_cookie_policy", async (fixture) => {
     const token = "c".repeat(64)
-    const production = await issuedSessionCookie(fixture, "production", token)
-    assert.match(production, /; Secure/u)
-    assert.match(production, /; HttpOnly/u)
-    assert.match(production, /; SameSite=Strict/u)
-    // Same transport, same database, same token: only the environment changed,
+    const production = await sessionCookiePolicy(fixture, "production", "https://invoice.test", token)
+    const httpsDevelopment = await sessionCookiePolicy(fixture, "development", "https://invoice.test", token)
+    for (const cookie of [production.issued, production.cleared, httpsDevelopment.issued, httpsDevelopment.cleared]) {
+      assert.match(cookie, /; Secure/u)
+      assert.match(cookie, /; HttpOnly/u)
+      assert.match(cookie, /; SameSite=Strict/u)
+    }
+    // Same transport, same database, same token: only the configuration changed,
     // so the missing attribute is the policy and not the plain-HTTP origin.
-    const development = await issuedSessionCookie(fixture, "development", token)
-    assert.doesNotMatch(development, /; Secure/u)
-    assert.match(development, /; HttpOnly/u)
-    assert.match(development, /; SameSite=Strict/u)
+    const development = await sessionCookiePolicy(fixture, "development", undefined, token)
+    for (const cookie of [development.issued, development.cleared]) {
+      assert.doesNotMatch(cookie, /; Secure/u)
+      assert.match(cookie, /; HttpOnly/u)
+      assert.match(cookie, /; SameSite=Strict/u)
+    }
   })
 })

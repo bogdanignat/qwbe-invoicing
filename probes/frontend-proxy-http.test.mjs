@@ -14,15 +14,16 @@ void test("HTTP development preview accepts the backend's non-Secure session coo
   const token = "h".repeat(64)
   const tokenFile = join(fixture.dataDirectory, "api-token")
   writeFileSync(tokenFile, token, { mode: 0o600 })
+  const publicOrigin = "http://invoicing-preview.example.test"
+  // The BFF rewrites Host and Origin to its public origin, which the kernel pins.
   const backend = await startServer(
-    fixture.config({ port: 0, nodeEnvironment: "development", authTokenFile: tokenFile, organizationId: "org-http" }),
+    fixture.config({ port: 0, nodeEnvironment: "development", authTokenFile: tokenFile, organizationId: "org-http", publicOrigin }),
     fixture.pool,
     () => Promise.resolve(true),
   )
   try {
     if (!backend.server.listening) await once(backend.server, "listening")
     const address = backend.server.address()
-    const publicOrigin = "http://invoicing-preview.example.test"
     const config = { frontendOrigin: new URL(publicOrigin), upstreamBase: new URL(`http://127.0.0.1:${String(address.port)}`), timeoutMs: 2_000 }
     const request = (method, headers = {}, body) => new globalThis.Request(`${publicOrigin}/api/qwbe/session`, {
       method, headers: { host: "invoicing-preview.example.test", ...headers }, ...(body === undefined ? {} : { body }),

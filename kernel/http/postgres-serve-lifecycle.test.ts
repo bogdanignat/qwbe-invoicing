@@ -9,6 +9,7 @@ import type { RuntimeConfig } from "../config.ts"
 import { allPlugins } from "../plugins.ts"
 import { createQueryPool } from "../storage/postgres-pool.ts"
 import { startServer } from "./http.ts"
+import { parseTrustedProxies } from "./trusted-proxy.ts"
 
 /**
  * Serving with the database unreachable. No server is started on port 1, so the
@@ -43,6 +44,9 @@ const configFor = (port: number, tokenFile: string): RuntimeConfig => ({
   organizationId: undefined,
   pgSettings: { host: "127.0.0.1", port: 1, database: "nothing", user: "nobody", password: "" },
   plugins: allPlugins,
+  publicOrigin: undefined,
+  bearerApi: false,
+  trustedProxies: parseTrustedProxies(undefined),
 })
 
 const tokenFile = (): string => {
@@ -107,7 +111,8 @@ void test("readiness recovering reopens the gate without a restart", async () =>
   try {
     const port = address(running.server)
     assert.equal((await fetch(`http://127.0.0.1:${String(port)}/health/ready`)).status, 503)
-    assert.equal((await fetch(`http://127.0.0.1:${String(port)}/api/session`, { method: "POST" })).status, 503)
+    const origin = `http://127.0.0.1:${String(port)}`
+    assert.equal((await fetch(`${origin}/api/session`, { method: "POST", headers: { origin } })).status, 503)
     healthy = true
     assert.equal((await fetch(`http://127.0.0.1:${String(port)}/health/ready`)).status, 200)
   } finally {

@@ -4,32 +4,39 @@ import type { ApiHandler } from "../api/api.ts"
 import type { RequestAuthenticator } from "../auth/auth.ts"
 import type { BrowserSession } from "../auth/browser-session.ts"
 import { loginPeerKey, type LoginThrottle } from "../auth/login-throttle.ts"
+import { clientAddress, type ClientAddress } from "./client-address.ts"
+import type { TrustedProxies } from "./trusted-proxy.ts"
 import { failureReason, logInternalFailure } from "../failure-log.ts"
+import type { ApiDocsResponse } from "./api-docs.ts"
+import { requestDeadlineMs, startDeadline, untilAborted } from "./edge-deadline.ts"
+import { edgeRefusal, type EdgePolicy } from "./edge-guard.ts"
+import { requestTarget } from "./edge-target.ts"
 import { forwardApiRequest } from "./http-api-forward.ts"
-import { header, send } from "./http-request-io.ts"
+import { serveApiDocs } from "./http-docs-route.ts"
+import { send } from "./http-request-io.ts"
 
 interface HttpResponse {
   readonly status: number
   readonly body: Readonly<Record<string, string>>
 }
 
-export const route = (method: string | undefined, url: string | undefined, ready: boolean): HttpResponse => {
+export const route = (method: string | undefined, path: string, ready: boolean): HttpResponse => {
   if (method !== "GET") return { status: 405, body: { status: "method_not_allowed" } }
-  if (url === "/health/live") return { status: 200, body: { status: "live" } }
-  if (url === "/health/ready") return ready ? { status: 200, body: { status: "ready" } } : { status: 503, body: { status: "not_ready" } }
-  if (url === "/") return { status: 200, body: { application: "QWBE Invoicing", status: "invoice_core" } }
+  if (path === "/health/live" || path === "/healthz") return { status: 200, body: { status: "live" } }
+  if (path === "/health/ready") return ready ? { status: 200, body: { status: "ready" } } : { status: 503, body: { status: "not_ready" } }
+  if (path === "/") return { status: 200, body: { application: "QWBE Invoicing", status: "invoice_core" } }
   return { status: 404, body: { status: "not_found" } }
 }
 
 /**
  * Which paths are allowed to pay for a readiness evaluation. Only
- * `/health/ready` is: liveness, the root document and the 404/405 answers are
- * decided without touching the database, so a slow or absent server cannot turn
- * a liveness probe into a restart loop. `route` still takes `ready` as a
- * parameter — it stays synchronous — and the caller passes `false` for the paths
- * that never consult it, which `route` ignores anyway.
+ * `/health/ready` is: liveness (`/health/live` and its alias `/healthz`), the
+ * root document and the 404/405 answers are decided without touching the
+ * database, so a slow or absent server cannot turn a liveness probe into a
+ * restart loop. `route` stays synchronous and the caller passes `false` for the
+ * paths that never consult readiness.
  */
-const needsReadiness = (url: string | undefined): boolean => url === "/health/ready"
+const needsReadiness = (path: string): boolean => path === "/health/ready"
 
 interface ListenerDependencies {
   readonly authenticate: RequestAuthenticator
@@ -37,47 +44,56 @@ interface ListenerDependencies {
   readonly throttle: LoginThrottle
   readonly api: ApiHandler
   readonly isReady: () => Promise<boolean>
-  readonly renderApiDocs: () => Promise<{ readonly status: number; readonly body: unknown; readonly headers: Readonly<Record<string, string>> }>
+  readonly renderApiDocs: () => Promise<ApiDocsResponse>
+  /** The public edge. Known once the server listens; before that nothing is served. */
+  readonly edge: () => EdgePolicy | undefined
+  readonly deadlineMs?: number
+  readonly trustedProxies: TrustedProxies
   readonly peerKey?: (request: IncomingMessage) => string | undefined
 }
 
+/**
+ * The order is the security contract: the deadline starts first, the raw
+ * request-target and the edge guard run before the path is branched on, before
+ * readiness, before the body is read and before a credential is looked at.
+ */
 export const createRequestListener = (dependencies: ListenerDependencies): RequestListener => (request, response) => {
-  const { api, authenticate, browserSession, isReady, renderApiDocs, throttle } = dependencies
-  const peer = loginPeerKey(dependencies.peerKey === undefined ? request.socket.remoteAddress : dependencies.peerKey(request))
-  const rejectCooldown = (): boolean => {
-    const retryAfter = throttle.check(peer)
-    if (retryAfter === 0) return false
-    send(response, 429, { error: "too_many_attempts" }, { "retry-after": String(retryAfter) })
-    return true
-  }
+  const { api, authenticate, browserSession, isReady, throttle } = dependencies
+  const signal = startDeadline(response, dependencies.deadlineMs ?? requestDeadlineMs, () => {
+    if (response.headersSent) response.destroy()
+    else send(response, 504, { error: "upstream_timeout" }, { connection: "close" })
+  })
   void (async () => {
-    const path = request.url === undefined ? undefined : new URL(request.url, "http://localhost").pathname
+    // A refused request is answered without reading its body, and its
+    // connection is not kept for another one.
+    const target = requestTarget(request.url)
+    if (target === undefined) { send(response, 400, { error: "invalid_request_target" }, { connection: "close" }); return }
+    const edge = dependencies.edge()
+    if (edge === undefined) { send(response, 503, { error: "not_ready" }); return }
+    const refusal = edgeRefusal(request, target.path, edge)
+    if (refusal !== undefined) { send(response, refusal.status, { error: refusal.error }, { connection: "close" }); return }
+    const client: ClientAddress = dependencies.peerKey === undefined
+      ? clientAddress(request, dependencies.trustedProxies)
+      : { kind: "client", address: dependencies.peerKey(request) }
+    if (client.kind === "invalid") { send(response, 400, { error: "invalid_forwarded_for" }, { connection: "close" }); return }
+    const peer = loginPeerKey(client.address)
+    const rejectCooldown = (): boolean => {
+      const retryAfter = throttle.check(peer)
+      if (retryAfter === 0) return false
+      send(response, 429, { error: "too_many_attempts" }, { "retry-after": String(retryAfter) })
+      return true
+    }
+    const { path } = target
     if (path === "/api" && request.method === "GET") {
-      // Everything on this branch can reject now: readiness opens a transaction
-      // and `resume` is a locked read. One try/catch covers all three, so a
-      // database failure answers the request instead of escaping the IIFE as an
-      // unhandled rejection and taking the process with it.
-      try {
-        if (!await isReady()) { send(response, 503, { error: "not_ready" }); return }
-        const session = await browserSession.resume(header(request.headers.cookie))
-        if (session.kind === "unauthorized") {
-          send(response, 401, { error: "AuthenticationRequired" }, { "set-cookie": browserSession.clearCookie }); return
-        }
-        const docs = await renderApiDocs()
-        send(response, docs.status, docs.body, docs.headers)
-      } catch (error) {
-        logInternalFailure({ kind: "api_docs", reason: failureReason(error) })
-        send(response, 500, { error: "internal_failure" })
-      }
+      await serveApiDocs(dependencies, request, response, signal)
       return
     }
-    if (path?.startsWith("/api/") === true) {
-      await forwardApiRequest({ api, authenticate, browserSession, isReady, peer, rejectCooldown, throttle }, request, response, path)
+    if (path.startsWith("/api/")) {
+      const forward = { api, authenticate, browserSession, isReady, origin: edge.origin, peer, rejectCooldown, signal, throttle }
+      await forwardApiRequest(forward, request, response, path)
       return
     }
-    // `/health/live`, `/` and the fallbacks answer without the database;
-    // `/health/ready` is the only path that pays for an evaluation.
-    const ready = needsReadiness(path) ? await isReady() : false
+    const ready = needsReadiness(path) ? await untilAborted(isReady(), signal) : false
     const result = route(request.method, path, ready)
     send(response, result.status, result.body)
   })().catch((error: unknown) => {
@@ -85,7 +101,9 @@ export const createRequestListener = (dependencies: ListenerDependencies): Reque
     // so a defect in the dispatch itself still answers the request instead of
     // becoming an unhandled rejection. There is deliberately NO process-level
     // `unhandledRejection` handler anywhere in the application: it would hide
-    // exactly this class of bug instead of surfacing it.
+    // exactly this class of bug instead of surfacing it. An aborted request was
+    // already answered (or has no one left to answer).
+    if (signal.aborted) return
     logInternalFailure({ kind: "request", reason: failureReason(error) })
     if (!response.headersSent) send(response, 500, { error: "internal_failure" })
     else response.end()

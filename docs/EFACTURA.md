@@ -319,8 +319,15 @@ A document issued in the running application is exported the same way, through
 the button on its page or directly:
 
 ```
-curl -H "Authorization: Bearer $TOKEN" -OJ http://localhost:3000/api/invoices/$ID/efactura.xml
+docker compose exec app sh -c "wget -qO- --header 'Host: invoice.test' \
+  --header \"Authorization: Bearer \$(cat /run/secrets/api_token)\" \
+  http://127.0.0.1:3000/api/invoices/$ID/efactura.xml" > "factura-$ID.xml"
 ```
+
+The backend has no published port: the call runs inside its container, with the
+Host of `PUBLIC_ORIGIN` (any other Host answers 400) and with `QWBE_BEARER_API=on`
+exported before `docker compose up -d` (off, `Authorization` answers 400). The
+button in the browser needs neither.
 
 That file is uploaded at the same address and under the same rule as the
 fixtures: only invented parties. A local invoice is issued against whatever

@@ -19,7 +19,9 @@ void test("BFF exchanges credentials with the real backend and preserves session
   const tokenFile = join(fixture.dataDirectory, "api-token")
   writeFileSync(tokenFile, token, { mode: 0o600 })
   const backend = await startServer(
-    fixture.config({ port: 0, nodeEnvironment: "development", authTokenFile: tokenFile, organizationId: "org-proxy" }),
+    // The BFF rewrites Host and Origin to its public origin, which the kernel pins.
+    fixture.config({ port: 0, nodeEnvironment: "development", authTokenFile: tokenFile, organizationId: "org-proxy",
+      publicOrigin: frontendOrigin }),
     fixture.pool,
     () => Promise.resolve(true),
   )
@@ -49,10 +51,12 @@ void test("BFF exchanges credentials with the real backend and preserves session
     assert.equal(logout.status, 200)
     const clearCookie = logout.headers.getSetCookie()[0]
     assert.match(clearCookie, /Max-Age=0/)
-    assert.match(clearCookie, /; Secure$/)
+    // The kernel marks the clearing cookie Secure itself under an HTTPS public
+    // origin; the BFF no longer has to append it.
+    assert.match(clearCookie, /; Secure(?:;|$)/)
     const replay = await handleProxyRequest(proxyRequest("session", { headers: { cookie } }), config)
     assert.equal(replay.status, 401)
-    assert.match(replay.headers.getSetCookie()[0], /; Secure$/)
+    assert.match(replay.headers.getSetCookie()[0], /; Secure(?:;|$)/)
 
     const authorization = await handleProxyRequest(proxyRequest("customers", { headers: { authorization: `Bearer ${token}` } }), config)
     assert.equal(authorization.status, 400)

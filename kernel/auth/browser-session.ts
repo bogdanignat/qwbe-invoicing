@@ -83,7 +83,9 @@ export const createBrowserSession = (
 ): BrowserSession => {
   const token = configuredToken(config)
   if (token !== undefined && token.length < 32) throw new Error("AUTH_TOKEN_FILE must contain at least 32 characters")
-  const secure = config.nodeEnvironment === "production"
+  // An HTTPS public origin marks every session cookie Secure, the clearing one
+  // included, whatever NODE_ENV says.
+  const secure = config.nodeEnvironment === "production" || secureOrigin(config.publicOrigin)
   const credentialHash = token === undefined ? undefined : sha256(token)
   const store = createSessionStore(pool)
   const decode = async (cookie: string | undefined): Promise<AuthenticatedSession | undefined> => {

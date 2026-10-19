@@ -86,6 +86,8 @@ services:
       # Optional plugins, comma-separated (`payments`, `efactura`, `company-lookup`). Passed through
       # only when set: unset means every plugin runs, empty means none. Restart to apply.
       QWBE_PLUGINS:
+      # The preview frontend's origin, which the BFF rewrites Host and Origin to.
+      PUBLIC_ORIGIN: ${PREVIEW_ORIGIN:-http://invoicing-next.localhost:3181}
       TMPDIR: /var/backups/staging
     secrets: [preview_api_token, preview_pg_password, preview_company_lookup_key]
     volumes:

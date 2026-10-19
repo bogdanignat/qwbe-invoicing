@@ -107,10 +107,19 @@ invoice is not `overdue` from the calendar date alone. Proformas have list/detai
 support, but no e-Factura, payment, overdue, or correction/storno semantics. Their PDF
 is conspicuously marked `DOCUMENT NEFISCAL`.
 
-Issued invoices remain immutable; payments are separate `Effect` records and never mutate the fiscal snapshot. For local calls, pass
-`Authorization: Bearer $(cat .local/api-token)` and JSON request bodies. The bearer
-adapter is the API-first kernel transport; the cube receives only the verified
-identity and organization context.
+Issued invoices remain immutable; payments are separate `Effect` records and never mutate the fiscal snapshot. For local Bearer
+calls, export `QWBE_BEARER_API=on` before `docker compose up -d` (off, the kernel answers
+400 to any `Authorization`), call from inside the `app` container (no port is published)
+with the Host of `PUBLIC_ORIGIN`, and add `Origin: https://invoice.test` on POST, PUT, PATCH
+and DELETE (403 without it):
+
+```bash
+docker compose exec app sh -c 'wget -qO- --header "Host: invoice.test" \
+  --header "Authorization: Bearer $(cat /run/secrets/api_token)" http://127.0.0.1:3000/api/customers'
+```
+
+Request bodies are JSON. The bearer adapter is the API-first kernel transport; the cube
+receives only the verified identity and organization context.
 
 Stop containers without deleting data:
 

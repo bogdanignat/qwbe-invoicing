@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs"
 import { Redacted } from "effect"
 
 import type { MasterKey } from "./company-lookup/key-cipher.ts"
+import { parseTrustedProxies, type TrustedProxies } from "./http/trusted-proxy.ts"
 import { parsePlugins, type PluginSelection } from "./plugins.ts"
 import type { PostgresSettings } from "./storage/postgres-pool.ts"
 
@@ -19,6 +20,17 @@ export interface RuntimeConfig {
   readonly plugins: PluginSelection
   /** `COMPANY_LOOKUP_KEY_FILE`, read at startup. Absent: the openapi.ro key cannot be stored, everything else runs. */
   readonly companyLookupKey?: MasterKey | undefined
+  /**
+   * `PUBLIC_ORIGIN`, the one origin the browser reaches the kernel on. Host,
+   * X-Forwarded-Host/Proto and Origin are pinned to it. Validated whenever it is
+   * set; required only to serve in production (`kernel/http/edge-server.ts`), so
+   * `migrate`, `backup`, `restore` and `doctor` run without it.
+   */
+  readonly publicOrigin: string | undefined
+  /** `QWBE_BEARER_API=on`: the Bearer API is served on the public listener. Off by default. */
+  readonly bearerApi: boolean
+  /** `QWBE_TRUSTED_PROXY`: whose `X-Forwarded-For` keys the login throttle. Nobody by default. */
+  readonly trustedProxies: TrustedProxies
 }
 
 const boundedPort = (value: string | undefined, variable: string, fallback: string): number => {
@@ -87,6 +99,28 @@ const masterKeyFrom = (path: string | undefined): MasterKey | undefined => {
   return Redacted.make(Buffer.from(hex, "hex"))
 }
 
+/** Canonical means exactly what `URL.origin` gives back: no path, userinfo, default port or upper case. */
+const canonicalOrigin = (value: string | undefined): string | undefined => {
+  if (value === undefined) return undefined
+  let parsed: URL | undefined
+  try {
+    parsed = new URL(value)
+  } catch {
+    parsed = undefined
+  }
+  if (parsed === undefined || (parsed.protocol !== "http:" && parsed.protocol !== "https:") || parsed.origin !== value) {
+    throw new Error("PUBLIC_ORIGIN must be a canonical http(s) origin, e.g. https://invoice.example.com")
+  }
+  return value
+}
+
+/** Off unless switched on; anything that is neither `on` nor `off` refuses to start. */
+const bearerSwitch = (value: string | undefined): boolean => {
+  if (value === undefined || value === "" || value === "off") return false
+  if (value === "on") return true
+  throw new Error("QWBE_BEARER_API must be on or off")
+}
+
 export const runtimeConfig = (environment: NodeJS.ProcessEnv = process.env): RuntimeConfig => {
   const nodeEnvironment = environment.NODE_ENV ?? "development"
   return {
@@ -99,5 +133,8 @@ export const runtimeConfig = (environment: NodeJS.ProcessEnv = process.env): Run
     pgSettings: postgresSettings(environment, nodeEnvironment),
     plugins: parsePlugins(environment.QWBE_PLUGINS),
     companyLookupKey: masterKeyFrom(environment.COMPANY_LOOKUP_KEY_FILE),
+    publicOrigin: canonicalOrigin(environment.PUBLIC_ORIGIN),
+    bearerApi: bearerSwitch(environment.QWBE_BEARER_API),
+    trustedProxies: parseTrustedProxies(environment.QWBE_TRUSTED_PROXY),
   }
 }
