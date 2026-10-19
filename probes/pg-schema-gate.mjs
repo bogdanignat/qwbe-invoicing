@@ -14,7 +14,7 @@ import { URL } from "node:url"
 import pg from "pg"
 
 
-import { translatedPredicate, triggerDifferences } from "./pg-schema-trigger-parity-lib.mjs"
+import { translatedMessage, translatedPredicate, triggerDifferences } from "./pg-schema-trigger-parity-lib.mjs"
 import { migrationScopes } from "../kernel/storage/postgres-migration-plans.ts"
 import {
   applyMigrations, applyMigrationsOnClient, assertCollationC, databaseReady, planMigrations,
@@ -182,27 +182,36 @@ const main = async () => {
     // -------------------------------------------------- inventory parity
     const golden = JSON.parse(readFileSync(new URL("../kernel/parity/sqlite-baseline-objects.json",
       import.meta.url), "utf8"))
-    // Tables born after the SQLite capture have no golden counterpart; each is named here.
-    const postCaptureTables = ["company_lookup_settings"]
+    // Objects born after the SQLite capture have no golden counterpart; each is named here.
+    const postCaptureTables = [
+      "company_lookup_settings",
+      "efactura_connections", "efactura_oauth_attempts",
+      "efactura_submissions", "efactura_resubmissions", "efactura_submission_attempts", "efactura_responses",
+      "efactura_dispatcher_epoch", "efactura_message_budgets", "efactura_rate_limits",
+    ]
+    const postCaptureIndexes = [
+      "efactura_submissions_current", "efactura_submissions_upload_index", "efactura_submissions_document",
+      "efactura_submissions_due", "efactura_submission_attempts_submission",
+    ]
     const goldenTables = [...golden.plans.flatMap((plan) => plan.tables.map(({ name }) => name)), ...postCaptureTables].sort()
-    const goldenIndexes = golden.plans.flatMap((plan) => plan.explicitIndexes.map(({ name }) => name)).sort()
+    const goldenIndexes = [...golden.plans.flatMap((plan) => plan.explicitIndexes.map(({ name }) => name)), ...postCaptureIndexes].sort()
     const liveTables = inventoryA.filter((entry) => entry.startsWith("table "))
       .map((entry) => entry.split(" ")[1]).sort()
     const liveIndexes = inventoryA.filter((entry) => entry.startsWith("index "))
       .map((entry) => entry.split(" ")[1]).sort()
 
-    check("27 domain tables: the SQLite baseline's 26 and company_lookup_settings", () => {
+    check("36 domain tables: the SQLite baseline's 26, company_lookup_settings and e-Factura's 9", () => {
       assert.deepEqual(liveTables, goldenTables)
-      assert.equal(liveTables.length, 27)
+      assert.equal(liveTables.length, 36)
     })
-    check("30 explicit indexes, the same names as the SQLite baseline", () => {
+    check("35 explicit indexes: the SQLite baseline's 30 and e-Factura's 5", () => {
       assert.deepEqual(liveIndexes, goldenIndexes)
-      assert.equal(liveIndexes.length, 30)
+      assert.equal(liveIndexes.length, 35)
     })
-    // 98 checks from the SQLite capture, plus the three of company_lookup_settings.
-    check("60 triggers, 101 named checks, 7 functions", () => {
-      assert.equal(countOf(inventoryA, "trigger"), 60)
-      assert.equal(countOf(inventoryA, "check"), 101)
+    // 129 checks before e-Factura, plus 10 of its connection and 33 of its submissions.
+    check("68 triggers, 172 named checks, 7 functions", () => {
+      assert.equal(countOf(inventoryA, "trigger"), 68)
+      assert.equal(countOf(inventoryA, "check"), 172)
       assert.equal(countOf(inventoryA, "function"), 7)
     })
     check("every check constraint is named and within 63 characters", () => {
@@ -229,7 +238,28 @@ const main = async () => {
     // ------------------------------------------- triggers vs the capture
     const goldenTriggers = JSON.parse(readFileSync(new URL(
       "../kernel/parity/sqlite-baseline-triggers.json", import.meta.url), "utf8"))
-    const liveTriggers = (await first.query(TRIGGER_ROWS)).rows
+    // The e-Factura triggers came after the capture: each is declared here with
+    // its table, event, column list and message, and held to exactly that.
+    const postCaptureTriggers = {
+      efactura_submissions_content_no_update: ["efactura_submissions", "UPDATE", "e-Factura submission content is immutable",
+        ["organization_id", "environment", "document_kind", "document_id", "standard", "cif", "xml", "xml_sha256", "xml_size", "created_by", "created_at"]],
+      efactura_submissions_no_delete: ["efactura_submissions", "DELETE", "e-Factura submissions are kept", []],
+      efactura_resubmissions_no_update: ["efactura_resubmissions", "UPDATE", "e-Factura resubmissions are append-only", []],
+      efactura_resubmissions_no_delete: ["efactura_resubmissions", "DELETE", "e-Factura resubmissions are append-only", []],
+      efactura_submission_attempts_no_update: ["efactura_submission_attempts", "UPDATE", "e-Factura call log is append-only", []],
+      efactura_submission_attempts_no_delete: ["efactura_submission_attempts", "DELETE", "e-Factura call log is append-only", []],
+      efactura_responses_no_update: ["efactura_responses", "UPDATE", "e-Factura responses are immutable", []],
+      efactura_responses_no_delete: ["efactura_responses", "DELETE", "e-Factura responses are immutable", []],
+    }
+    const allTriggers = (await first.query(TRIGGER_ROWS)).rows
+    const liveTriggers = allTriggers.filter(({ name }) => !(name in postCaptureTriggers))
+    check("every post-capture trigger is exactly the declared one", () => {
+      const live = allTriggers.filter(({ name }) => name in postCaptureTriggers).map((row) => [row.name, [row.table_name,
+        row.on_update ? "UPDATE" : row.on_delete ? "DELETE" : "INSERT", translatedMessage(row), row.update_of]])
+      assert.deepEqual(Object.fromEntries(live), postCaptureTriggers)
+      assert.ok(allTriggers.filter(({ name }) => name in postCaptureTriggers)
+        .every((row) => row.before && row.for_each_row && !row.has_when), "BEFORE, FOR EACH ROW, unconditional")
+    })
     check("every trigger matches the frozen SQLite capture", () => {
       assert.deepEqual(triggerDifferences(goldenTriggers, liveTriggers), [])
       assert.equal(liveTriggers.length, goldenTriggers.total)
@@ -335,6 +365,9 @@ const main = async () => {
       assert.equal(byScope.payments.ok, false, "payments needs issued_invoices and the foundation")
       assert.equal(byScope.documents.ok, false, "documents needs the foundation function")
       assert.equal(byScope.documents.code, "42883", "missing qwbe_abort")
+      assert.equal(byScope.connection.ok, true, "the e-Factura connection stands alone")
+      assert.equal(byScope.submissions.ok, false, "e-Factura submissions need the foundation function")
+      assert.equal(byScope.submissions.code, "42883", "missing qwbe_abort")
     })
 
     // ------------------------------------------------------ fault cases

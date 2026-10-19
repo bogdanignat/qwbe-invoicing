@@ -14,6 +14,8 @@
     "invoicing/parties",
     "invoicing/payments",
     "invoicing/efactura",
+    "invoicing/efactura/connection",
+    "invoicing/efactura/submissions",
     "invoicing/company-lookup"
   ]
 }

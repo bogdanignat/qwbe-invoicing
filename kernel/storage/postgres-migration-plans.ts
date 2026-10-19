@@ -3,6 +3,8 @@ import { cube as companyLookupCube, companyLookupMigrations } from "../../cubes/
 import { cube as catalogCube, catalogMigrations } from "../../cubes/invoicing/catalog/index.ts"
 import { cube as customersCube, customersMigrations } from "../../cubes/invoicing/customers/index.ts"
 import { cube as documentsCube, documentsMigrations } from "../../cubes/invoicing/documents/index.ts"
+import { cube as connectionCube, connectionMigrations } from "../../cubes/invoicing/efactura/connection/index.ts"
+import { cube as submissionsCube, submissionsMigrations } from "../../cubes/invoicing/efactura/submissions/index.ts"
 import { cube as issuerCube, issuerMigrations } from "../../cubes/invoicing/issuer/index.ts"
 import { cube as paymentsCube, paymentsMigrations } from "../../cubes/invoicing/payments/index.ts"
 import { foundationMigrations, foundationScope, type SchemaMigration } from "./postgres-foundation.ts"
@@ -46,6 +48,10 @@ export const migrationScopes: ReadonlyArray<MigrationScope> = [
   { scope: paymentsCube.manifest.name, migrations: paymentsMigrations, tables: paymentsCube.manifest.tables },
   { scope: documentsCube.manifest.name, migrations: documentsMigrations, tables: documentsCube.manifest.tables },
   { scope: companyLookupCube.manifest.name, migrations: companyLookupMigrations, tables: companyLookupCube.manifest.tables },
+  // e-Factura's tables exist whether or not the plugin is on: a restore and the
+  // environment guard read them regardless of QWBE_PLUGINS.
+  { scope: connectionCube.manifest.name, migrations: connectionMigrations, tables: connectionCube.manifest.tables },
+  { scope: submissionsCube.manifest.name, migrations: submissionsMigrations, tables: submissionsCube.manifest.tables },
   // The host's own scope: no cube declares these, so the list is stated here.
   { scope: "kernel", migrations: [browserSessionsMigration], tables: ["browser_sessions"] },
 ]

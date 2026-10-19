@@ -313,9 +313,10 @@ into `.env` or into an environment variable.
 
 ### Generate it (once, before the first `up`)
 
-`scripts/init-secrets.sh` creates the three files (API token, database password,
-company-lookup key) at the paths in `.env`, mode 0600, and never overwrites one that
-exists. Local development (paths used by `compose.yaml`):
+`scripts/init-secrets.sh` creates the four files (API token, database password,
+company-lookup key, ANAF token key) at the paths in `.env`, mode 0600, and never
+overwrites one that exists. The ANAF token key is read only with `compose.anaf.yaml`
+(e-Factura, docs/LOCAL_DEVELOPMENT.md); the ANAF client secret is never generated. Local development (paths used by `compose.yaml`):
 
 ```bash
 cd /path/to/invoicing-qwbe

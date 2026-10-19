@@ -18,6 +18,7 @@ frontend/dist
 frontend/.tanstack
 **/*.tsbuildinfo
 .local
+**/.local
 .playwright-mcp
 **/secrets
 **/.env

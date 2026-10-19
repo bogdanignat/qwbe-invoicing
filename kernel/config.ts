@@ -2,7 +2,9 @@ import { readFileSync } from "node:fs"
 
 import { Redacted } from "effect"
 
-import type { MasterKey } from "./company-lookup/key-cipher.ts"
+import { masterKeyFromFile } from "./crypto/master-key.ts"
+import type { MasterKey } from "./crypto/sealed-text.ts"
+import { anafSettings, type AnafSettings } from "./efactura/anaf/config.ts"
 import { parseTrustedProxies, type TrustedProxies } from "./http/trusted-proxy.ts"
 import { parsePlugins, type PluginSelection } from "./plugins.ts"
 import type { PostgresSettings } from "./storage/postgres-pool.ts"
@@ -20,6 +22,11 @@ export interface RuntimeConfig {
   readonly plugins: PluginSelection
   /** `COMPANY_LOOKUP_KEY_FILE`, read at startup. Absent: the openapi.ro key cannot be stored, everything else runs. */
   readonly companyLookupKey?: MasterKey | undefined
+  /**
+   * `ANAF_ENVIRONMENT` and the ANAF OAuth client (`kernel/efactura/anaf/config.ts`),
+   * read at startup. Absent from a hand-built test config: not configured, `test`.
+   */
+  readonly anaf?: AnafSettings | undefined
   /**
    * `PUBLIC_ORIGIN`, the one origin the browser reaches the kernel on. Host,
    * X-Forwarded-Host/Proto and Origin are pinned to it. Validated whenever it is
@@ -88,21 +95,19 @@ const postgresSettings = (environment: NodeJS.ProcessEnv, nodeEnvironment: strin
 })
 
 /**
- * The master key that encrypts the openapi.ro key at rest: 32 bytes, written as
- * 64 hex characters (`openssl rand -hex 32`), read from a file like the database
- * password and never from an environment value. Unset is a supported setup; a
- * set path that is unreadable or malformed refuses to start, with the path only.
+ * The master key that encrypts the openapi.ro key at rest (`kernel/crypto/master-key.ts`).
+ * Unset is a supported setup; a set path that is unreadable or malformed refuses to start.
  */
-const masterKeyFrom = (path: string | undefined): MasterKey | undefined => {
-  if (path === undefined) return undefined
-  let hex: string
-  try {
-    hex = readFileSync(path, "utf8").trim()
-  } catch {
-    throw new Error(`COMPANY_LOOKUP_KEY_FILE is not readable: ${path}`)
+const companyLookupKeyFrom = (path: string | undefined): MasterKey | undefined =>
+  path === undefined ? undefined : masterKeyFromFile(path, "COMPANY_LOOKUP_KEY_FILE")
+
+/** The ANAF tokens are sealed under their own key: one leaked or rotated key never reaches the other secret. */
+const separateKeys = (companyLookupKey: MasterKey | undefined, anaf: AnafSettings): AnafSettings => {
+  const tokenKey = anaf.client?.tokenKey
+  if (companyLookupKey !== undefined && tokenKey !== undefined && Redacted.value(companyLookupKey).equals(Redacted.value(tokenKey))) {
+    throw new Error("ANAF_TOKEN_KEY_FILE must hold its own key, not the one in COMPANY_LOOKUP_KEY_FILE")
   }
-  if (!/^[0-9a-f]{64}$/iu.test(hex)) throw new Error(`COMPANY_LOOKUP_KEY_FILE must hold 64 hex characters: ${path}`)
-  return Redacted.make(Buffer.from(hex, "hex"))
+  return anaf
 }
 
 /** Canonical means exactly what `URL.origin` gives back: no path, userinfo, default port or upper case. */
@@ -129,6 +134,8 @@ const bearerSwitch = (value: string | undefined): boolean => {
 
 export const runtimeConfig = (environment: NodeJS.ProcessEnv = process.env): RuntimeConfig => {
   const nodeEnvironment = environment.NODE_ENV ?? "development"
+  const publicOrigin = canonicalOrigin(environment.PUBLIC_ORIGIN)
+  const companyLookupKey = companyLookupKeyFrom(environment.COMPANY_LOOKUP_KEY_FILE)
   return {
     host: environment.HOST ?? "0.0.0.0",
     port: boundedPort(environment.PORT, "PORT", "3000"),
@@ -138,8 +145,9 @@ export const runtimeConfig = (environment: NodeJS.ProcessEnv = process.env): Run
     organizationId: environment.ORGANIZATION_ID,
     pgSettings: postgresSettings(environment, nodeEnvironment),
     plugins: parsePlugins(environment.QWBE_PLUGINS),
-    companyLookupKey: masterKeyFrom(environment.COMPANY_LOOKUP_KEY_FILE),
-    publicOrigin: canonicalOrigin(environment.PUBLIC_ORIGIN),
+    companyLookupKey,
+    anaf: separateKeys(companyLookupKey, anafSettings(environment, publicOrigin)),
+    publicOrigin,
     bearerApi: bearerSwitch(environment.QWBE_BEARER_API),
     trustedProxies: parseTrustedProxies(environment.QWBE_TRUSTED_PROXY),
     uiDirectory: environment.QWBE_UI_DIR === "" ? undefined : environment.QWBE_UI_DIR,

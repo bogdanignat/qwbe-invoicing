@@ -42,7 +42,7 @@ void test("the optional plugins are exactly the declared units with required: fa
   const units = await Promise.all(manifest.cubes.map(async (path) =>
     (await import(new URL(`../cubes/${path}/index.ts`, import.meta.url).href) as {
       cube: { manifest: { name: string, required: boolean } } }).cube.manifest))
-  assert.equal(units.length, 12)
+  assert.equal(units.length, 14)
   assert.deepEqual(units.filter((unit) => !unit.required).map((unit) => unit.name).sort(), [...optionalPlugins].sort())
   assert.deepEqual(Object.keys(allPlugins).sort(), [...optionalPlugins].sort())
   assert.deepEqual(activePluginNames(allPlugins), optionalPlugins, "the session names exactly the declared plugins")
