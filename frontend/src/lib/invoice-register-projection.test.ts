@@ -72,7 +72,15 @@ void test("an invoice without a due date also reads as a dash", () => {
 void test("each e-Factura status has a Romanian label", () => {
   const labels = (["not_sent", "queued", "processing", "accepted", "rejected", "refused", "unknown"] as const)
     .map((status) => projectInvoiceRegisterRow({ ...invoice, eFacturaStatus: status }).status)
-  assert.deepEqual(labels, ["Netrimisă", "În coadă", "În procesare", "Acceptată", "Respinsă", "Refuzată", "Necunoscută"])
+  assert.deepEqual(labels, ["Netrimisă", "În procesare", "În procesare", "Acceptată", "Respinsă", "Refuzată", "Necunoscut"])
+})
+
+void test("a status that needs attention reads in the danger tone; with e-Factura off the dash is muted", () => {
+  const classes = (["not_sent", "queued", "processing", "accepted", "rejected", "refused", "unknown"] as const)
+    .map((status) => projectInvoiceRegisterRow({ ...invoice, eFacturaStatus: status }).statusClass)
+  assert.deepEqual(classes, ["badge muted", "badge info", "badge info", "badge positive",
+    "badge text-invoice-danger-text", "badge text-invoice-danger-text", "badge text-invoice-danger-text"])
+  assert.equal(projectInvoiceRegisterRow(correction).statusClass, "badge muted")
 })
 
 void test("a correction shows its own e-Factura status", () => {

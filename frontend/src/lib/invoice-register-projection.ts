@@ -18,17 +18,18 @@ export interface InvoiceRegisterPresentationRow {
   readonly dueDate: string
   readonly total: string
   readonly status: string
+  readonly statusClass: string
   readonly originalInvoice: { readonly label: string; readonly href: string } | null
 }
 
 const statusLabels: Readonly<Record<EFacturaStatus, string>> = {
   not_sent: "Netrimisă",
-  queued: "În coadă",
+  queued: "În procesare",
   processing: "În procesare",
   accepted: "Acceptată",
   rejected: "Respinsă",
   refused: "Refuzată",
-  unknown: "Necunoscută",
+  unknown: "Necunoscut",
 }
 
 /**
@@ -39,6 +40,18 @@ const statusLabels: Readonly<Record<EFacturaStatus, string>> = {
  * on the document came to be two answers to the same question.
  */
 export const eFacturaStatusLabel = (status: EFacturaStatus): string => statusLabels[status]
+
+export type BadgeTone = "muted" | "info" | "positive" | "danger"
+
+/** The badge class of a status: what needs a person's attention reads in the danger colour. */
+export const eFacturaStatusTone = (status: EFacturaStatus): BadgeTone => {
+  if (status === "accepted") return "positive"
+  if (status === "queued" || status === "processing") return "info"
+  return status === "not_sent" ? "muted" : "danger"
+}
+
+/** `.badge` paints its own background, so the danger tone only colours the text. */
+export const badgeClass = (tone: BadgeTone): string => tone === "danger" ? "badge text-invoice-danger-text" : `badge ${tone}`
 
 export const invoiceDetailHref = (id: string): string => `/invoices/${encodeURIComponent(id)}`
 export const correctionDetailHref = (id: string): string => `/corrections/${encodeURIComponent(id)}`
@@ -53,6 +66,7 @@ export const projectInvoiceRegisterRow = (row: InvoiceRegisterRow): InvoiceRegis
   dueDate: row.dueDate ?? "—",
   total: money(row.totalIncludingVat, row.currency),
   status: row.eFacturaStatus === null ? "—" : statusLabels[row.eFacturaStatus],
+  statusClass: badgeClass(row.eFacturaStatus === null ? "muted" : eFacturaStatusTone(row.eFacturaStatus)),
   originalInvoice: row.kind === "correction"
     ? {
       label: `Factura inițială ${row.originalReference.series} ${String(row.originalReference.number)}`,

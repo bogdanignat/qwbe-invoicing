@@ -11,6 +11,8 @@ import { createAuthoringReferenceClient } from "../lib/authoring-reference-clien
 import type { AuthoringReferenceClient } from "../lib/authoring-reference-client.ts"
 import { createCompanyLookupClient } from "../lib/company-lookup-client.ts"
 import type { CompanyLookupClient } from "../lib/company-lookup-client.ts"
+import { createEFacturaClient } from "../lib/efactura-client.ts"
+import type { EFacturaClient } from "../lib/efactura-client.ts"
 import { createPaymentsClient } from "../lib/payments-client.ts"
 import type { PaymentsClient } from "../lib/payments-client.ts"
 import { createProformaReplayClient } from "../lib/proforma-replay-client.ts"
@@ -50,6 +52,8 @@ export interface InvoicingClients {
   readonly reports: ReportsClient
   /** The company-lookup plugin's routes; only a caller that checked the session's plugins asks them. */
   readonly companyLookup: CompanyLookupClient
+  /** The e-Factura plugin's routes; only a caller that checked the session's plugins asks them. */
+  readonly efactura: EFacturaClient
 }
 
 export const useInvoicingClients = (): InvoicingClients => {
@@ -66,5 +70,6 @@ export const useInvoicingClients = (): InvoicingClients => {
     payments: createPaymentsClient(transport),
     reports: createReportsClient(transport),
     companyLookup: createCompanyLookupClient(transport),
+    efactura: createEFacturaClient(transport),
   }), [transport])
 }

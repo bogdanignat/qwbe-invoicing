@@ -211,8 +211,7 @@ On a new installation:
 6. **Connect** in Setări → Integrări → e-Factura with "Conectează cu certificatul"
    (T-1346): the browser goes to ANAF, the certificate is chosen there, and ANAF sends it
    back to the callback. The tokens stay in the backend, encrypted with the token key.
-   Until that button lands, `POST /api/efactura/connection/start` (session + CSRF) answers
-   the `authorizeUrl` to open in the same browser. The flow, its codes and its residual
+   The flow, its codes and its residual
    risk are in [EFACTURA.md](EFACTURA.md#connecting-to-anaf-oauth-t-1346).
 
 Keep `.local/anaf-token-key` for as long as the connection should survive: a new key

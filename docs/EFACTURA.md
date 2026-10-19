@@ -5,10 +5,11 @@ UBL 2.1 / CIUS-RO XML, plus the host mapping from the invoicing model and
 synthetic fixtures for the official validator.
 
 **Nothing is transmitted.** The only thing exposed is a download: `GET
-/api/invoices/{id}/efactura.xml` and `GET /api/corrections/{id}/efactura.xml`,
-plus the button beside "Descarcă PDF" on an issued invoice. Both routes read a
-frozen snapshot and render it on the spot — no migration, no write to
-`eFacturaStatus`, nothing stored and nothing sent. Transport to the SPV is
+/api/invoices/{id}/efactura.xml` and `GET /api/corrections/{id}/efactura.xml`.
+Both routes read a frozen snapshot and render it on the spot — no migration, no
+write to `eFacturaStatus`, nothing stored and nothing sent. They stay for tests
+and debugging; the interface no longer calls them (its button now submits, and
+the exact XML of a submission is downloaded from its history). Transport to the SPV is
 T-1346: see [Submitting to ANAF](#submitting-to-anaf-t-1346).
 
 Both routes belong to the `efactura` plugin. With it off (`QWBE_PLUGINS` without
@@ -479,6 +480,28 @@ the user's, always confirmed.
 Audit: `efactura_submission.queued | .accepted | .rejected | .refused | .unknown | .restored_unknown | .linked | .resubmitted`,
 each in the transaction of its transition; the dispatcher's actor is `efactura:dispatcher`.
 
+### The interface
+
+Setări → Integrări → ANAF e-Factura (with the plugin on, even when it is the only
+integration) shows the environment as a label (`TEST` / `PRODUCȚIE`, never editable),
+the connection's state, the verified CIF, who connected and when, the refresh token's
+expiry with a warning 30 days before it, "Conectează cu certificatul" (a top-level
+navigation to the `authorizeUrl` that `start` answers) and "Deconectează" (confirmed).
+The callback's `?anaf=<code>` is shown once, in Romanian, and dropped from the address;
+an attempt of yours that never came back says to retry in a few minutes.
+
+On an invoice and on a storno the head button that used to export the XML is now
+"Trimite în e-Factura": active only with a `connected` connection and while the document
+is `not_sent`, `rejected` or `refused` ("Retrimite"); "Se procesează la ANAF" while it
+is queued or processing, with the history polled every 12 s until ANAF decides and then
+every 60 s only while ANAF's answer ZIP is still being fetched;
+"Înregistrată în e-Factura" once accepted, with the upload index, ANAF's ZIP and the
+submitted XML. An `unknown` document explains that nobody knows whether ANAF has it and
+offers the reconciliation below ("Caută la ANAF", "Leagă indexul X", "Retrimite", each
+write confirmed explicitly). Every submission is listed with its state, moment, index,
+ANAF's messages and which one replaced it. The register shows the status of invoices and
+stornos. A proforma has none of it.
+
 ### Reconciling an `unknown` submission
 
 `unknown` means nobody can tell whether ANAF took the upload. The logic is in
@@ -595,8 +618,7 @@ node scripts/efactura-fixtures.mjs          # writes .local/efactura-fixtures/*.
 Upload each file at <https://www.anaf.ro/uploadxmi/>, standard `FACT1` — except
 the credit notes (06, 09), which go as `FCN`.
 
-A document issued in the running application is exported the same way, through
-the button on its page or directly:
+A document issued in the running application is exported the same way, directly:
 
 ```
 docker compose exec app sh -c "wget -qO- --header 'Host: invoice.test' \
@@ -606,8 +628,7 @@ docker compose exec app sh -c "wget -qO- --header 'Host: invoice.test' \
 
 The backend has no published port: the call runs inside its container, with the
 Host of `PUBLIC_ORIGIN` (any other Host answers 400) and with `QWBE_BEARER_API=on`
-exported before `docker compose up -d` (off, `Authorization` answers 400). The
-button in the browser needs neither.
+exported before `docker compose up -d` (off, `Authorization` answers 400).
 
 That file is uploaded at the same address and under the same rule as the
 fixtures: only invented parties. A local invoice is issued against whatever

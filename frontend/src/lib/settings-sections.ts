@@ -1,7 +1,8 @@
 /**
  * The tabs of the settings screen, as data. The issuer stays at `/settings`;
- * Integrări exists only while the company-lookup plugin runs, and a menu with a
- * single entry is no menu, so with the plugin off there is none at all.
+ * Integrări exists only while an integration plugin runs (company lookup or
+ * e-Factura), and a menu with a single entry is no menu, so with both off there
+ * is none at all.
  */
 export type SettingsSection = "issuer" | "integrations"
 
@@ -19,5 +20,5 @@ const SECTIONS: ReadonlyArray<Omit<SettingsSectionLink, "current">> = [
 
 const NO_SECTIONS: ReadonlyArray<SettingsSectionLink> = []
 
-export const settingsSections = (companyLookup: boolean, current: SettingsSection): ReadonlyArray<SettingsSectionLink> =>
-  companyLookup ? SECTIONS.map((link) => ({ ...link, current: link.section === current })) : NO_SECTIONS
+export const settingsSections = (integrations: boolean, current: SettingsSection): ReadonlyArray<SettingsSectionLink> =>
+  integrations ? SECTIONS.map((link) => ({ ...link, current: link.section === current })) : NO_SECTIONS

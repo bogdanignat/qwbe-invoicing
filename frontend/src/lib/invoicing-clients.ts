@@ -29,8 +29,6 @@ export interface InvoiceDocumentsClient {
   readonly getInvoice: (id: string, signal: AbortSignal) => Promise<IssuedInvoice>
   readonly getCorrection: (id: string, signal: AbortSignal) => Promise<CorrectionDocument>
   readonly downloadInvoicePdf: (id: string, csrfToken: string) => Promise<Blob>
-  readonly downloadInvoiceEFactura: (id: string) => Promise<Blob>
-  readonly downloadCorrectionEFactura: (id: string) => Promise<Blob>
   readonly downloadCorrectionPdf: (id: string) => Promise<Blob>
   readonly listCorrections: (invoiceId: string, signal: AbortSignal) => Promise<ReadonlyArray<CorrectionDocument>>
   readonly createCorrection: (csrfToken: string, invoiceId: string, body: CorrectionInput, idempotencyKey: string) => Promise<CorrectionDocument>
@@ -39,11 +37,9 @@ export interface InvoiceDocumentsClient {
 }
 
 /**
- * The `accept` header is stated per document type rather than left to default.
- *
- * `transport.binary` otherwise asks for `application/octet-stream`, which is
- * not what either endpoint declares it produces — the PDF route answers
- * `application/pdf` and the e-Factura route `application/xml`.
+ * The `accept` header is stated rather than left to default: `transport.binary`
+ * otherwise asks for `application/octet-stream`, which is not what the PDF
+ * routes declare they produce (`application/pdf`).
  */
 export const createInvoiceDocumentsClient = (transport: BrowserTransport): InvoiceDocumentsClient => {
   /**
@@ -64,19 +60,14 @@ export const createInvoiceDocumentsClient = (transport: BrowserTransport): Invoi
     /**
      * A PDF is rendered before it can be fetched, and rendering is a mutation:
      * it needs the session's CSRF token, while the byte fetch that follows is a
-     * plain read. The XML has no such step — it is a pure function of the frozen
-     * snapshot, so a single GET is the whole operation. A correction's PDF is the
-     * same kind of read: the backend renders it on request from the immutable
-     * correction, with nothing stored and nothing to render first.
+     * plain read. A correction's PDF is a single read: the backend renders it on
+     * request from the immutable correction, with nothing stored and nothing to
+     * render first.
      */
     downloadInvoicePdf: async (id, csrfToken) => {
       await transport.json(`/api/invoices/${encoded(id)}/pdf`, { method: "POST", body: {}, csrfToken })
       return transport.binary(`/api/invoices/${encoded(id)}/pdf`, { accept: "application/pdf" })
     },
-    downloadInvoiceEFactura: (id) =>
-      transport.binary(`/api/invoices/${encoded(id)}/efactura.xml`, { accept: "application/xml" }),
-    downloadCorrectionEFactura: (id) =>
-      transport.binary(`/api/corrections/${encoded(id)}/efactura.xml`, { accept: "application/xml" }),
     downloadCorrectionPdf: (id) =>
       transport.binary(`/api/corrections/${encoded(id)}/pdf`, { accept: "application/pdf" }),
     listCorrections: async (invoiceId, signal) => array(

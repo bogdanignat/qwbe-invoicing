@@ -90,8 +90,8 @@ void test("a register page the contract does not describe fails the request", as
 
 void test("document identifiers are encoded into the path", async () => {
   const { calls, transport } = recorder()
-  await createInvoiceDocumentsClient(transport).downloadInvoiceEFactura("a/b")
-  assert.equal(calls[0]?.path, "/api/invoices/a%2Fb/efactura.xml")
+  await createInvoiceDocumentsClient(transport).downloadCorrectionPdf("a/b")
+  assert.equal(calls[0]?.path, "/api/corrections/a%2Fb/pdf")
 })
 
 // Rendering a PDF is a state change and needs the session's CSRF token; the
@@ -110,18 +110,6 @@ void test("a PDF download renders first with the CSRF token, then fetches the by
       [undefined, undefined, "application/pdf"],
     ],
   )
-})
-
-void test("an e-Factura download is a single read asking for XML", async () => {
-  const { calls, transport } = recorder()
-  const client = createInvoiceDocumentsClient(transport)
-  await client.downloadInvoiceEFactura("inv-1")
-  await client.downloadCorrectionEFactura("cor-1")
-  assert.deepEqual(calls.map((call) => [call.kind, call.path, call.options?.accept]), [
-    ["binary", "/api/invoices/inv-1/efactura.xml", "application/xml"],
-    ["binary", "/api/corrections/cor-1/efactura.xml", "application/xml"],
-  ])
-  assert.deepEqual(calls.map((call) => call.options?.method), [undefined, undefined])
 })
 
 void test("a failed render is not followed by a fetch of stale bytes", async () => {
