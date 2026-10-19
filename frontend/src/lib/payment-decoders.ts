@@ -1,19 +1,7 @@
-import { array, object, optionalText, text, type Decoder } from "./model-decoder.ts"
+import { array, literal, object, optionalText, text, type Decoder } from "./model-decoder.ts"
 import {
   PAYMENT_KINDS, PAYMENT_STATUSES, type Payment, type PaymentSummary,
 } from "./payment-models.ts"
-
-/**
- * A literal the screen branches on is checked against the list it is typed
- * from: an unknown `kind` would otherwise render as a payment with a reverse
- * button, and an unknown `status` as a badge with no label.
- */
-const literal = <Value extends string>(allowed: ReadonlyArray<Value>, input: unknown, field: string): Value => {
-  const value = text(input, field)
-  const match = allowed.find((candidate) => candidate === value)
-  if (match === undefined) throw new Error(`invalid ${field}`)
-  return match
-}
 
 const decodePayment: Decoder<Payment> = (input) => {
   const value = object(input)

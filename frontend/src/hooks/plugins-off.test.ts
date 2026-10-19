@@ -8,12 +8,14 @@ import { renderToString } from "react-dom/server"
 import { AuthContext, type AuthController } from "./auth-context.ts"
 import { useCorrectionDetail, useInvoiceDetail } from "./use-document-detail.ts"
 import { invoicePaymentsQueries } from "./invoice-payments-query.ts"
+import { collectionsQueryOptions, invalidateCollections, invalidateIssuedDocuments, revenueQueryOptions } from "./report-queries.ts"
 import { useInvoicePayments } from "./use-invoice-payments.ts"
 import { useInvoiceRegister } from "./use-invoice-register.ts"
 import type { PluginName } from "../lib/api-contracts.ts"
 import { createBrowserTransport } from "../lib/browser-transport.ts"
 import { createInvoiceDocumentsClient } from "../lib/invoicing-clients.ts"
 import { createPaymentsClient } from "../lib/payments-client.ts"
+import { createReportsClient } from "../lib/reports-client.ts"
 import { pluginActive } from "../lib/plugins.ts"
 
 /**
@@ -96,4 +98,40 @@ void test("e-Factura off: invoice and storno offer the PDF alone, no XML action"
 void test("e-Factura off: the register drops its e-Factura column", () => {
   assert.equal(renderHook([], () => useInvoiceRegister()).result?.eFacturaColumn, false)
   assert.equal(renderHook(["efactura"], () => useInvoiceRegister()).result?.eFacturaColumn, true)
+})
+
+void test("payments off: the dashboard asks for revenue only, even after every write that invalidates reports", async () => {
+  const range = { from: "2025-11-01", to: "2026-10-19" }
+  const observe = async (plugins: ReadonlyArray<PluginName>) => {
+    const { transport, requested } = countingTransport()
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const clients = { reports: createReportsClient(transport) }
+    const payments = pluginActive({ status: "authenticated", plugins }, "payments")
+    const observers = [
+      new QueryObserver(queryClient, revenueQueryOptions(clients, range, true)),
+      new QueryObserver(queryClient, collectionsQueryOptions(clients, range, "unpaid", payments)),
+    ]
+    const unsubscribe = observers.map((observer) => observer.subscribe(() => undefined))
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    // An issue, a storno, a payment and its reversal all go through these two.
+    invalidateIssuedDocuments(queryClient)
+    invalidateCollections(queryClient)
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    for (const stop of unsubscribe) stop()
+    return [...new Set(requested)].sort()
+  }
+  const revenue = "/api/qwbe/reports/revenue?from=2025-11-01&to=2026-10-19"
+  assert.deepEqual(await observe([]), [revenue])
+  assert.deepEqual(await observe(["efactura"]), [revenue])
+  assert.deepEqual(await observe(["payments"]), [
+    "/api/qwbe/reports/collections?from=2025-11-01&to=2026-10-19&status=unpaid", revenue,
+  ])
+})
+
+void test("report keys: revenue follows the interval only, collections the interval and the status", () => {
+  const clients = { reports: createReportsClient(countingTransport().transport) }
+  const range = { from: "2026-01-01", to: "2026-03-31" }
+  assert.deepEqual(revenueQueryOptions(clients, range, true).queryKey, ["reports", "revenue", "2026-01-01", "2026-03-31"])
+  assert.deepEqual(collectionsQueryOptions(clients, range, "overdue", true).queryKey,
+    ["reports", "collections", "2026-01-01", "2026-03-31", "overdue"])
 })

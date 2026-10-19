@@ -1,0 +1,33 @@
+/* Dashboard: the figure cards, the custom period and the revenue chart. */
+/* Narrow enough that five cards share one desktop row; fewer columns as the card narrows. */
+.stat-cards { display: grid; gap: .9rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 10.5rem), 1fr)); margin: 0 0 1.25rem; }
+.stat-card { display: grid; gap: .3rem; align-content: start; padding: 1rem 1.1rem; border: 1px solid var(--color-invoice-border); border-radius: var(--radius-invoice-container); background: var(--color-invoice-secondary-surface); }
+.stat-card dt { color: var(--color-invoice-muted); font-size: .72rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
+.stat-card dd { margin: 0; }
+.stat-value { color: var(--color-invoice-ink); font-size: 1.3rem; font-weight: 750; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.stat-hint { color: var(--color-invoice-muted); font-size: .78rem; line-height: 1.45; }
+.dashboard-filters { align-items: flex-start; }
+.custom-range { display: flex; flex-wrap: wrap; gap: .75rem 1rem; align-items: flex-end; }
+.custom-range label { min-width: 10.5rem; }
+.custom-range .hint { flex-basis: 100%; }
+.revenue-chart { margin: 0; }
+/* `contain` keeps the drawing's width out of the card's min-content: a narrow card scrolls the chart instead of growing. */
+.chart-scroll { overflow-x: auto; padding-bottom: .25rem; contain: inline-size; }
+.chart-scroll svg { display: block; min-width: 100%; height: auto; }
+.chart-tick line { stroke: var(--color-invoice-border); stroke-width: 1; }
+.chart-tick text, .chart-month, .chart-year { fill: var(--color-invoice-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+.chart-year { font-weight: 700; }
+.chart-zero { stroke: var(--color-invoice-label); stroke-width: 1.5; }
+.chart-bar.invoiced, .legend-swatch.invoiced { fill: var(--color-invoice-primary); background: var(--color-invoice-primary); }
+.chart-bar.collected, .legend-swatch.collected { fill: var(--color-invoice-connected); background: var(--color-invoice-connected); }
+.chart-legend { display: flex; flex-wrap: wrap; gap: .5rem 1.25rem; align-items: center; margin-top: .75rem; color: var(--color-invoice-muted); font-size: .8rem; }
+.chart-legend > span { display: inline-flex; gap: .4rem; align-items: center; }
+.legend-swatch { display: inline-block; width: .75rem; height: .75rem; border-radius: .2rem; }
+@media (max-width: 680px) {
+  .stat-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .6rem; }
+  .stat-card { padding: .8rem; }
+  .stat-value { font-size: 1.05rem; }
+  /* Two columns: an odd last card takes the whole row instead of standing alone in half of it. */
+  .stat-card:last-child:nth-child(odd) { grid-column: 1 / -1; }
+  .custom-range label { min-width: 0; flex: 1 1 9rem; }
+}

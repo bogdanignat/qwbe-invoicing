@@ -7,7 +7,7 @@ import { useEffect, useState } from "react"
 import { useAuth } from "./auth-context.ts"
 import { useInvoicingClients } from "./use-invoicing-clients.ts"
 import { draftsQueryKey, draftQueryKey } from "./use-drafts.ts"
-import { invoiceRegisterQueryKey } from "./use-invoice-register.ts"
+import { invalidateIssuedDocuments } from "./report-queries.ts"
 import { staleProformaKeys } from "./proforma-query-keys.ts"
 import { createOperationLifetime } from "../lib/authoring-operation-lifetime.ts"
 import { lifetimeMountEffect, lifetimeRequestsEffect } from "../lib/authoring-lifetime-wiring.ts"
@@ -65,7 +65,7 @@ export const useOperationReplay = (recovery: RecoveryPort): OperationReplayModel
         router.replace(`/drafts/${encodeURIComponent(draft.id)}`)
       },
       onIssued: (invoice, sourceProformaId) => {
-        void queryClient.invalidateQueries({ queryKey: invoiceRegisterQueryKey })
+        invalidateIssuedDocuments(queryClient)
         void queryClient.invalidateQueries({ queryKey: draftsQueryKey })
         staleProformas(sourceProformaId)
         router.push(`/invoices/${encodeURIComponent(invoice.id)}`)
@@ -78,7 +78,7 @@ export const useOperationReplay = (recovery: RecoveryPort): OperationReplayModel
         queryClient.setQueryData(["correction", correction.id], correction)
         // The invoice prefix covers its payments and its corrections as well.
         void queryClient.invalidateQueries({ queryKey: ["invoice", invoiceId] })
-        void queryClient.invalidateQueries({ queryKey: invoiceRegisterQueryKey })
+        invalidateIssuedDocuments(queryClient)
         router.push(`/corrections/${encodeURIComponent(correction.id)}`)
       },
     },

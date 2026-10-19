@@ -20,6 +20,7 @@ export interface ShellNavItem extends ShellLink {
 }
 
 export const SHELL_LINKS: ReadonlyArray<ShellLink> = [
+  { href: "/", section: "home", label: "Acasă", icon: "⌂" },
   { href: "/invoices", section: "invoices", label: "Facturi", icon: "▤" },
   { href: "/proformas", section: "proformas", label: "Proforme", icon: "▧" },
   { href: "/customers", section: "customers", label: "Clienți", icon: "♙" },
@@ -27,8 +28,11 @@ export const SHELL_LINKS: ReadonlyArray<ShellLink> = [
   { href: "/settings", section: "settings", label: "Setări firmă", icon: "⚙" },
 ]
 
-/** The first path segment: `/invoices/inv-1` is still the invoices section. */
-export const activeShellSection = (pathname: string): string => pathname.split("/")[1] ?? ""
+/** The first path segment: `/invoices/inv-1` is still the invoices section, and `/` is home. */
+export const activeShellSection = (pathname: string): string => {
+  const segment = pathname.split("/")[1] ?? ""
+  return segment === "" ? "home" : segment
+}
 
 export const shellNavigation = (pathname: string, unlocked: boolean): ReadonlyArray<ShellNavItem> => {
   const section = activeShellSection(pathname)

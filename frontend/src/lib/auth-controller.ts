@@ -29,7 +29,7 @@ interface Dependencies {
   readonly session: AuthSessionClient
   readonly publish: (snapshot: AuthSnapshot) => void
   readonly clearCache: () => void
-  readonly navigate: (path: "/unlock" | "/invoices") => void
+  readonly navigate: (path: "/unlock" | "/") => void
   readonly pathname: () => string
 }
 interface ActiveOperation {
@@ -50,7 +50,7 @@ export const createAuthController = (dependencies: Dependencies): AuthController
   const current = (operation: ActiveOperation): boolean =>
     mounted && active === operation && generation === operation.id && !operation.controller.signal.aborted
   const route = (pathname: string): void => {
-    if (state.status === "authenticated" && pathname === "/unlock") dependencies.navigate("/invoices")
+    if (state.status === "authenticated" && pathname === "/unlock") dependencies.navigate("/")
     if (state.status === "locked" && pathname !== "/unlock") dependencies.navigate("/unlock")
   }
   const begin = (

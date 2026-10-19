@@ -29,6 +29,18 @@ export const boolean = (input: unknown, field: string): boolean => {
   return input
 }
 
+/**
+ * A literal the screen branches on is checked against the list it is typed
+ * from: an unknown `kind` would otherwise render as a payment with a reverse
+ * button, and an unknown `status` as a badge with no label.
+ */
+export const literal = <Value extends string>(allowed: ReadonlyArray<Value>, input: unknown, field: string): Value => {
+  const value = text(input, field)
+  const match = allowed.find((candidate) => candidate === value)
+  if (match === undefined) throw new Error(`invalid ${field}`)
+  return match
+}
+
 export const nullableText = (input: unknown, field: string): string | null =>
   input === null ? null : text(input, field)
 

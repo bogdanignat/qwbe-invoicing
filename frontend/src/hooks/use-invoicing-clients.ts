@@ -16,6 +16,8 @@ import type { ProformaReplayClient } from "../lib/proforma-replay-client.ts"
 import { createProformasClient } from "../lib/proformas-client.ts"
 import type { ProformasClient } from "../lib/proformas-client.ts"
 import { createRegistryClient } from "../lib/registry-client.ts"
+import { createReportsClient } from "../lib/reports-client.ts"
+import type { ReportsClient } from "../lib/reports-client.ts"
 import type { RegistryClient } from "../lib/registry-client.ts"
 import { createSettingsClient } from "../lib/settings-client.ts"
 import type { SettingsClient } from "../lib/settings-client.ts"
@@ -42,6 +44,8 @@ export interface InvoicingClients {
   readonly settings: SettingsClient
   /** An issued invoice's payment ledger: the summary and its two writes. */
   readonly payments: PaymentsClient
+  /** The dashboard's revenue and collections reports. */
+  readonly reports: ReportsClient
 }
 
 export const useInvoicingClients = (): InvoicingClients => {
@@ -56,5 +60,6 @@ export const useInvoicingClients = (): InvoicingClients => {
     proformaReplay: createProformaReplayClient(transport),
     settings: createSettingsClient(transport),
     payments: createPaymentsClient(transport),
+    reports: createReportsClient(transport),
   }), [transport])
 }
