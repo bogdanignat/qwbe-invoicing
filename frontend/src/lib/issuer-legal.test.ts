@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { bankNameValue, ibanValue, socialCapitalValue, tradeRegistryValue } from "./issuer-legal.ts"
+import { SOCIAL_CAPITAL_MAX_LENGTH, bankNameValue, ibanValue, socialCapitalValue, tradeRegistryValue } from "./issuer-legal.ts"
 
 void test("trade registry number — accepts both accepted forms, upper-cased and trimmed", () => {
   assert.deepEqual(tradeRegistryValue("  j12/1234/2020 "), { kind: "ready", value: "J12/1234/2020" })
@@ -37,6 +37,7 @@ void test("social capital — refuses a sum that is not a non-negative RON amoun
   assert.deepEqual(socialCapitalValue("200.005"), { kind: "issue", message })
   assert.deepEqual(socialCapitalValue("200,00"), { kind: "issue", message })
   assert.deepEqual(socialCapitalValue("1".repeat(17)), { kind: "issue", message })
+  assert.equal(`${"9".repeat(16)}.99`.length, SOCIAL_CAPITAL_MAX_LENGTH)
 })
 
 void test("IBAN — checks the mod-97 digit over the whitespace-free value", () => {

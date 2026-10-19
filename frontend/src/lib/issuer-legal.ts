@@ -23,6 +23,11 @@ const issue = (message: string): LegalValue => ({ kind: "issue", message })
 
 export const TRADE_REGISTRY_MAX_LENGTH = 32
 export const BANK_NAME_MAX_CODE_POINTS = 120
+/** Integer digits of the social capital: the BIGINT column in bani must hold it. */
+export const SOCIAL_CAPITAL_MAX_DIGITS = 16
+/** The longest capital the field accepts: the digits, the point and two decimals. */
+export const SOCIAL_CAPITAL_MAX_LENGTH = SOCIAL_CAPITAL_MAX_DIGITS + 3
+const socialCapitalShape = new RegExp(`^(\\d{1,${String(SOCIAL_CAPITAL_MAX_DIGITS)}})(?:\\.(\\d{1,2}))?$`, "u")
 
 export const tradeRegistryValue = (input: string): LegalValue => {
   const value = input.trim().toUpperCase()
@@ -39,9 +44,9 @@ export const tradeRegistryValue = (input: string): LegalValue => {
 export const socialCapitalValue = (input: string): LegalValue => {
   const value = input.trim()
   if (value === "") return ready("")
-  const match = /^(\d{1,16})(?:\.(\d{1,2}))?$/u.exec(value)
+  const match = socialCapitalShape.exec(value)
   if (match === null) {
-    return issue("Capitalul social trebuie să fie o sumă RON nenegativă, cu maximum 16 cifre întregi și 2 zecimale.")
+    return issue(`Capitalul social trebuie să fie o sumă RON nenegativă, cu maximum ${String(SOCIAL_CAPITAL_MAX_DIGITS)} cifre întregi și 2 zecimale.`)
   }
   const whole = (match[1] ?? "").replace(/^0+(?=\d)/u, "")
   return ready(`${whole}.${(match[2] ?? "").padEnd(2, "0")}`)
