@@ -14,7 +14,7 @@ export interface StoredConnection {
   readonly refreshExpiresAt?: string | undefined
 }
 
-const DAY_MS = 24 * 60 * 60 * 1000
+export const DAY_MS = 24 * 60 * 60 * 1000
 /** The access token is refreshed ahead of time when it expires within this window. */
 export const ACCESS_REFRESH_WINDOW_DAYS = 7
 /** Settings warn about the refresh token this long before it lapses. */

@@ -4,6 +4,9 @@ import type { AddressInfo } from "node:net"
 import { join } from "node:path"
 
 import { startServer } from "./http.ts"
+import { createApiHandler } from "../api/api.ts"
+import type { AnafSettings } from "../efactura/anaf/config.ts"
+import type { Transport } from "../outbound/send.ts"
 import type { PluginSelection } from "../plugins.ts"
 import type { TestFixture } from "../storage/postgres-rig.test-support.ts"
 
@@ -33,14 +36,22 @@ export interface Served {
   readonly cookie: string
   /** What the login answered, for the session contract. */
   readonly login: Record<string, unknown>
+  readonly csrfToken: string
 }
 
-/** Start, prove readiness, log in: the session cookie and its CSRF token carry every later call. */
-export const serve = async (fixture: TestFixture, plugins: PluginSelection): Promise<Served> => {
+/**
+ * Start, prove readiness, log in: the session cookie and its CSRF token carry every later call.
+ * `anaf` hands in the ANAF client and the transport that reaches the fake ANAF.
+ */
+export const serve = async (
+  fixture: TestFixture, plugins: PluginSelection, anaf: { readonly settings?: AnafSettings; readonly transport?: Transport } = {},
+): Promise<Served> => {
   const tokenFile = join(fixture.dataDirectory, "api-token")
   writeFileSync(tokenFile, token, { mode: 0o600 })
-  const running = await startServer(fixture.config({ port: 0, authTokenFile: tokenFile, plugins }), fixture.pool,
-    undefined, undefined, { barrierHeld: () => true })
+  const { transport } = anaf
+  const running = await startServer(fixture.config({ port: 0, authTokenFile: tokenFile, plugins, anaf: anaf.settings }), fixture.pool,
+    undefined, undefined, { barrierHeld: () => true,
+      ...(transport === undefined ? {} : { apiHandlerFactory: (runtime) => createApiHandler({ ...runtime, transport }) }) })
   try {
     const origin = `http://127.0.0.1:${String((running.server.address() as AddressInfo).port)}`
     assert.equal((await fetch(`${origin}/health/ready`)).status, 200)
@@ -60,7 +71,7 @@ export const serve = async (fixture: TestFixture, plugins: PluginSelection): Pro
       return { status: response.status, type,
         body: type.includes("json") ? await response.json() : type.includes("pdf") ? undefined : await response.text() }
     }
-    return { call, close: running.close, origin, cookie, login: loginBody }
+    return { call, close: running.close, origin, cookie, login: loginBody, csrfToken }
   } catch (error) {
     await running.close()
     throw error

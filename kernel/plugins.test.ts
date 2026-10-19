@@ -73,9 +73,10 @@ void test("a plugin's grants exist only with that plugin on; invoicing:read stay
     const on = await grants(undefined)
     const payments = ["payments:read", "payments:payment.record"]
     const companyLookup = ["company-lookup:company.lookup"]
-    assert.ok([...payments, ...companyLookup, "invoicing:read"].every((name) => on.includes(name)))
-    for (const [value, missing] of [["", [...payments, ...companyLookup]], ["efactura", [...payments, ...companyLookup]],
-      ["company-lookup", payments], ["payments", companyLookup]] as const) {
+    const efactura = ["efactura:read", "efactura:connection.manage"]
+    assert.ok([...payments, ...companyLookup, ...efactura, "invoicing:read"].every((name) => on.includes(name)))
+    for (const [value, missing] of [["", [...payments, ...companyLookup, ...efactura]], ["efactura", [...payments, ...companyLookup]],
+      ["company-lookup", [...payments, ...efactura]], ["payments", [...companyLookup, ...efactura]]] as const) {
       const off = await grants(value)
       assert.ok(off.includes("invoicing:read"), value)
       assert.deepEqual([...off, ...missing].sort(), [...on].sort(), value)

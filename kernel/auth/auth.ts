@@ -12,6 +12,7 @@ import {
 } from "../../cubes/invoicing/index.ts"
 import { companyLookupPermission } from "../../cubes/invoicing/company-lookup/index.ts"
 import { documentsPermissions } from "../../cubes/invoicing/documents/index.ts"
+import { efacturaPermissions } from "../../cubes/invoicing/efactura/connection/index.ts"
 import { paymentsPermissions } from "../../cubes/invoicing/payments/index.ts"
 import type { RuntimeConfig } from "../config.ts"
 
@@ -41,6 +42,7 @@ export const createRequestAuthenticator = (config: RuntimeConfig): RequestAuthen
   }
   const invoicing = invoicingPermissions("invoicing")
   const payments = paymentsPermissions("payments")
+  const efactura = efacturaPermissions("efactura")
   // A plugin's grants exist only with the plugin on. `invoicing:read` stays
   // regardless: it is the invoicing base permission, and the alias the payments
   // cube still accepts for reading.
@@ -53,6 +55,7 @@ export const createRequestAuthenticator = (config: RuntimeConfig): RequestAuthen
     invoicing.voidInvoices,
     invoicing.manageSettings,
     ...(config.plugins.payments ? [payments.read, payments.record] : []),
+    ...(config.plugins.efactura ? [efactura.read, efactura.manageConnection] : []),
     ...(config.plugins["company-lookup"] ? [companyLookupPermission("company-lookup")] : []),
     documentsPermissions.read,
     documentsPermissions.render,

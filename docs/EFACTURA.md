@@ -282,6 +282,97 @@ corrections domain rather than in the HTTP schema, because the storno reason is
 a fiscal element of the document, and the rule holds for every caller, not only
 for the one that arrives over HTTP.
 
+## Connecting to ANAF (OAuth, T-1346)
+
+The SPV is reached with an OAuth token issued to one organization's certificate.
+The connection lives in `cubes/invoicing/efactura/connection` (states, attempt,
+callback, refresh) and `kernel/efactura/anaf/` (ANAF client, token cipher, callback
+HTTP); its rows in `efactura_connections` and `efactura_oauth_attempts`.
+
+| Route | Grant | What it does |
+| --- | --- | --- |
+| `POST /api/efactura/connection/start` | `efactura:connection.manage`, session + CSRF | a new attempt; answers ANAF's `authorize` URL and sets the attempt cookie; `409 efactura_not_configured` without the ANAF variables, `409 efactura_issuer_cif_invalid` when the issuer has no CIF the SPV can check |
+| `GET /api/anaf/callback` | none: the attempt cookie | ANAF's redirect; always `303` to `/settings/integrations?anaf=<code>` |
+| `GET /api/efactura/connection` | `efactura:read` | `not_configured`, `disconnected`, `connected` or `needs_reconnect`, the environment, the verified CIF, the refresh token's expiry, who connected and when, and whether your own attempt never came back. Never a token |
+| `DELETE /api/efactura/connection` | `efactura:connection.manage`, session + CSRF | a new generation, the tokens deleted; ANAF's `revoke` is asked after the commit, best effort |
+
+All four belong to the `efactura` plugin: off, they answer 404 and are absent from OpenAPI.
+
+**The attempt.** `start` draws a 32-byte nonce, stores only its SHA-256 with the
+connection's generation, and replaces the organization's previous attempt, which
+can then never complete. The nonce travels only in `qwbe_anaf_oauth` (HttpOnly,
+Secure, SameSite=Lax, `Path=/api/anaf`, Max-Age 600). The attempt lives ten minutes
+and is consumed by the first callback that presents it, whatever ANAF answered. The
+`authorize` URL carries `response_type=code`, `client_id`, `redirect_uri` (the
+configured one, never one from a request) and `token_content_type=jwt`; no `state`
+and no `scope`, because ANAF closes the session when `state` is sent (verified live,
+2026-10-19; ANAF's OAuth guide, p. 23: "State se lasă necompletat").
+
+**The callback**, fail-closed at every step: no cookie, an attempt that is expired,
+consumed or no longer the current one, `error=`, or a missing code end it with a
+fixed code. Otherwise the attempt is consumed in a short transaction; the code is
+exchanged (Basic client auth, `token_content_type=jwt`) outside any transaction; the
+token's right on the issuer's CIF is checked with a read-only
+`listaMesajePaginatieFactura` (one day, page 1). Only a recognised positive answer (a
+list, or "no messages") saves the connection: "no right" is `fara_drept_cif`; a
+timeout, a redirect, an unknown body, a throttle or anything else is
+`verificare_esuata` and nothing is saved. The save checks, in the same transaction,
+that the consumed attempt is still the organization's current one and that the
+generation it started from still holds, so a late callback of a replaced attempt or
+one overtaken by a disconnect writes nothing (`conexiune_schimbata`). Once ANAF has
+granted a pair, the one not kept is revoked after the commit, best effort, without
+changing the outcome: the new pair on `fara_drept_cif`, `verificare_esuata` and
+`conexiune_schimbata`, the previous pair when a reconnect replaces it. The issuer's
+CIF is checked at start as well; the callback keeps its check for a CIF changed in
+between. The answer is
+`no-store` and `Referrer-Policy: no-referrer` and clears the cookie. The query string,
+the cookie, the code and the tokens never reach a log, the failure log included: a
+storage failure logs its tag and fixed operation name, and the browser sees `eroare`.
+
+The codes: `conectat`, `neconfigurat`, `tentativa_lipsa`, `tentativa_expirata`,
+`tentativa_folosita`, `refuzat_anaf`, `cod_lipsa`, `schimb_esuat`, `fara_drept_cif`,
+`verificare_esuata`, `conexiune_schimbata`, `eroare`.
+
+**The tokens** are sealed with AES-256-GCM under `ANAF_TOKEN_KEY_FILE`
+(`kernel/crypto/sealed-text.ts`), each bound to
+`efactura:<access|refresh>:<organization>:<environment>:<client_id>:<generation>`. A
+pair that does not open (another key, client, environment or generation) reads as
+`needs_reconnect`. A connect and a disconnect each start a new generation; a refresh
+writes a new revision of the pair. The refresh (`refreshConnection`, called only by the
+dispatcher, never from a request) asks ANAF outside any transaction and stores the
+answer only if the generation and revision it observed still hold; `invalid_grant`
+marks `needs_reconnect` under the same condition, so an old failure cannot invalidate a
+newer pair, and a refresh overtaken by another one or by a disconnect is dropped. ANAF
+does not say when a refresh token lapses: it is taken as 365 days from the connection
+and not extended by a refresh until ANAF TEST shows otherwise (task 6).
+
+Connections, disconnections and `needs_reconnect` are audited
+(`efactura_connection.connected | .disconnected | .needs_reconnect`) in the transaction
+that makes the change.
+
+**Backups** exclude the rows of both tables (`excludedTableData`, like
+`browser_sessions`): no backup carries an ANAF token or an attempt. After a restore,
+e-Factura reads `disconnected` and the organization **connects again with its
+certificate**.
+
+### Residual risk: login CSRF without `state`
+
+Without `state`, ANAF's authorization code is not bound cryptographically to the
+attempt that asked for it. The attempt cookie proves only that this browser started an
+attempt in the last ten minutes; the CIF check proves only that the token has a right
+on the issuer's CIF. What remains possible: **someone else who holds an SPV right on
+the same CIF** could bind their own token in place of yours, if they get their
+callback URL (with their code) opened in your browser within your ten-minute window.
+The effect: submissions would leave under their token, for your company. It does not
+expose another company's data, and that person can already submit in the SPV for this
+CIF directly.
+
+Mitigations: the short window, the single-use attempt that a newer one replaces, the
+audit trail with the moment and the person who connected, and disconnect/reconnect at
+any time from Settings. PKCE (`code_challenge`) is not assumed: ANAF's support for it
+is tried once on ANAF TEST (task 6). If ANAF accepts it without closing the session it
+is added; otherwise this risk stays, accepted by Bogdan on 2026-10-19.
+
 ## What is still unverified
 
 - The official `ro16931-ubl-1.0.9` package is **not** reachable over HTTP from
@@ -305,6 +396,9 @@ for the one that arrives over HTTP.
   document states the truth: correct totals with the wrong VAT category pass.
 - Nothing here has been sent to the SPV. Acceptance by the validator is not
   acceptance by the system that receives real invoices (T-1346).
+- The ANAF connection runs only against the fake ANAF so far. The exact text of
+  "no right on the CIF", the positive list shape, the refresh token's lifetime after a
+  refresh and PKCE are confirmed on ANAF TEST in task 6.
 
 ## Validating the fixtures
 

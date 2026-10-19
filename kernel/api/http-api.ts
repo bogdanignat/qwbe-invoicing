@@ -2,6 +2,7 @@ import { HttpApi, type HttpApiEndpoint, HttpApiGroup, OpenApi } from "@effect/pl
 
 import { companyLookupEndpoints as l } from "./http-endpoints-company-lookup.ts"
 import { draftEndpoints as d } from "./http-endpoints-drafts.ts"
+import { efacturaConnectionEndpoints as e } from "./http-endpoints-efactura.ts"
 import { fiscalEndpoints as f } from "./http-endpoints-fiscal.ts"
 import { documentEndpoints as x, sessionEndpoints as s } from "./http-endpoints-host.ts"
 import { masterDataEndpoints as m } from "./http-endpoints-master-data.ts"
@@ -21,6 +22,7 @@ export const operationNames = [
   "listPayments", "recordPayment", "reversePayment", "createCorrection", "listCorrections", "getCorrection",
   "listInvoiceRegister", "getRevenueReport", "getCollectionsReport", "listIssuedInvoices", "getIssuedInvoice", "renderInvoicePdf", "downloadInvoicePdf",
   "downloadInvoiceEFactura", "downloadCorrectionEFactura",
+  "getEFacturaConnection", "startEFacturaConnection", "disconnectEFactura", "completeAnafCallback",
   "issueDraftProforma", "issueProforma", "listProformas", "getProforma", "issueInvoiceFromProforma", "createDraftInvoiceFromProforma",
   "renderProformaPdf", "downloadProformaPdf", "downloadCorrectionPdf", "getSession", "createSession", "deleteSession",
   "getCompanyLookupSettings", "updateCompanyLookupSettings", "getCompanyLookupAvailability", "lookupCompany", "searchCompanies",
@@ -45,6 +47,7 @@ const withPayments = <E extends HttpApiEndpoint.HttpApiEndpoint.Any, R>(group: I
   group.add(f.listPayments).add(f.recordPayment).add(f.reversePayment).add(f.getCollectionsReport)
 const withEFactura = <E extends HttpApiEndpoint.HttpApiEndpoint.Any, R>(group: InvoicingGroup<E, R>) =>
   group.add(f.downloadInvoiceEFactura).add(f.downloadCorrectionEFactura)
+    .add(e.getEFacturaConnection).add(e.startEFacturaConnection).add(e.disconnectEFactura).add(e.completeAnafCallback)
 const withCompanyLookup = <E extends HttpApiEndpoint.HttpApiEndpoint.Any, R>(group: InvoicingGroup<E, R>) =>
   group.add(l.getCompanyLookupSettings).add(l.updateCompanyLookupSettings).add(l.getCompanyLookupAvailability)
     .add(l.lookupCompany).add(l.searchCompanies)

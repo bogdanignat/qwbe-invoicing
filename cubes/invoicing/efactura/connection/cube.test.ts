@@ -8,6 +8,9 @@ void test("declares the connection as a required child of e-Factura, owning its 
   assert.equal(cube.manifest.parent, "efactura")
   assert.equal(cube.manifest.required, true)
   assert.deepEqual(cube.manifest.tables, ["efactura_connections", "efactura_oauth_attempts"])
+  assert.deepEqual(cube.manifest.permissions, [
+    { name: "efactura:read", roles: ["admin"] }, { name: "efactura:connection.manage", roles: ["admin"] },
+  ])
 })
 
 void test("one baseline creates exactly the declared tables, and never a nullable column the state does not explain", () => {

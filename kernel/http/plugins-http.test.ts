@@ -59,6 +59,7 @@ for (const plugins of combinations) {
         if (!plugins.payments) await plugin(false, "POST", `/api/invoices/${id}/payments/any/reversal`, { reason: "x" }, "rev-1")
         await plugin(plugins.efactura, "GET", `/api/invoices/${id}/efactura.xml`)
         await plugin(plugins.efactura, "GET", `/api/corrections/${String(correction.id)}/efactura.xml`)
+        await plugin(plugins.efactura, "GET", "/api/efactura/connection")
         const lookup = plugins["company-lookup"]
         await plugin(lookup, "GET", "/api/settings/company-lookup")
         await plugin(lookup, "PUT", "/api/settings/company-lookup", { provider: "none" })
@@ -73,6 +74,8 @@ for (const plugins of combinations) {
         assert.equal(paths.includes("/api/invoices/{invoiceId}/payments/{paymentId}/reversal"), plugins.payments)
         assert.equal(paths.includes("/api/invoices/{id}/efactura.xml"), plugins.efactura, "e-Factura in OpenAPI")
         assert.equal(paths.includes("/api/corrections/{id}/efactura.xml"), plugins.efactura)
+        assert.equal(paths.includes("/api/efactura/connection"), plugins.efactura)
+        assert.equal(paths.includes("/api/anaf/callback"), plugins.efactura)
         assert.equal(paths.includes("/api/company-lookup/lookup"), lookup, "company lookup in OpenAPI")
       } finally {
         await served.close()
