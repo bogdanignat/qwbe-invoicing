@@ -142,7 +142,7 @@ export const triggerRejections = [
   ["issued_invoices_bucharest_sector_insert", invoiceWith("inv-bad-sector", 7, { issuerCounty: "'RO-B'" }),
     "Bucharest sector is required"],
   ["correction_documents_no_update", "UPDATE correction_documents SET reason='x' WHERE id='corr-1'",
-    "correction documents are immutable"],
+    "correction documents are immutable except e_factura_status"],
   ["correction_documents_no_delete", "DELETE FROM correction_documents WHERE id='corr-1'",
     "correction documents are immutable"],
   ["correction_documents_source_insert", correctionWith("corr-bad-source", 9, { sourceApp: "'crm'" }),
@@ -210,7 +210,8 @@ export const triggerRejections = [
 
 /** Writes that must be accepted: the mutations the domain really performs. */
 export const acceptedWrites = [
-  ["issued invoice e-Factura status", "UPDATE issued_invoices SET e_factura_status='pending' WHERE id='invoice-1'"],
+  ["issued invoice e-Factura status", "UPDATE issued_invoices SET e_factura_status='queued' WHERE id='invoice-1'"],
+  ["correction e-Factura status", "UPDATE correction_documents SET e_factura_status='queued' WHERE id='corr-1'"],
   ["draft notes cleared", "UPDATE invoice_drafts SET notes=NULL WHERE id='draft-2'"],
   ["customer soft delete", "UPDATE customers SET deleted_at='2026-09-10' WHERE id='customer-1'"],
   ["sequence advance", "UPDATE invoice_sequences SET last_number=4 WHERE organization_id='org-1'"],

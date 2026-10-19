@@ -261,7 +261,7 @@ void test("an e-Factura status reads in the same words as the register", () => {
 })
 
 void test("an e-Factura status outside the contract fails the document", () => {
-  assert.throws(() => decodeIssuedInvoice({ ...invoiceJson, eFacturaStatus: "queued" }), /invalid eFacturaStatus/u)
+  assert.throws(() => decodeIssuedInvoice({ ...invoiceJson, eFacturaStatus: "sent" }), /invalid eFacturaStatus/u)
   assert.throws(() => decodeIssuedInvoice({ ...invoiceJson, eFacturaStatus: undefined }), /invalid eFacturaStatus/u)
 })
 

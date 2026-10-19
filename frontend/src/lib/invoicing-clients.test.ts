@@ -36,7 +36,7 @@ const row = {
   currency: "RON",
   totalIncludingVat: "1190.00",
   dueDate: null,
-  eFacturaStatus: "sent",
+  eFacturaStatus: "processing",
 }
 
 void test("a page request with no cursor asks for the register's first page", () => {

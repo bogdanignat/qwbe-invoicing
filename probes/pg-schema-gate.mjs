@@ -208,10 +208,11 @@ const main = async () => {
       assert.deepEqual(liveIndexes, goldenIndexes)
       assert.equal(liveIndexes.length, 35)
     })
-    // 129 checks before e-Factura, plus 10 of its connection and 33 of its submissions.
-    check("68 triggers, 172 named checks, 7 functions", () => {
+    // 129 checks before e-Factura, plus 10 of its connection, 33 of its submissions
+    // and the e-Factura status of a correction.
+    check("68 triggers, 173 named checks, 7 functions", () => {
       assert.equal(countOf(inventoryA, "trigger"), 68)
-      assert.equal(countOf(inventoryA, "check"), 172)
+      assert.equal(countOf(inventoryA, "check"), 173)
       assert.equal(countOf(inventoryA, "function"), 7)
     })
     check("every check constraint is named and within 63 characters", () => {
@@ -236,8 +237,32 @@ const main = async () => {
     })
 
     // ------------------------------------------- triggers vs the capture
-    const goldenTriggers = JSON.parse(readFileSync(new URL(
+    const capturedTriggers = JSON.parse(readFileSync(new URL(
       "../kernel/parity/sqlite-baseline-triggers.json", import.meta.url), "utf8"))
+    // Triggers changed on purpose after the capture, declared here and nowhere
+    // else: a correction gained its e-Factura status (T-1346), so its blanket
+    // UPDATE guard became an UPDATE OF every other column except the actor,
+    // which keeps its own trigger, exactly like the invoice's.
+    const changedAfterCapture = {
+      correction_documents_no_update: {
+        updateOf: ["id", "organization_id", "original_invoice_id", "fiscal_year", "document_type", "series", "number", "issue_date",
+          "issued_at", "reason", "currency", "issuer_legal_name", "issuer_tax_identifier", "issuer_country_code", "issuer_city",
+          "issuer_street", "issuer_county", "issuer_sector", "issuer_postal_code", "customer_legal_name", "customer_tax_identifier",
+          "customer_country_code", "customer_city", "customer_street", "customer_county", "customer_sector", "customer_postal_code",
+          "total_excluding_tax", "tax_total", "total_including_tax", "customer_party_type", "customer_vat_registered", "source_app",
+          "source_kind", "source_id", "issuer_legal_form", "issuer_trade_registry_number", "issuer_iban", "issuer_bank_name",
+          "issuer_social_capital", "issuer_vat_registered"],
+        raiseMessages: ["correction documents are immutable except e_factura_status"],
+      },
+    }
+    const goldenTriggers = {
+      ...capturedTriggers,
+      withUpdateOf: [...capturedTriggers.withUpdateOf, ...Object.keys(changedAfterCapture)],
+      triggers: capturedTriggers.triggers.map((trigger) => ({ ...trigger, ...changedAfterCapture[trigger.name] })),
+    }
+    check("each declared post-capture change names a captured trigger", () => {
+      for (const name of Object.keys(changedAfterCapture)) assert.ok(capturedTriggers.triggers.some((t) => t.name === name), name)
+    })
     // The e-Factura triggers came after the capture: each is declared here with
     // its table, event, column list and message, and held to exactly that.
     const postCaptureTriggers = {
@@ -285,10 +310,10 @@ const main = async () => {
         assert.notDeepEqual(triggerDifferences(goldenTriggers, mutated), [], label)
       }
     })
-    check("the 11 UPDATE OF column lists and the 6 moved predicates match the capture", () => {
+    check("the 12 UPDATE OF column lists (the capture's 11 and the correction's) and the 6 moved predicates match", () => {
       const withUpdateOf = liveTriggers.filter((row) => row.update_of.length > 0).map(({ name }) => name).sort()
       assert.deepEqual(withUpdateOf, [...goldenTriggers.withUpdateOf].sort())
-      assert.equal(withUpdateOf.length, 11)
+      assert.equal(withUpdateOf.length, 12)
       const inBody = liveTriggers.filter((row) => translatedPredicate(row).where === "body")
         .map(({ name }) => name).sort()
       assert.deepEqual(inBody, [...goldenTriggers.withSubqueryInWhen].sort())

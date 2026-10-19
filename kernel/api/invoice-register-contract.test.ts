@@ -40,15 +40,15 @@ void test("invoice register OpenAPI preserves discriminated nullability and orig
   assert.ok(invoice.properties.dueDate.anyOf)
   assert.deepEqual(invoice.properties.dueDate.anyOf.map(({ type }) => type), ["string", "null"])
   assert.ok(invoice.properties.eFacturaStatus)
-  // `null` is the e-Factura plugin switched off (`QWBE_PLUGINS`); otherwise one of the five statuses.
-  assert.deepEqual(invoice.properties.eFacturaStatus.anyOf?.map((variant) => variant.enum ?? variant.type),
-    [["not_sent", "pending", "sent", "accepted", "rejected"], "null"])
+  // `null` is the e-Factura plugin switched off (`QWBE_PLUGINS`); otherwise one of the seven statuses.
+  const statuses = [["not_sent", "queued", "processing", "accepted", "rejected", "refused", "unknown"], "null"]
+  assert.deepEqual(invoice.properties.eFacturaStatus.anyOf?.map((variant) => variant.enum ?? variant.type), statuses)
   assert.ok(correction)
   assert.ok(correction.required)
   assert.ok(correction.properties)
   assert.equal(correction.required.includes("originalReference"), true)
   assert.equal(correction.properties.dueDate?.type, "null")
-  assert.equal(correction.properties.eFacturaStatus?.type, "null")
+  assert.deepEqual(correction.properties.eFacturaStatus?.anyOf?.map((variant) => variant.enum ?? variant.type), statuses)
   assert.ok(correction.properties.originalReference)
   assert.ok(correction.properties.originalReference.required)
   assert.deepEqual(correction.properties.originalReference.required, ["id", "series", "number"])

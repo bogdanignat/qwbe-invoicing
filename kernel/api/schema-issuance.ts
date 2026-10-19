@@ -1,6 +1,7 @@
 import { Schema } from "effect"
 
 import { DraftInvoice, DraftLine, DraftLineInput, VatBreakdown } from "./schema-drafts.ts"
+import { EFacturaStatus } from "./schema-invoice-register.ts"
 import { IssuerCompanySnapshot, IssuerParty } from "./schema-issuer.ts"
 import {
   bodyObject, Buyer, BuyerSelection, DocumentNotes, DocumentSource, nullableString, optional,
@@ -14,7 +15,7 @@ export const IssuedInvoice = Schema.Struct({
   notes: DocumentNotes, issuer: IssuerParty, customer: Buyer, lines: Schema.Array(DraftLine),
   vatBreakdown: Schema.Array(VatBreakdown), totalExcludingVat: Schema.String,
   vatTotal: Schema.String, totalIncludingVat: Schema.String,
-  eFacturaStatus: Schema.NullOr(Schema.Literal("not_sent", "pending", "sent", "accepted", "rejected")).annotations({
+  eFacturaStatus: Schema.NullOr(EFacturaStatus).annotations({
     description: "null when the e-Factura plugin is off in this installation.",
   }),
 })

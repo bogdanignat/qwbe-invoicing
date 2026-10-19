@@ -65,9 +65,14 @@ void test("an invoice carrying a correction's reference is rejected", () => {
   )
 })
 
-void test("a correction carrying an invoice's due date or status is rejected", () => {
+void test("a correction carrying an invoice's due date is rejected", () => {
   assert.throws(() => decodeInvoiceRegisterRow({ ...correction, dueDate: "2026-03-05" }), /invalid dueDate/u)
+})
+
+void test("a correction carries its own e-Factura status, from the same closed enum", () => {
+  assert.equal(decodeInvoiceRegisterRow({ ...correction, eFacturaStatus: "processing" }).eFacturaStatus, "processing")
   assert.throws(() => decodeInvoiceRegisterRow({ ...correction, eFacturaStatus: "sent" }), /invalid eFacturaStatus/u)
+  assert.throws(() => decodeInvoiceRegisterRow({ ...correction, eFacturaStatus: undefined }), /invalid eFacturaStatus/u)
 })
 
 void test("a correction without the invoice it reverses is rejected", () => {
@@ -80,7 +85,9 @@ void test("an unknown document kind is refused instead of rendered blank", () =>
 })
 
 void test("an e-Factura status outside the contract is refused", () => {
-  assert.throws(() => decodeInvoiceRegisterRow({ ...invoice, eFacturaStatus: "queued" }), /invalid eFacturaStatus/u)
+  for (const retired of ["pending", "sent", "validating", "uploading"]) {
+    assert.throws(() => decodeInvoiceRegisterRow({ ...invoice, eFacturaStatus: retired }), /invalid eFacturaStatus/u, retired)
+  }
   assert.throws(() => decodeInvoiceRegisterRow({ ...invoice, eFacturaStatus: undefined }), /invalid eFacturaStatus/u)
 })
 

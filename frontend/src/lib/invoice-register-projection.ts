@@ -23,10 +23,12 @@ export interface InvoiceRegisterPresentationRow {
 
 const statusLabels: Readonly<Record<EFacturaStatus, string>> = {
   not_sent: "Netrimisă",
-  pending: "În curs",
-  sent: "Trimisă",
+  queued: "În coadă",
+  processing: "În procesare",
   accepted: "Acceptată",
   rejected: "Respinsă",
+  refused: "Refuzată",
+  unknown: "Necunoscută",
 }
 
 /**

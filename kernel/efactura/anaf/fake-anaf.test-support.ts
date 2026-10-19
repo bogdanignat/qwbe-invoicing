@@ -13,10 +13,13 @@ import type { Transport } from "../../outbound/send.ts"
  * Each operation answers like ANAF by default and can be switched to one of
  * the scenarios ANAF (or the road to it) produces: an error inside HTTP 200, a
  * throttle, a request that is read and never answered, a redirect, a body past
- * the limit, an XML answer carrying a DOCTYPE.
+ * the limit, an XML answer carrying a DOCTYPE, a refused token, a 500, a body
+ * cut short, and (for `stareMesaj`) ANAF's `nok`.
  */
 export type FakeOperation = "token" | "revoke" | "validare" | "upload" | "stareMesaj" | "lista" | "descarcare"
-export type FakeScenario = "normal" | "error_in_200" | "rate_limited" | "timeout_after_send" | "redirect" | "oversized" | "dtd"
+export type FakeScenario =
+  | "normal" | "error_in_200" | "rate_limited" | "timeout_after_send" | "redirect" | "oversized" | "dtd"
+  | "unauthorized" | "server_error" | "malformed" | "rejected"
 
 export interface FakeCall {
   readonly operation: FakeOperation | "unknown"
@@ -112,6 +115,12 @@ export const startFakeAnaf = async (): Promise<FakeAnaf> => {
     if (scenario === "rate_limited") return response.writeHead(429, { "retry-after": FAKE_RETRY_AFTER }).end()
     if (scenario === "redirect") return response.writeHead(302, { location: "https://elsewhere.example/" }).end()
     if (scenario === "dtd") return response.writeHead(200, { "content-type": "application/xml" }).end(DTD)
+    if (scenario === "unauthorized") return response.writeHead(401).end()
+    if (scenario === "server_error") return response.writeHead(500, { "content-type": "text/html" }).end("<html>Service Unavailable</html>")
+    if (scenario === "malformed") return response.writeHead(200, { "content-type": "application/xml" }).end("<header ExecutionStatus=\"0\"")
+    if (scenario === "rejected" && operation === "stareMesaj") {
+      return response.writeHead(200, { "content-type": "application/xml" }).end(xml(`stare="nok" id_descarcare="3000000999"`))
+    }
     if (scenario === "oversized") {
       response.writeHead(200, { "content-type": "application/zip" })
       const chunk = Buffer.alloc(256 * 1024, 0x41)

@@ -59,7 +59,7 @@ void test("a correction's negative total is shown as stored, not flipped", () =>
   assert.equal(projectInvoiceRegisterRow(correction).total, "-1190.00 RON")
 })
 
-void test("fields a correction never has read as a dash instead of blank", () => {
+void test("a correction's due date, and its status with e-Factura off, read as a dash instead of blank", () => {
   const row = projectInvoiceRegisterRow(correction)
   assert.equal(row.dueDate, "—")
   assert.equal(row.status, "—")
@@ -70,9 +70,13 @@ void test("an invoice without a due date also reads as a dash", () => {
 })
 
 void test("each e-Factura status has a Romanian label", () => {
-  const labels = (["not_sent", "pending", "sent", "accepted", "rejected"] as const)
+  const labels = (["not_sent", "queued", "processing", "accepted", "rejected", "refused", "unknown"] as const)
     .map((status) => projectInvoiceRegisterRow({ ...invoice, eFacturaStatus: status }).status)
-  assert.deepEqual(labels, ["Netrimisă", "În curs", "Trimisă", "Acceptată", "Respinsă"])
+  assert.deepEqual(labels, ["Netrimisă", "În coadă", "În procesare", "Acceptată", "Respinsă", "Refuzată", "Necunoscută"])
+})
+
+void test("a correction shows its own e-Factura status", () => {
+  assert.equal(projectInvoiceRegisterRow({ ...correction, eFacturaStatus: "accepted" }).status, "Acceptată")
 })
 
 // The two kinds are numbered independently, so an invoice and a correction can

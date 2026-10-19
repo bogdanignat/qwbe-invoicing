@@ -2,6 +2,7 @@ import { spawn } from "node:child_process"
 
 import type { PostgresSettings } from "../storage/postgres-pool.ts"
 import { redactSecrets } from "../storage/postgres-errors.ts"
+import { EFACTURA_RESTORE_SQL } from "./efactura-restore.ts"
 
 /**
  * `pg_dump` and `psql`, run as bounded child processes.
@@ -213,6 +214,11 @@ export const dumpDatabase = async (
   ], { password: settings.password, timeoutMillis })
 }
 
+/**
+ * The dump, then the e-Factura transformation (`efactura-restore.ts`), in one
+ * transaction: psql wraps every `--file` and `--command` of a
+ * `--single-transaction` run in the same BEGIN/COMMIT, in the order given.
+ */
 export const restoreDatabase = async (
   settings: PostgresSettings,
   dump: string,
@@ -225,5 +231,6 @@ export const restoreDatabase = async (
     "--single-transaction",
     "--set=ON_ERROR_STOP=1",
     `--file=${dump}`,
+    `--command=${EFACTURA_RESTORE_SQL}`,
   ], { password: settings.password, timeoutMillis })
 }

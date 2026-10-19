@@ -217,8 +217,8 @@ void test("refuses negative payment terms and invalid preset prices, and lets an
     for (const price of ["1.00", "1.5", "1e2", ""]) assert.equal((await badPrice(price)).code, "22P02", price)
     assert.equal(Number(await sql.scalar("SELECT count(*) FROM product_presets")), 1)
 
-    assert.equal(await sql.rowCount("UPDATE issued_invoices SET e_factura_status='pending' WHERE id='invoice-1'"), 1)
-    assert.equal(await sql.scalar("SELECT e_factura_status FROM issued_invoices WHERE id='invoice-1'"), "pending")
+    assert.equal(await sql.rowCount("UPDATE issued_invoices SET e_factura_status='queued' WHERE id='invoice-1'"), 1)
+    assert.equal(await sql.scalar("SELECT e_factura_status FROM issued_invoices WHERE id='invoice-1'"), "queued")
     for (const change of ["issuer_county='RO-CJ'", "customer_legal_name='Alt client'", "total_including_tax=100", "notes='Adaugata'"]) {
       const failure = await sql.rejects(`UPDATE issued_invoices SET ${change} WHERE id='invoice-1'`)
       assert.equal(failure.code, "23514", change)
@@ -236,6 +236,6 @@ void test("refuses negative payment terms and invalid preset prices, and lets an
     }
     assert.deepEqual(await sql.one(`SELECT issuer_county,customer_legal_name,total_including_tax,notes,e_factura_status
       FROM issued_invoices WHERE id='invoice-1'`),
-      { issuer_county: "RO-IS", customer_legal_name: "Client SRL", total_including_tax: "12100", notes: null, e_factura_status: "pending" })
+      { issuer_county: "RO-IS", customer_legal_name: "Client SRL", total_including_tax: "12100", notes: null, e_factura_status: "queued" })
   })
 })

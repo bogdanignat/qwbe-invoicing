@@ -8,8 +8,8 @@ synthetic fixtures for the official validator.
 /api/invoices/{id}/efactura.xml` and `GET /api/corrections/{id}/efactura.xml`,
 plus the button beside "Descarcă PDF" on an issued invoice. Both routes read a
 frozen snapshot and render it on the spot — no migration, no write to
-`eFacturaStatus`, nothing stored and nothing sent. Transport to the SPV stays in
-T-1346 (T-1395).
+`eFacturaStatus`, nothing stored and nothing sent. Transport to the SPV is
+T-1346: see [Submitting to ANAF](#submitting-to-anaf-t-1346).
 
 Both routes belong to the `efactura` plugin. With it off (`QWBE_PLUGINS` without
 `efactura`) they answer 404, are absent from OpenAPI, and every invoice response
@@ -373,6 +373,122 @@ any time from Settings. PKCE (`code_challenge`) is not assumed: ANAF's support f
 is tried once on ANAF TEST (task 6). If ANAF accepts it without closing the session it
 is added; otherwise this risk stays, accepted by Bogdan on 2026-10-19.
 
+## Submitting to ANAF (T-1346)
+
+A user submits one issued document at a time; nothing is ever submitted on its
+own. The states and the reading of ANAF's answers are pure functions in
+`cubes/invoicing/efactura/submissions`; the HTTP calls, the storage and the
+dispatcher are the host's (`kernel/efactura/dispatch`, `kernel/storage/postgres-efactura-*.ts`).
+
+| Route | Grant | What it does |
+| --- | --- | --- |
+| `POST /api/invoices/{id}/efactura/submission`, `POST /api/corrections/{id}/efactura/submission` | `efactura:submit`, session + CSRF | queues the document: `202` with the new submission, or `200` with the one it already has |
+| `GET /api/invoices/{id}/efactura/submissions`, `GET /api/corrections/{id}/efactura/submissions` | `efactura:read` | the current submission and every earlier one, newest first, with ANAF's own messages (sanitized) |
+| `GET /api/efactura/submissions/{id}/xml` | `efactura:read` | the exact XML that was submitted |
+| `GET /api/efactura/submissions/{id}/response` | `efactura:read` | ANAF's ZIP, once it is stored; `404` before |
+
+All of them belong to the `efactura` plugin: off, they answer 404 and are absent from OpenAPI.
+
+**Submit.** The XML is generated from the frozen snapshot (`UBL` for an invoice,
+`CN` for a correction), checked to be at most 10 MB, and stored byte for byte
+with its SHA-256 and size. It is refused with `409` when e-Factura is not
+configured (`efactura_not_configured`), not connected (`efactura_not_connected`),
+when the issuer's CIF in the snapshot is not the CIF the connection was verified
+for (`efactura_cif_mismatch`), when the buyer is a private person, for an invoice
+and for a correction alike (`efactura_b2c_refused`), and when the XML is too large
+(`efactura_xml_too_large`); a proforma is not an issued document and answers
+`404`. A document whose current submission is live, `unknown` or `accepted` gets
+that submission back (`200`); after `rejected` or `refused` a new one is queued.
+The partial unique index on the current submission makes two concurrent submits
+queue exactly one. The row, the document's status and the audit row
+`efactura_submission.queued` are written in one transaction.
+
+**States.** `queued → validating → uploading → processing → accepted | rejected`,
+plus `refused` (ANAF said why, nothing was taken) and `unknown` (nobody can tell
+whether ANAF took it). The archive of a decided submission goes
+`none → pending → stored`. The document shows its current submission in
+`e_factura_status`: `not_sent`, `queued`, `processing` (validating and uploading
+read as processing), `accepted`, `rejected`, `refused` or `unknown`, on invoices
+and corrections alike; it is written only in the transaction of the transition.
+That column is the only one of an issued invoice or a correction that may change
+(the triggers refuse an update of any other).
+
+**The dispatcher** is the one executor. It starts in `serve` once the
+application is ready and only with the plugin on, on its own PostgreSQL
+connection, and leads while it holds a session advisory lock there. Taking the
+lock bumps an epoch (`efactura_dispatcher_epoch`); every transaction it runs
+first proves, inside itself, that this connection still holds the lock and the
+epoch is still its own, so an executor that lost its right cannot write. A second
+`serve` waits as a candidate. On taking the lead it recovers: `uploading` becomes
+`unknown` (an upload may have reached ANAF), `validating` goes back to `queued`
+(validation is idempotent), `processing` resumes polling and `pending` archives
+resume downloading. Losing the lock, the connection or the maintenance barrier, or
+any of its transactions failing, interrupts the step in flight (its ANAF call is
+aborted), closes the connection and starts over as a candidate. On shutdown it is
+the first thing stopped, before the drain.
+
+One step at a time: `queued` → `validare` (`refused` on ANAF's errors, back to
+`queued` on anything unclear) → `uploading`, **committed before the POST** →
+upload, outside any transaction → `processing` with ANAF's index, `refused` on
+`ExecutionStatus="1"` with errors, `queued` only on an explicit 401/403 (after
+one refresh), and **`unknown` on anything else**: a timeout, a broken connection, a
+redirect, a 5xx, a 429, a body that does not parse or is too large. If storing the
+upload's answer fails, the submission stays `uploading` and the next recovery
+makes it `unknown`. Then `stareMesaj` 1, 2, 5, 10 and 30 minutes after the upload
+and hourly after that → `accepted` or `rejected` with the download id (or
+`refused` for "XML cu erori nepreluat de sistem" without one) → `descarcare` →
+the ZIP in `efactura_responses`, archive `stored`.
+
+**The connection's CIF** is checked again before every step: a submission whose
+CIF is not the one the organization's connection is now verified for makes no ANAF
+call at all (no `validare`, no upload, no poll). It stays where it is and waits,
+like a submission of an organization with no connection, 15 minutes at a time; a
+`queued` one shows the reason `conexiune_alt_cif` in its `errors` until it is sent.
+It is never `refused`: ANAF refused nothing.
+
+**A 401/403 is the only automatic reupload.** An explicit 401/403 at `validare`
+or at the upload sends the submission back to `queued`, the token is refreshed
+once, and it goes through `validare` and the upload again. That is safe because
+ANAF refused the request at authentication, before processing it: nothing was
+taken. Every other unclear upload answer is `unknown`.
+
+**Budgets**, reserved in the database before each call, in the transaction that
+takes the step, so a call that times out has still been counted: at most 90
+`stareMesaj` and 9 `descarcare` per message per day (Europe/Bucharest days, reset
+at its midnight) and 900 calls per minute per organization. A 429 pauses the
+organization for its `Retry-After` in whole seconds, at most 30 (30 when the
+header is anything else). Every call is logged in `efactura_submission_attempts`
+(operation, classified outcome, HTTP status, duration): never a body, never a token.
+
+**Tokens** are refreshed only by the dispatcher: ahead of time when the access
+token has less than 7 days left, and once after a 401/403. A pair that such a
+refresh produced is not refreshed again on the next refusal, so a token ANAF keeps
+refusing never turns into a loop.
+
+**No automatic replay.** Nothing `unknown` is ever uploaded again by the
+application: not by the dispatcher, not by its recovery, not by a submit. Finding
+out what happened to it (and resubmitting, knowing it may create a duplicate at
+ANAF) is the reconciliation of task 4.
+
+Audit: `efactura_submission.queued | .accepted | .rejected | .refused | .unknown | .restored_unknown`,
+each in the transaction of its transition; the dispatcher's actor is `efactura:dispatcher`.
+
+**`ANAF_ENVIRONMENT`** is checked by `serve` against the environment of the stored
+submissions once the schema is ready, before any traffic and before the dispatcher,
+whatever `QWBE_PLUGINS` says: `/health/ready` and `/api*` answer 503 until it
+passed, so no submit can write in the startup window. Polling a `test` index
+against `prod`, or the reverse, would read another system's answer, so `serve`
+stops with exit 1 and says why.
+
+**Restore.** A backup is a picture of the past: a submission it shows `queued`,
+`validating` or `uploading` may have reached ANAF since. `restore` therefore runs a
+fixed SQL step after the dump, inside the same `psql --single-transaction`
+(`kernel/ops/efactura-restore.ts`), whatever `QWBE_PLUGINS` says: those submissions
+become `unknown` ("restaurat din backup"), their documents show `unknown`, each one
+gets an `efactura_submission.restored_unknown` audit row, and the OAuth attempts are
+deleted. If that step fails, the whole restore rolls back with it and the database
+stays empty. After a restore, reconnecting with the certificate uploads nothing.
+
 ## What is still unverified
 
 - The official `ro16931-ubl-1.0.9` package is **not** reachable over HTTP from
@@ -396,6 +512,9 @@ is added; otherwise this risk stays, accepted by Bogdan on 2026-10-19.
   document states the truth: correct totals with the wrong VAT category pass.
 - Nothing here has been sent to the SPV. Acceptance by the validator is not
   acceptance by the system that receives real invoices (T-1346).
+- The submissions run only against the fake ANAF so far: `validare` under the
+  environment's base, the shape of its answer and the end-to-end cycle are
+  confirmed on ANAF TEST in task 6.
 - The ANAF connection runs only against the fake ANAF so far. The exact text of
   "no right on the CIF", the positive list shape, the refresh token's lifetime after a
   refresh and PKCE are confirmed on ANAF TEST in task 6.

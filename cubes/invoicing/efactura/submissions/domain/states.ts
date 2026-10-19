@@ -78,3 +78,7 @@ export const archiveFor = (state: FiscalState): ArchiveState => decided(state) ?
 
 /** ANAF's answer is stored once, for a decided submission whose download is pending. */
 export const canStoreArchive = (state: FiscalState, archive: ArchiveState): boolean => decided(state) && archive === "pending"
+
+/** What the document shows of its current submission (`e_factura_status`): validation and upload read as `processing`. */
+export const documentStatus = (state: FiscalState): Exclude<FiscalState, "validating" | "uploading"> =>
+  state === "validating" || state === "uploading" ? "processing" : state

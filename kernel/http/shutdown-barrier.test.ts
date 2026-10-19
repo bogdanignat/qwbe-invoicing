@@ -130,6 +130,7 @@ void test("a shutdown whose drain rejects keeps the barrier until the query pool
     assert.equal(session.held(), true, "the application must hold the barrier before the shutdown starts")
     const running = runShutdown({
       // The failure a child cannot be made to produce. Everything else is real.
+      stopWorkers: () => Promise.resolve(),
       drain: () => Promise.reject(new Error("server.close failed")),
       destroyConnections: () => { /* no listener in this test; the real one cuts sockets */ },
       endQueries: () => runtime.closeQueries(),

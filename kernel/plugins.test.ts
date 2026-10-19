@@ -73,7 +73,7 @@ void test("a plugin's grants exist only with that plugin on; invoicing:read stay
     const on = await grants(undefined)
     const payments = ["payments:read", "payments:payment.record"]
     const companyLookup = ["company-lookup:company.lookup"]
-    const efactura = ["efactura:read", "efactura:connection.manage"]
+    const efactura = ["efactura:read", "efactura:connection.manage", "efactura:submit"]
     assert.ok([...payments, ...companyLookup, ...efactura, "invoicing:read"].every((name) => on.includes(name)))
     for (const [value, missing] of [["", [...payments, ...companyLookup, ...efactura]], ["efactura", [...payments, ...companyLookup]],
       ["company-lookup", [...payments, ...efactura]], ["payments", [...companyLookup, ...efactura]]] as const) {

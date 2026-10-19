@@ -40,7 +40,7 @@ for (const plugins of combinations) {
         const register = await ok(call("GET", "/api/invoice-register"), "register") as
           { items: ReadonlyArray<{ kind: string, eFacturaStatus: unknown }> }
         assert.deepEqual(register.items.map((row) => [row.kind, row.eFacturaStatus]).sort(),
-          [["correction", null], ["invoice", status], ["invoice", status]], "register")
+          [["correction", status], ["invoice", status], ["invoice", status]], "register")
 
         await ok(call("POST", `/api/invoices/${id}/pdf`, {}), "render invoice pdf")
         for (const path of [`/api/invoices/${id}/pdf`, `/api/corrections/${String(correction.id)}/pdf`]) {
@@ -60,6 +60,9 @@ for (const plugins of combinations) {
         await plugin(plugins.efactura, "GET", `/api/invoices/${id}/efactura.xml`)
         await plugin(plugins.efactura, "GET", `/api/corrections/${String(correction.id)}/efactura.xml`)
         await plugin(plugins.efactura, "GET", "/api/efactura/connection")
+        await plugin(plugins.efactura, "GET", `/api/invoices/${id}/efactura/submissions`)
+        await plugin(plugins.efactura, "GET", `/api/corrections/${String(correction.id)}/efactura/submissions`)
+        if (!plugins.efactura) await plugin(false, "POST", `/api/invoices/${id}/efactura/submission`, {})
         const lookup = plugins["company-lookup"]
         await plugin(lookup, "GET", "/api/settings/company-lookup")
         await plugin(lookup, "PUT", "/api/settings/company-lookup", { provider: "none" })

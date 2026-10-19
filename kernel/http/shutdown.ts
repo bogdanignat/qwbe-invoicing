@@ -37,6 +37,13 @@
  * idle until the deadline abandoned the process.
  */
 export interface ShutdownSteps {
+  /**
+   * Stops the background workers (the e-Factura dispatcher) before anything
+   * else: no new step is taken, the ANAF call in flight is aborted and the
+   * worker's own connection is closed while the barrier is still held. A
+   * failure is reported and the sequence goes on.
+   */
+  readonly stopWorkers: () => Promise<void>
   /** Drains the listener and disposes the API handler. */
   readonly drain: () => Promise<void>
   /**
@@ -90,6 +97,7 @@ export const runShutdown = async (steps: ShutdownSteps): Promise<number> => {
       return false
     }
   }
+  await attempt("workers", steps.stopWorkers)
   let destroyed = false
   const destroy = () => {
     if (destroyed) return

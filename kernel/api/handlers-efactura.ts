@@ -12,11 +12,12 @@ import { errors } from "./api-failures.ts"
 import { efacturaXml } from "./api-responses.ts"
 import { createUseServices } from "./api-services.ts"
 import type { ApiRuntime } from "./api-types.ts"
+import { submissionHandlers } from "./handlers-efactura-submissions.ts"
 import { efacturaHttpApi } from "./http-api.ts"
 
 /**
  * The e-Factura plugin's routes: the UBL XML of an invoice and of a correction,
- * and the ANAF connection. `createApiHandler` mounts them only when the plugin
+ * the ANAF connection, and the submissions with their history, XML and answer. `createApiHandler` mounts them only when the plugin
  * is on, so with it off neither the mapper nor ANAF is ever reached.
  */
 export const efacturaGroup = (runtime: ApiRuntime) => {
@@ -26,6 +27,7 @@ export const efacturaGroup = (runtime: ApiRuntime) => {
   const connection = <A, E>(operation: (service: ConnectionService) => Effect.Effect<A, E>) => Effect.flatMap(CurrentRequest,
     (context) => operation(createConnectionService({ ...host, context: { current: Effect.succeed(context) }, permissions })))
   const callback = completeCallback(host)
+  const submissions = submissionHandlers(runtime)
   return HttpApiBuilder.group(efacturaHttpApi, "invoicing", (handlers) => handlers
     .handleRaw("downloadInvoiceEFactura", ({ path }) => use((s) => s.invoicing.getIssuedInvoice(path.id)).pipe(
       Effect.flatMap((invoice) => efacturaXml(() => mapIssuedInvoice(invoice))),
@@ -40,5 +42,11 @@ export const efacturaGroup = (runtime: ApiRuntime) => {
       Effect.map(({ authorizeUrl, nonce }) => HttpServerResponse.unsafeJson({ authorizeUrl }, { headers: { "set-cookie": attemptCookie(nonce) } })),
       Effect.mapError(errors("DomainConflict"))))
     .handle("disconnectEFactura", () => connection((s) => s.disconnect).pipe(Effect.mapError(errors())))
-    .handleRaw("completeAnafCallback", ({ request }) => anafCallbackResponse(callback, request)))
+    .handleRaw("completeAnafCallback", ({ request }) => anafCallbackResponse(callback, request))
+    .handleRaw("submitInvoiceEFactura", submissions.submitInvoice)
+    .handleRaw("submitCorrectionEFactura", submissions.submitCorrection)
+    .handle("listInvoiceEFacturaSubmissions", submissions.listInvoice)
+    .handle("listCorrectionEFacturaSubmissions", submissions.listCorrection)
+    .handleRaw("downloadEFacturaResponse", submissions.response)
+    .handleRaw("downloadEFacturaSubmissionXml", submissions.xml))
 }
