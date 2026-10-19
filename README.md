@@ -422,6 +422,7 @@ handler on shutdown.
 | Issue | `POST /api/invoices`, `POST /api/drafts/:id/issue` |
 | Invoices | `GET /api/invoices`, `GET /api/invoices/:id`, `POST`, `GET /api/invoices/:id/pdf` |
 | Invoice register | `GET /api/invoice-register` — paged invoices and storno documents |
+| Reports | `GET /api/reports/revenue?from&to`; `GET /api/reports/collections?from&to&status` (payments plugin) |
 | Payments | `GET`, `POST /api/invoices/:id/payments`, `POST /api/invoices/:id/payments/:paymentId/reversal` |
 | Corrections | `GET`, `POST /api/invoices/:id/corrections`, `GET /api/corrections/:id` |
 | Proformas | `POST /api/proformas`, `POST /api/drafts/:id/proformas`, `GET /api/proformas`, `GET /api/proformas/:id`, `POST /api/proformas/:id/invoice`, `POST`, `GET /api/proformas/:id/pdf` |

@@ -1,6 +1,8 @@
 import type { Effect } from "effect"
 
 import type { DomainConflict, PersistenceFailure } from "../contracts/failures.ts"
+import type { ReportPeriod } from "../../corrections/index.ts"
+import type { CollectionInvoiceRow, MonthlyCollections } from "../domain/settlement.ts"
 import type { Payment, PaymentIdempotencyRecord } from "../domain/payments.ts"
 
 type Read<Value> = Effect.Effect<Value, PersistenceFailure>
@@ -30,4 +32,7 @@ export interface PaymentsTransaction {
   readonly findIdempotencyRecord: (organizationId: string, key: string) => Read<PaymentIdempotencyRecord | undefined>
   readonly saveIdempotencyRecord: (record: PaymentIdempotencyRecord) => Write
   readonly appendAuditEvent: (event: AuditEvent) => Write
+  readonly aggregateCollections: (organizationId: string, period: ReportPeriod) => Read<MonthlyCollections>
+  /** Invoices issued in the period, ordered by due date (none last), then id. */
+  readonly listCollectionInvoices: (organizationId: string, period: ReportPeriod) => Read<ReadonlyArray<CollectionInvoiceRow>>
 }

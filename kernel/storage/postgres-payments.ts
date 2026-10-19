@@ -49,8 +49,12 @@ const paymentFrom = (value: Row): Payment => {
 }
 
 export const paymentsPersistence = persistence
+export const paymentsRead = read
 
-export const paymentsTransactionAdapter = (client: TransactionClient): PaymentsTransaction => ({
+// The two report reads live in `postgres-collections-report.ts`; the store composes both.
+type LedgerTransaction = Omit<PaymentsTransaction, "aggregateCollections" | "listCollectionInvoices">
+
+export const paymentsTransactionAdapter = (client: TransactionClient): LedgerTransaction => ({
   findInvoiceSnapshot: (organizationId, id) => read("find issued invoice", async () => {
     const { rows } = await client.query(
       "SELECT * FROM issued_invoices WHERE organization_id = $1 AND id = $2", [organizationId, id],

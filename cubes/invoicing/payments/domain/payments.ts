@@ -86,23 +86,14 @@ export const validateReversePaymentInput = (input: ReversePaymentInput): void =>
   if (input.reason !== undefined && input.reason.trim().length > 500) issues.push("reason must be at most 500 characters")
   if (issues.length > 0) throw new ValidationFailure({ issues })
 }
+/** A canonical amount ("12.50", "-0.05") or a validated input amount, in bani. */
 export const moneyMinor = (value: string): bigint => {
-  const match = /^(\d+)\.(\d{2})$/.exec(value.trim())
-  return match === null ? parseMoneyMinor(value, "money") : BigInt(match[1] ?? "0") * 100n + BigInt(match[2] ?? "0")
+  const match = /^(-?)(\d+)\.(\d{2})$/.exec(value.trim())
+  if (match === null) return parseMoneyMinor(value, "money")
+  const minor = BigInt(match[2] ?? "0") * 100n + BigInt(match[3] ?? "0")
+  return match[1] === "-" ? -minor : minor
 }
-export const sumPaymentsMinor = (payments: ReadonlyArray<Payment>): bigint =>
-  payments.reduce((total, payment) => total + (payment.kind === "reversal" ? -moneyMinor(payment.amount) : moneyMinor(payment.amount)), 0n)
-export const derivePaymentStatus = (input: {
-  readonly totalIncludingVat: string
-  readonly dueDate: string | null
-  readonly payments: ReadonlyArray<Payment>
-  readonly now: Date
-}): PaymentStatus => {
-  const total = moneyMinor(input.totalIncludingVat); const paid = sumPaymentsMinor(input.payments)
-  let status: PaymentStatus = paid === 0n ? "unpaid" : paid < total ? "partially_paid" : paid === total ? "paid" : "overpaid"
-  if (input.dueDate !== null && (status === "unpaid" || status === "partially_paid")
-    && input.dueDate < calendarDate(input.now)) status = "overdue"
-  return status
+export const formatMinor = (value: bigint): string => {
+  const digits = (value < 0n ? -value : value).toString().padStart(3, "0")
+  return `${value < 0n ? "-" : ""}${digits.slice(0, -2)}.${digits.slice(-2)}`
 }
-export const formatMinor = (value: bigint): string =>
-  `${(value / 100n).toString()}.${(value % 100n).toString().padStart(2, "0")}`

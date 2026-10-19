@@ -12,18 +12,20 @@ import { invoicesTransactionAdapter } from "./postgres-invoices.ts"
 import { invoiceRegisterTransactionAdapter } from "./postgres-invoice-register.ts"
 import { issuerTransactionAdapter } from "./postgres-issuer.ts"
 import { kernelTransactionAdapter } from "./postgres-kernel.ts"
+import { collectionsReportTransactionAdapter } from "./postgres-collections-report.ts"
 import { paymentsTransactionAdapter } from "./postgres-payments.ts"
 import { proformaConversionsTransactionAdapter } from "./postgres-proforma-conversions.ts"
 import { proformasTransactionAdapter } from "./postgres-proformas.ts"
+import { revenueReportTransactionAdapter } from "./postgres-revenue-report.ts"
 import { seriesTransactionAdapter } from "./postgres-series.ts"
 import { withMigrated } from "./postgres-rig.test-support.ts"
 import { createPostgresPaymentsStore, createPostgresStore } from "./postgres-store.ts"
 import type { TransactionClient } from "./postgres-transaction.ts"
 
 /**
- * The composition of the domain adapters, unchanged from the SQLite suite: the
- * same thirty-seven keys, still disjoint, still exactly what the public store
- * exposes, and still rolled back together across two domains.
+ * The composition of the domain adapters: the thirty-seven keys of the SQLite
+ * suite plus the revenue report, still disjoint, still exactly what the public
+ * store exposes, and still rolled back together across two domains.
  *
  * The key assertions take a client that is never used, because asking an adapter
  * which operations it owns is not a question about a database. The rollback
@@ -31,7 +33,7 @@ import type { TransactionClient } from "./postgres-transaction.ts"
  */
 
 const expectedInvoicingKeys = [
-  "addDocumentSeries", "allocateDocumentNumber", "appendAuditEvent", "deleteDraft", "deleteProductPreset",
+  "addDocumentSeries", "aggregateRevenue", "allocateDocumentNumber", "appendAuditEvent", "deleteDraft", "deleteProductPreset",
   "findCorrection", "findCustomer", "findDocumentSeries", "findDraft", "findIdempotencyRecord",
   "findIssuedInvoice", "findIssuer", "findLatestIssueDate", "findProductPreset", "findProforma",
   "findProformaConversion", "findProformaInvoiceConversion", "hasOpenDraftsForCustomer", "listCorrections",
@@ -52,7 +54,7 @@ void test("domain adapters have disjoint keys and compose the characterized tran
     kernelTransactionAdapter(unusedClient), customersTransactionAdapter(unusedClient),
     catalogTransactionAdapter(unusedClient), issuerTransactionAdapter(unusedClient),
     proformasTransactionAdapter(unusedClient), proformaConversionsTransactionAdapter(unusedClient),
-    correctionsTransactionAdapter(unusedClient),
+    correctionsTransactionAdapter(unusedClient), revenueReportTransactionAdapter(unusedClient),
   ]
   const keys = adapters.map((adapter) => Object.keys(adapter))
   const flattened = keys.flat()
@@ -65,7 +67,10 @@ void test("domain adapters have disjoint keys and compose the characterized tran
     assert.deepEqual(publicKeys, expectedInvoicingKeys)
     const paymentKeys = await Effect.runPromise(createPostgresPaymentsStore(pool).transaction((transaction) =>
       Effect.succeed(Object.keys(transaction).sort())))
-    assert.deepEqual(paymentKeys, Object.keys(paymentsTransactionAdapter(unusedClient)).sort())
+    const ledgerKeys = Object.keys(paymentsTransactionAdapter(unusedClient))
+    const reportKeys = Object.keys(collectionsReportTransactionAdapter(unusedClient))
+    assert.deepEqual(reportKeys.filter((key) => ledgerKeys.includes(key)), [])
+    assert.deepEqual(paymentKeys, [...ledgerKeys, ...reportKeys].sort())
   })
 })
 

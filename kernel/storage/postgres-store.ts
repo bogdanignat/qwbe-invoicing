@@ -9,6 +9,7 @@ import type { IssuerTransaction } from "../../cubes/invoicing/issuer/index.ts"
 import type { PaymentsTransaction, TransactionalStore as PaymentsStore } from "../../cubes/invoicing/payments/index.ts"
 import { persistence } from "./postgres-errors.ts"
 import { catalogTransactionAdapter } from "./postgres-catalog.ts"
+import { collectionsReportTransactionAdapter } from "./postgres-collections-report.ts"
 import { correctionsTransactionAdapter } from "./postgres-corrections.ts"
 import { customersTransactionAdapter } from "./postgres-customers.ts"
 import { draftsTransactionAdapter } from "./postgres-drafts.ts"
@@ -19,6 +20,7 @@ import { kernelTransactionAdapter } from "./postgres-kernel.ts"
 import { paymentsPersistence, paymentsTransactionAdapter } from "./postgres-payments.ts"
 import { proformaConversionsTransactionAdapter } from "./postgres-proforma-conversions.ts"
 import { proformasTransactionAdapter } from "./postgres-proformas.ts"
+import { revenueReportTransactionAdapter } from "./postgres-revenue-report.ts"
 import { seriesTransactionAdapter } from "./postgres-series.ts"
 import { businessLockKey, transactionWith, type TransactionClient } from "./postgres-transaction.ts"
 
@@ -37,6 +39,12 @@ const applicationTransactionAdapter = (client: TransactionClient): ApplicationTr
   ...proformasTransactionAdapter(client),
   ...proformaConversionsTransactionAdapter(client),
   ...correctionsTransactionAdapter(client),
+  ...revenueReportTransactionAdapter(client),
+})
+
+const paymentsStoreAdapter = (client: TransactionClient): PaymentsTransaction => ({
+  ...paymentsTransactionAdapter(client),
+  ...collectionsReportTransactionAdapter(client),
 })
 
 /**
@@ -62,7 +70,7 @@ export const createPostgresStore = (pool: Pool): TransactionalStore<ApplicationT
 export const createPostgresPaymentsStore = (pool: Pool): PaymentsStore<PaymentsTransaction> => ({
   transaction: transactionWith(pool, {
     lock: businessLockKey,
-    adapter: paymentsTransactionAdapter,
+    adapter: paymentsStoreAdapter,
     onBeginFailure: () => paymentsPersistence("begin transaction"),
     onCommitFailure: () => paymentsPersistence("commit transaction"),
   }),

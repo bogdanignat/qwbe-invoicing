@@ -17,7 +17,7 @@ export const operationNames = [
   "listDrafts", "getDraft", "createDraft", "updateDraft", "deleteDraft",
   "addDraftLine", "updateDraftLine", "deleteDraftLine", "issueDraftInvoice", "issueInvoice",
   "listPayments", "recordPayment", "reversePayment", "createCorrection", "listCorrections", "getCorrection",
-  "listInvoiceRegister", "listIssuedInvoices", "getIssuedInvoice", "renderInvoicePdf", "downloadInvoicePdf",
+  "listInvoiceRegister", "getRevenueReport", "getCollectionsReport", "listIssuedInvoices", "getIssuedInvoice", "renderInvoicePdf", "downloadInvoicePdf",
   "downloadInvoiceEFactura", "downloadCorrectionEFactura",
   "issueDraftProforma", "issueProforma", "listProformas", "getProforma", "issueInvoiceFromProforma", "createDraftInvoiceFromProforma",
   "renderProformaPdf", "downloadProformaPdf", "downloadCorrectionPdf", "getSession", "createSession", "deleteSession",
@@ -32,14 +32,14 @@ const invoicing = HttpApiGroup.make("invoicing")
   .add(d.listDrafts).add(d.getDraft).add(d.createDraft).add(d.updateDraft).add(d.deleteDraft)
   .add(d.addDraftLine).add(d.updateDraftLine).add(d.deleteDraftLine).add(d.issueDraftInvoice)
   .add(f.createCorrection).add(f.listCorrections).add(f.getCorrection)
-  .add(f.listInvoiceRegister).add(f.listIssuedInvoices).add(f.issueInvoice).add(f.getIssuedInvoice)
+  .add(f.listInvoiceRegister).add(f.getRevenueReport).add(f.listIssuedInvoices).add(f.issueInvoice).add(f.getIssuedInvoice)
   .add(f.issueDraftProforma).add(f.listProformas).add(f.issueProforma).add(f.getProforma)
   .add(f.issueInvoiceFromProforma).add(f.createDraftInvoiceFromProforma)
 // The plugins' endpoints stay in the `invoicing` group, so their operation ids
 // and their OpenAPI tag are the ones they had before they could be switched off.
 type InvoicingGroup<E extends HttpApiEndpoint.HttpApiEndpoint.Any, R> = HttpApiGroup.HttpApiGroup<"invoicing", E, never, R, boolean>
 const withPayments = <E extends HttpApiEndpoint.HttpApiEndpoint.Any, R>(group: InvoicingGroup<E, R>) =>
-  group.add(f.listPayments).add(f.recordPayment).add(f.reversePayment)
+  group.add(f.listPayments).add(f.recordPayment).add(f.reversePayment).add(f.getCollectionsReport)
 const withEFactura = <E extends HttpApiEndpoint.HttpApiEndpoint.Any, R>(group: InvoicingGroup<E, R>) =>
   group.add(f.downloadInvoiceEFactura).add(f.downloadCorrectionEFactura)
 const documents = HttpApiGroup.make("documents")

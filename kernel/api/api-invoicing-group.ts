@@ -38,7 +38,7 @@ export const invoicingGroup = (runtime: ApiRuntime) => {
     .handle("updateDraftLine", d.updateDraftLine).handle("deleteDraftLine", d.deleteDraftLine)
     .handle("issueDraftInvoice", d.issueDraftInvoice)
     .handle("createCorrection", p.createCorrection).handle("listCorrections", p.listCorrections).handle("getCorrection", p.getCorrection)
-    .handle("listInvoiceRegister", i.listInvoiceRegister)
+    .handle("listInvoiceRegister", i.listInvoiceRegister).handle("getRevenueReport", p.getRevenueReport)
     .handle("listIssuedInvoices", i.listIssuedInvoices).handle("issueInvoice", i.issueInvoice)
     .handle("getIssuedInvoice", i.getIssuedInvoice)
     .handle("issueDraftProforma", i.issueDraftProforma).handle("listProformas", i.listProformas)

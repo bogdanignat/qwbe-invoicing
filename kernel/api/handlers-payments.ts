@@ -20,5 +20,8 @@ export const paymentsGroup = (runtime: ApiRuntime) => {
     .handle("reversePayment", ({ path, payload, headers }) =>
       idempotent(headers["idempotency-key"], "reverse_payment", { invoiceId: path.invoiceId, paymentId: path.paymentId, ...payload }).pipe(
         Effect.flatMap((input) => use((s) => activePayments(s).reversePayment(input))),
-        Effect.mapError(errors("ValidationFailure", "ResourceNotFound", "DomainConflict")))))
+        Effect.mapError(errors("ValidationFailure", "ResourceNotFound", "DomainConflict"))))
+    .handle("getCollectionsReport", ({ urlParams }) =>
+      use((s) => activePayments(s).getCollectionsReport({ ...urlParams, status: urlParams.status ?? "all" })).pipe(
+        Effect.mapError(errors("ValidationFailure")))))
 }

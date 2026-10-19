@@ -17,6 +17,7 @@ export {
 } from "./schema-issuance.ts"
 export { PaymentInput, PaymentStatus, ReversalInput, Payment, RecordPaymentResult, PaymentSummary } from "./schema-payments.ts"
 export { InvoiceRegisterRow, InvoiceRegisterPage } from "./schema-invoice-register.ts"
+export { ReportQuery, CollectionsQuery, CollectionsStatusFilter, RevenueReport, CollectionsReport } from "./schema-reports.ts"
 export { Artifact, ProformaArtifact, EmptyInput, Pdf, EFacturaXml } from "./schema-documents.ts"
 export {
   Deleted, LoginInput, AuthenticatedSession, LoggedOutSession, ValidationError, InvalidJsonError,

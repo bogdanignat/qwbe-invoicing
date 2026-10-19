@@ -14,6 +14,8 @@ export const correctionHandlers = (use: UseServices) => ({
   listCorrections: HttpApiBuilder.handler(applicationHttpApi, "invoicing", "listCorrections", ({ path, urlParams }) =>
     sourceFilter(urlParams).pipe(Effect.flatMap((source) => use((s) => s.invoicing.listCorrections(path.invoiceId, source))),
       Effect.mapError(errors("ValidationFailure")))),
+  getRevenueReport: HttpApiBuilder.handler(applicationHttpApi, "invoicing", "getRevenueReport", ({ urlParams }) =>
+    use((s) => s.invoicing.getRevenueReport(urlParams)).pipe(Effect.mapError(errors("ValidationFailure")))),
   getCorrection: HttpApiBuilder.handler(applicationHttpApi, "invoicing", "getCorrection", ({ path }) =>
     use((s) => s.invoicing.getCorrection(path.id)).pipe(Effect.mapError(errors("ResourceNotFound")))),
 })
