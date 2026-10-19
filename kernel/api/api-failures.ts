@@ -1,3 +1,4 @@
+import type { CompanyLookupFailure, ProviderFailureReason } from "../../cubes/invoicing/company-lookup/index.ts"
 import type { DocumentsFailure } from "../../cubes/invoicing/documents/index.ts"
 import type { InvoicingFailure } from "../../cubes/invoicing/index.ts"
 import type { PaymentsFailure } from "../../cubes/invoicing/payments/index.ts"
@@ -9,15 +10,26 @@ type Wire =
   | { readonly error: "ResourceNotFound" | "DocumentNotFound" | "ArtifactConflict" | "PersistenceFailure"
     | "DocumentPersistenceFailure" | "DocumentRenderingFailure" | "internal_failure" }
   | { readonly error: "DomainConflict"; readonly code: string }
-type ApiFailure = InvoicingFailure | PaymentsFailure | DocumentsFailure
+  | { readonly error: "ProviderFailure"; readonly reason: ProviderFailureReason; readonly message: string; readonly retryAfterSeconds?: number }
+type ApiFailure = InvoicingFailure | PaymentsFailure | DocumentsFailure | CompanyLookupFailure
 type WireTag = Wire["error"]
 type Allowed<T extends WireTag> = Extract<Wire, { readonly error: T }> | { readonly error: "internal_failure" }
+
+/** Shown as is by the forms: what happened, never what the provider said. */
+const providerMessages: Readonly<Record<ProviderFailureReason, string>> = {
+  quota_exceeded: "Cererile openapi.ro s-au terminat.",
+  pending: "openapi.ro pregătește datele firmei; reîncearcă în câteva secunde.",
+  auth_failed: "openapi.ro a refuzat cheia configurată.",
+  unavailable: "Furnizorul de date despre firme nu răspunde acum.",
+}
 
 const toWire = (failure: ApiFailure): Wire => {
   switch (failure._tag) {
     case "ValidationFailure": return { error: "ValidationFailure", issues: failure.issues }
     case "DomainConflict": return { error: "DomainConflict", code: failure.code }
     case "RenderingFailure": return { error: "internal_failure" }
+    case "ProviderFailure": return { error: "ProviderFailure", reason: failure.reason, message: providerMessages[failure.reason],
+      ...(failure.retryAfterSeconds === undefined ? {} : { retryAfterSeconds: failure.retryAfterSeconds }) }
     case "AuthenticationRequired":
     case "OrganizationContextMissing":
     case "PermissionDenied":

@@ -7,15 +7,19 @@ name: qwbe-invoicing
 #   IMAGE_TAG=0.3.0@sha256:<app-digest> FRONTEND_IMAGE_TAG=0.3.0@sha256:<frontend-digest> \
 #   FRONTEND_ORIGIN=https://invoice.example.com docker compose -f compose.prod.yaml --profile proxy up -d
 #
-# Before the first `up`, the operator creates the two secret files. They are never in
+# Before the first `up`, the operator creates the three secret files. They are never in
 # this file, never in the image and never in an environment variable:
 #   install -d -m 700 /opt/qwbe-invoicing/secrets
 #   openssl rand -hex 32 > /opt/qwbe-invoicing/secrets/api-token
 #   openssl rand -hex 32 > /opt/qwbe-invoicing/secrets/pg-password
+#   openssl rand -hex 32 > /opt/qwbe-invoicing/secrets/company-lookup-key
 #   chmod 600 /opt/qwbe-invoicing/secrets/*
 #   AUTH_TOKEN_PATH=/opt/qwbe-invoicing/secrets/api-token \
-#   PG_PASSWORD_PATH=/opt/qwbe-invoicing/secrets/pg-password docker compose -f compose.prod.yaml up -d
-# Both paths are required (`:?`) rather than defaulted: a production stack that starts
+#   PG_PASSWORD_PATH=/opt/qwbe-invoicing/secrets/pg-password \
+#   COMPANY_LOOKUP_KEY_PATH=/opt/qwbe-invoicing/secrets/company-lookup-key docker compose -f compose.prod.yaml up -d
+# The company-lookup key encrypts the openapi.ro key at rest; it is never rotated
+# in place: a new one makes the stored openapi.ro key unreadable until it is entered again.
+# All three paths are required (`:?`) rather than defaulted: a production stack that starts
 # with a guessable fallback credential is worse than one that refuses to start.
 
 x-postgres-environment: &postgres-environment
@@ -89,6 +93,8 @@ services:
       DATA_DIR: /data
       ORGANIZATION_ID: ${ORGANIZATION_ID:-local-organization}
       AUTH_TOKEN_FILE: /run/secrets/api_token
+      # The master key that encrypts the openapi.ro key at rest (company-lookup).
+      COMPANY_LOOKUP_KEY_FILE: /run/secrets/company_lookup_key
       # Optional plugins, comma-separated (`payments`, `efactura`, `company-lookup`). Passed through
       # only when set: unset means every plugin runs, empty means none. Restart to apply.
       QWBE_PLUGINS:
@@ -99,6 +105,7 @@ services:
     secrets:
       - api_token
       - pg_password
+      - company_lookup_key
     depends_on:
       db:
         condition: service_healthy
@@ -175,6 +182,8 @@ secrets:
     file: ${AUTH_TOKEN_PATH:?Set AUTH_TOKEN_PATH to the operator-created API token file}
   pg_password:
     file: ${PG_PASSWORD_PATH:?Set PG_PASSWORD_PATH to the operator-created PostgreSQL password file}
+  company_lookup_key:
+    file: ${COMPANY_LOOKUP_KEY_PATH:?Set COMPANY_LOOKUP_KEY_PATH to the operator-created company lookup master key file}
 
 volumes:
   invoicing-data:

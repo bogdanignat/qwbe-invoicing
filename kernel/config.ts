@@ -1,5 +1,8 @@
 import { readFileSync } from "node:fs"
 
+import { Redacted } from "effect"
+
+import type { MasterKey } from "./company-lookup/key-cipher.ts"
 import { parsePlugins, type PluginSelection } from "./plugins.ts"
 import type { PostgresSettings } from "./storage/postgres-pool.ts"
 
@@ -14,6 +17,8 @@ export interface RuntimeConfig {
   readonly pgSettings: PostgresSettings
   /** `QWBE_PLUGINS`, parsed at startup: an unknown name fails here. */
   readonly plugins: PluginSelection
+  /** `COMPANY_LOOKUP_KEY_FILE`, read at startup. Absent: the openapi.ro key cannot be stored, everything else runs. */
+  readonly companyLookupKey?: MasterKey | undefined
 }
 
 const boundedPort = (value: string | undefined, variable: string, fallback: string): number => {
@@ -64,6 +69,24 @@ const postgresSettings = (environment: NodeJS.ProcessEnv, nodeEnvironment: strin
   password: secretFrom(environment.PGPASSWORD_FILE, nodeEnvironment),
 })
 
+/**
+ * The master key that encrypts the openapi.ro key at rest: 32 bytes, written as
+ * 64 hex characters (`openssl rand -hex 32`), read from a file like the database
+ * password and never from an environment value. Unset is a supported setup; a
+ * set path that is unreadable or malformed refuses to start, with the path only.
+ */
+const masterKeyFrom = (path: string | undefined): MasterKey | undefined => {
+  if (path === undefined) return undefined
+  let hex: string
+  try {
+    hex = readFileSync(path, "utf8").trim()
+  } catch {
+    throw new Error(`COMPANY_LOOKUP_KEY_FILE is not readable: ${path}`)
+  }
+  if (!/^[0-9a-f]{64}$/iu.test(hex)) throw new Error(`COMPANY_LOOKUP_KEY_FILE must hold 64 hex characters: ${path}`)
+  return Redacted.make(Buffer.from(hex, "hex"))
+}
+
 export const runtimeConfig = (environment: NodeJS.ProcessEnv = process.env): RuntimeConfig => {
   const nodeEnvironment = environment.NODE_ENV ?? "development"
   return {
@@ -75,5 +98,6 @@ export const runtimeConfig = (environment: NodeJS.ProcessEnv = process.env): Run
     organizationId: environment.ORGANIZATION_ID,
     pgSettings: postgresSettings(environment, nodeEnvironment),
     plugins: parsePlugins(environment.QWBE_PLUGINS),
+    companyLookupKey: masterKeyFrom(environment.COMPANY_LOOKUP_KEY_FILE),
   }
 }

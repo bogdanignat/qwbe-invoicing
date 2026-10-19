@@ -59,6 +59,13 @@ for (const plugins of combinations) {
         if (!plugins.payments) await plugin(false, "POST", `/api/invoices/${id}/payments/any/reversal`, { reason: "x" }, "rev-1")
         await plugin(plugins.efactura, "GET", `/api/invoices/${id}/efactura.xml`)
         await plugin(plugins.efactura, "GET", `/api/corrections/${String(correction.id)}/efactura.xml`)
+        const lookup = plugins["company-lookup"]
+        await plugin(lookup, "GET", "/api/settings/company-lookup")
+        await plugin(lookup, "PUT", "/api/settings/company-lookup", { provider: "none" })
+        await plugin(lookup, "GET", "/api/company-lookup/availability")
+        // Through the session's CSRF check; below the threshold, so nothing leaves the application.
+        const below = await call("POST", "/api/company-lookup/lookup", { cui: "12" })
+        assert.equal(below.status, lookup ? 400 : 404, JSON.stringify(below.body))
 
         const paths = await documentedPaths(call)
         assert.ok(paths.includes("/api/invoices/{invoiceId}/corrections"))
@@ -66,6 +73,7 @@ for (const plugins of combinations) {
         assert.equal(paths.includes("/api/invoices/{invoiceId}/payments/{paymentId}/reversal"), plugins.payments)
         assert.equal(paths.includes("/api/invoices/{id}/efactura.xml"), plugins.efactura, "e-Factura in OpenAPI")
         assert.equal(paths.includes("/api/corrections/{id}/efactura.xml"), plugins.efactura)
+        assert.equal(paths.includes("/api/company-lookup/lookup"), lookup, "company lookup in OpenAPI")
       } finally {
         await served.close()
       }

@@ -16,7 +16,8 @@ mkdir -p .local && chmod 700 .local
 umask 077
 openssl rand -hex 32 > .local/api-token
 openssl rand -hex 32 > .local/pg-password        # the operator creates it; see below
-chmod 600 .local/api-token .local/pg-password
+openssl rand -hex 32 > .local/company-lookup-key # encrypts the openapi.ro key at rest
+chmod 600 .local/api-token .local/pg-password .local/company-lookup-key
 docker compose build
 docker compose up -d
 docker compose ps
@@ -24,9 +25,11 @@ curl --fail --cacert ~/.warden/ssl/rootca/certs/ca.cert.pem https://invoice.test
 docker compose exec app wget -qO- http://127.0.0.1:3000/health/ready
 ```
 
-Create the two secret files once. Never regenerate `.local/pg-password` after the
+Create the three secret files once. Never regenerate `.local/pg-password` after the
 cluster exists (PostgreSQL keeps the first password and `migrate` then fails with
 `password authentication failed`), and never regenerate an existing `.local/api-token`.
+A new `.local/company-lookup-key` makes a stored openapi.ro key unreadable: the
+provider reads as off until the key is entered again in Setări → Integrări.
 To change the password, or to start over, see README, [Database
 password](../README.md#database-password).
 

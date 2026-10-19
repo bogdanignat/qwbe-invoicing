@@ -5,6 +5,8 @@ import type { InvoicingService } from "../../cubes/invoicing/index.ts"
 import type { ArtifactService } from "../../cubes/invoicing/documents/index.ts"
 import type { PaymentsService } from "../../cubes/invoicing/payments/index.ts"
 import type { RequestAuthenticator } from "../auth/auth.ts"
+import type { MasterKey } from "../company-lookup/key-cipher.ts"
+import type { Transport } from "../company-lookup/provider-http.ts"
 import type { BrowserSession } from "../auth/browser-session.ts"
 import type { PluginSelection } from "../plugins.ts"
 import type { CurrentRequest } from "./api-context.ts"
@@ -24,6 +26,10 @@ export interface ApiRuntime {
   readonly browserSession?: BrowserSession
   /** The optional plugins this installation runs; `RuntimeConfig.plugins` in production. */
   readonly plugins: PluginSelection
+  /** `RuntimeConfig.companyLookupKey`: without it the openapi.ro key cannot be stored. */
+  readonly companyLookupKey?: MasterKey | undefined
+  /** Outbound HTTP to the company-lookup providers: `fetch` unless a test hands in a fake. */
+  readonly transport?: Transport
 }
 export interface ApiServices {
   readonly invoicing: InvoicingService

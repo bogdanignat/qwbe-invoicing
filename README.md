@@ -179,19 +179,21 @@ The supported way is the versioned Docker Compose bundle. Each release ships
 Images live at `ghcr.io/bogdanignat/qwbe-invoicing:<version>`.
 
 ```bash
-# 1. Data and secret locations on the host. Two secrets: the API token and the
-#    database password. Both are files, never environment variables.
+# 1. Data and secret locations on the host. Three secrets: the API token, the
+#    database password and the company-lookup master key. All are files, never
+#    environment variables.
 mkdir -p /opt/qwbe-invoicing/secrets && chmod 700 /opt/qwbe-invoicing/secrets
 openssl rand -hex 32 > /opt/qwbe-invoicing/secrets/api-token
 openssl rand -hex 32 > /opt/qwbe-invoicing/secrets/pg-password
-chmod 600 /opt/qwbe-invoicing/secrets/api-token /opt/qwbe-invoicing/secrets/pg-password
+openssl rand -hex 32 > /opt/qwbe-invoicing/secrets/company-lookup-key
+chmod 600 /opt/qwbe-invoicing/secrets/*
 
 # 2. The bundle
 cp compose.prod.yaml Caddyfile.example /opt/qwbe-invoicing/
 cp .env.example /opt/qwbe-invoicing/.env
 cd /opt/qwbe-invoicing
-# edit .env: IMAGE_TAG, ORGANIZATION_ID, AUTH_TOKEN_PATH, PG_PASSWORD_PATH, APP_DOMAIN
-# (see Configuration; AUTH_TOKEN_PATH and PG_PASSWORD_PATH have no fallback)
+# edit .env: IMAGE_TAG, ORGANIZATION_ID, AUTH_TOKEN_PATH, PG_PASSWORD_PATH, COMPANY_LOOKUP_KEY_PATH, APP_DOMAIN
+# (see Configuration; the three secret paths have no fallback)
 
 # 3. Optional TLS: copy Caddyfile.example to Caddyfile and set your domain
 
@@ -244,6 +246,9 @@ mkdir -p .local && chmod 700 .local
 umask 077
 openssl rand -hex 32 > .local/pg-password
 chmod 600 .local/pg-password
+# the company-lookup master key, if .local/company-lookup-key does not exist yet
+# (a new one makes the stored openapi.ro key unreadable until it is entered again):
+# openssl rand -hex 32 > .local/company-lookup-key && chmod 600 .local/company-lookup-key
 # the API token too, if .local/api-token does not exist yet
 # (never regenerate an existing one):
 # openssl rand -hex 32 > .local/api-token && chmod 600 .local/api-token
@@ -330,6 +335,7 @@ Everything is configured through environment variables, read once at startup.
 | `NODE_ENV` | `development` | `production` requires `--confirm-production` on destructive CLI operations and marks cookies `Secure` |
 | `ORGANIZATION_ID` | none | the legal entity this installation serves; every record is scoped to it |
 | `AUTH_TOKEN_FILE` | none | path to the file holding the API bearer token (the Compose secret mounts it at `/run/secrets/api_token`) |
+| `COMPANY_LOOKUP_KEY_FILE` | none | path to the company-lookup master key: 32 bytes as 64 hex characters (`openssl rand -hex 32`), mounted at `/run/secrets/company_lookup_key`. It encrypts the openapi.ro key at rest (AES-256-GCM). Unset: storing an openapi.ro key is refused (409 `company_lookup_key_storage_unavailable`) and everything else runs; set but unreadable or malformed: the application does not start. A different key makes the stored openapi.ro key unreadable: the provider reads as off until the key is entered again |
 | `QWBE_PLUGINS` | absent: every plugin | the optional plugins to run, comma-separated: `payments`, `efactura`. Absent runs both; empty (`QWBE_PLUGINS=`) runs none; an unknown name stops the application at startup with an error naming the known plugins. Spaces are ignored and duplicates tolerated; a change takes a restart. A plugin that is off has no route (404), no OpenAPI entry and, for payments, no `payments:*` grant; with e-Factura off every invoice response says `eFacturaStatus: null`. Migrations, tables and data stay, so switching a plugin back on finds its records |
 
 Variables used only by the Compose files, in `.env`:
@@ -341,6 +347,7 @@ Variables used only by the Compose files, in `.env`:
 | `APP_DOMAIN` | domain served by the optional Caddy proxy |
 | `DATA_VOLUME_NAME` | name of the data volume, default `qwbe-invoicing-data` |
 | `PG_PASSWORD_PATH` | host path of the database password file, mounted as a secret into both `db` and the application (required with no fallback in `compose.prod.yaml`; `compose.yaml` defaults to `./.local/pg-password`) |
+| `COMPANY_LOOKUP_KEY_PATH` | host path of the company-lookup master key file, mounted as a secret into the application (required with no fallback in `compose.prod.yaml`; `compose.yaml` defaults to `./.local/company-lookup-key`; the preview uses `PREVIEW_COMPANY_LOOKUP_KEY_PATH`) |
 | `PG_VOLUME_NAME` | name of the cluster volume, default `qwbe-invoicing-postgres` |
 | `BACKUP_STAGING_VOLUME_NAME` | name of the `backup`/`restore` staging volume, default `qwbe-invoicing-backup-staging` |
 
