@@ -1,20 +1,21 @@
-# Caddyfile for the optional TLS proxy in front of the qwbe-invoicing Next `frontend`.
+# Caddyfile for the optional TLS proxy in front of qwbe-invoicing.
 # Used only with `docker compose -f compose.prod.yaml --profile proxy up -d`.
-# Replace invoice.example.com (it must match FRONTEND_ORIGIN) and keep the
-# reverse_proxy target as `frontend:3000`; the backend `app` is internal.
+# Copy it to `Caddyfile` next to compose.prod.yaml and replace invoice.example.com
+# with the host of PUBLIC_ORIGIN (they must match exactly). Keep the target `app:3000`:
+# the one image serves the UI and /api on that port, on the Compose network only.
 
 invoice.example.com {
   encode zstd gzip
-  reverse_proxy frontend:3000 {
+  # The kernel pins Host and X-Forwarded-Proto to PUBLIC_ORIGIN: both are passed as
+  # the browser sent them, and anything else answers 400.
+  reverse_proxy app:3000 {
     header_up Host {host}
-    header_up X-Real-IP {remote}
-    header_up X-Forwarded-For {remote}
     header_up X-Forwarded-Proto {scheme}
   }
   header {
     Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
     X-Content-Type-Options "nosniff"
     X-Frame-Options "DENY"
-    Referrer-Policy "strict-origin-when-cross-origin"
+    Referrer-Policy "no-referrer"
   }
 }

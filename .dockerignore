@@ -13,9 +13,10 @@ PRODUCT.md
 probes
 *.log
 **/node_modules
-**/.next
+# Built inside the image (Dockerfile, stage `ui-builder`), never copied from the host.
+frontend/dist
+frontend/.tanstack
 **/*.tsbuildinfo
-frontend/next-env.d.ts
 .local
 .playwright-mcp
 **/secrets

@@ -15,16 +15,13 @@ void test("answers a same-origin API path unchanged, encoded ids and repeated qu
   }
 })
 
-void test("refuses external URLs, the retired proxy prefix and paths that leave /api/", () => {
+void test("refuses external URLs and paths that leave /api/", () => {
   for (const path of [
     "https://example.test/api/session",
     "//example.test/api/session",
     "api/session",
     "/api",
     "/apis/session",
-    "/api/qwbe/session",
-    "/api/qwbe",
-    "/api/qwbe?x=1",
     "/api/../health/live",
     "/api/./session",
     "/api/invoices/..",

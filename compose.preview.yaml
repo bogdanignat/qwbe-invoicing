@@ -1,4 +1,6 @@
 # Explicitly opt-in. This file never references the existing Warden/data volume.
+# The shipped image, built from this checkout, on its own fixture stack, at
+# http://invoicing-preview.localhost:3181 (loopback only).
 #
 # Its own project name, its own PostgreSQL cluster, its own secret and its own
 # volumes: nothing here can reach the development stack's cluster or its data, and
@@ -14,6 +16,8 @@
 #   PREVIEW_PG_PASSWORD_PATH=./.local/preview-pg-password \
 #   PREVIEW_COMPANY_LOOKUP_KEY_PATH=./.local/preview-company-lookup-key \
 #     docker compose -f compose.preview.yaml --profile preview up -d
+# To change the port, set PREVIEW_PORT and PREVIEW_ORIGIN together: the kernel pins
+# Host and Origin to PREVIEW_ORIGIN.
 name: qwbe-invoicing-preview
 
 x-postgres-environment: &postgres-environment
@@ -47,9 +51,9 @@ services:
       start_period: 5s
     restart: "no"
 
-  migrate-fixture:
+  migrate:
     profiles: [preview]
-    image: qwbe-invoicing:t1400-preview
+    image: qwbe-invoicing:preview
     build:
       context: .
       dockerfile: Dockerfile
@@ -68,9 +72,9 @@ services:
     tmpfs: [/tmp]
     restart: "no"
 
-  backend-fixture:
+  app:
     profiles: [preview]
-    image: qwbe-invoicing:t1400-preview
+    image: qwbe-invoicing:preview
     build:
       context: .
       dockerfile: Dockerfile
@@ -86,8 +90,8 @@ services:
       # Optional plugins, comma-separated (`payments`, `efactura`, `company-lookup`). Passed through
       # only when set: unset means every plugin runs, empty means none. Restart to apply.
       QWBE_PLUGINS:
-      # The preview frontend's origin, which the BFF rewrites Host and Origin to.
-      PUBLIC_ORIGIN: ${PREVIEW_ORIGIN:-http://invoicing-next.localhost:3181}
+      # The origin the browser uses for the published port below.
+      PUBLIC_ORIGIN: ${PREVIEW_ORIGIN:-http://invoicing-preview.localhost:3181}
       TMPDIR: /var/backups/staging
     secrets: [preview_api_token, preview_pg_password, preview_company_lookup_key]
     volumes:
@@ -96,33 +100,16 @@ services:
     depends_on:
       db:
         condition: service_healthy
-      migrate-fixture:
+      migrate:
         condition: service_completed_successfully
-    expose: ["3000"]
+    # Loopback only: the preview is for this machine's browser, never the network.
+    ports:
+      - "127.0.0.1:${PREVIEW_PORT:-3181}:3000"
     read_only: true
     tmpfs:
       - /tmp:size=64m
     init: true
     stop_grace_period: 15s
-    restart: "no"
-
-  frontend:
-    profiles: [preview]
-    image: qwbe-invoicing-frontend:t1400-preview
-    build:
-      context: .
-      dockerfile: frontend/Dockerfile
-    environment:
-      FRONTEND_ORIGIN: ${PREVIEW_ORIGIN:-http://invoicing-next.localhost:3181}
-      INVOICING_API_URL: http://backend-fixture:3000
-    ports:
-      - "127.0.0.1:${PREVIEW_PORT:-3181}:3000"
-    # No depends_on backend: the UI must still boot and report unavailable upstream.
-    read_only: true
-    tmpfs:
-      - /tmp
-      - /app/frontend/.next/cache:uid=1000,gid=1000
-    init: true
     restart: "no"
 
 secrets:

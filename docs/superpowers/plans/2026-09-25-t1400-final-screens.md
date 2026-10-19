@@ -4,7 +4,7 @@ Plan revizuit după plan-review (executor Opus, REVISE — corecții adoptate). 
 
 Branch: feat/T-1400-next-final-screens, checkout principal, bază main 24580b8.
 
-Repo: /home/bogdan/projects/invoicing-qwbe, main 24580b8 (curat). Branch nou:
+Repo: ~/projects/invoicing-qwbe, main 24580b8 (curat). Branch nou:
 `feat/T-1400-next-final-screens`, creat în checkout-ul principal (fără worktree).
 
 ## Context verificat

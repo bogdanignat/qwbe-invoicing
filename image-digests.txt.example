@@ -1,8 +1,7 @@
 # Produced by the release workflow (.github/workflows/release.yaml) as the `image-digests` artifact:
-# the version, then each image pinned by its multi-arch index digest. Copy the two
-# digests into IMAGE_TAG and FRONTEND_IMAGE_TAG in /opt/qwbe-invoicing/.env, e.g.
-#   IMAGE_TAG=0.3.0@sha256:<app-digest>
-#   FRONTEND_IMAGE_TAG=0.3.0@sha256:<frontend-digest>
+# the version, then the one image pinned by its multi-arch index digest. Copy the digest
+# into IMAGE_TAG in the .env next to compose.prod.yaml, e.g.
+#   IMAGE_TAG=0.3.0@sha256:<digest>
+# The registry path is the repository the workflow ran in (QWBE_IMAGE in .env).
 0.3.0
-ghcr.io/bogdanignat/qwbe-invoicing@sha256:0000000000000000000000000000000000000000000000000000000000000000
-ghcr.io/bogdanignat/qwbe-invoicing-frontend@sha256:1111111111111111111111111111111111111111111111111111111111111111
+ghcr.io/<owner>/qwbe-invoicing@sha256:0000000000000000000000000000000000000000000000000000000000000000

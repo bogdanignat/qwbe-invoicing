@@ -1,9 +1,10 @@
 # Local Docker development with Warden
 
 The local hostname is `invoice.test`. Warden owns ports 80/443, local `.test` DNS,
-and the development certificate authority. The Next `frontend` service joins the
-external `warden` Docker network and serves `invoice.test`; the backend `app` is
-internal to the Compose network. Neither publishes a port.
+and the development certificate authority. There is one image: the kernel `app`
+serves the UI (the Vite build in `frontend/dist`, `QWBE_UI_DIR`) and `/api` on
+`https://invoice.test`. `app` joins the external `warden` Docker network and Warden's
+Traefik routes `invoice.test` straight to it; no port is published.
 
 > Runtime: every request is an `Effect`. The kernel authenticates (`Bearer` → `RequestContext`), injects `Clock`/`IdGenerator`/`TransactionalStore`, and runs the cube service `Effect` via `Effect.runPromise(Effect.either(...))`. Failures are typed (`ValidationFailure` → 400, `PermissionDenied` → 403, `ResourceNotFound` → 404, `DomainConflict` → 409).
 
@@ -12,20 +13,17 @@ internal to the Compose network. Neither publishes a port.
 ```bash
 pnpm local:setup             # dry-run
 pnpm local:setup --apply     # starts Warden services and signs invoice.test once
-mkdir -p .local && chmod 700 .local
-umask 077
-openssl rand -hex 32 > .local/api-token
-openssl rand -hex 32 > .local/pg-password        # the operator creates it; see below
-openssl rand -hex 32 > .local/company-lookup-key # encrypts the openapi.ro key at rest
-chmod 600 .local/api-token .local/pg-password .local/company-lookup-key
-docker compose build
+cp -n .env.example .env      # default secret paths: ./.local/...
+scripts/init-secrets.sh      # api-token, pg-password, company-lookup-key; 0600, never overwritten
+docker compose build         # one image; its ui-builder stage runs `pnpm build:frontend`
 docker compose up -d
 docker compose ps
-curl --fail --cacert ~/.warden/ssl/rootca/certs/ca.cert.pem https://invoice.test/healthz
+curl --fail --cacert ~/.warden/ssl/rootca/certs/ca.cert.pem https://invoice.test/health/ready
 docker compose exec app wget -qO- http://127.0.0.1:3000/health/ready
 ```
 
-Create the three secret files once. Never regenerate `.local/pg-password` after the
+`scripts/init-secrets.sh` creates the three secret files once and keeps them on every
+later run. Never regenerate `.local/pg-password` after the
 cluster exists (PostgreSQL keeps the first password and `migrate` then fails with
 `password authentication failed`), and never regenerate an existing `.local/api-token`.
 A new `.local/company-lookup-key` makes a stored openapi.ro key unreadable: the
@@ -33,7 +31,7 @@ provider reads as off until the key is entered again in Setări → Integrări.
 To change the password, or to start over, see README, [Database
 password](../README.md#database-password).
 
-Both secrets are files the operator creates. Nothing in this repository holds a
+All three secrets are files the operator creates. Nothing in this repository holds a
 credential, no default password exists, and the PostgreSQL password is never passed
 as `PGPASSWORD`: the server reads it through `POSTGRES_PASSWORD_FILE` and the
 application through `PGPASSWORD_FILE`, so it reaches neither a child process nor
@@ -60,13 +58,38 @@ credential from the Compose secret; the secret is never stored in the image or
 printed by the application. `ORGANIZATION_ID` selects the trusted organization for
 this initial single-organization host adapter.
 
-The UI at `https://invoice.test` is the Next application in `frontend/` (T-1649); the browser reaches the API only through its BFF at `/api/qwbe/<path>`, which refuses an `Authorization` header, so the Bearer API is internal (`docker compose exec app …` or the Compose network). The Next contracts (BFF, session, CSP) are described in `NEXT_PREVIEW.md`.
+The UI at `https://invoice.test` is the Vite + TanStack Router application in
+`frontend/`, built into `frontend/dist` and served by the kernel on the same origin as
+the API: the browser calls `/api/*` directly. The kernel pins `Host` and, on writes,
+`Origin` to `PUBLIC_ORIGIN`, which `compose.yaml` sets to `https://${APP_DOMAIN}`. The
+Bearer API is off on that listener unless `QWBE_BEARER_API=on`.
 
-Session mechanics are owned by the backend host and apply to the Next UI through the BFF. On unlock, the host exchanges the local bearer token for a revocable, opaque 30-day session persisted in the `browser_sessions` table and referenced by an HttpOnly `SameSite=Strict` cookie (`Secure` for HTTPS origins and in production). The token is never written to browser JavaScript, storage, or the URL. State-changing requests carry a per-session CSRF token held only in memory; the UI restores it from the cookie-backed session after a reload or host restart.
+Session mechanics are owned by the kernel. On unlock, it exchanges the local bearer token for a revocable, opaque 30-day session persisted in the `browser_sessions` table and referenced by the `qwbe_session` cookie (`Path=/api`, `HttpOnly`, `SameSite=Strict`, `Secure` for HTTPS origins and in production). The token is never written to browser JavaScript, storage, or the URL. State-changing requests carry a per-session CSRF token in `x-csrf-token`, held only in memory; the UI restores it from the cookie-backed session after a reload or host restart.
 
-The authenticated Swagger page is served on `invoice.test` at `/api/qwbe/docs` (linked from Settings): a dedicated BFF route fetches the backend's `GET /api` at a fixed path and restates its strict CSP, and a caller without a session is sent to `/unlock`. It is read-only — "Try it out" calls the contract's `/api/...` paths, which the BFF does not serve. Its OpenAPI 3.1 document is generated from the same Effect `HttpApi` contract served by `HttpApiBuilder`; it is not a separately maintained endpoint list. The page stays behind the browser session so the full contract is not exposed anonymously.
+The authenticated Swagger page is `GET /api` on `invoice.test` (linked from Settings), behind the browser session: a caller without a valid session is redirected to `/unlock`. Its OpenAPI 3.1 document is generated from the same Effect `HttpApi` contract served by `HttpApiBuilder`; it is not a separately maintained endpoint list. The page stays behind the session so the full contract is not exposed anonymously.
 
-The backend serves the Vite build in `QWBE_UI_DIR` (T-1912), read once at startup into memory; a request never builds a path on disk. `/api*` and `/health*` come first, then a file of the build (hashed `assets/*`: `public, max-age=31536000, immutable`; `index.html`: `no-store`), then `index.html` for every other `GET`/`HEAD`, so deep links load the application. A missing file under `/assets/` answers `404`, other methods `405`. `/` is the application: the old identity JSON is gone. A symlink or special file in the build refuses to start. In production `serve` refuses to start without a build; in development and tests the kernel runs without one and the UI routes answer `503` (`ui_not_built`). Until step D of T-1910 the Next application in `frontend/` still serves `invoice.test` and ships as its own image (`frontend/Dockerfile`).
+The backend serves the Vite build in `QWBE_UI_DIR` (T-1912), read once at startup into memory; a request never builds a path on disk. `/api*` and `/health*` come first, then a file of the build (hashed `assets/*`: `public, max-age=31536000, immutable`; `index.html`: `no-store`), then `index.html` for every other `GET`/`HEAD`, so deep links load the application. A missing file under `/assets/` answers `404`, other methods `405`. `/` is the application: the old identity JSON is gone. A symlink or special file in the build refuses to start. In production `serve` refuses to start without a build; in development and tests the kernel runs without one and the UI routes answer `503` (`ui_not_built`).
+
+## UI development with vite dev
+
+For work on `frontend/` with hot reload, the Vite dev server serves the UI and proxies
+`/api` to the kernel. It needs Node 24.19 and pnpm 11 on the host and the frontend
+dependencies installed there (`pnpm install`); the kernel keeps running in Docker:
+
+```bash
+docker compose -f compose.yaml -f compose.vite.yaml up -d   # kernel on 127.0.0.1:3000
+pnpm --filter @qwbe/invoicing-frontend dev                  # http://localhost:5173
+```
+
+`compose.vite.yaml` publishes the kernel on `127.0.0.1:${KERNEL_DEV_PORT:-3000}` only and
+sets its `PUBLIC_ORIGIN` to `http://localhost:5173`. Vite forwards `/api` to
+`QWBE_KERNEL_URL` (default `http://127.0.0.1:3000`; set it when `KERNEL_DEV_PORT`
+changes) with `Host` and `Origin` exactly as the browser sent them, so the kernel's
+Host, Origin and CSRF checks judge the real request; nothing is rewritten to make it
+pass. The dev server's port is fixed at 5173 for the same reason (`frontend/vite.config.ts`).
+While the overlay is on, `https://invoice.test` answers `400` (its Host no longer
+matches); `docker compose up -d` without it restores Warden. Check the production
+bundle, without the dev server, with `pnpm build:frontend` (it writes `frontend/dist`).
 
 Every cube use-case is an `Effect` and has a 1:1 authenticated HTTP endpoint. Authenticated routes under `/api`:
 
@@ -108,10 +131,11 @@ support, but no e-Factura, payment, overdue, or correction/storno semantics. The
 is conspicuously marked `DOCUMENT NEFISCAL`.
 
 Issued invoices remain immutable; payments are separate `Effect` records and never mutate the fiscal snapshot. For local Bearer
-calls, export `QWBE_BEARER_API=on` before `docker compose up -d` (off, the kernel answers
-400 to any `Authorization`), call from inside the `app` container (no port is published)
-with the Host of `PUBLIC_ORIGIN`, and add `Origin: https://invoice.test` on POST, PUT, PATCH
-and DELETE (403 without it):
+calls, set `QWBE_BEARER_API=on` in `.env` (or export it) before `docker compose up -d`
+(off, the kernel answers 400 to any `Authorization`), call from inside the `app` container
+(no port is published) with the Host of `PUBLIC_ORIGIN`, and add `Origin: https://invoice.test`
+on POST, PUT, PATCH and DELETE (403 without it); a request that also carries the session
+cookie is refused:
 
 ```bash
 docker compose exec app sh -c 'wget -qO- --header "Host: invoice.test" \
@@ -137,19 +161,19 @@ and the backup staging volume in one go.
 While the laptop is on the same LAN, add this line to its hosts file:
 
 ```text
-10.10.1.30 invoice.test
+<dev-host-lan-ip> invoice.test
 ```
 
 When connecting over Tailscale instead, use:
 
 ```text
-100.105.214.126 invoice.test
+<dev-host-tailscale-ip> invoice.test
 ```
 
 Copy the **public** Warden root CA from microq and trust it as a local development CA:
 
 ```text
-/home/bogdan/.warden/ssl/rootca/certs/ca.cert.pem
+~/.warden/ssl/rootca/certs/ca.cert.pem
 ```
 
 Do not copy anything from `~/.warden/ssl/rootca/private/`. After the CA is trusted,
@@ -159,7 +183,7 @@ Warden Traefik.
 ## Operational checks
 
 ```bash
-docker compose run --rm app node bin/qwbe-invoicing.ts migrate --json
+docker compose exec app node bin/qwbe-invoicing.ts migrate --json
 docker compose exec app node bin/qwbe-invoicing.ts doctor --json
 docker compose exec app node bin/qwbe-invoicing.ts artifacts --limit 50 --json
 docker compose exec app node bin/qwbe-invoicing.ts artifacts --limit 50 --apply --json
@@ -205,8 +229,8 @@ The PostgreSQL database and the artifact tree are the durable state. An archive 
 proformas, conversion metadata, artifact metadata and the PDFs travel together.
 `browser_sessions` is dumped without its rows (`--exclude-table-data`): the table
 definition stays, so the restored schema does not drift, but no live session is
-carried over. Operator-provided configuration (`ORGANIZATION_ID`, `AUTH_TOKEN_FILE`,
-the two secret files), image digests and externally stored recovery secrets are
+carried over. Operator-provided configuration (`ORGANIZATION_ID`, `PUBLIC_ORIGIN`,
+the three secret files), image digests and externally stored recovery secrets are
 **not** in the backup; include them separately in your runbook.
 
 Staging is a volume, not RAM: `TMPDIR` is `/var/backups/staging` inside the container
@@ -215,21 +239,31 @@ and `/tmp` is a bounded tmpfs, because the archive bounds allow a 1 GiB expanded
 Both commands require the application to be stopped. They take the same maintenance
 key EXCLUSIVE that `app` holds SHARED for the life of its process, as a *try*: a
 refusal is immediate, because a maintenance command that blocks behind a healthy
-application looks like a hang.
+application looks like a hang. Each `run` carries `--no-deps`: `db` is already up, and
+a plain `run` would also start the `migrate` service and change the schema first.
 
 ```bash
 docker compose stop app
 
 # Create a versioned archive (or directory) with manifest + SHA-256 verification
-docker compose run --rm app node bin/qwbe-invoicing.ts backup --output /data/backup-2026-08-31.tar.gz --json
-docker compose run --rm -v $(pwd)/.local/backup:/backup app node bin/qwbe-invoicing.ts backup --output /backup/qwbe-backup.tar.gz --json
+docker compose run --rm --no-deps app node bin/qwbe-invoicing.ts backup --output /data/backup-2026-08-31.tar.gz --json
+docker compose run --rm --no-deps -v $(pwd)/.local/backup:/backup app node bin/qwbe-invoicing.ts backup --output /backup/qwbe-backup.tar.gz --json
 
+# Restore — into a FRESH, empty database AND a fresh artifact volume, never the live
+# `qwbe_invoicing` and `/data`: restore deletes nothing, so it refuses a populated
+# target, the dry-run included. The archive comes from the host directory above.
+docker compose exec db psql -U qwbe -d postgres \
+  -c "CREATE DATABASE qwbe_invoicing_restored TEMPLATE template0 LC_COLLATE 'C' LC_CTYPE 'C' ENCODING 'UTF8'"
+docker volume create qwbe-invoicing-data-restored
 # Dry-run restore — validates the whole archive and reports the target, writing nothing
-docker compose run --rm app node bin/qwbe-invoicing.ts restore --input /data/backup-2026-08-31.tar.gz --json
+docker compose run --rm --no-deps -e PGDATABASE=qwbe_invoicing_restored \
+  -v qwbe-invoicing-data-restored:/data -v $(pwd)/.local/backup:/backup:ro app \
+  node bin/qwbe-invoicing.ts restore --input /backup/qwbe-backup.tar.gz --json
 
-# Apply restore — only into a fresh, empty database and an empty artifact tree;
-# outside development it also requires --confirm-production
-docker compose run --rm app node bin/qwbe-invoicing.ts restore --input /data/backup-2026-08-31.tar.gz --apply --json
+# Apply restore; outside development it also requires --confirm-production
+docker compose run --rm --no-deps -e PGDATABASE=qwbe_invoicing_restored \
+  -v qwbe-invoicing-data-restored:/data -v $(pwd)/.local/backup:/backup:ro app \
+  node bin/qwbe-invoicing.ts restore --input /backup/qwbe-backup.tar.gz --apply --json
 
 docker compose start app
 ```

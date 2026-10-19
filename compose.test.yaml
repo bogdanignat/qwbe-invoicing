@@ -1,7 +1,7 @@
 # The permanent test rig: `pnpm test` on a throwaway PostgreSQL 16 cluster.
 #
 # This is where the suite lives now. The storage, API, HTTP, auth, e-Factura,
-# documents, ops and frontend-proxy tests all talk to a real server, so there is no
+# documents and ops tests all talk to a real server, so there is no
 # longer a configuration in which `node --test` means anything on the host alone.
 # Permanent, not a step rig: the five `compose.pg-*.yaml` files were written to
 # carry one unit each while it was being built; this one carries the suite.
@@ -111,6 +111,8 @@ services:
     <<: *test-image
     user: "${HOST_UID}:${HOST_GID}"
     environment:
+      # No PUBLIC_ORIGIN, as in compose.verify.yaml: the fixtures pin their own
+      # ephemeral loopback address, and a CLI child inherits this environment.
       # Scratch only: tmpfs below, nothing in it survives the container. No
       # DATA_DIR here on purpose: each fixture makes its own `mkdtemp` under
       # TMPDIR and hands it to its children, so two concurrent files never share

@@ -2,25 +2,39 @@
 ARG NODE_VERSION=24.19.0
 ARG NODE_IMAGE_DIGEST=sha256:d32cdf619f63fe0471182d08996dd516c6275bb5fd31ae06e55a570bd9e1ad43
 
-FROM node:${NODE_VERSION}-alpine@${NODE_IMAGE_DIGEST} AS dependencies
+# pnpm and the workspace manifests, shared by the two install stages below.
+FROM node:${NODE_VERSION}-alpine@${NODE_IMAGE_DIGEST} AS base
 ARG PNPM_VERSION=11.22.0
 WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY frontend/package.json ./frontend/package.json
+
+FROM base AS dependencies
 RUN pnpm --filter qwbe-invoicing install --frozen-lockfile --prod
+
+# The browser bundle. Its build dependencies (Vite, Tailwind, TypeScript) live only
+# in this stage: the runtime below receives `frontend/dist` and nothing else from it.
+# `frontend/` is self-contained: vite.config.ts, tsconfig.json and scripts/ import
+# nothing from outside it, so the root manifests are the only other input.
+FROM base AS ui-builder
+RUN pnpm --filter @qwbe/invoicing-frontend install --frozen-lockfile
+COPY frontend ./frontend
+RUN pnpm build:frontend
 
 FROM node:${NODE_VERSION}-alpine@${NODE_IMAGE_DIGEST} AS runtime
 ENV NODE_ENV=production \
     HOST=0.0.0.0 \
     PORT=3000 \
-    DATA_DIR=/data
+    DATA_DIR=/data \
+    QWBE_UI_DIR=/app/frontend/dist
 WORKDIR /app
 COPY --from=dependencies /app/node_modules ./node_modules
 COPY package.json ./
 COPY bin ./bin
 COPY cubes ./cubes
 COPY kernel ./kernel
+COPY --from=ui-builder /app/frontend/dist ./frontend/dist
 # `pg_dump`/`pg_restore` for the ops commands, installed in the runtime stage and
 # BEFORE `USER node`, because apk needs root. Client 16 exactly, matching the
 # server: a newer client writes an archive the older server cannot read back,
