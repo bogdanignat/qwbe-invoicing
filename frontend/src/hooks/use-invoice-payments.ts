@@ -15,7 +15,7 @@ import { createOperationIdempotency, operationFingerprint } from "../lib/operati
 import {
   PAYMENT_RECORDED, PAYMENT_REVERSED, REVERSAL_CONFIRM, paymentInputFrom, paymentsView,
 } from "../lib/payment-state.ts"
-import { registryWriteOutcome } from "../lib/registry-write-outcome.ts"
+import { sessionWrite } from "../lib/session-write.ts"
 
 /**
  * The payments panel of an issued invoice: the ledger read, and the two writes
@@ -31,7 +31,7 @@ import { registryWriteOutcome } from "../lib/registry-write-outcome.ts"
  * `useMutation` is not single-flight: `isPending` reaches the button only on
  * the next render, so an Enter and a click in that gap would send two writes.
  * The ref is set synchronously before `mutate` and cleared when it settles.
- * An answer that outlived its session (`registryWriteOutcome`) leaves no
+ * An answer that outlived its session (`sessionWrite`) leaves no
  * notice, refetch, key change or error behind.
  *
  * With the payments plugin off nothing is read and there is no model: no
@@ -56,11 +56,9 @@ export const useInvoicePayments = (invoiceId: string): InvoicePaymentsModel | un
   const refresh = (): void => { void queryClient.invalidateQueries({ queryKey: queries.ledger.queryKey }) }
   const mutation = useMutation({
     mutationFn: async (write: PaymentWrite): Promise<PaymentWrite | undefined> => {
-      const csrfToken = auth.csrfToken()
-      if (csrfToken === undefined) throw new Error(SESSION_CLOSED)
-      const epoch = auth.epoch()
-      const key = idempotency.current(write.operation, write.fingerprint)
-      return await registryWriteOutcome(write, () => write.send(csrfToken, key), () => auth.ownsEpoch(epoch))
+      const answer = await sessionWrite(auth,
+        (csrfToken) => write.send(csrfToken, idempotency.current(write.operation, write.fingerprint)), SESSION_CLOSED)
+      return answer === undefined ? undefined : write
     },
     onSuccess: (write) => {
       if (write === undefined) return

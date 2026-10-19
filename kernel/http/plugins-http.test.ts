@@ -7,10 +7,10 @@ import {
   customer, documentedPaths, dueDate, issueDate, issueInvoice, lines, ok, payment, seed, serve,
 } from "./plugins-http.test-support.ts"
 
-/** `QWBE_PLUGINS` end to end, for each of the four payments x e-Factura combinations. */
+/** `QWBE_PLUGINS` end to end, for each of the four payments x e-Factura combinations; company-lookup rides along. */
 const combinations: ReadonlyArray<PluginSelection> = [
-  { payments: true, efactura: true }, { payments: false, efactura: true },
-  { payments: true, efactura: false }, { payments: false, efactura: false },
+  { payments: true, efactura: true, "company-lookup": true }, { payments: false, efactura: true, "company-lookup": false },
+  { payments: true, efactura: false, "company-lookup": true }, { payments: false, efactura: false, "company-lookup": false },
 ]
 
 for (const plugins of combinations) {
@@ -19,7 +19,8 @@ for (const plugins of combinations) {
       const served = await serve(fixture, plugins)
       const { call } = served
       try {
-        const names = [...plugins.payments ? ["payments"] : [], ...plugins.efactura ? ["efactura"] : []]
+        const names = [...plugins.payments ? ["payments"] : [], ...plugins.efactura ? ["efactura"] : [],
+          ...plugins["company-lookup"] ? ["company-lookup"] : []]
         assert.deepEqual(served.login.plugins, names, "login")
         assert.deepEqual((await ok(call("GET", "/api/session"), "session")).plugins, names, "session")
         await seed(served)
@@ -58,6 +59,13 @@ for (const plugins of combinations) {
         if (!plugins.payments) await plugin(false, "POST", `/api/invoices/${id}/payments/any/reversal`, { reason: "x" }, "rev-1")
         await plugin(plugins.efactura, "GET", `/api/invoices/${id}/efactura.xml`)
         await plugin(plugins.efactura, "GET", `/api/corrections/${String(correction.id)}/efactura.xml`)
+        const lookup = plugins["company-lookup"]
+        await plugin(lookup, "GET", "/api/settings/company-lookup")
+        await plugin(lookup, "PUT", "/api/settings/company-lookup", { provider: "none" })
+        await plugin(lookup, "GET", "/api/company-lookup/availability")
+        // Through the session's CSRF check; below the threshold, so nothing leaves the application.
+        const below = await call("POST", "/api/company-lookup/lookup", { cui: "12" })
+        assert.equal(below.status, lookup ? 400 : 404, JSON.stringify(below.body))
 
         const paths = await documentedPaths(call)
         assert.ok(paths.includes("/api/invoices/{invoiceId}/corrections"))
@@ -65,6 +73,7 @@ for (const plugins of combinations) {
         assert.equal(paths.includes("/api/invoices/{invoiceId}/payments/{paymentId}/reversal"), plugins.payments)
         assert.equal(paths.includes("/api/invoices/{id}/efactura.xml"), plugins.efactura, "e-Factura in OpenAPI")
         assert.equal(paths.includes("/api/corrections/{id}/efactura.xml"), plugins.efactura)
+        assert.equal(paths.includes("/api/company-lookup/lookup"), lookup, "company lookup in OpenAPI")
       } finally {
         await served.close()
       }

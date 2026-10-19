@@ -1,5 +1,7 @@
 "use client"
 
+import { CompanyNameField } from "../company-lookup/CompanyNameField.tsx"
+import { CompanyProposalCard } from "../company-lookup/CompanyProposalCard.tsx"
 import { Field } from "../ui/Field.tsx"
 import { FieldIssue } from "../registry/FieldIssue.tsx"
 import { Input } from "../ui/Input.tsx"
@@ -11,6 +13,8 @@ import { BANK_NAME_MAX_CODE_POINTS, TRADE_REGISTRY_MAX_LENGTH } from "../../lib/
 import { romanianCuiPattern } from "../../lib/vat-defaults.ts"
 import { legalFormValue } from "../../lib/issuer-form.ts"
 import type { IssuerSettingsForm } from "../../lib/issuer-form.ts"
+import { issuerFill } from "../../lib/company-proposal-fill.ts"
+import { useCompanyLookup } from "../../hooks/use-company-lookup.ts"
 import type { RegistryEditorIssue } from "../../hooks/use-registry-editor.ts"
 
 interface IssuerIdentityFieldsProps {
@@ -22,22 +26,28 @@ interface IssuerIdentityFieldsProps {
   readonly onIdentifierChange: (value: string) => void
 }
 
-/** Who the issuer is on the document: the legal identity and the banking details printed on it. */
+/**
+ * Who the issuer is on the document: the legal identity and the banking details
+ * printed on it. The identity and the address can be completed from the CUI;
+ * the VAT regime cannot, it stays the VAT section's.
+ */
 export const IssuerIdentityFields = (props: IssuerIdentityFieldsProps) => {
   const { form, disabled, issue, aria } = props
+  const { lookup, nameRef } = useCompanyLookup("issuer", true)
   return <div className="form-grid">
-    <Field label="Denumire legală" required>
-      <Input required disabled={disabled} value={form.name} maxLength={CIUS_TEXT_LIMITS.partyName} {...aria("name")}
-        onChange={(event) => { props.onChange({ name: event.currentTarget.value }) }} />
+    <CompanyNameField lookup={lookup} inputRef={nameRef} label="Denumire legală" value={form.name} disabled={disabled}
+      maxLength={CIUS_TEXT_LIMITS.partyName} controlAria={aria("name")} onChange={(name) => { props.onChange({ name }) }}>
       <FieldIssue issue={issue} field="name" form={ISSUER_FORM} />
-    </Field>
+    </CompanyNameField>
     <Field label="CUI / identificator fiscal" required>
       <Input required disabled={disabled} value={form.fiscalIdentifier} {...aria("fiscalIdentifier")}
         pattern={romanianCuiPattern} maxLength={FISCAL_IDENTIFIER_MAX_LENGTH}
         title="CUI românesc numeric; prefixul RO introdus este eliminat"
-        onChange={(event) => { props.onIdentifierChange(event.currentTarget.value) }} />
+        onChange={(event) => { props.onIdentifierChange(event.currentTarget.value); lookup.typeCui(event.currentTarget.value) }} />
       <FieldIssue issue={issue} field="fiscalIdentifier" form={ISSUER_FORM} />
     </Field>
+    <CompanyProposalCard lookup={lookup} vat="informative" disabled={disabled}
+      onApply={(proposal) => { props.onChange(issuerFill(form, proposal)) }} />
     <p className="hint span-two">CUI-ul este salvat numeric; prefixul RO introdus este eliminat fără a modifica regimul TVA. Cifra de control este verificată la salvare.</p>
     <Field label="Formă juridică" required>
       <Select required disabled={disabled} value={form.legalForm} {...aria("legalForm")}

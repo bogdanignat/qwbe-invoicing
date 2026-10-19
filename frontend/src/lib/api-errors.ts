@@ -76,6 +76,12 @@ const failureMessages: Readonly<Record<string, string>> = {
   payment_already_reversed: "Plata a fost deja anulată.",
   // A second full storno of the same invoice (cubes/invoicing/corrections/application/corrections.ts:37).
   invoice_already_corrected: "Factura are deja un document storno integral.",
+  // The company-lookup plugin's conflicts (cubes/invoicing/company-lookup/application/company-lookup.ts,
+  // kernel/storage/postgres-company-lookup.ts): no provider on, a provider without name search,
+  // and a key the server cannot encrypt because it has no master key.
+  company_lookup_not_configured: "Completarea datelor firmelor nu este pornită. Pornește un furnizor din Setări → Integrări.",
+  company_search_unavailable: "Furnizorul ales nu caută firme după nume; caută după CUI.",
+  company_lookup_key_storage_unavailable: "Cheia openapi.ro nu poate fi salvată: serverul nu are configurată cheia de criptare (COMPANY_LOOKUP_KEY_FILE). ANAF funcționează și fără cheie.",
 }
 
 /**

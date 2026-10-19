@@ -4,8 +4,9 @@ import type {
 import { isTaxableVatCode } from "./draft-decoders.ts"
 
 export const romanianCuiPattern = "[1-9][0-9]{1,9}"
+/** Trimmed, upper-cased, without the `RO` VAT prefix and the space after it: `" ro 14399840"` is `"14399840"`. */
 export const normalizeRomanianCui = (value: string): string =>
-  value.trim().toUpperCase().replace(/^RO/, "")
+  value.trim().toUpperCase().replace(/^RO\s*/u, "").trim()
 
 export const activeOn = (
   value: { readonly effectiveFrom: string; readonly effectiveTo?: string },

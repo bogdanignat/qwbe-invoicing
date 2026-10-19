@@ -101,7 +101,8 @@ export const startServer = async (
     ...(dependencies.monotonicNow === undefined ? {} : { monotonicNow: dependencies.monotonicNow }),
     ...(dependencies.securityLogger === undefined ? {} : { logger: dependencies.securityLogger }) })
   const apiFactory = dependencies.apiHandlerFactory ?? createApiHandler
-  const api = apiFactory({ authenticate, pool, dataDirectory: config.dataDirectory, browserSession, plugins: config.plugins })
+  const api = apiFactory({ authenticate, pool, dataDirectory: config.dataDirectory, browserSession, plugins: config.plugins,
+    companyLookupKey: config.companyLookupKey })
   let disposePromise: Promise<void> | undefined
   const dispose = () => disposePromise ??= api.dispose()
   let closePromise: Promise<void> | undefined

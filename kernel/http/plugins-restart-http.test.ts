@@ -6,7 +6,7 @@ import { issueInvoice, ok, payment, seed, serve } from "./plugins-http.test-supp
 
 void test("payments switched off and on again over the same database keeps payments and their idempotency", async () => {
   await withMigrated("plugins_restart", async (fixture) => {
-    const first = await serve(fixture, { payments: true, efactura: true })
+    const first = await serve(fixture, { payments: true, efactura: true, "company-lookup": false })
     let invoiceId: string
     let recorded: Record<string, unknown>
     try {
@@ -17,7 +17,7 @@ void test("payments switched off and on again over the same database keeps payme
       await first.close()
     }
 
-    const off = await serve(fixture, { payments: false, efactura: true })
+    const off = await serve(fixture, { payments: false, efactura: true, "company-lookup": false })
     try {
       assert.equal((await off.call("GET", `/api/invoices/${invoiceId}/payments`)).status, 404)
       assert.equal((await off.call("POST", `/api/invoices/${invoiceId}/payments`, payment, "pay-1")).status, 404)
@@ -26,7 +26,7 @@ void test("payments switched off and on again over the same database keeps payme
       await off.close()
     }
 
-    const again = await serve(fixture, { payments: true, efactura: true })
+    const again = await serve(fixture, { payments: true, efactura: true, "company-lookup": false })
     try {
       const summary = await ok(again.call("GET", `/api/invoices/${invoiceId}/payments`), "list") as
         { status: string, paidAmount: string, payments: ReadonlyArray<unknown> }
@@ -43,7 +43,7 @@ void test("payments switched off and on again over the same database keeps payme
 
 void test("a mounted payments route refuses like a core route: 401 without credential, 403 without CSRF", async () => {
   await withMigrated("plugins_payments_auth", async (fixture) => {
-    const served = await serve(fixture, { payments: true, efactura: false })
+    const served = await serve(fixture, { payments: true, efactura: false, "company-lookup": false })
     const { origin, cookie } = served
     try {
       const refusal = async (path: string, init: RequestInit) => {

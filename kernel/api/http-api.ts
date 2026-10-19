@@ -1,10 +1,12 @@
 import { HttpApi, type HttpApiEndpoint, HttpApiGroup, OpenApi } from "@effect/platform"
 
+import { companyLookupEndpoints as l } from "./http-endpoints-company-lookup.ts"
 import { draftEndpoints as d } from "./http-endpoints-drafts.ts"
 import { fiscalEndpoints as f } from "./http-endpoints-fiscal.ts"
 import { documentEndpoints as x, sessionEndpoints as s } from "./http-endpoints-host.ts"
 import { masterDataEndpoints as m } from "./http-endpoints-master-data.ts"
 import type { PluginSelection } from "../plugins.ts"
+import { providerErrors } from "./schema-company-lookup.ts"
 
 export { CurrentRequest, CurrentSession } from "./api-context.ts"
 export type { BrowserPrincipal } from "./api-context.ts"
@@ -21,6 +23,7 @@ export const operationNames = [
   "downloadInvoiceEFactura", "downloadCorrectionEFactura",
   "issueDraftProforma", "issueProforma", "listProformas", "getProforma", "issueInvoiceFromProforma", "createDraftInvoiceFromProforma",
   "renderProformaPdf", "downloadProformaPdf", "downloadCorrectionPdf", "getSession", "createSession", "deleteSession",
+  "getCompanyLookupSettings", "updateCompanyLookupSettings", "getCompanyLookupAvailability", "lookupCompany", "searchCompanies",
 ] as const
 export type OperationName = typeof operationNames[number]
 
@@ -42,6 +45,9 @@ const withPayments = <E extends HttpApiEndpoint.HttpApiEndpoint.Any, R>(group: I
   group.add(f.listPayments).add(f.recordPayment).add(f.reversePayment)
 const withEFactura = <E extends HttpApiEndpoint.HttpApiEndpoint.Any, R>(group: InvoicingGroup<E, R>) =>
   group.add(f.downloadInvoiceEFactura).add(f.downloadCorrectionEFactura)
+const withCompanyLookup = <E extends HttpApiEndpoint.HttpApiEndpoint.Any, R>(group: InvoicingGroup<E, R>) =>
+  group.add(l.getCompanyLookupSettings).add(l.updateCompanyLookupSettings).add(l.getCompanyLookupAvailability)
+    .add(l.lookupCompany).add(l.searchCompanies)
 const documents = HttpApiGroup.make("documents")
   .add(x.renderInvoicePdf).add(x.downloadInvoicePdf).add(x.renderProformaPdf).add(x.downloadProformaPdf)
   .add(x.downloadCorrectionPdf)
@@ -58,11 +64,22 @@ const application = <E extends HttpApiEndpoint.HttpApiEndpoint.Any, R>(group: In
 export const applicationHttpApi = application(invoicing)
 export const paymentsHttpApi = HttpApi.make("application").add(withPayments(HttpApiGroup.make("invoicing"))).prefix("/api")
 export const efacturaHttpApi = HttpApi.make("application").add(withEFactura(HttpApiGroup.make("invoicing"))).prefix("/api")
+export const companyLookupHttpApi = HttpApi.make("application").add(withCompanyLookup(HttpApiGroup.make("invoicing"))).prefix("/api")
+
+/**
+ * What `createApiHandler` encodes every failure with: the core contract plus the
+ * provider errors, which only the company-lookup routes raise. They sit at the
+ * API level of this value alone, so the documented contract (`activeHttpApi`)
+ * lists them on those routes only.
+ */
+const [quota, pending, authFailed, unavailable] = providerErrors
+export const handlerHttpApi = applicationHttpApi.addError(quota).addError(pending).addError(authFailed).addError(unavailable)
 
 /** The contract this installation serves, for OpenAPI: the core plus the active plugins, in one invoicing group. */
 export const activeHttpApi = (plugins: PluginSelection) => {
   const paid = plugins.payments ? withPayments(invoicing) : invoicing
-  return application(plugins.efactura ? withEFactura(paid) : paid).annotateContext(OpenApi.annotations({
+  const billed = plugins.efactura ? withEFactura(paid) : paid
+  return application(plugins["company-lookup"] ? withCompanyLookup(billed) : billed).annotateContext(OpenApi.annotations({
     title: "QWBE Invoicing API",
     description: "Kernel invoice-core, PDF artifact, and browser-session HTTP contract.",
     version: "0.1.0",

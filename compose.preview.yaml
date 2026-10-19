@@ -9,8 +9,10 @@
 #   install -d -m 700 .local && umask 077
 #   openssl rand -hex 32 > .local/preview-api-token
 #   openssl rand -hex 32 > .local/preview-pg-password
+#   openssl rand -hex 32 > .local/preview-company-lookup-key
 #   PREVIEW_AUTH_TOKEN_PATH=./.local/preview-api-token \
 #   PREVIEW_PG_PASSWORD_PATH=./.local/preview-pg-password \
+#   PREVIEW_COMPANY_LOOKUP_KEY_PATH=./.local/preview-company-lookup-key \
 #     docker compose -f compose.preview.yaml --profile preview up -d
 name: qwbe-invoicing-preview
 
@@ -80,11 +82,12 @@ services:
       DATA_DIR: /data
       ORGANIZATION_ID: preview-fixture-only
       AUTH_TOKEN_FILE: /run/secrets/preview_api_token
-      # Optional plugins, comma-separated (`payments`, `efactura`). Passed through
+      COMPANY_LOOKUP_KEY_FILE: /run/secrets/preview_company_lookup_key
+      # Optional plugins, comma-separated (`payments`, `efactura`, `company-lookup`). Passed through
       # only when set: unset means every plugin runs, empty means none. Restart to apply.
       QWBE_PLUGINS:
       TMPDIR: /var/backups/staging
-    secrets: [preview_api_token, preview_pg_password]
+    secrets: [preview_api_token, preview_pg_password, preview_company_lookup_key]
     volumes:
       - preview-data:/data
       - preview-backup-staging:/var/backups/staging
@@ -125,6 +128,8 @@ secrets:
     file: ${PREVIEW_AUTH_TOKEN_PATH:?Set a separate synthetic preview token file}
   preview_pg_password:
     file: ${PREVIEW_PG_PASSWORD_PATH:?Set a separate synthetic preview PostgreSQL password file}
+  preview_company_lookup_key:
+    file: ${PREVIEW_COMPANY_LOOKUP_KEY_PATH:?Set a separate synthetic preview company lookup master key file}
 
 volumes:
   # Anonymous, project-scoped and distinct from every shipped volume name: the
