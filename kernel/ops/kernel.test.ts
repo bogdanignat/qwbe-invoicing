@@ -58,9 +58,10 @@ void test("migration apply is idempotent", async () => {
       "invoicing/invoicing-001-baseline",
       "payments/payments-001-baseline",
       "documents/documents-001-baseline",
+      "company-lookup/company-lookup-001-baseline",
       "kernel/000-browser-sessions",
     ])
-    assert.equal((await applyMigrations(pool)).changed, 8)
+    assert.equal((await applyMigrations(pool)).changed, 9)
     await assertSourceIndexes(sql)
     assert.equal((await applyMigrations(pool)).changed, 0)
     await assertSourceIndexes(sql)
@@ -74,11 +75,11 @@ void test("migrate CLI reapplies the complete schema with zero changes", async (
     assert.equal(first.status, 0, first.stderr)
     const firstReport: unknown = JSON.parse(first.stdout)
     assert.ok(typeof firstReport === "object" && firstReport !== null && "changed" in firstReport)
-    assert.equal(firstReport.changed, 8)
+    assert.equal(firstReport.changed, 9)
     const second = cli(fixture, ["migrate", "--apply", "--json"])
     assert.equal(second.status, 0, second.stderr)
     const secondReport: unknown = JSON.parse(second.stdout)
-    assert.deepEqual(secondReport, { scanned: 8, changed: 0, skipped: 8, failed: 0, pending: [], schemaDrift: [] })
+    assert.deepEqual(secondReport, { scanned: 9, changed: 0, skipped: 9, failed: 0, pending: [], schemaDrift: [] })
     return Promise.resolve()
   })
 })

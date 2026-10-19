@@ -1,0 +1,8 @@
+[
+  {
+    "name": "company-lookup-001-baseline",
+    "statements": [
+      "CREATE TABLE company_lookup_settings(organization_id TEXT PRIMARY KEY,provider TEXT NOT NULL DEFAULT 'none' CONSTRAINT company_lookup_settings_provider_valid CHECK(provider IN('none','anaf','openapi')),openapi_key_ciphertext TEXT CONSTRAINT company_lookup_settings_key_not_empty CHECK(openapi_key_ciphertext IS NULL OR length(openapi_key_ciphertext)>0),updated_at TEXT NOT NULL,updated_by TEXT NOT NULL,CONSTRAINT company_lookup_settings_openapi_needs_key CHECK(provider!='openapi' OR openapi_key_ciphertext IS NOT NULL))"
+    ]
+  }
+]

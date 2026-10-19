@@ -1,4 +1,5 @@
 import { cube as invoicingCube, invoicingMigrations } from "../../cubes/invoicing/index.ts"
+import { cube as companyLookupCube, companyLookupMigrations } from "../../cubes/invoicing/company-lookup/index.ts"
 import { cube as catalogCube, catalogMigrations } from "../../cubes/invoicing/catalog/index.ts"
 import { cube as customersCube, customersMigrations } from "../../cubes/invoicing/customers/index.ts"
 import { cube as documentsCube, documentsMigrations } from "../../cubes/invoicing/documents/index.ts"
@@ -44,6 +45,7 @@ export const migrationScopes: ReadonlyArray<MigrationScope> = [
   { scope: invoicingCube.manifest.name, migrations: invoicingMigrations, tables: invoicingCube.manifest.tables },
   { scope: paymentsCube.manifest.name, migrations: paymentsMigrations, tables: paymentsCube.manifest.tables },
   { scope: documentsCube.manifest.name, migrations: documentsMigrations, tables: documentsCube.manifest.tables },
+  { scope: companyLookupCube.manifest.name, migrations: companyLookupMigrations, tables: companyLookupCube.manifest.tables },
   // The host's own scope: no cube declares these, so the list is stated here.
   { scope: "kernel", migrations: [browserSessionsMigration], tables: ["browser_sessions"] },
 ]

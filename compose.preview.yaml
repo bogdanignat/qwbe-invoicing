@@ -80,7 +80,7 @@ services:
       DATA_DIR: /data
       ORGANIZATION_ID: preview-fixture-only
       AUTH_TOKEN_FILE: /run/secrets/preview_api_token
-      # Optional plugins, comma-separated (`payments`, `efactura`). Passed through
+      # Optional plugins, comma-separated (`payments`, `efactura`, `company-lookup`). Passed through
       # only when set: unset means every plugin runs, empty means none. Restart to apply.
       QWBE_PLUGINS:
       TMPDIR: /var/backups/staging

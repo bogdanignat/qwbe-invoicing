@@ -7,10 +7,10 @@ import {
   customer, documentedPaths, dueDate, issueDate, issueInvoice, lines, ok, payment, seed, serve,
 } from "./plugins-http.test-support.ts"
 
-/** `QWBE_PLUGINS` end to end, for each of the four payments x e-Factura combinations. */
+/** `QWBE_PLUGINS` end to end, for each of the four payments x e-Factura combinations; company-lookup rides along. */
 const combinations: ReadonlyArray<PluginSelection> = [
-  { payments: true, efactura: true }, { payments: false, efactura: true },
-  { payments: true, efactura: false }, { payments: false, efactura: false },
+  { payments: true, efactura: true, "company-lookup": true }, { payments: false, efactura: true, "company-lookup": false },
+  { payments: true, efactura: false, "company-lookup": true }, { payments: false, efactura: false, "company-lookup": false },
 ]
 
 for (const plugins of combinations) {
@@ -19,7 +19,8 @@ for (const plugins of combinations) {
       const served = await serve(fixture, plugins)
       const { call } = served
       try {
-        const names = [...plugins.payments ? ["payments"] : [], ...plugins.efactura ? ["efactura"] : []]
+        const names = [...plugins.payments ? ["payments"] : [], ...plugins.efactura ? ["efactura"] : [],
+          ...plugins["company-lookup"] ? ["company-lookup"] : []]
         assert.deepEqual(served.login.plugins, names, "login")
         assert.deepEqual((await ok(call("GET", "/api/session"), "session")).plugins, names, "session")
         await seed(served)

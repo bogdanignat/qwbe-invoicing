@@ -50,7 +50,8 @@ void test("a plugin that is off leaves the contract and keeps every other operat
   assert.deepEqual([all["/api/invoices/{invoiceId}/payments"]?.get?.operationId, all["/api/invoices/{invoiceId}/payments"]?.get?.tags],
     ["invoicing.listPayments", ["invoicing"]])
   assert.equal(all["/api/invoices/{id}/efactura.xml"]?.get?.operationId, "invoicing.downloadInvoiceEFactura")
-  for (const plugins of [{ payments: false, efactura: true }, { payments: true, efactura: false }, { payments: false, efactura: false }]) {
+  for (const plugins of [{ payments: false, efactura: true }, { payments: true, efactura: false }, { payments: false, efactura: false }]
+    .map((selection) => ({ ...selection, "company-lookup": true }))) {
     const spec = OpenApi.fromApi(activeHttpApi(plugins))
     const routes = Object.entries(spec.paths).flatMap(([path, item]) => Object.entries(item).map(([method, operation]) =>
       ({ path, method, route: `${method.toUpperCase()} ${path.replace(/\{(\w+)\}/g, ":$1")}`, operation })))

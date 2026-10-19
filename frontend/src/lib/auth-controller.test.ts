@@ -19,7 +19,7 @@ const deferred = <Value>(): Deferred<Value> => {
   const promise = new Promise<Value>((resolve, reject) => { resolvePromise = resolve; rejectPromise = reject })
   return { promise, resolve: resolvePromise, reject: rejectPromise }
 }
-const ALL_PLUGINS: ReadonlyArray<PluginName> = ["payments", "efactura"]
+const ALL_PLUGINS: ReadonlyArray<PluginName> = ["payments", "efactura", "company-lookup"]
 const authenticated = (csrfToken: string, plugins = ALL_PLUGINS): AuthenticatedSession =>
   ({ authenticated: true, csrfToken, plugins })
 

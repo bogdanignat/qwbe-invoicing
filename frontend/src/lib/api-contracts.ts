@@ -6,8 +6,8 @@ const record = (input: unknown): Readonly<Record<string, unknown>> => {
 }
 
 /** The optional plugins the backend may run; any other name in a session answer is a contract break. */
-export type PluginName = "payments" | "efactura"
-const pluginNames: ReadonlyArray<unknown> = ["payments", "efactura"] satisfies ReadonlyArray<PluginName>
+export type PluginName = "payments" | "efactura" | "company-lookup"
+const pluginNames: ReadonlyArray<unknown> = ["payments", "efactura", "company-lookup"] satisfies ReadonlyArray<PluginName>
 
 export interface AuthenticatedSession {
   readonly authenticated: true
