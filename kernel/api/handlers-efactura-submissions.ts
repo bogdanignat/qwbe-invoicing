@@ -3,35 +3,21 @@ import { randomUUID } from "node:crypto"
 import { HttpServerResponse } from "@effect/platform"
 import { Effect } from "effect"
 
-import type { CorrectionDocument } from "../../cubes/invoicing/corrections/index.ts"
-import type { InvoicingFailure, IssuedInvoice } from "../../cubes/invoicing/index.ts"
+import type { InvoicingFailure } from "../../cubes/invoicing/index.ts"
 import { efacturaPermissions } from "../../cubes/invoicing/efactura/connection/index.ts"
 import {
   createSubmissionsService, type SubmissionDocument, type SubmissionsService, type Submitted, type SubmittedKind,
 } from "../../cubes/invoicing/efactura/submissions/index.ts"
-import { mapCorrection, mapIssuedInvoice } from "../efactura/efactura-mapper.ts"
 import { createPostgresSubmissionsStore } from "../storage/postgres-efactura-submissions.ts"
 import { CurrentRequest } from "./api-context.ts"
 import { errors } from "./api-failures.ts"
-import { attachment, renderEFactura, safeFilename } from "./api-responses.ts"
-import { createUseServices } from "./api-services.ts"
+import { attachment, safeFilename } from "./api-responses.ts"
+import { efacturaDocuments } from "./efactura-documents.ts"
 import { EFacturaSubmission } from "./http-endpoints-efactura-submissions.ts"
 import type { ApiRuntime } from "./api-types.ts"
 
-const xmlOf = (build: Parameters<typeof renderEFactura>[0]) => Effect.map(renderEFactura(build), ({ bytes }) => bytes)
-
-const invoiceDocument = (invoice: IssuedInvoice): SubmissionDocument => ({
-  kind: "invoice", id: invoice.id, issuerFiscalIdentifier: invoice.issuer.fiscalIdentifier,
-  buyerIsIndividual: invoice.customer.partyType === "individual", xml: xmlOf(() => mapIssuedInvoice(invoice)),
-})
-
-const correctionDocument = (correction: CorrectionDocument, original: IssuedInvoice): SubmissionDocument => ({
-  kind: "correction", id: correction.id, issuerFiscalIdentifier: correction.issuer.fiscalIdentifier,
-  buyerIsIndividual: correction.customer.partyType === "individual", xml: xmlOf(() => mapCorrection(correction, original)),
-})
-
 /** Encoded through the API schema, so only its fields leave (never the organization). */
-const submitted = ({ submission, created }: Submitted) =>
+export const submitted = ({ submission, created }: Submitted) =>
   Effect.orDie(HttpServerResponse.schemaJson(EFacturaSubmission)(submission, { status: created ? 202 : 200 }))
 
 /**
@@ -40,7 +26,7 @@ const submitted = ({ submission, created }: Submitted) =>
  * document, is a 404 here), and the submissions service decides the rest.
  */
 export const submissionHandlers = (runtime: ApiRuntime) => {
-  const use = createUseServices(runtime)
+  const { invoice, correction } = efacturaDocuments(runtime)
   const anaf = runtime.anaf
   const environment = anaf?.environment ?? "test"
   const store = createPostgresSubmissionsStore(runtime.pool, environment)
@@ -50,9 +36,6 @@ export const submissionHandlers = (runtime: ApiRuntime) => {
       clock: { now: Effect.sync(runtime.now ?? (() => new Date())) }, ids: { next: Effect.sync(randomUUID) },
       store, configured: anaf?.client !== undefined, environment,
     })))
-  const invoice = (id: string) => use((s) => Effect.map(s.invoicing.getIssuedInvoice(id), invoiceDocument))
-  const correction = (id: string) => use((s) => Effect.flatMap(s.invoicing.getCorrection(id),
-    (found) => Effect.map(s.invoicing.getIssuedInvoice(found.originalInvoiceId), (original) => correctionDocument(found, original))))
   const submit = (document: Effect.Effect<SubmissionDocument, InvoicingFailure, CurrentRequest>) => document.pipe(
     Effect.flatMap((loaded) => submissions((s) => s.submit(loaded))), Effect.flatMap(submitted),
     Effect.mapError(errors("ResourceNotFound", "ValidationFailure", "DomainConflict")))

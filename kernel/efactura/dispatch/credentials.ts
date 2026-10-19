@@ -12,7 +12,8 @@ export interface AccessToken {
   readonly verifiedCif: string
 }
 
-const usable = (record: ConnectionRecord | undefined, at: Date): (AccessToken & { readonly expiresAt: string }) | undefined => {
+/** The stored pair while the connection is usable; never refreshed here. */
+export const usableToken = (record: ConnectionRecord | undefined, at: Date): (AccessToken & { readonly expiresAt: string }) | undefined => {
   const identity = record?.identity
   if (record === undefined || identity === undefined || typeof record.tokens !== "object" || record.accessExpiresAt === undefined) return undefined
   if (connectionStatus(true, { status: record.status, refreshExpiresAt: identity.refreshExpiresAt }, at) !== "connected") return undefined
@@ -30,8 +31,16 @@ const usable = (record: ConnectionRecord | undefined, at: Date): (AccessToken & 
 export const dispatcherCredentials = (host: ConnectionHost, now: () => Date) => {
   const replacedAfterRefusal = new Map<string, string>()
   const read = (organizationId: string) => host.store.transaction((transaction) => transaction.findConnection(organizationId)).pipe(
-    Effect.map((record) => usable(record, now())), Effect.orElseSucceed(() => undefined))
+    Effect.map((record) => usableToken(record, now())), Effect.orElseSucceed(() => undefined))
   const refresh = (organizationId: string) => refreshConnection(host)(organizationId).pipe(Effect.orElseSucceed(() => "unavailable" as const))
+  const refused = (organizationId: string, token: AccessToken): Effect.Effect<boolean> => Effect.gen(function*() {
+    if (replacedAfterRefusal.get(organizationId) === token.pair) return false
+    if ((yield* refresh(organizationId)) !== "refreshed") return false
+    const next = yield* read(organizationId)
+    if (next === undefined) return false
+    replacedAfterRefusal.set(organizationId, next.pair)
+    return true
+  })
 
   return {
     /** A usable access token of the organization, or `undefined` while it is not connected. */
@@ -42,13 +51,11 @@ export const dispatcherCredentials = (host: ConnectionHost, now: () => Date) => 
       return yield* read(organizationId)
     }),
     /** After ANAF refused `token`: whether a fresh pair is now stored to try with. */
-    refused: (organizationId: string, token: AccessToken): Effect.Effect<boolean> => Effect.gen(function*() {
-      if (replacedAfterRefusal.get(organizationId) === token.pair) return false
-      if ((yield* refresh(organizationId)) !== "refreshed") return false
-      const next = yield* read(organizationId)
-      if (next === undefined) return false
-      replacedAfterRefusal.set(organizationId, next.pair)
-      return true
+    refused,
+    /** A request was refused with the stored pair and asked for a refresh: the same one-refresh-per-refusal rule. */
+    requested: (organizationId: string): Effect.Effect<void> => Effect.gen(function*() {
+      const current = yield* read(organizationId)
+      if (current !== undefined) yield* refused(organizationId, current)
     }),
   }
 }

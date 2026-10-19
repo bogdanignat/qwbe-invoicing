@@ -9,7 +9,7 @@ import { connectionStatus, spvCif } from "../../connection/index.ts"
 import { documentStatus } from "../domain/states.ts"
 import { submissionAudit } from "./audit.ts"
 import type {
-  ConnectionState, SubmissionDocument, SubmissionRecord, SubmissionsDependencies, SubmissionsTransaction, SubmittedKind,
+  ConnectionState, Resubmission, SubmissionDocument, SubmissionRecord, SubmissionsDependencies, SubmissionsTransaction, SubmittedKind,
 } from "./ports.ts"
 
 /** ANAF's upload limit, and the stored column's. */
@@ -24,6 +24,8 @@ export interface SubmissionHistory {
   readonly current: SubmissionRecord | null
   /** Newest first. */
   readonly submissions: ReadonlyArray<SubmissionRecord>
+  /** Which `unknown` submission was replaced by which, newest first. */
+  readonly resubmissions: ReadonlyArray<Resubmission>
 }
 
 export interface Submitted {
@@ -34,6 +36,33 @@ export interface Submitted {
 
 const conflict = (code: string, message: string) => Effect.fail(new DomainConflict({ code, message }))
 
+/** The CIF the upload names: the snapshot's, and only when it is the one ANAF proved the connection has a right on. */
+const uploadCif = (configured: boolean, connection: ConnectionState | undefined, document: SubmissionDocument, at: Date) => {
+  if (!configured) return conflict("efactura_not_configured", "ANAF e-Factura is not configured")
+  if (connectionStatus(true, connection, at) !== "connected" || connection?.verifiedCif === undefined) {
+    return conflict("efactura_not_connected", "connect to ANAF e-Factura before submitting")
+  }
+  const cif = spvCif(document.issuerFiscalIdentifier)
+  if (cif !== connection.verifiedCif) {
+    return conflict("efactura_cif_mismatch", "the document's issuer CIF is not the CIF the ANAF connection was verified for")
+  }
+  return Effect.succeed(cif)
+}
+
+/**
+ * Every check a new submission passes before it is stored, then its XML: a
+ * private buyer is refused, the CIF must be the connection's, and the bytes
+ * must fit ANAF's 10 MB. The XML is generated only once the rest passed.
+ */
+export const checkedUpload = (configured: boolean, connection: ConnectionState | undefined, document: SubmissionDocument, at: Date) =>
+  Effect.gen(function*() {
+    if (document.buyerIsIndividual) return yield* conflict("efactura_b2c_refused", "documents for a private person are not sent to e-Factura")
+    const cif = yield* uploadCif(configured, connection, document, at)
+    const xml = yield* document.xml
+    if (xml.byteLength > MAX_XML_BYTES) return yield* conflict("efactura_xml_too_large", "the e-Factura XML is larger than 10 MB")
+    return { cif, xml }
+  })
+
 export const createSubmissionsService = (dependencies: SubmissionsDependencies) => {
   const { clock, configured, environment, ids, permissions, store } = dependencies
 
@@ -41,22 +70,8 @@ export const createSubmissionsService = (dependencies: SubmissionsDependencies) 
     Effect.flatMap(dependencies.context.current, (context) =>
       context.identity.permissions.includes(permission) ? Effect.succeed(context) : Effect.fail(new PermissionDenied({ permission })))
 
-  /** The CIF the upload names: the snapshot's, and only when it is the one ANAF proved the connection has a right on. */
-  const uploadCif = (connection: ConnectionState | undefined, document: SubmissionDocument, at: Date) => {
-    if (!configured) return conflict("efactura_not_configured", "ANAF e-Factura is not configured")
-    if (connectionStatus(true, connection, at) !== "connected" || connection?.verifiedCif === undefined) {
-      return conflict("efactura_not_connected", "connect to ANAF e-Factura before submitting")
-    }
-    const cif = spvCif(document.issuerFiscalIdentifier)
-    if (cif !== connection.verifiedCif) {
-      return conflict("efactura_cif_mismatch", "the document's issuer CIF is not the CIF the ANAF connection was verified for")
-    }
-    return Effect.succeed(cif)
-  }
-
   const submit = (document: SubmissionDocument): Effect.Effect<Submitted, SubmissionsFailure> => Effect.gen(function*() {
     const context = yield* authorize(permissions.submit)
-    if (document.buyerIsIndividual) return yield* conflict("efactura_b2c_refused", "documents for a private person are not sent to e-Factura")
     const organizationId = context.organization.id
     const current = (transaction: SubmissionsTransaction) =>
       transaction.findCurrent(organizationId, environment, document.kind, document.id)
@@ -64,9 +79,7 @@ export const createSubmissionsService = (dependencies: SubmissionsDependencies) 
     const [existing, connection] = yield* store.transaction((transaction) =>
       Effect.all([current(transaction), transaction.findConnection(organizationId)]))
     if (existing !== undefined) return { submission: existing, created: false }
-    const cif = yield* uploadCif(connection, document, now)
-    const xml = yield* document.xml
-    if (xml.byteLength > MAX_XML_BYTES) return yield* conflict("efactura_xml_too_large", "the e-Factura XML is larger than 10 MB")
+    const { cif, xml } = yield* checkedUpload(configured, connection, document, now)
     const [id, auditId] = yield* Effect.all([ids.next, ids.next])
     const at = now.toISOString()
     // Serialised with every other submission write: a concurrent submit of the same document finds this one.
@@ -84,8 +97,10 @@ export const createSubmissionsService = (dependencies: SubmissionsDependencies) 
   const history = (kind: SubmittedKind, documentId: string): Effect.Effect<SubmissionHistory, SubmissionsFailure> =>
     Effect.gen(function*() {
       const context = yield* authorize(permissions.read)
-      const submissions = yield* store.transaction((transaction) => transaction.history(context.organization.id, kind, documentId))
-      return { current: submissions.find((submission) => !submission.superseded) ?? null, submissions }
+      const organizationId = context.organization.id
+      const [submissions, resubmissions] = yield* store.transaction((transaction) => Effect.all([
+        transaction.history(organizationId, kind, documentId), transaction.resubmissions(organizationId, kind, documentId)]))
+      return { current: submissions.find((submission) => !submission.superseded) ?? null, submissions, resubmissions }
     })
 
   /** The exact XML that was submitted, or ANAF's stored ZIP. */

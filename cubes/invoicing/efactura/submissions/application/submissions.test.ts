@@ -24,7 +24,7 @@ const reads = (connection: ConnectionState): SubmissionsTransaction => {
     findCurrent: () => Effect.succeed(undefined),
     findConnection: () => Effect.succeed(connection),
     insert: write, project: write, appendAuditEvent: write,
-    history: () => Effect.succeed([]), readXml: () => Effect.succeed(undefined), readResponse: () => Effect.succeed(undefined),
+    history: () => Effect.succeed([]), resubmissions: () => Effect.succeed([]), readXml: () => Effect.succeed(undefined), readResponse: () => Effect.succeed(undefined),
   }
 }
 

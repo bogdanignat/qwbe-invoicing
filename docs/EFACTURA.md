@@ -383,7 +383,7 @@ dispatcher are the host's (`kernel/efactura/dispatch`, `kernel/storage/postgres-
 | Route | Grant | What it does |
 | --- | --- | --- |
 | `POST /api/invoices/{id}/efactura/submission`, `POST /api/corrections/{id}/efactura/submission` | `efactura:submit`, session + CSRF | queues the document: `202` with the new submission, or `200` with the one it already has |
-| `GET /api/invoices/{id}/efactura/submissions`, `GET /api/corrections/{id}/efactura/submissions` | `efactura:read` | the current submission and every earlier one, newest first, with ANAF's own messages (sanitized) |
+| `GET /api/invoices/{id}/efactura/submissions`, `GET /api/corrections/{id}/efactura/submissions` | `efactura:read` | the current submission and every earlier one, newest first, with ANAF's own messages (sanitized), and which `unknown` submission was replaced by which (`resubmissions`) |
 | `GET /api/efactura/submissions/{id}/xml` | `efactura:read` | the exact XML that was submitted |
 | `GET /api/efactura/submissions/{id}/response` | `efactura:read` | ANAF's ZIP, once it is stored; `404` before |
 
@@ -443,7 +443,8 @@ the ZIP in `efactura_responses`, archive `stored`.
 CIF is not the one the organization's connection is now verified for makes no ANAF
 call at all (no `validare`, no upload, no poll). It stays where it is and waits,
 like a submission of an organization with no connection, 15 minutes at a time; a
-`queued` one shows the reason `conexiune_alt_cif` in its `errors` until it is sent.
+`queued` one shows the reason in its `errors` until it is sent: `conexiune_alt_cif`, or
+`neconectat` while the organization has no usable connection at all.
 It is never `refused`: ANAF refused nothing.
 
 **A 401/403 is the only automatic reupload.** An explicit 401/403 at `validare`
@@ -463,15 +464,77 @@ header is anything else). Every call is logged in `efactura_submission_attempts`
 **Tokens** are refreshed only by the dispatcher: ahead of time when the access
 token has less than 7 days left, and once after a 401/403. A pair that such a
 refresh produced is not refreshed again on the next refusal, so a token ANAF keeps
-refusing never turns into a loop.
+refusing never turns into a loop. A request that calls ANAF (the reconciliation
+below) never refreshes: on a 401/403 it sets `refresh_requested` on the connection
+row, only for the very pair it was refused with, and answers `409
+efactura_connection_refreshing`. The dispatcher takes such a request first in its
+next turn (clearing the flag as it takes it) and applies the same
+one-refresh-per-refusal rule; every write of the connection row clears the flag.
 
 **No automatic replay.** Nothing `unknown` is ever uploaded again by the
 application: not by the dispatcher, not by its recovery, not by a submit. Finding
-out what happened to it (and resubmitting, knowing it may create a duplicate at
-ANAF) is the reconciliation of task 4.
+out what happened to it, and resubmitting it, is the reconciliation below: always
+the user's, always confirmed.
 
-Audit: `efactura_submission.queued | .accepted | .rejected | .refused | .unknown | .restored_unknown`,
+Audit: `efactura_submission.queued | .accepted | .rejected | .refused | .unknown | .restored_unknown | .linked | .resubmitted`,
 each in the transaction of its transition; the dispatcher's actor is `efactura:dispatcher`.
+
+### Reconciling an `unknown` submission
+
+`unknown` means nobody can tell whether ANAF took the upload. The logic is in
+`cubes/invoicing/efactura/reconciliation` (it moves submissions only through the
+`submissions` unit's surface); the host's side is
+`kernel/efactura/reconciliation/request-anaf.ts` and
+`kernel/storage/postgres-efactura-reconciliation.ts`.
+
+| Route | Grant | What it does |
+| --- | --- | --- |
+| `GET /api/efactura/submissions/{id}/candidates?page=` | `efactura:reconcile` | one page of ANAF's list for the submission's CIF and window: this CIF's own uploads only (index, ANAF's date, type, and `linked` when another submission of the organization already holds the index, read locally) |
+| `POST /api/efactura/submissions/{id}/link` `{ uploadIndex, confirmed: true }` | `efactura:reconcile`, session + CSRF | links the index you confirm is this document, once the server found it in ANAF's list |
+| `POST /api/efactura/submissions/{id}/resubmit` `{ confirmed: true }` | `efactura:reconcile`, session + CSRF | a new submission in place of the unknown one: `202`, or `200` with the one already made |
+
+All three answer only for a current `unknown` submission (`409 efactura_not_unknown`
+otherwise: queued, processing, accepted, or one already superseded), only with e-Factura
+configured and connected for the submission's CIF (`efactura_not_configured`,
+`efactura_not_connected`, `efactura_cif_mismatch`), and belong to the plugin.
+
+**Candidates.** `listaMesajePaginatieFactura` for the submission's CIF and
+environment, from the moment the submission was created, at most 60 days and never
+past now, one page per call. Only the types an upload of this CIF leaves are
+candidates (`FACTURA TRIMISA`, `ERORI FACTURA`): a received invoice carries someone
+else's index. Nothing is opened (no ZIP) and nothing is linked. Every call is
+reserved in the organization's budget (900 per minute) before it leaves, like the
+dispatcher's, and logged in `efactura_submission_attempts` (`listaMesaje`); a 429
+pauses the organization, a spent budget or a pause answers `409 efactura_rate_limited`,
+a 401/403 answers `409 efactura_connection_refreshing` (retry once the dispatcher
+refreshed), "no right" `409 efactura_no_right`, anything unclear
+`409 efactura_anaf_unavailable`.
+
+**Link.** `confirmed: true` is your statement that the index is this document;
+nothing proves it, and nothing is linked without it (`400`). The server then looks
+for the index itself, in ANAF's list for the submission's environment, CIF and window
+(at most 10 pages, each reserved like above): an index that only answers
+`stareMesaj` is not enough (`409 efactura_index_not_listed`). An index already held by
+another submission of the organization and environment is refused
+(`409 efactura_index_linked`; the unique index backs it). Then, in one transaction:
+`unknown → processing` with the index, the document's status `processing`, and
+`efactura_submission.linked` with you as the actor and the index as the reason. The
+dispatcher polls it from there, like any other upload.
+
+**Resubmit.** `confirmed: true` is your statement that the index's absence from
+ANAF's list does not prove the upload never arrived, and that **ANAF may end up
+holding the document twice**. The application gives no technical guarantee against
+that duplicate: the resubmission is explicit, confirmed and audited, and that is
+all. The XML is generated again from the frozen snapshot and passes every check of
+a submit (configured, connected, issuer CIF = the connection's, no private buyer,
+at most 10 MB). In one transaction under the submissions key: the old submission is
+marked `superseded` (its state stays `unknown`; an accepted submission can never be
+superseded, a CHECK enforces it), the new one is queued, `efactura_resubmissions`
+records the link with you and the confirmation, the document shows `queued`, and
+the audit gets `efactura_submission.resubmitted` (on the old one) and `.queued` (on
+the new one). Asked again after a lost answer, or several times at once, it answers
+the replacement it already made (`200`) and creates nothing. A submit of the
+document then answers the new submission.
 
 **`ANAF_ENVIRONMENT`** is checked by `serve` against the environment of the stored
 submissions once the schema is ready, before any traffic and before the dispatcher,
@@ -518,6 +581,10 @@ stays empty. After a restore, reconnecting with the certificate uploads nothing.
 - The ANAF connection runs only against the fake ANAF so far. The exact text of
   "no right on the CIF", the positive list shape, the refresh token's lifetime after a
   refresh and PKCE are confirmed on ANAF TEST in task 6.
+- The reconciliation runs only against the fake ANAF so far. The message types of
+  an upload in ANAF's list (`FACTURA TRIMISA`, `ERORI FACTURA`), the page size of
+  `listaMesajePaginatieFactura` and whether it accepts a window older than 60 days
+  are confirmed on ANAF TEST in task 6.
 
 ## Validating the fixtures
 

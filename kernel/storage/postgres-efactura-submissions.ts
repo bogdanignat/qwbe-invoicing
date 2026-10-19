@@ -8,12 +8,12 @@ import { appendAuditEvent } from "./postgres-kernel.ts"
 import {
   SUBMISSION_COLUMNS, STANDARDS, efacturaSubmissionsLockKey, oneOf, projectDocument, submissionFrom,
 } from "./postgres-efactura-submission-rows.ts"
-import { bytes, firstRow, optionalText } from "./postgres-rows.ts"
+import { bytes, firstRow, optionalText, text } from "./postgres-rows.ts"
 import { transactionWith, type TransactionClient } from "./postgres-transaction.ts"
 
 const STATED = LIVE_STATES.map((state) => `'${state}'`).join(",")
 
-const adapter = (client: TransactionClient, environment: AnafEnvironment): SubmissionsTransaction => {
+export const submissionsAdapter = (client: TransactionClient, environment: AnafEnvironment): SubmissionsTransaction => {
   const one = async (sql: string, values: ReadonlyArray<string>) => {
     const row = firstRow((await client.query(sql, values)).rows)
     return row === undefined ? undefined : submissionFrom(row)
@@ -51,6 +51,11 @@ const adapter = (client: TransactionClient, environment: AnafEnvironment): Submi
     history: (organizationId, kind, documentId) => read("list e-Factura submissions", async () => (await client.query(
       `SELECT ${SUBMISSION_COLUMNS} FROM efactura_submissions WHERE organization_id=$1 AND document_kind=$2 AND document_id=$3
         ORDER BY created_at DESC, id DESC`, [organizationId, kind, documentId])).rows.map(submissionFrom)),
+    resubmissions: (organizationId, kind, documentId) => read("list e-Factura resubmissions", async () => (await client.query(
+      `SELECT r.previous_id,r.next_id,r.actor_id,r.created_at FROM efactura_resubmissions r JOIN efactura_submissions s ON s.id=r.previous_id
+        WHERE r.organization_id=$1 AND s.document_kind=$2 AND s.document_id=$3 ORDER BY r.created_at DESC, r.next_id DESC`,
+      [organizationId, kind, documentId])).rows.map((row) => ({ previousId: text(row, "previous_id"), nextId: text(row, "next_id"),
+      actorId: text(row, "actor_id"), createdAt: text(row, "created_at") }))),
     readXml: (organizationId, id) => stored(
       "SELECT xml AS content FROM efactura_submissions WHERE organization_id=$1 AND id=$2", organizationId, id),
     readResponse: (organizationId, id) => stored(
@@ -63,7 +68,7 @@ const adapter = (client: TransactionClient, environment: AnafEnvironment): Submi
 export const createPostgresSubmissionsStore = (pool: Pool, environment: AnafEnvironment): TransactionalStore<SubmissionsTransaction> => ({
   transaction: transactionWith(pool, {
     lock: efacturaSubmissionsLockKey,
-    adapter: (client: TransactionClient) => adapter(client, environment),
+    adapter: (client: TransactionClient) => submissionsAdapter(client, environment),
     onBeginFailure: () => persistence("begin transaction"),
     onCommitFailure: () => persistence("commit transaction"),
   }),

@@ -31,7 +31,7 @@ export {
 export type { ArchiveState, FiscalEvent, FiscalState } from "./domain/states.ts"
 export { ANAF_XML_LIMITS, childrenNamed, localName, parseStrictXml } from "./domain/xml.ts"
 export type { XmlElement, XmlLimits, XmlParse, XmlRefusal } from "./domain/xml.ts"
-export { CALL_OUTCOMES, sanitizedMessages, type AnafReply, type CallOutcome, type Interrupted } from "./domain/replies.ts"
+export { CALL_OUTCOMES, anafId, sanitizedMessages, type AnafReply, type CallOutcome, type Interrupted } from "./domain/replies.ts"
 export { UPLOAD_EVENTS, classifyStatus, classifyUpload, statusEvent, type StatusResult, type UploadResult } from "./domain/xml-replies.ts"
 export { classifyDownload, classifyList, classifyValidation, validationEvent } from "./domain/json-replies.ts"
 export type { DownloadResult, ListResult, ListedMessage, ValidationResult } from "./domain/json-replies.ts"
@@ -43,9 +43,9 @@ export {
 export type { BudgetedOperation, MessageBudget, OrganizationBudget, OrganizationReservation } from "./domain/budgets.ts"
 export { auditedArrival, submissionAudit, type AuditedSubmission, type SubmissionAuditAction } from "./application/audit.ts"
 export {
-  MAX_XML_BYTES, createSubmissionsService, type SubmissionHistory, type SubmissionsFailure, type SubmissionsService,
+  MAX_XML_BYTES, checkedUpload, createSubmissionsService, type SubmissionHistory, type SubmissionsFailure, type SubmissionsService,
   type Submitted,
 } from "./application/submissions.ts"
 export type {
-  ConnectionState, NewSubmission, SubmissionDocument, SubmissionRecord, SubmissionsDependencies, SubmissionsTransaction, SubmittedKind,
+  ConnectionState, NewSubmission, Resubmission, SubmissionDocument, SubmissionRecord, SubmissionsDependencies, SubmissionsTransaction, SubmittedKind,
 } from "./application/ports.ts"

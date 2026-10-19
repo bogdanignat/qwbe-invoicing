@@ -58,7 +58,8 @@ const adapter = (client: TransactionClient, cipher: TokenCipher, environment: An
             generation = EXCLUDED.generation, revision = EXCLUDED.revision, access_token_ciphertext = EXCLUDED.access_token_ciphertext,
             refresh_token_ciphertext = EXCLUDED.refresh_token_ciphertext, access_expires_at = EXCLUDED.access_expires_at,
             refresh_expires_at = EXCLUDED.refresh_expires_at, verified_cif = EXCLUDED.verified_cif, connected_by = EXCLUDED.connected_by,
-            connected_at = EXCLUDED.connected_at, updated_by = EXCLUDED.updated_by, updated_at = EXCLUDED.updated_at`,
+            connected_at = EXCLUDED.connected_at, updated_by = EXCLUDED.updated_by, updated_at = EXCLUDED.updated_at,
+            refresh_requested = false`,
         [organizationId, environment, connection.status, generation, connection.revision, sealed("access"), sealed("refresh"),
           tokens?.accessExpiresAt ?? null, identity?.refreshExpiresAt ?? null, identity?.verifiedCif ?? null, identity?.connectedBy ?? null,
           identity?.connectedAt ?? null, connection.updatedBy, connection.updatedAt])

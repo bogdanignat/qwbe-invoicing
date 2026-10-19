@@ -1,8 +1,9 @@
 import type { AuditEvent } from "../../../domain/invoice.ts"
 import type { FiscalState } from "../domain/states.ts"
 
-/** The states a submission is audited on arriving in, plus the restore that turns it `unknown`. */
-export type SubmissionAuditAction = Extract<FiscalState, "queued" | "accepted" | "rejected" | "refused" | "unknown"> | "restored_unknown"
+/** The states a submission is audited on arriving in, the restore that turns it `unknown`, and the two ways out of `unknown`. */
+export type SubmissionAuditAction =
+  | Extract<FiscalState, "queued" | "accepted" | "rejected" | "refused" | "unknown"> | "restored_unknown" | "linked" | "resubmitted"
 
 const AUDITED: ReadonlyArray<FiscalState> = ["queued", "accepted", "rejected", "refused", "unknown"]
 

@@ -32,7 +32,7 @@ export interface Patch {
 
 /** One line of `efactura_submission_attempts`: never a body, never a token. */
 export interface CallRecord {
-  readonly operation: "validare" | "upload" | "stareMesaj" | "descarcare"
+  readonly operation: "validare" | "upload" | "stareMesaj" | "descarcare" | "listaMesaje"
   readonly outcome: CallOutcome
   readonly httpStatus: number | undefined
   readonly durationMs: number

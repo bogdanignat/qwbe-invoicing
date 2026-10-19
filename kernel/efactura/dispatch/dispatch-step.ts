@@ -4,6 +4,7 @@ import {
   classifyDownload, classifyStatus, nextPollAt, statusEvent, type SubmissionRecord,
 } from "../../../cubes/invoicing/efactura/submissions/index.ts"
 import { dispatchStore, type Due } from "../../storage/postgres-efactura-dispatch.ts"
+import { takeRefreshRequest } from "../../storage/postgres-efactura-refresh-requests.ts"
 import type { LeadershipLost } from "../../storage/postgres-efactura-lease.ts"
 import {
   ARCHIVE_WAIT_MS, DISCONNECTED_WAIT_MS, afterRefusal, kindOf, later, reserved, settle, timed, type StepContext,
@@ -15,6 +16,8 @@ export type { StepContext } from "./dispatch-calls.ts"
 
 /** Why a queued submission waits: the connection is now for another CIF than the one in the document. */
 export const OTHER_CIF = "conexiune_alt_cif"
+/** Why a queued submission waits: the organization has no usable connection. */
+export const NOT_CONNECTED = "neconectat"
 
 const poll = (ctx: StepContext, { submission, polls }: Due, uploadIndex: string, token: AccessToken) => Effect.gen(function*() {
   if ((yield* reserved(ctx, submission, { operation: "stareMesaj", id: uploadIndex }, () => Promise.resolve(true))) === undefined) return
@@ -43,17 +46,23 @@ const download = (ctx: StepContext, submission: SubmissionRecord, downloadId: st
 })
 
 /**
- * One turn: the submission due first, one step of it. `idle` when nothing is
- * due. Every write runs in a fenced transaction; no HTTP call runs inside one.
+ * One turn: a token refresh a request asked for, else the submission due
+ * first, one step of it. `idle` when nothing is due. Every write runs in a
+ * fenced transaction; no HTTP call runs inside one.
  */
 export const dispatchOne = (ctx: StepContext): Effect.Effect<"idle" | "worked", LeadershipLost> => Effect.gen(function*() {
+  const asked = yield* ctx.lease.run((client) => takeRefreshRequest(client, ctx.environment))
+  if (asked !== undefined) {
+    yield* ctx.credentials.requested(asked)
+    return "worked"
+  }
   const due = yield* ctx.lease.run((client) => dispatchStore(client, ctx.now()).due(ctx.environment))
   if (due === undefined) return "idle"
   const { submission } = due
   const token = yield* ctx.credentials.token(submission.organizationId)
   // Not connected, or connected for another CIF: no ANAF call at all, the submission waits as it is.
   if (token === undefined || token.verifiedCif !== submission.cif) {
-    const errors = token !== undefined && submission.state === "queued" ? [OTHER_CIF] : undefined
+    const errors = submission.state !== "queued" ? undefined : token === undefined ? [NOT_CONNECTED] : [OTHER_CIF]
     yield* ctx.lease.run((client) => dispatchStore(client, ctx.now()).move(submission, undefined, {
       nextAttemptAt: later(ctx.now(), DISCONNECTED_WAIT_MS), errors }))
   } else if (submission.state === "queued") yield* upload(ctx, submission, token)

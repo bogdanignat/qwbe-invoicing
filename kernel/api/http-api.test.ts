@@ -13,7 +13,8 @@ import { allPlugins } from "../plugins.ts"
 
 const submissionRoutes = ["POST /api/invoices/:id/efactura/submission", "POST /api/corrections/:id/efactura/submission",
   "GET /api/invoices/:id/efactura/submissions", "GET /api/corrections/:id/efactura/submissions",
-  "GET /api/efactura/submissions/:id/response", "GET /api/efactura/submissions/:id/xml"]
+  "GET /api/efactura/submissions/:id/response", "GET /api/efactura/submissions/:id/xml",
+  "GET /api/efactura/submissions/:id/candidates", "POST /api/efactura/submissions/:id/link", "POST /api/efactura/submissions/:id/resubmit"]
 const inventory = [
   "GET /api/issuer", "PUT /api/issuer", "GET /api/document-series", "POST /api/document-series",
   "GET /api/unit-of-measures", "GET /api/vat-regimes",
@@ -44,15 +45,15 @@ const efacturaRoutes = ["GET /api/invoices/:id/efactura.xml", "GET /api/correcti
 const companyLookupRoutes = ["GET /api/settings/company-lookup", "PUT /api/settings/company-lookup",
   "GET /api/company-lookup/availability", "POST /api/company-lookup/lookup", "POST /api/company-lookup/search"]
 
-void test("the contract with every plugin on exposes exactly the current 67 operations", () => {
+void test("the contract with every plugin on exposes exactly the current 70 operations", () => {
   const applicationRoutes: Array<{ readonly method: string, readonly operationId: string, readonly path: string }> = []
   HttpApi.reflect(activeHttpApi(allPlugins), { onGroup() {}, onEndpoint({ endpoint }) {
     applicationRoutes.push({ method: endpoint.method, operationId: endpoint.name, path: endpoint.path })
   } })
-  assert.equal(operationNames.length, 67)
-  assert.equal(new Set(operationNames).size, 67)
-  assert.equal(applicationRoutes.length, 67)
-  assert.equal(new Set(applicationRoutes.map((route) => route.operationId)).size, 67)
+  assert.equal(operationNames.length, 70)
+  assert.equal(new Set(operationNames).size, 70)
+  assert.equal(applicationRoutes.length, 70)
+  assert.equal(new Set(applicationRoutes.map((route) => route.operationId)).size, 70)
   assert.ok(operationNames.includes("listVatRegimes"))
   assert.deepEqual(applicationRoutes.map((route) => `${route.method} ${route.path}`).sort(), inventory)
   assert.equal(applicationRoutes.some((route) => route.path === "/api"), false)

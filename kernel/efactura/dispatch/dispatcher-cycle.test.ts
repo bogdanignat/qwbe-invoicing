@@ -6,7 +6,7 @@ import { FAKE_ZIP, type FakeScenario } from "../anaf/fake-anaf.test-support.ts"
 import { bucharestDay, nextBucharestMidnight } from "../../../cubes/invoicing/efactura/submissions/index.ts"
 import { withMigrated } from "../../storage/postgres-rig.test-support.ts"
 import { cutAfter, dispatchRig, type DispatchRig } from "./dispatch.test-support.ts"
-import { OTHER_CIF } from "./dispatch-step.ts"
+import { NOT_CONNECTED, OTHER_CIF } from "./dispatch-step.ts"
 
 /**
  * The dispatcher against a real database and the fake ANAF: every state a
@@ -172,6 +172,11 @@ void test("a connection made again for another CIF sends nothing: the submission
     const history = (await rig.server.call("GET", `/api/invoices/${invoiceId}/efactura/submissions`)).body as
       { current: { state: string; errors: ReadonlyArray<string> } }
     assert.deepEqual([history.current.state, history.current.errors], ["queued", [OTHER_CIF]])
+
+    await rig.sql("DELETE FROM efactura_connections WHERE organization_id='org-1'")
+    rig.clock.offsetMs += 16 * 60_000
+    await rig.until("the reason follows the connection", async () => (JSON.parse((await rig.row(id)).errors) as Array<string>)[0] === NOT_CONNECTED)
+    assert.deepEqual(JSON.parse((await rig.row(id)).errors), [NOT_CONNECTED], "no stale conexiune_alt_cif without a connection")
 
     await rig.connect()
     rig.clock.offsetMs += 16 * 60_000

@@ -54,6 +54,14 @@ export interface ConnectionState {
   readonly refreshExpiresAt: string | undefined
 }
 
+/** One manual resubmission out of `unknown`: `previousId` was superseded by `nextId`. */
+export interface Resubmission {
+  readonly previousId: string
+  readonly nextId: string
+  readonly actorId: string
+  readonly createdAt: string
+}
+
 export interface SubmissionsTransaction {
   /** The document's one non-superseded submission in a live state, `unknown` and `accepted` included. */
   readonly findCurrent: (organizationId: string, environment: AnafEnvironment, kind: SubmittedKind, documentId: string) =>
@@ -64,6 +72,8 @@ export interface SubmissionsTransaction {
   readonly project: (organizationId: string, kind: SubmittedKind, documentId: string, status: EFacturaStatus) => Write
   /** Every submission of the document, newest first. */
   readonly history: (organizationId: string, kind: SubmittedKind, documentId: string) => Read<ReadonlyArray<SubmissionRecord>>
+  /** The document's resubmissions, newest first. */
+  readonly resubmissions: (organizationId: string, kind: SubmittedKind, documentId: string) => Read<ReadonlyArray<Resubmission>>
   readonly readXml: (organizationId: string, id: string) => Read<Uint8Array | undefined>
   readonly readResponse: (organizationId: string, id: string) => Read<Uint8Array | undefined>
   readonly appendAuditEvent: (event: AuditEvent) => Write

@@ -13,13 +13,17 @@ export const EFacturaSubmission = Schema.Struct({
   state: Schema.Literal(...FISCAL_STATES), archiveState: Schema.Literal(...ARCHIVE_STATES),
   uploadIndex: Schema.NullOr(Schema.String), downloadId: Schema.NullOr(Schema.String),
   errors: Schema.Array(Schema.String).annotations({
-    description: "ANAF's own messages, sanitized; on a queued submission, `conexiune_alt_cif` while the connection is for another CIF.",
+    description: "ANAF's own messages, sanitized; on a queued submission, why it waits: `neconectat` without a usable connection,"
+      + " `conexiune_alt_cif` while the connection is for another CIF.",
   }),
   superseded: Schema.Boolean, xmlSha256: Schema.String, xmlSize: Schema.Int,
   createdBy: Schema.String, createdAt: Schema.String, updatedAt: Schema.String,
 })
+const EFacturaResubmission = Schema.Struct({
+  previousId: Schema.String, nextId: Schema.String, actorId: Schema.String, createdAt: Schema.String,
+}).annotations({ description: "The unknown submission `previousId` was replaced by `nextId`, on the actor's confirmation." })
 export const EFacturaSubmissionHistory = Schema.Struct({
-  current: Schema.NullOr(EFacturaSubmission), submissions: Schema.Array(EFacturaSubmission),
+  current: Schema.NullOr(EFacturaSubmission), submissions: Schema.Array(EFacturaSubmission), resubmissions: Schema.Array(EFacturaResubmission),
 })
 const EFacturaResponse = HttpApiSchema.Uint8Array({ contentType: "application/zip" })
 

@@ -55,7 +55,7 @@ export const createRequestAuthenticator = (config: RuntimeConfig): RequestAuthen
     invoicing.voidInvoices,
     invoicing.manageSettings,
     ...(config.plugins.payments ? [payments.read, payments.record] : []),
-    ...(config.plugins.efactura ? [efactura.read, efactura.manageConnection, efactura.submit] : []),
+    ...(config.plugins.efactura ? [efactura.read, efactura.manageConnection, efactura.submit, efactura.reconcile] : []),
     ...(config.plugins["company-lookup"] ? [companyLookupPermission("company-lookup")] : []),
     documentsPermissions.read,
     documentsPermissions.render,
