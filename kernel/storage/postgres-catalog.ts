@@ -1,6 +1,7 @@
 import { DomainConflict } from "../../cubes/invoicing/index.ts"
 import type { CatalogTransaction, ProductPreset } from "../../cubes/invoicing/catalog/index.ts"
 import { read, write } from "./postgres-errors.ts"
+import { money, moneyValue } from "./postgres-money.ts"
 import { firstRow, optionalText, text, type Row } from "./postgres-rows.ts"
 import { assignExcluded, foldedOrder, insertStatement, nameKeyset, pairs, rowsWanted } from "./postgres-sql.ts"
 import type { TransactionClient } from "./postgres-transaction.ts"
@@ -11,7 +12,7 @@ const productPresetFrom = (value: Row): ProductPreset => {
     id: text(value, "id"),
     organizationId: text(value, "organization_id"),
     description: text(value, "description"),
-    unitPrice: text(value, "unit_price"),
+    unitPrice: money(value, "unit_price"),
     unitOfMeasure: { code: text(value, "unit_code"), name: text(value, "unit_name") },
     ...(preferredVatRateCode === undefined ? {} : { preferredVatRateCode }),
   }
@@ -29,7 +30,7 @@ const presetUpdatedColumns = presetColumns.filter((column) =>
 export const catalogTransactionAdapter = (client: TransactionClient): CatalogTransaction => ({
   saveProductPreset: (preset) => write("save product preset", async () => {
     const statement = insertStatement("product_presets", pairs(presetColumns, [
-      preset.id, preset.organizationId, preset.description, preset.unitPrice,
+      preset.id, preset.organizationId, preset.description, moneyValue(preset.unitPrice),
       preset.unitOfMeasure.code, preset.unitOfMeasure.name, preset.preferredVatRateCode ?? null,
     ]))
     const { rowCount } = await client.query(

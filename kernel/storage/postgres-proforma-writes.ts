@@ -1,5 +1,6 @@
 import type { Proforma } from "../../cubes/invoicing/index.ts"
 import { write } from "./postgres-errors.ts"
+import { moneyValue, optionalMoneyValue } from "./postgres-money.ts"
 import { addressColumns, addressValues, booleanValue } from "./postgres-rows.ts"
 import { insertStatement, pairs } from "./postgres-sql.ts"
 import { breakdownColumns, breakdownValues, saveLines, vatTreatment } from "./postgres-document-lines.ts"
@@ -29,11 +30,11 @@ export const saveProforma = (client: TransactionClient, proforma: Proforma) =>
       proforma.series, proforma.number, proforma.issueDate, proforma.dueDate, proforma.issuedAt, proforma.currency,
       proforma.issuer.name, proforma.issuer.fiscalIdentifier, ...addressValues(proforma.issuer.address),
       proforma.issuer.legalForm, proforma.issuer.tradeRegistryNumber, proforma.issuer.iban,
-      proforma.issuer.bankName, proforma.issuer.socialCapital, booleanValue(proforma.issuer.vatRegistered),
+      proforma.issuer.bankName, optionalMoneyValue(proforma.issuer.socialCapital), booleanValue(proforma.issuer.vatRegistered),
       proforma.issuer.branding === null ? null : JSON.stringify(proforma.issuer.branding),
       proforma.customer.partyType, proforma.customer.name, proforma.customer.fiscalIdentifier,
       ...addressValues(proforma.customer.address), booleanValue(proforma.customer.vatRegistered),
-      proforma.totalExcludingVat, proforma.vatTotal, proforma.totalIncludingVat,
+      moneyValue(proforma.totalExcludingVat), moneyValue(proforma.vatTotal), moneyValue(proforma.totalIncludingVat),
       proforma.notes, proforma.actorId,
     ]))
     await client.query(statement.sql, statement.values)

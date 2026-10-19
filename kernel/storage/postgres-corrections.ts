@@ -1,5 +1,6 @@
 import type { CorrectionsTransaction } from "../../cubes/invoicing/corrections/index.ts"
 import { read, write } from "./postgres-errors.ts"
+import { moneyValue, optionalMoneyValue } from "./postgres-money.ts"
 import { addressColumns, addressValues, booleanValue, firstRow } from "./postgres-rows.ts"
 import { fragments, insertStatement, pairs } from "./postgres-sql.ts"
 import { correctionFrom } from "./postgres-correction-rows.ts"
@@ -31,10 +32,10 @@ export const correctionsTransactionAdapter = (client: TransactionClient): Correc
       correction.reason, correction.currency,
       correction.issuer.name, correction.issuer.fiscalIdentifier, ...addressValues(correction.issuer.address),
       correction.issuer.legalForm, correction.issuer.tradeRegistryNumber, correction.issuer.iban,
-      correction.issuer.bankName, correction.issuer.socialCapital, booleanValue(correction.issuer.vatRegistered),
+      correction.issuer.bankName, optionalMoneyValue(correction.issuer.socialCapital), booleanValue(correction.issuer.vatRegistered),
       correction.customer.name, correction.customer.fiscalIdentifier, correction.customer.partyType,
       ...addressValues(correction.customer.address), booleanValue(correction.customer.vatRegistered),
-      correction.totalExcludingVat, correction.vatTotal, correction.totalIncludingVat, correction.actorId,
+      moneyValue(correction.totalExcludingVat), moneyValue(correction.vatTotal), moneyValue(correction.totalIncludingVat), correction.actorId,
     ]))
     await client.query(statement.sql, statement.values)
     for (const [position, line] of correction.lines.entries()) {

@@ -343,11 +343,11 @@ void test("a trigger, a CHECK and a type error all become a 409-shaped conflict"
         }
       })))
 
-    // A CHECK: the translated money pattern refuses a three-decimal price.
+    // A CHECK: the money column refuses a negative price in bani.
     const check = await errorOf(
       `INSERT INTO product_presets(id,organization_id,description,unit_price,unit_code,unit_name)
         VALUES($1,$2,$3,$4,$5,$6)`,
-      ["p-1", "org-1", "Preț", "1.000", "C62", "unitate"],
+      ["p-1", "org-1", "Preț", "-100", "C62", "unitate"],
     )
     assert.equal((check as { readonly code?: string }).code, "23514")
     const mappedCheck = writeFailure(check, "save product preset")

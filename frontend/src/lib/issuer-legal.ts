@@ -9,7 +9,7 @@
  *
  * The rules themselves are the backend's (`cubes/invoicing/issuer`): the trade
  * registry number in either the classic or the 13-digit form, an IBAN with a
- * valid mod-97 check digit, a social capital with at most 18 integer digits and
+ * valid mod-97 check digit, a social capital with at most 16 integer digits and
  * two decimals, a bank name of at most 120 characters on one line. Three of the
  * four may be empty — the profile is saveable before it is complete, and the
  * missing pieces are refused at issuance, not here.
@@ -39,9 +39,9 @@ export const tradeRegistryValue = (input: string): LegalValue => {
 export const socialCapitalValue = (input: string): LegalValue => {
   const value = input.trim()
   if (value === "") return ready("")
-  const match = /^(\d{1,18})(?:\.(\d{1,2}))?$/u.exec(value)
+  const match = /^(\d{1,16})(?:\.(\d{1,2}))?$/u.exec(value)
   if (match === null) {
-    return issue("Capitalul social trebuie să fie o sumă RON nenegativă, cu maximum 18 cifre întregi și 2 zecimale.")
+    return issue("Capitalul social trebuie să fie o sumă RON nenegativă, cu maximum 16 cifre întregi și 2 zecimale.")
   }
   const whole = (match[1] ?? "").replace(/^0+(?=\d)/u, "")
   return ready(`${whole}.${(match[2] ?? "").padEnd(2, "0")}`)

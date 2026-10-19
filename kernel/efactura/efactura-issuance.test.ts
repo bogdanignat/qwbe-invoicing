@@ -85,7 +85,7 @@ const issuanceState = async (rig: TestFixture) => {
     { table_name: "invoice_sequences", column_name: "last_number", data_type: "integer" },
     { table_name: "issued_invoices", column_name: "fiscal_year", data_type: "integer" },
     { table_name: "issued_invoices", column_name: "number", data_type: "integer" },
-    { table_name: "issued_invoices", column_name: "total_including_tax", data_type: "text" },
+    { table_name: "issued_invoices", column_name: "total_including_tax", data_type: "bigint" },
   ])
   return {
     invoices: await counted(sql, "SELECT count(*) FROM issued_invoices"),

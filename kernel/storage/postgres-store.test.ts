@@ -237,8 +237,8 @@ void test("persists an issued snapshot across store recreation and isolates orga
 
     for (const [statement, values] of [
       ["UPDATE issued_lines SET description = $1 WHERE invoice_id = $2", ["tampered", issued.id]],
-      ["UPDATE issued_tax_breakdown SET tax_amount = $1 WHERE invoice_id = $2", ["0.00", issued.id]],
-      ["UPDATE issued_invoices SET total_including_tax = $1 WHERE id = $2", ["0.00", issued.id]],
+      ["UPDATE issued_tax_breakdown SET tax_amount = $1 WHERE invoice_id = $2", ["0", issued.id]],
+      ["UPDATE issued_invoices SET total_including_tax = $1 WHERE id = $2", ["0", issued.id]],
       ["UPDATE issued_invoices SET issuer_county = $1 WHERE id = $2", ["RO-BT", issued.id]],
       ["UPDATE issued_invoices SET issuer_sector = 1 WHERE id = $1", [issued.id]],
       ["UPDATE issued_invoices SET customer_sector = 1 WHERE id = $1", [issued.id]],
@@ -271,10 +271,10 @@ void test("persists an issued snapshot across store recreation and isolates orga
       ["DELETE FROM issued_tax_breakdown WHERE invoice_id = $1", [issued.id]],
       ["DELETE FROM issued_invoices WHERE id = $1", [issued.id]],
       ["DELETE FROM invoice_drafts WHERE id = $1", [draft.id]],
-      ["UPDATE proformas SET total_including_tax='0.00' WHERE id=$1", [proforma.id]],
+      ["UPDATE proformas SET total_including_tax=0 WHERE id=$1", [proforma.id]],
       ["UPDATE proformas SET source_id='changed' WHERE id=$1", [proforma.id]],
       ["UPDATE proformas SET issuer_branding=NULL WHERE id=$1", [proforma.id]],
-      ["UPDATE proformas SET issuer_social_capital='0.00' WHERE id=$1", [proforma.id]],
+      ["UPDATE proformas SET issuer_social_capital=0 WHERE id=$1", [proforma.id]],
       ["UPDATE proformas SET issuer_sector=1 WHERE id=$1", [proforma.id]],
       ["UPDATE proformas SET customer_sector=1 WHERE id=$1", [proforma.id]],
       ["UPDATE proformas SET customer_vat_registered=0 WHERE id=$1", [proforma.id]],

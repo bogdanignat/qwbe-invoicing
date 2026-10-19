@@ -218,7 +218,8 @@ NOCASE behaved.
 (int8) as a **string** — no global type parser is installed, so `epoch(row, field)`
 decodes the two session epochs explicitly and throws rather than rounding past
 2^53. Money and dates are TEXT on both engines and decode with `text`: the exact
-characters the writer bound. Booleans are the 0/1 integers the CHECKs expect
+characters the writer bound (money is `BIGINT` in bani since T-1904, decoded by
+`postgres-money.ts`). Booleans are the 0/1 integers the CHECKs expect
 (`booleanValue`). Branding stays TEXT with an `IS JSON` CHECK, parsed in
 `brandingFrom`.
 

@@ -4,6 +4,7 @@ import {
   DomainConflict, PersistenceFailure, type Payment, type PaymentsTransaction,
 } from "../../cubes/invoicing/payments/index.ts"
 import { isConflict } from "./postgres-errors.ts"
+import { money, moneyValue } from "./postgres-money.ts"
 import { firstRow, nullableText, optionalText, text, type Row } from "./postgres-rows.ts"
 import { appendAuditEvent } from "./postgres-kernel.ts"
 import type { TransactionClient } from "./postgres-transaction.ts"
@@ -40,7 +41,7 @@ const paymentFrom = (value: Row): Payment => {
   return {
     id: text(value, "id"), invoiceId: text(value, "invoice_id"), organizationId: text(value, "organization_id"),
     kind: text(value, "kind") === "reversal" ? "reversal" : "payment",
-    ...(reversesPaymentId === undefined ? {} : { reversesPaymentId }), amount: text(value, "amount"),
+    ...(reversesPaymentId === undefined ? {} : { reversesPaymentId }), amount: money(value, "amount"),
     currency: text(value, "currency"), paymentDate: text(value, "payment_date"), method: text(value, "method"),
     ...(externalReference === undefined ? {} : { externalReference }), ...(note === undefined ? {} : { note }),
     actorId: text(value, "actor_id"), createdAt: text(value, "created_at"),
@@ -57,7 +58,7 @@ export const paymentsTransactionAdapter = (client: TransactionClient): PaymentsT
     const value = firstRow(rows)
     return value === undefined ? undefined : {
       id: text(value, "id"), organizationId: text(value, "organization_id"), currency: text(value, "currency"),
-      dueDate: nullableText(value, "due_date"), totalIncludingVat: text(value, "total_including_tax"),
+      dueDate: nullableText(value, "due_date"), totalIncludingVat: money(value, "total_including_tax"),
     }
   }),
   savePayment: (payment) => write("save payment", async () => {
@@ -67,7 +68,7 @@ export const paymentsTransactionAdapter = (client: TransactionClient): PaymentsT
          external_reference, note, actor_id, created_at)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
       [payment.id, payment.invoiceId, payment.organizationId, payment.kind, payment.reversesPaymentId ?? null,
-        payment.amount, payment.currency, payment.paymentDate, payment.method,
+        moneyValue(payment.amount), payment.currency, payment.paymentDate, payment.method,
         payment.externalReference ?? null, payment.note ?? null, payment.actorId, payment.createdAt],
     )
     if (rowCount === 0) {

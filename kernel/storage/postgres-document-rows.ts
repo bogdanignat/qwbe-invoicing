@@ -1,6 +1,7 @@
 import { calculateTotals, type DraftInvoice, type IssuedInvoice, type Proforma } from "../../cubes/invoicing/index.ts"
 import { buyerFrom, integer, nullableText, optionalText, text, type Row } from "./postgres-rows.ts"
 import { loadLines, taxBreakdownFrom } from "./postgres-document-lines.ts"
+import { money } from "./postgres-money.ts"
 import { issuerFrom } from "./postgres-document-parties.ts"
 import { sourceFrom } from "./postgres-document-query.ts"
 import type { TransactionClient } from "./postgres-transaction.ts"
@@ -22,8 +23,8 @@ export const issuedInvoiceFrom = async (client: TransactionClient, value: Row): 
     currency: text(value, "currency"), notes: nullableText(value, "notes"), issuer: issuerFrom(value, "issuer_branding"),
     customer: buyerFrom(value, "customer_"), lines: await loadLines(client, "issued_lines", id),
     vatBreakdown: await taxBreakdownFrom(client, "issued_tax_breakdown", "invoice_id", id),
-    totalExcludingVat: text(value, "total_excluding_tax"), vatTotal: text(value, "tax_total"),
-    totalIncludingVat: text(value, "total_including_tax"),
+    totalExcludingVat: money(value, "total_excluding_tax"), vatTotal: money(value, "tax_total"),
+    totalIncludingVat: money(value, "total_including_tax"),
     eFacturaStatus: (optionalText(value, "e_factura_status") ?? "not_sent") as IssuedInvoice["eFacturaStatus"],
   }
 }
@@ -40,8 +41,8 @@ export const proformaFrom = async (client: TransactionClient, value: Row): Promi
     notes: nullableText(value, "notes"), issuer: issuerFrom(value, "issuer_branding"), customer: buyerFrom(value, "customer_"),
     lines: await loadLines(client, "proforma_lines", id),
     vatBreakdown: await taxBreakdownFrom(client, "proforma_tax_breakdown", "proforma_id", id),
-    totalExcludingVat: text(value, "total_excluding_tax"), vatTotal: text(value, "tax_total"),
-    totalIncludingVat: text(value, "total_including_tax"),
+    totalExcludingVat: money(value, "total_excluding_tax"), vatTotal: money(value, "tax_total"),
+    totalIncludingVat: money(value, "total_including_tax"),
   }
 }
 

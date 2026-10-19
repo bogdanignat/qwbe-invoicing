@@ -3,6 +3,7 @@ import test from "node:test"
 import { Effect } from "effect"
 import { createInvoicingService, PersistenceFailure, type InvoicingFailure } from "../../cubes/invoicing/index.ts"
 import { withMigrated } from "./postgres-rig.test-support.ts"
+import { moneyValue } from "./postgres-money.ts"
 import { createPostgresStore } from "./postgres-store.ts"
 
 /**
@@ -60,24 +61,27 @@ void test("strict issuer reads refuse corrupt or noncanonical profile, invoice, 
       // three snapshot tables do, and all four carry named CHECKs.
       if (prefix !== "") assert.ok(removed.triggers.length > 0, `${table} must have had triggers to remove`)
       assert.ok(removed.checks.length > 0, `${table} must have had CHECKs to remove`)
-      const mutations = [
+      // The capital is BIGINT in bani, so a noncanonical decimal cannot be stored
+      // at all; what is left to corrupt is its sign, with the CHECK removed, and
+      // a missing capital (NULL) on an issued SRL snapshot.
+      const mutations: ReadonlyArray<readonly [string, string | null]> = [
         ["legal_form", "SRL"], ["trade_registry_number", "BAD"], ["trade_registry_number", " j40/123/2020 "],
-        ["social_capital", "1.001"], ["social_capital", "200"], ["iban", "RO00INVALID"],
+        ["social_capital", "-1"], ["iban", "RO00INVALID"],
         ["iban", "ro49aaaa1b31007593840000"], ["bank_name", "Bank\u200bName"], ["bank_name", " Bank "],
-        ...(prefix === "" ? [] : [["trade_registry_number", ""], ["social_capital", ""]]),
+        ...(prefix === "" ? [] : [["trade_registry_number", ""], ["social_capital", null]] as const),
       ]
       for (const [field, value] of mutations) {
         try {
-          await sql.query(`UPDATE ${table} SET ${prefix}${String(field)}=$1`, [String(value)])
+          await sql.query(`UPDATE ${table} SET ${prefix}${field}=$1`, [value])
           for (const read of reads) {
             const result = await Effect.runPromise(Effect.either(read()))
-            assert.equal(result._tag, "Left", `${table}.${String(field)}=${String(value)}`)
+            assert.equal(result._tag, "Left", `${table}.${field}=${String(value)}`)
             assert.ok(result.left instanceof PersistenceFailure)
           }
         } finally {
           const original = ({ legal_form: profile.legalForm, trade_registry_number: profile.tradeRegistryNumber,
-            social_capital: profile.socialCapital, iban: profile.iban, bank_name: profile.bankName } as Record<string, string>)[String(field)]
-          await sql.query(`UPDATE ${table} SET ${prefix}${String(field)}=$1`, [original ?? ""])
+            social_capital: moneyValue(profile.socialCapital), iban: profile.iban, bank_name: profile.bankName } as Record<string, string>)[field]
+          await sql.query(`UPDATE ${table} SET ${prefix}${field}=$1`, [original ?? ""])
         }
       }
     }

@@ -2,6 +2,7 @@ import type { DraftLine, VatBreakdown } from "../../cubes/invoicing/index.ts"
 import { buyerFrom, integer, text, type Row } from "./postgres-rows.ts"
 import { breakdownFrom, lineFrom } from "./postgres-document-lines.ts"
 import { issuerCompanyFrom } from "./postgres-document-parties.ts"
+import { money } from "./postgres-money.ts"
 import { sourceFrom } from "./postgres-document-query.ts"
 import type { TransactionClient } from "./postgres-transaction.ts"
 
@@ -22,7 +23,7 @@ export const correctionFrom = async (client: TransactionClient, value: Row) => {
     series: text(value, "series"), number: integer(value, "number"), ...(source === undefined ? {} : { source }),
     issueDate: text(value, "issue_date"), issuedAt: text(value, "issued_at"), reason: text(value, "reason"),
     actorId: text(value, "actor_id"), currency: text(value, "currency"), issuer: issuerCompanyFrom(value, "issuer_"),
-    customer: buyerFrom(value, "customer_"), lines, vatBreakdown, totalExcludingVat: text(value, "total_excluding_tax"),
-    vatTotal: text(value, "tax_total"), totalIncludingVat: text(value, "total_including_tax"),
+    customer: buyerFrom(value, "customer_"), lines, vatBreakdown, totalExcludingVat: money(value, "total_excluding_tax"),
+    vatTotal: money(value, "tax_total"), totalIncludingVat: money(value, "total_including_tax"),
   }
 }
