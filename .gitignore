@@ -8,8 +8,8 @@ data/
 .env
 .env.*
 !.env.example
-frontend/.next/
-frontend/next-env.d.ts
+frontend/dist/
+frontend/.tanstack/
 frontend/*.tsbuildinfo
 
 # Arhitectura (contract, analize): sursa e personal-hub (architecture-files), nu git; restore cu architecture-report restore

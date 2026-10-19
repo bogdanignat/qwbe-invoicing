@@ -1,5 +1,3 @@
-"use client"
-
 import { CorrectionsSection } from "../components/CorrectionsSection.tsx"
 import { DocumentDetail } from "../components/DocumentDetail.tsx"
 import { PaymentsSection } from "../components/PaymentsSection.tsx"

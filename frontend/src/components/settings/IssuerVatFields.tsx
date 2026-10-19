@@ -1,5 +1,3 @@
-"use client"
-
 import { Field } from "../ui/Field.tsx"
 import { FieldIssue } from "../registry/FieldIssue.tsx"
 import { Input } from "../ui/Input.tsx"

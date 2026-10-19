@@ -1,5 +1,4 @@
-import Link from "next/link"
-
+import { AppLink } from "./ui/AppLink.tsx"
 import type { InvoiceRegisterPresentationRow } from "../lib/invoice-register-projection.ts"
 
 interface InvoiceRegisterTableProps {
@@ -22,11 +21,11 @@ export const InvoiceRegisterTable = ({ rows, eFactura }: InvoiceRegisterTablePro
       <tbody>
         {rows.map((row) => <tr key={row.key}>
           <td data-label="Număr">
-            <Link href={row.documentHref}><strong>{row.number}</strong></Link>
+            <AppLink href={row.documentHref}><strong>{row.number}</strong></AppLink>
             {row.kindLabel === null ? null : <small className="badge storno">{row.kindLabel}</small>}
             {row.originalInvoice === null
               ? null
-              : <small><Link href={row.originalInvoice.href}>{row.originalInvoice.label}</Link></small>}
+              : <small><AppLink href={row.originalInvoice.href}>{row.originalInvoice.label}</AppLink></small>}
           </td>
           <td data-label="Client">{row.customerName}</td>
           <td data-label="Emisă">{row.issueDate}</td>

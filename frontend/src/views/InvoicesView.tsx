@@ -1,7 +1,4 @@
-"use client"
-
-import Link from "next/link"
-
+import { AppLink } from "../components/ui/AppLink.tsx"
 import { EmptyState, ErrorAlert, Loading } from "../components/AsyncState.tsx"
 import { DraftsSection } from "../components/DraftsSection.tsx"
 import { InvoiceRegisterTable } from "../components/InvoiceRegisterTable.tsx"
@@ -19,7 +16,7 @@ export const InvoicesView = () => {
   const drafts = useDrafts()
   return <PrivateScreen shell={shell}>
     <Page title="Registru de facturi" eyebrow="Documente emise"
-      actions={<Link className="button" href="/invoices/new">Factură nouă</Link>}>
+      actions={<AppLink className="button" href="/invoices/new">Factură nouă</AppLink>}>
       {shell.error === undefined ? null : <ErrorAlert error={shell.error} />}
       <div className="section-stack">
         {register.rows === undefined

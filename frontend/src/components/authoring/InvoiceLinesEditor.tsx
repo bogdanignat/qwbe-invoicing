@@ -1,5 +1,3 @@
-"use client"
-
 import type { EditableInvoiceLine } from "../../lib/invoice-authoring-model.ts"
 import type { ProductPreset, UnitOfMeasure, VatCatalogue } from "../../lib/draft-models.ts"
 import { InvoiceLineRow } from "./InvoiceLineRow.tsx"

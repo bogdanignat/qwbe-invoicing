@@ -1,7 +1,5 @@
-"use client"
-
 import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { useRouter } from "next/navigation"
+import { useNavigate } from "@tanstack/react-router"
 import { useEffect, useState } from "react"
 
 import { useAuth } from "./auth-context.ts"
@@ -53,7 +51,7 @@ export const useProformaSave = (input: ProformaSaveInput): ProformaSaveModel => 
   const auth = useAuth()
   const clients = useInvoicingClients()
   const queryClient = useQueryClient()
-  const router = useRouter()
+  const navigate = useNavigate()
   const [lifetime] = useState(createOperationLifetime)
   useEffect(() => lifetimeMountEffect(lifetime), [lifetime])
   useEffect(() => lifetimeRequestsEffect(lifetime), [lifetime, auth.status])
@@ -70,7 +68,7 @@ export const useProformaSave = (input: ProformaSaveInput): ProformaSaveModel => 
     effects: {
       onSaved: (proforma) => {
         void queryClient.invalidateQueries({ queryKey: proformasQueryKey })
-        router.push(`/proformas/${encodeURIComponent(proforma.id)}`)
+        void navigate({ to: `/proformas/${encodeURIComponent(proforma.id)}` })
       },
       onOutcomeUnknown: () => {
         // The proforma may already exist: the registry is refreshed so the

@@ -1,7 +1,5 @@
-"use client"
-
 import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { useRouter } from "next/navigation"
+import { useNavigate } from "@tanstack/react-router"
 import { useEffect, useState } from "react"
 
 import { useAuth } from "./auth-context.ts"
@@ -33,7 +31,7 @@ export const useOperationReplay = (recovery: RecoveryPort): OperationReplayModel
   const auth = useAuth()
   const clients = useInvoicingClients()
   const queryClient = useQueryClient()
-  const router = useRouter()
+  const navigate = useNavigate()
   // One helper for both conversions and direct issuance, so the registry and the
   // source proforma can never be invalidated apart from each other.
   const staleProformas = (sourceProformaId: string | undefined): void => {
@@ -62,24 +60,24 @@ export const useOperationReplay = (recovery: RecoveryPort): OperationReplayModel
         queryClient.setQueryData(draftQueryKey(draft.id), draft)
         void queryClient.invalidateQueries({ queryKey: draftsQueryKey })
         staleProformas(sourceProformaId)
-        router.replace(`/drafts/${encodeURIComponent(draft.id)}`)
+        void navigate({ to: `/drafts/${encodeURIComponent(draft.id)}`, replace: true })
       },
       onIssued: (invoice, sourceProformaId) => {
         invalidateIssuedDocuments(queryClient)
         void queryClient.invalidateQueries({ queryKey: draftsQueryKey })
         staleProformas(sourceProformaId)
-        router.push(`/invoices/${encodeURIComponent(invoice.id)}`)
+        void navigate({ to: `/invoices/${encodeURIComponent(invoice.id)}` })
       },
       onProforma: (proforma) => {
         staleProformas(undefined)
-        router.push(`/proformas/${encodeURIComponent(proforma.id)}`)
+        void navigate({ to: `/proformas/${encodeURIComponent(proforma.id)}` })
       },
       onCorrection: (correction, invoiceId) => {
         queryClient.setQueryData(["correction", correction.id], correction)
         // The invoice prefix covers its payments and its corrections as well.
         void queryClient.invalidateQueries({ queryKey: ["invoice", invoiceId] })
         invalidateIssuedDocuments(queryClient)
-        router.push(`/corrections/${encodeURIComponent(correction.id)}`)
+        void navigate({ to: `/corrections/${encodeURIComponent(correction.id)}` })
       },
     },
   }))

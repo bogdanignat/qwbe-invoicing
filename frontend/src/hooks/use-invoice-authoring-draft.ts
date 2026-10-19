@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { useRouter } from "next/navigation"
+import { useNavigate } from "@tanstack/react-router"
 import { useEffect, useState, type Dispatch, type SetStateAction } from "react"
 
 import { useAuth } from "./auth-context.ts"
@@ -54,7 +54,7 @@ export const useInvoiceAuthoringDraft = (input: AuthoringDraftInput): AuthoringD
   const auth = useAuth()
   const clients = useInvoicingClients()
   const queryClient = useQueryClient()
-  const router = useRouter()
+  const navigate = useNavigate()
   const [draft, setDraft] = useState(input.initialDraft)
   const [notice, setNotice] = useState<string | null>(null)
   // The reconciliation read is tracked: its request dies with the screen or
@@ -92,7 +92,7 @@ export const useInvoiceAuthoringDraft = (input: AuthoringDraftInput): AuthoringD
       invalidateDrafts: () => { void queryClient.invalidateQueries({ queryKey: draftsQueryKey }) },
       evictDraft: (id) => { queryClient.removeQueries({ queryKey: draftQueryKey(id), exact: true }) },
       notify: (message) => { setNotice(message) },
-      navigate: (path) => { router.replace(path) },
+      navigate: (path) => { void navigate({ to: path, replace: true }) },
     },
   }))
 

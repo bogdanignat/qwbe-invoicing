@@ -149,6 +149,33 @@ test("refuses missing, non-directory and symbolic-link file roots", async () => 
   }
 })
 
+test("leaves out only the generated files named with a reason, and refuses stale or vague exclusions", async () => {
+  const root = fixture()
+  try {
+    makeUnit(root, "cubes/invoicing")
+    write(root, "web/src/routeTree.gen.ts", "export const tree = 'generated and long'\n")
+    write(root, "web/src/other.gen.ts", "export const other = 'generated and long'\n")
+    symlinkSync(join(root, "web/src/other.gen.ts"), join(root, "web/linked.gen.ts"))
+    const reason = "written by the router plugin"
+    const measurement = await inspectSizes(root, {
+      fileRoots: ["web"], generatedFiles: [{ path: "web/src/routeTree.gen.ts", reason }],
+    })
+    assert.deepEqual(measurement.files.map(({ path }) => path), ["web/src/other.gen.ts"])
+    for (const entry of [
+      { path: "web/src/routeTree.gen.ts" },
+      { path: "web/src/routeTree.gen.ts", reason: " " },
+      { path: "web/src/missing.gen.ts", reason },
+      { path: "web/src", reason },
+      { path: "web/linked.gen.ts", reason },
+      { path: "../outside.gen.ts", reason },
+    ]) {
+      await assert.rejects(inspectSizes(root, { fileRoots: ["web"], generatedFiles: [entry] }), /generated file exclusion|inside the repository/i)
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
 test("size gate CLI fails on oversized host and frontend/src sources and invalid configured roots", () => {
   const root = fixture()
   try {

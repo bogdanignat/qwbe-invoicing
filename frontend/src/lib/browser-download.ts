@@ -1,7 +1,7 @@
 /**
  * Hands a fetched document to the browser's own download machinery.
  *
- * The bytes already crossed the BFF under the session cookie, so there is no
+ * The bytes already came from the API under the session cookie, so there is no
  * URL a second, unauthenticated navigation could use; an object URL is created
  * for the blob in hand, clicked once and revoked. The revoke is deferred rather
  * than immediate because the click is dispatched asynchronously — revoking in

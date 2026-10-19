@@ -1,7 +1,4 @@
-"use client"
-
-import Link from "next/link"
-
+import { AppLink } from "./ui/AppLink.tsx"
 import { Button } from "./Button.tsx"
 import { Field } from "./ui/Field.tsx"
 import { Select } from "./ui/Select.tsx"
@@ -70,7 +67,7 @@ export const ProformaConversionSection = ({ conversion }: { readonly conversion:
         <p className="conversion-state">
           <span className={`badge ${outcome.status.tone}`}>{outcome.status.label}</span>
         </p>
-        <Link className="button secondary" href={outcome.href}>{outcome.label}</Link>
+        <AppLink className="button secondary" href={outcome.href}>{outcome.label}</AppLink>
       </>}
   </section>
 }

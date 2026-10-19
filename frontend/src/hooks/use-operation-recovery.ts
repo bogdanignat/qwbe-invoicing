@@ -1,5 +1,3 @@
-"use client"
-
 import { useEffect, useSyncExternalStore } from "react"
 
 import { useAuth } from "./auth-context.ts"

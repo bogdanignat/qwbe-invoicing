@@ -1,7 +1,4 @@
-"use client"
-
-import Link from "next/link"
-
+import { AppLink } from "../ui/AppLink.tsx"
 import type { ProformaAuthoringSessionInput } from "../../hooks/proforma-authoring-session-types.ts"
 import { useProformaAuthoringSession } from "../../hooks/use-proforma-authoring-session.ts"
 import { InvoiceLinesEditor } from "./InvoiceLinesEditor.tsx"
@@ -31,7 +28,7 @@ export const ProformaAuthoringSession = (input: ProformaAuthoringSessionInput) =
     />
     {feedback.unconfirmedMessage === undefined
       ? null
-      : <p className="status-note warning" role="status">{feedback.unconfirmedMessage}{" "}<Link href="/proformas">Registrul de proforme</Link></p>}
+      : <p className="status-note warning" role="status">{feedback.unconfirmedMessage}{" "}<AppLink href="/proformas">Registrul de proforme</AppLink></p>}
     {feedback.issuerWarning === undefined
       ? null
       : <p className="status-note warning" role="status">{feedback.issuerWarning} Proforma nu este document fiscal; salvarea rămâne disponibilă.</p>}

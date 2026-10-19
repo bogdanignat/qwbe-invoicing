@@ -1,5 +1,3 @@
-"use client"
-
 import type { ProformaAuthoringSession } from "../../hooks/proforma-authoring-session-types.ts"
 import { Button } from "../Button.tsx"
 

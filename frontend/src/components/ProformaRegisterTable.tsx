@@ -1,5 +1,4 @@
-import Link from "next/link"
-
+import { AppLink } from "./ui/AppLink.tsx"
 import type { ProformaRegisterRow } from "../lib/proforma-projection.ts"
 
 /**
@@ -17,7 +16,7 @@ export const ProformaRegisterTable = ({ rows }: { readonly rows: ReadonlyArray<P
       </thead>
       <tbody>
         {rows.map((row) => <tr key={row.key}>
-          <td data-label="Număr"><Link href={row.documentHref}><strong>{row.number}</strong></Link></td>
+          <td data-label="Număr"><AppLink href={row.documentHref}><strong>{row.number}</strong></AppLink></td>
           <td data-label="Client">{row.customerName}</td>
           <td data-label="Emisă">{row.issueDate}</td>
           <td data-label="Scadență">{row.dueDate}</td>

@@ -1,7 +1,4 @@
-"use client"
-
-import Link from "next/link"
-
+import { AppLink } from "../components/ui/AppLink.tsx"
 import { ErrorAlert } from "../components/AsyncState.tsx"
 import { PeriodSection } from "../components/dashboard/PeriodSection.tsx"
 import { SituationSection } from "../components/dashboard/SituationSection.tsx"
@@ -15,7 +12,7 @@ export const DashboardView = () => {
   const dashboard = useDashboard()
   return <PrivateScreen shell={shell}>
     <Page title="Acasă" eyebrow="Tablou de bord"
-      actions={<Link className="button" href="/invoices/new">Factură nouă</Link>}>
+      actions={<AppLink className="button" href="/invoices/new">Factură nouă</AppLink>}>
       {shell.error === undefined ? null : <ErrorAlert error={shell.error} />}
       <div className="section-stack">
         <PeriodSection dashboard={dashboard} />

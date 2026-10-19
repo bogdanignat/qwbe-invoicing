@@ -1,7 +1,5 @@
-"use client"
-
 import { useQueryClient } from "@tanstack/react-query"
-import { useRouter } from "next/navigation"
+import { useNavigate } from "@tanstack/react-router"
 import { useEffect, useState } from "react"
 
 import { useAuth } from "./auth-context.ts"
@@ -26,7 +24,7 @@ export const useCorrectionIssuanceController = (recovery: RecoveryPort): Correct
   const auth = useAuth()
   const clients = useInvoicingClients()
   const queryClient = useQueryClient()
-  const router = useRouter()
+  const navigate = useNavigate()
   const [lifetime] = useState(createOperationLifetime)
   useEffect(() => lifetimeMountEffect(lifetime), [lifetime])
   useEffect(() => lifetimeRequestsEffect(lifetime), [lifetime, auth.status])
@@ -54,7 +52,7 @@ export const useCorrectionIssuanceController = (recovery: RecoveryPort): Correct
         // The storno is the answer the server just gave: cached so its screen does not read it again.
         queryClient.setQueryData(["correction", correction.id], correction)
         refreshInvoice(invoiceId)
-        router.push(`/corrections/${encodeURIComponent(correction.id)}`)
+        void navigate({ to: `/corrections/${encodeURIComponent(correction.id)}` })
       },
       onOutcomeUnknown: refreshInvoice,
       onAlreadyCorrected: refreshInvoice,

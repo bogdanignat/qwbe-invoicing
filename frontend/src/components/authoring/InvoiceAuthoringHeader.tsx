@@ -1,5 +1,3 @@
-"use client"
-
 import type { InvoiceAuthoringSession } from "../../hooks/invoice-authoring-session-types.ts"
 import { BuyerEditor } from "./BuyerEditor.tsx"
 import { Field } from "../ui/Field.tsx"

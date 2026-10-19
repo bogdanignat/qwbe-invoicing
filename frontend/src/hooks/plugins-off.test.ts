@@ -83,7 +83,7 @@ void test("payments off: none of the panel's three reads fetches, even when the 
   // The control: with the plugin on, the same observers reach all three routes.
   assert.deepEqual(await observe(["payments"]), {
     enabled: [true, true, true],
-    requested: ["/api/qwbe/invoices/inv-1", "/api/qwbe/invoices/inv-1/corrections", "/api/qwbe/invoices/inv-1/payments"],
+    requested: ["/api/invoices/inv-1", "/api/invoices/inv-1/corrections", "/api/invoices/inv-1/payments"],
   })
 })
 
@@ -120,11 +120,11 @@ void test("payments off: the dashboard asks for revenue only, even after every w
     for (const stop of unsubscribe) stop()
     return [...new Set(requested)].sort()
   }
-  const revenue = "/api/qwbe/reports/revenue?from=2025-11-01&to=2026-10-19"
+  const revenue = "/api/reports/revenue?from=2025-11-01&to=2026-10-19"
   assert.deepEqual(await observe([]), [revenue])
   assert.deepEqual(await observe(["efactura"]), [revenue])
   assert.deepEqual(await observe(["payments"]), [
-    "/api/qwbe/reports/collections?from=2025-11-01&to=2026-10-19&status=unpaid", revenue,
+    "/api/reports/collections?from=2025-11-01&to=2026-10-19&status=unpaid", revenue,
   ])
 })
 

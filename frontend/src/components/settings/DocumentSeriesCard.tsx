@@ -1,5 +1,3 @@
-"use client"
-
 import { Button } from "../Button.tsx"
 import { DocumentSeriesTable } from "./DocumentSeriesTable.tsx"
 import { ErrorAlert, Loading } from "../AsyncState.tsx"

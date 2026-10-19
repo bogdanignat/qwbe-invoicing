@@ -1,5 +1,4 @@
-import Link from "next/link"
-
+import { AppLink } from "../ui/AppLink.tsx"
 import type { CollectionRow } from "../../lib/dashboard-situation.ts"
 
 /** The listed invoices with today's status and balance; `data-label` stacks each row on a narrow screen. */
@@ -16,7 +15,7 @@ export const CollectionsTable = ({ rows }: { readonly rows: ReadonlyArray<Collec
       </thead>
       <tbody>
         {rows.map((row) => <tr key={row.id}>
-          <td data-label="Număr"><Link href={row.href}><strong>{row.number}</strong></Link></td>
+          <td data-label="Număr"><AppLink href={row.href}><strong>{row.number}</strong></AppLink></td>
           <td data-label="Client">{row.customerName}</td>
           <td data-label="Emisă">{row.issueDate}</td>
           <td data-label="Scadență">{row.dueDate}</td>

@@ -1,5 +1,3 @@
-"use client"
-
 import { useAuthoringPagedList } from "./use-authoring-paged-list.ts"
 import { useInvoicingClients } from "./use-invoicing-clients.ts"
 import { useRegistryEditor, type RegistryEditorIssue } from "./use-registry-editor.ts"

@@ -1,5 +1,3 @@
-"use client"
-
 import { queryOptions, useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query"
 import { useState } from "react"
 

@@ -1,7 +1,4 @@
-"use client"
-
-import Link from "next/link"
-
+import { AppLink } from "../components/ui/AppLink.tsx"
 import { ErrorAlert, Loading } from "../components/AsyncState.tsx"
 import { Page } from "../components/Page.tsx"
 import { PrivateScreen } from "../components/PrivateScreen.tsx"
@@ -24,7 +21,7 @@ export const ProformaAuthoringView = () => {
     <Page
       title="Proformă nouă"
       eyebrow="Document comercial"
-      actions={<Link className="button secondary" href="/proformas">Înapoi la proforme</Link>}
+      actions={<AppLink className="button secondary" href="/proformas">Înapoi la proforme</AppLink>}
     >
       {page.kind === "loading" ? <Loading label="Se pregătește formularul…" />
         : page.kind === "error" ? <ErrorAlert error={page.error} onRetry={page.retry} />

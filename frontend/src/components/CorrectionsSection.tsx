@@ -1,7 +1,4 @@
-"use client"
-
-import Link from "next/link"
-
+import { AppLink } from "./ui/AppLink.tsx"
 import { Button } from "./Button.tsx"
 import { EmptyState, ErrorAlert, Loading } from "./AsyncState.tsx"
 import { Field } from "./ui/Field.tsx"
@@ -44,7 +41,7 @@ export const CorrectionsSection = ({ corrections }: { readonly corrections: Invo
           : <div>
             {view.rows.map((row) => <div className="draft-item" key={row.id}>
               <div className="draft-item-main">
-                <Link href={row.href}><strong>{row.title}</strong></Link>
+                <AppLink href={row.href}><strong>{row.title}</strong></AppLink>
                 <small>{row.caption}</small>
                 <small>{row.reason}</small>
               </div>

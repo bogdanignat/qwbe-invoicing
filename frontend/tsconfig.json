@@ -26,20 +26,16 @@
     "esModuleInterop": true,
     "isolatedModules": true,
     "incremental": true,
-    "plugins": [
-      {
-        "name": "next"
-      }
-    ],
-    "allowJs": true
+    "types": [
+      "vite/client",
+      "node"
+    ]
   },
   "include": [
-    "next-env.d.ts",
-    "next.config.ts",
     "src/**/*.ts",
     "src/**/*.tsx",
-    ".next/types/**/*.ts",
-    ".next/dev/types/**/*.ts"
+    "vite.config.ts",
+    "scripts/route-tree.ts"
   ],
   "exclude": [
     "node_modules"

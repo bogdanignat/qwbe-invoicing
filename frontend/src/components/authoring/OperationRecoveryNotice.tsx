@@ -1,7 +1,4 @@
-"use client"
-
-import Link from "next/link"
-
+import { AppLink } from "../ui/AppLink.tsx"
 import { Button } from "../Button.tsx"
 import { DISMISS_LABEL, REPLAY_LABEL, type RecoveryNoticeModel } from "../../lib/operation-recovery-view.ts"
 import type { RecoveryRecord } from "../../lib/operation-recovery-types.ts"
@@ -31,7 +28,7 @@ export const OperationRecoveryNotice = ({ notice, pending, onReplay, onDismiss }
           <dt>{detail.label}</dt><dd>{detail.value}</dd>
         </div>)}
       </dl>}
-    <p><Link href={notice.link?.href ?? "/invoices"}>{notice.link?.label ?? "Deschide registrul de facturi"}</Link></p>
+    <p><AppLink href={notice.link?.href ?? "/invoices"}>{notice.link?.label ?? "Deschide registrul de facturi"}</AppLink></p>
     {record === undefined
       ? null
       : <Button className="full-width" disabled={pending} onClick={() => { onReplay(record) }}>

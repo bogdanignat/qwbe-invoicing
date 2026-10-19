@@ -1,7 +1,4 @@
-"use client"
-
-import Link from "next/link"
-
+import { AppLink } from "../ui/AppLink.tsx"
 import type { InvoiceAuthoringSessionInput } from "../../hooks/invoice-authoring-session-types.ts"
 import { useInvoiceAuthoringSession } from "../../hooks/use-invoice-authoring-session.ts"
 import { InvoiceAuthoringHeader } from "./InvoiceAuthoringHeader.tsx"
@@ -33,10 +30,10 @@ export const InvoiceAuthoringSession = (input: InvoiceAuthoringSessionInput) => 
       : null}
     {feedback.unconfirmedMessage === undefined
       ? null
-      : <p className="status-note warning" role="status">{feedback.unconfirmedMessage}{" "}<Link href="/invoices">Registrul de facturi</Link></p>}
+      : <p className="status-note warning" role="status">{feedback.unconfirmedMessage}{" "}<AppLink href="/invoices">Registrul de facturi</AppLink></p>}
     {feedback.issueUnconfirmedMessage === undefined
       ? null
-      : <p className="status-note warning" role="status">{feedback.issueUnconfirmedMessage}{" "}<Link href="/invoices">Verifică registrul de facturi</Link></p>}
+      : <p className="status-note warning" role="status">{feedback.issueUnconfirmedMessage}{" "}<AppLink href="/invoices">Verifică registrul de facturi</AppLink></p>}
     {feedback.issuerWarning === undefined
       ? null
       : <p className="status-note warning" role="status">{feedback.issuerWarning} Salvarea draftului rămâne disponibilă; API-ul verifică emiterea.</p>}

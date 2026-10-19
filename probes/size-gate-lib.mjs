@@ -121,7 +121,26 @@ const fileRoot = (root, path) => {
   return { directory }
 }
 
-export const inspectSizes = async (root, { fileRoots = [], excludedDirectories = [] } = {}) => {
+/**
+ * A generated file is left out of the per-file cap one by one, by exact path and
+ * with the reason written next to it: the cap measures what people write, and a
+ * tool's output is reviewed by regenerating it, not by reading it. Each entry
+ * must name a real file inside the repository, so a stale exclusion fails
+ * instead of silently covering nothing.
+ */
+const generatedFile = (root, entry) => {
+  if (typeof entry?.reason !== "string" || entry.reason.trim() === "") {
+    throw new Error(`Generated file exclusion needs a reason: ${JSON.stringify(entry)}`)
+  }
+  const absolute = containedPath(root, entry.path)
+  const stat = lstatSync(absolute, { throwIfNoEntry: false })
+  if (stat === undefined || !stat.isFile() || stat.isSymbolicLink()) {
+    throw new Error(`Generated file exclusion must be a real file: ${entry.path}`)
+  }
+  return absolute
+}
+
+export const inspectSizes = async (root, { fileRoots = [], excludedDirectories = [], generatedFiles = [] } = {}) => {
   const units = await discoverCubeUnits(root)
   const files = []
   const measuredUnits = units.map((unit) => {
@@ -136,13 +155,14 @@ export const inspectSizes = async (root, { fileRoots = [], excludedDirectories =
     }
   })
   const excluded = new Set(excludedDirectories.map((path) => containedPath(root, path)))
+  const generated = new Set(generatedFiles.map((entry) => generatedFile(root, entry)))
   const seen = new Set(files.map((file) => file.path))
   for (const path of fileRoots) {
     const unit = fileRoot(root, path)
     if ([...excluded].some((directory) => unit.directory === directory || unit.directory.startsWith(`${directory}${sep}`))) continue
     for (const source of sourceFilesOwnedBy(unit, [unit], excluded).filter((source) => !isTestFile(source))) {
       const local = toPosix(relative(root, source))
-      if (seen.has(local)) continue
+      if (seen.has(local) || generated.has(source)) continue
       seen.add(local)
       files.push({ path: local, ...measureFile(source) })
     }

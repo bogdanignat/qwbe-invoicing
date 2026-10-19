@@ -1,5 +1,3 @@
-"use client"
-
 import { Button } from "../Button.tsx"
 import { SettingsHelpIdentity } from "./SettingsHelpIdentity.tsx"
 import { SettingsHelpVat } from "./SettingsHelpVat.tsx"

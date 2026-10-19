@@ -1,5 +1,3 @@
-"use client"
-
 import { Button } from "../Button.tsx"
 import { ErrorAlert } from "../AsyncState.tsx"
 import { Field } from "../ui/Field.tsx"

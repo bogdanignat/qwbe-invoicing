@@ -1,5 +1,3 @@
-"use client"
-
 import { useId, type ReactNode, type RefObject } from "react"
 
 import { Combobox } from "../ui/Combobox.tsx"

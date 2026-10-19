@@ -1,5 +1,3 @@
-"use client"
-
 import { DocumentSeriesCard } from "../components/settings/DocumentSeriesCard.tsx"
 import { ErrorAlert, Loading } from "../components/AsyncState.tsx"
 import { IssuerSettingsCard } from "../components/settings/IssuerSettingsCard.tsx"
@@ -26,7 +24,7 @@ export const SettingsView = () => {
   const { load } = issuer
   return <PrivateScreen shell={shell}>
     <Page title="Date firmă" eyebrow="Configurare emitent" actions={<>
-      <a className="button secondary" href="/api/qwbe/docs" target="_blank" rel="noopener noreferrer">Documentație API<span className="sr-only"> (se deschide într-o fereastră nouă)</span></a>
+      <a className="button secondary" href="/api" target="_blank" rel="noopener noreferrer">Documentație API<span className="sr-only"> (se deschide într-o fereastră nouă)</span></a>
       <SettingsHelpDialog />
     </>}>
       <SettingsSectionsNav current="issuer" />

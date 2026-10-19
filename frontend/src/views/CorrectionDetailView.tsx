@@ -1,5 +1,3 @@
-"use client"
-
 import { DocumentDetail } from "../components/DocumentDetail.tsx"
 import { PrivateScreen } from "../components/PrivateScreen.tsx"
 import { useAuthenticatedShell } from "../hooks/use-authenticated-shell.ts"

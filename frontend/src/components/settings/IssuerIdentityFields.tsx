@@ -1,5 +1,3 @@
-"use client"
-
 import { CompanyNameField } from "../company-lookup/CompanyNameField.tsx"
 import { CompanyProposalCard } from "../company-lookup/CompanyProposalCard.tsx"
 import { Field } from "../ui/Field.tsx"

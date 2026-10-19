@@ -1,5 +1,3 @@
-"use client"
-
 import { ErrorAlert } from "../components/AsyncState.tsx"
 import { DocumentDetail } from "../components/DocumentDetail.tsx"
 import { PrivateScreen } from "../components/PrivateScreen.tsx"
