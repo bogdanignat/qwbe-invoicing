@@ -1,5 +1,3 @@
-"use client"
-
 import { orDash } from "../../lib/format.ts"
 import { vatTreatmentLabel } from "../../lib/vat-snapshots.ts"
 import type { DraftInvoice } from "../../lib/draft-models.ts"

@@ -60,14 +60,14 @@ void test("company-lookup off: the settings read never leaves; on, it reaches ex
   }
   assert.deepEqual(await observe([]), { paths: [], data: undefined })
   assert.deepEqual(await observe(["payments"]), { paths: [], data: undefined })
-  assert.deepEqual(await observe(["company-lookup"]), { paths: ["/api/qwbe/settings/company-lookup"], data: answer })
+  assert.deepEqual(await observe(["company-lookup"]), { paths: ["/api/settings/company-lookup"], data: answer })
 })
 
 void test("the write is a PUT with CSRF and the body the rule decided; the answer is decoded", async () => {
   const { transport, requested } = countingTransport()
   const saved = await createCompanyLookupClient(transport).saveSettings("csrf-1", { provider: "anaf", openapiKey: "abcdefghijwxyz" })
   assert.deepEqual(saved, answer)
-  assert.deepEqual(requested.map((request) => request.path), ["/api/qwbe/settings/company-lookup"])
+  assert.deepEqual(requested.map((request) => request.path), ["/api/settings/company-lookup"])
   const init = requested[0]?.init ?? {}
   assert.equal(init.method, "PUT")
   assert.equal(new Headers(init.headers).get("x-csrf-token"), "csrf-1")

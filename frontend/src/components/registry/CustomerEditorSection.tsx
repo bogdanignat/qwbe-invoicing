@@ -1,5 +1,3 @@
-"use client"
-
 import { Button } from "../Button.tsx"
 import { CustomerAddressFields } from "./CustomerAddressFields.tsx"
 import { CustomerIdentityFields } from "./CustomerIdentityFields.tsx"

@@ -1,7 +1,5 @@
-"use client"
-
 import { useQueryClient } from "@tanstack/react-query"
-import { useRouter } from "next/navigation"
+import { useNavigate } from "@tanstack/react-router"
 import { useEffect, useState } from "react"
 
 import { useAuth } from "./auth-context.ts"
@@ -29,7 +27,7 @@ export const useProformaConversionController = (recovery: RecoveryPort): Proform
   const auth = useAuth()
   const clients = useInvoicingClients()
   const queryClient = useQueryClient()
-  const router = useRouter()
+  const navigate = useNavigate()
   const [lifetime] = useState(createOperationLifetime)
   useEffect(() => lifetimeMountEffect(lifetime), [lifetime])
   useEffect(() => lifetimeRequestsEffect(lifetime), [lifetime, auth.status])
@@ -71,13 +69,13 @@ export const useProformaConversionController = (recovery: RecoveryPort): Proform
         void queryClient.invalidateQueries({ queryKey: draftsQueryKey })
         if (result.kind === "invoice") {
           invalidateIssuedDocuments(queryClient)
-          router.push(`/invoices/${encodeURIComponent(result.invoice.id)}`)
+          void navigate({ to: `/invoices/${encodeURIComponent(result.invoice.id)}` })
           return
         }
         // The draft is the answer the server just gave: it is put in the cache so
         // the screen it opens does not read it again.
         queryClient.setQueryData(draftQueryKey(result.draft.id), result.draft)
-        router.push(`/drafts/${encodeURIComponent(result.draft.id)}`)
+        void navigate({ to: `/drafts/${encodeURIComponent(result.draft.id)}` })
       },
       // The document may already exist: the outcome can then be looked up by hand.
       onOutcomeUnknown: refreshConverted,

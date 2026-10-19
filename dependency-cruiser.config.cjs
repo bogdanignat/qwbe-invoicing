@@ -3,14 +3,15 @@ const frontendLayers = {
   hooks: "lib|hooks",
   components: "lib|hooks|components",
   views: "lib|hooks|components|views",
+  routes: "lib|hooks|components|views|routes",
 }
 
+// Everything under frontend/src ships to the browser: the layers, routes/, the
+// entrypoint (main.tsx) and the generated route tree. Only the node:test files
+// next to the code run in Node.
 const browserFrontendSource = {
-  path: "^frontend/src/(lib|hooks|components|views)/",
-  pathNot: [
-    "^frontend/src/lib/server/",
-    "[.](test|spec|test-support)[.][cm]?[jt]sx?$",
-  ],
+  path: "^frontend/src/",
+  pathNot: "[.](test|spec|test-support)[.][cm]?[jt]sx?$",
 }
 
 module.exports = {
@@ -64,26 +65,29 @@ module.exports = {
       name: `frontend-${layer}-dependencies`,
       severity: "error",
       from: { path: `^frontend/src/${layer}/` },
-      // app/proxy compose these layers; neither is a dependency of a lower layer.
+      // The entrypoint and the generated route tree compose these layers; neither
+      // is a dependency of a layer, and no layer below routes/ reaches a route.
       to: { path: "^frontend/src/", pathNot: `^frontend/src/(${allowed})/` },
     })),
     {
+      // The server side of the frontend is the Vite dev/build server: its config,
+      // the build scripts and the build-time packages. None of it runs in a page.
       name: "frontend-browser-does-not-import-server",
       severity: "error",
       from: browserFrontendSource,
-      to: { path: "^frontend/src/lib/server/" },
+      to: {
+        path: [
+          "^frontend/[^/]+[.][cm]?[jt]sx?$",
+          "^frontend/scripts/",
+          "(^|/)node_modules/(vite|@vitejs/[^/]+|@tailwindcss/vite|@tanstack/router-plugin|@tanstack/router-generator)(/|$)",
+        ],
+      },
     },
     {
       name: "frontend-browser-does-not-import-node",
       severity: "error",
       from: browserFrontendSource,
       to: { dependencyTypes: ["core"] },
-    },
-    {
-      name: "frontend-app-does-not-import-server",
-      severity: "error",
-      from: { path: "^frontend/src/app/", pathNot: "/route[.]ts$" },
-      to: { path: "^frontend/src/lib/server/" },
     },
     {
       name: "frontend-does-not-import-host-or-tooling",
@@ -95,7 +99,7 @@ module.exports = {
       name: "frontend-does-not-import-build-output",
       severity: "error",
       from: { path: "^frontend/src/" },
-      to: { path: "^frontend/[.]next/" },
+      to: { path: "^frontend/dist/" },
     },
     {
       name: "backend-does-not-import-frontend",
@@ -119,7 +123,7 @@ module.exports = {
   options: {
     // Keep direct edges for validation (notably the tooling rules),
     // but do not traverse third-party packages or fixture implementation details.
-    doNotFollow: { path: "node_modules|probes/fixtures|frontend/[.]next" },
+    doNotFollow: { path: "node_modules|probes/fixtures|frontend/dist" },
     tsPreCompilationDeps: true,
     enhancedResolveOptions: {
       exportsFields: ["exports"],

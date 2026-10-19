@@ -4,7 +4,7 @@ import test from "node:test"
 import { ApiFailure } from "./api-errors.ts"
 import { createBrowserTransport } from "./browser-transport.ts"
 
-void test("uses only the same-origin BFF path and carries the login token only in its request body", async () => {
+void test("uses only the same-origin API path and carries the login token only in its request body", async () => {
   let requested: string | URL | Request = ""
   let init: RequestInit | undefined
   const transport = createBrowserTransport({
@@ -16,7 +16,7 @@ void test("uses only the same-origin BFF path and carries the login token only i
     onUnauthorized: () => undefined,
   })
   await transport.json("/api/session", { method: "POST", body: { token: "secret" } })
-  assert.equal(requested, "/api/qwbe/session")
+  assert.equal(requested, "/api/session")
   assert.ok(init)
   assert.equal(init.credentials, "same-origin")
   assert.equal(new Headers(init.headers).has("authorization"), false)

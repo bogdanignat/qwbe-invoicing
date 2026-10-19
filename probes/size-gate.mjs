@@ -9,6 +9,7 @@ const config = JSON.parse(readFileSync(join(root, "qwbe.config.json"), "utf8"))
 const measurement = await inspectSizes(root, {
   fileRoots: config.sizeFileRoots,
   excludedDirectories: config.sizeExcludedDirectories,
+  generatedFiles: config.sizeGeneratedFiles,
 })
 const violations = sizeViolations(measurement, config.caps)
 
@@ -17,6 +18,9 @@ for (const unit of measurement.units) {
 }
 if (config.sizeFileRoots?.length) {
   console.log(`File-only roots: ${config.sizeFileRoots.join(", ")}; cap ${config.caps.maxCharsPerFile} code characters per production source file.`)
+}
+for (const entry of config.sizeGeneratedFiles ?? []) {
+  console.log(`Generated, not measured: ${entry.path} (${entry.reason})`)
 }
 for (const file of violations.files) {
   console.error(`File over cap: ${file.path} has ${file.code}; cap is ${config.caps.maxCharsPerFile}.`)

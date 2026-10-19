@@ -1,5 +1,5 @@
 import { useQueryClient } from "@tanstack/react-query"
-import { usePathname, useRouter } from "next/navigation"
+import { useLocation, useNavigate } from "@tanstack/react-router"
 import { useEffect, useMemo, useState } from "react"
 
 import type { AuthController as AuthViewController } from "./auth-context.ts"
@@ -12,8 +12,8 @@ import { createSessionClient } from "../lib/session-client.ts"
 
 export const useAuthController = (): AuthViewController => {
   const queryClient = useQueryClient()
-  const router = useRouter()
-  const pathname = usePathname()
+  const navigate = useNavigate()
+  const pathname = useLocation({ select: (location) => location.pathname })
   const [state, setState] = useState(initialAuthSnapshot)
   const { controller, transport } = useMemo(() => {
     let unauthorized: (epoch: number) => void = () => undefined
@@ -29,13 +29,13 @@ export const useAuthController = (): AuthViewController => {
         resetSessionCache(queryClient)
         operationRecoveryJournal.strip()
       },
-      navigate: (path) => { router.replace(path) },
+      navigate: (path) => { void navigate({ to: path, replace: true }) },
       pathname: () => window.location.pathname,
     })
     unauthorized = auth.unauthorized
     epoch = auth.epoch
     return { controller: auth, transport: created }
-  }, [queryClient, router])
+  }, [queryClient, navigate])
 
   useEffect(() => {
     controller.mount()

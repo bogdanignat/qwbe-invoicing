@@ -1,7 +1,4 @@
-"use client"
-
-import Link from "next/link"
-
+import { AppLink } from "../components/ui/AppLink.tsx"
 import { ErrorAlert, Loading } from "../components/AsyncState.tsx"
 import { Page } from "../components/Page.tsx"
 import { PrivateScreen } from "../components/PrivateScreen.tsx"
@@ -29,7 +26,7 @@ export const InvoiceAuthoringView = ({ id }: InvoiceAuthoringViewProps) => {
     <Page
       title={page.kind === "ready" && page.initialDraft !== undefined ? `Draft ${page.initialDraft.series}` : "Factură nouă"}
       eyebrow="Document de lucru"
-      actions={<Link className="button secondary" href="/invoices">Înapoi la documente</Link>}
+      actions={<AppLink className="button secondary" href="/invoices">Înapoi la documente</AppLink>}
     >
       {page.kind === "loading" ? <Loading label="Se pregătește formularul…" />
         : page.kind === "error" ? <ErrorAlert error={page.error} onRetry={page.retry} />
@@ -37,7 +34,7 @@ export const InvoiceAuthoringView = ({ id }: InvoiceAuthoringViewProps) => {
         : page.kind === "vat-catalogue-empty" ? <p className="setup-note">Catalogul de regimuri TVA nu este disponibil. Verifică configurarea TVA a organizației în aplicația existentă, apoi reîncearcă.</p>
         : page.kind === "invoice-series-required" ? <p className="setup-note">Nu există nicio serie de facturi configurată. Adaugă o serie pentru facturi în aplicația existentă, apoi revino aici.</p>
         : page.kind === "unit-catalogue-empty" ? <p className="setup-note">Catalogul de unități de măsură este gol. Verifică configurarea organizației în aplicația existentă, apoi reîncearcă.</p>
-        : page.kind === "draft-missing" ? <p className="setup-note">Draftul cerut nu există sau nu mai este disponibil. <Link href="/invoices">Întoarce-te la registrul de facturi</Link>.</p>
+        : page.kind === "draft-missing" ? <p className="setup-note">Draftul cerut nu există sau nu mai este disponibil. <AppLink href="/invoices">Întoarce-te la registrul de facturi</AppLink>.</p>
         : page.kind === "locked" ? <LockedDraftReadonly
           title={page.title} notice={page.notice}
           registryHref={page.registryHref} registryLabel={page.registryLabel}

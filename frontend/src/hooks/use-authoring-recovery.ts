@@ -1,5 +1,3 @@
-"use client"
-
 import { useOperationRecovery } from "./use-operation-recovery.ts"
 import { useOperationReplay } from "./use-operation-replay.ts"
 import type { RecoveryPort } from "../lib/operation-recovery-port.ts"

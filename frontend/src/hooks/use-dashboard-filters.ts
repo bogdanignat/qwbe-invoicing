@@ -1,4 +1,4 @@
-import { useSearchParams } from "next/navigation"
+import { useLocation, useNavigate } from "@tanstack/react-router"
 import { useMemo, useState } from "react"
 
 import {
@@ -32,14 +32,17 @@ export interface DashboardFiltersModel {
  * cannot hold about the custom interval lives in `custom-range-state.ts`.
  */
 export const useDashboardFilters = (): DashboardFiltersModel => {
-  const search = useSearchParams().toString()
+  // The query string as the router holds it: plain text pairs (`lib/search-params.ts`), so the
+  // address is read here with `dashboard-query.ts` and nothing in between reinterprets it.
+  const search = useLocation({ select: (location) => location.searchStr })
   const query = useMemo(() => parseDashboardQuery(search), [search])
   const range = dashboardRange(query.period, todayIn(ORGANIZATION_TIME_ZONE))
   const [custom, setCustom] = useState(INITIAL_CUSTOM_RANGE)
   const shown = customRangeView(custom, search, range)
-  // The native history API is integrated with Next's router: `useSearchParams` follows it, and
-  // unlike `router.push` it asks the server for nothing — the page has no server data to refresh.
-  const navigate = (next: DashboardQuery): void => { window.history.pushState(null, "", dashboardHref(next)) }
+  const navigate = useNavigate()
+  // A history entry per change, at the address `dashboardHref` writes, so Back and Forward walk the
+  // filters. The page stays where it is: a filter changes the reports, it does not open a new page.
+  const show = (next: DashboardQuery): void => { void navigate({ href: dashboardHref(next), resetScroll: false }) }
   return {
     query,
     range,
@@ -48,14 +51,14 @@ export const useDashboardFilters = (): DashboardFiltersModel => {
     customError: shown.error,
     choosePeriod: (choice) => {
       if (choice === "custom") { setCustom(chooseCustomRange(custom, search)); return }
-      navigate({ ...query, period: { kind: "preset", preset: choice } })
+      show({ ...query, period: { kind: "preset", preset: choice } })
     },
     editCustom: (field, value) => { setCustom(editCustomRange(custom, search, shown.range, field, value)) },
     applyCustom: () => {
       const outcome = applyCustomRange(custom, search, shown.range)
       if (outcome.kind === "refused") { setCustom(outcome.state); return }
-      navigate({ ...query, period: { kind: "custom", range: outcome.range } })
+      show({ ...query, period: { kind: "custom", range: outcome.range } })
     },
-    chooseStatus: (status) => { navigate({ ...query, status }) },
+    chooseStatus: (status) => { show({ ...query, status }) },
   }
 }

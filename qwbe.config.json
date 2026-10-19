@@ -3,6 +3,12 @@
     "kernel",
     "frontend/src"
   ],
+  "sizeGeneratedFiles": [
+    {
+      "path": "frontend/src/routeTree.gen.ts",
+      "reason": "written by @tanstack/router-plugin from frontend/src/routes/; checked by regenerating it (frontend scripts/route-tree.ts), not by reading it"
+    }
+  ],
   "caps": {
     "maxCharsPerFile": 6000,
     "maxCharsPerUnit": 40000,

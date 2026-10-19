@@ -22,8 +22,9 @@ Usage:
   pnpm local:setup --domain name.test      # plan another .test domain
   pnpm local:setup --apply --json
 
-The command never edits /etc/hosts. Warden DNS resolves .test on microq; add the
-microq LAN address and selected domain to the laptop hosts file separately.
+The command never edits /etc/hosts. Warden DNS resolves .test on the machine that
+runs Warden (the dev host); to open the site from another machine, add the dev
+host's address and the selected domain to that machine's hosts file separately.
 Exit codes: 0 success, 2 invalid input, 1 execution failure.
 `
 

@@ -1,7 +1,4 @@
-"use client"
-
-import Link from "next/link"
-
+import { AppLink } from "../ui/AppLink.tsx"
 import type { InvoiceAuthoringSession } from "../../hooks/invoice-authoring-session-types.ts"
 import { Button } from "../Button.tsx"
 
@@ -30,7 +27,7 @@ export const AuthoringActions = ({ session }: { readonly session: InvoiceAuthori
       : draftDeletion.kind === "derived"
         ? <p className="status-note">
           {draftDeletion.notice.message}{" "}
-          <Link href={draftDeletion.notice.proformaHref}>{draftDeletion.notice.proformaLabel}</Link>
+          <AppLink href={draftDeletion.notice.proformaHref}>{draftDeletion.notice.proformaLabel}</AppLink>
         </p>
         : null}
     <p className="hint">Dintr-un document nou poți emite direct. Dacă ai salvat deja draftul, salvează întâi orice modificare nouă.</p>

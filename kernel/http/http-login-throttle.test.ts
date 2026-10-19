@@ -56,7 +56,8 @@ const withFixture = async (run: (fixture: Fixture) => Promise<void>, options: Fi
     } }),
   }
   const running = await startServer(
-    rig.config({ port: 0, authTokenFile: tokenFile }),
+    // The Bearer API is under test here, so it is switched on as an operator would.
+    rig.config({ port: 0, authTokenFile: tokenFile, bearerApi: true }),
     rig.pool,
     () => Promise.resolve(true),
     undefined,
@@ -260,6 +261,7 @@ void test("same-turn request admission cannot race failed credential accounting 
       const request = new IncomingMessage(new Socket())
       request.method = "GET"
       request.url = "/api/customers"
+      request.headers.host = new URL(fixture.origin).host
       request.headers.authorization = `Bearer ${wrongToken}`
       const response = new ServerResponse(request)
       response.end = () => { resolve(response.statusCode); return response }
@@ -333,8 +335,10 @@ void test("security logging is bounded and redacted, and logger failures never a
   await withFixture(async (fixture) => {
     await failSixTimes(fixture)
     const afterActivation = fixture.events.length
+    // A session cookie beside a Bearer credential is refused at the edge, so the
+    // canary rides in a foreign cookie the throttle still sees.
     await assertThrottled(await bearer(fixture, token, `/api/customers?query=${token}`, {
-      cookie: `qwbe_session=${token}`,
+      cookie: `other=${token}`,
     }), 1)
     const afterFirstBlocked = fixture.events.length
     await assertThrottled(await browserLogin(fixture, token), 1)

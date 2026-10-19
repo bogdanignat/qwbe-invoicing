@@ -95,19 +95,19 @@ needs no product edit. Absent means the issuer's default.
 
 ## Inspected evidence
 
-Existing extracted official package: **ro16931-ubl-1.0.9**, under
-`PROIECTE DEVELOPMENT/RO_E_FACTURA` in the project's Google Drive materials.
+Existing extracted official package: **ro16931-ubl-1.0.9**, a local copy kept
+outside this repository.
 The SCH root only includes dependencies; the rules below were read from the
 extracted dependency previews on 2026-09-16, not inferred from the root alone.
 
 - [Cod fiscal](https://legislatie.just.ro/Public/DetaliiDocument/171282), art. 310:
   small-business special exemption; art. 319: indication of the applicable exemption.
 - [MF technical entry](https://mfinante.gov.ro/ro/web/efactura/informatii-tehnice).
-- `abstract/EN16931-model.sch` (Drive file `14KJeUxbduaLZDelOon_zCcFnveFvw5Dk`):
+- `abstract/EN16931-model.sch`:
   BR-CO-04/BR-47 require line/breakdown categories; BR-S-05 positive rate;
   BR-S-10 forbids reason for S; BR-E-01 exactly one E breakdown; BR-E-05 rate zero;
   BR-E-10 requires reason text **or** code. E rate is zero, not absent (unlike O).
-- `cius-ro/RO16931-rules.sch` (`1NxhRyPCphVyMeh9gq_EBpdUAWYc3ewZf`):
+- `cius-ro/RO16931-rules.sch`:
   BR-RO-L100 limits BT-120 to 100 characters after `normalize-space`;
   BR-RO-065 accepts the seller tax registration ID as an alternative to VAT ID.
   The flattened `preprocessed/ROeFactura-UBL-validation-Invoice_v1.0.8.sch` was
@@ -115,8 +115,8 @@ extracted dependency previews on 2026-09-16, not inferred from the root alone.
   from. It also settles a citation this file used to carry: there is **no**
   BR-RO-060 in CIUS-RO 1.0.1 — BT-22 as the place for the Article 310 reference
   rests on ANAF's technical recommendation alone.
-- `UBL/EN16931-UBL-model.sch` (`1WI_4BXpu_mabZdph-m6eBqDHkLs4h-Ed`) and
-  `codelist/EN16931-UBL-codes.sch` (`1qeo90pxiZkwzb9iKkIOQzzUJAfO8J-Hw`).
+- `UBL/EN16931-UBL-model.sch` and
+  `codelist/EN16931-UBL-codes.sch`.
   BR-CL-22 requires VATEX when a reason code is supplied. The VATEX mapping for
   Article 310 was asserted later, by ANAF's own technical recommendation
   (`VATEX-EU-O`, with category `O`); see docs/EFACTURA.md. Until then BT-120 text
@@ -139,7 +139,7 @@ not reset the existing app.
 
 - **T-1345 — XML export:** deterministic UBL generation from public snapshots,
   official XSD/Schematron CIUS-RO validation and fixtures for supported S/O,
-  SRL/PFA and B2B/B2C cases. The inspected SCH materials already exist in Drive.
+  SRL/PFA and B2B/B2C cases. The inspected SCH materials are the package above.
 - **T-1346 — ANAF transport:** authentication, submission, status/response handling,
   safe retries, idempotency and audit. Separate from producing the XML file.
 - **T-1371 — company lookup API:** verify/autocomplete company details from CUI.

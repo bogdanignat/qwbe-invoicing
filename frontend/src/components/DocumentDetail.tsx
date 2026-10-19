@@ -1,6 +1,6 @@
-import Link from "next/link"
 import type { ReactNode } from "react"
 
+import { AppLink } from "./ui/AppLink.tsx"
 import { ErrorAlert, Loading } from "./AsyncState.tsx"
 import { DocumentDownloads } from "./DocumentDownloads.tsx"
 import { DocumentSnapshot } from "./DocumentSnapshot.tsx"
@@ -30,7 +30,7 @@ export const DocumentDetail = ({
   eyebrow={eyebrow}
   actions={model.view === undefined ? undefined : <DocumentDownloads actions={model.downloads} />}
 >
-  <p className="back-link"><Link href={backHref}>{backLabel}</Link></p>
+  <p className="back-link"><AppLink href={backHref}>{backLabel}</AppLink></p>
   {model.downloads.map((action) => action.error === null
     ? null
     : <ErrorAlert key={action.key} error={action.error} />)}

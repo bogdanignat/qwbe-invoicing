@@ -50,7 +50,7 @@ const rejects = (result, rule) => {
   assert.ok(result.output.includes(rule), result.output)
 }
 
-const layers = ["lib", "hooks", "components", "views"]
+const layers = ["lib", "hooks", "components", "views", "routes"]
 test("frontend layer matrix only points downward", () => {
   for (const [sourceIndex, source] of layers.entries()) {
     for (const [targetIndex, target] of layers.entries()) {
@@ -62,20 +62,20 @@ test("frontend layer matrix only points downward", () => {
   }
 })
 
-test("lower layers cannot import app, proxy, or unclassified frontend sources", () => {
+test("no layer imports the entrypoint, the route tree, or unclassified frontend sources", () => {
   for (const source of layers) {
-    for (const target of ["app/page.tsx", "proxy.ts", "misc/helper.ts"]) {
+    for (const target of ["main.tsx", "routeTree.gen.ts", "misc/helper.ts"]) {
       rejects(cruise((root) => edge(root, `frontend/src/${source}/source.ts`, `frontend/src/${target}`)),
         `frontend-${source}-dependencies`)
     }
   }
 })
 
-test("app and proxy composition may import every frontend layer", () => {
+test("the entrypoint and the route tree compose every frontend layer", () => {
   const result = cruise((root) => {
     for (const layer of layers) write(root, `frontend/src/${layer}/entry.ts`)
-    write(root, "frontend/src/app/page.tsx", layers.map((layer) => `import "../${layer}/entry.ts"`).join("\n"))
-    write(root, "frontend/src/proxy.ts", 'import "./lib/entry.ts"\n')
+    write(root, "frontend/src/routeTree.gen.ts", layers.map((layer) => `import "./${layer}/entry.ts"`).join("\n"))
+    write(root, "frontend/src/main.tsx", 'import "./routeTree.gen.ts"\nimport "./lib/entry.ts"\n')
   })
   assert.equal(result.status, 0, result.output)
 })
@@ -87,13 +87,13 @@ test("layer rules cover type re-exports and dynamic imports", () => {
   }
 })
 
-test("frontend cannot import backend, tooling, or Next build output", () => {
+test("frontend cannot import backend, tooling, or the Vite build output", () => {
   for (const target of [
     "cubes/invoicing/index.ts", "kernel/http/runtime.ts", "probes/helper.mjs", "bin/helper.ts",
-    "frontend/.next/server/generated.js",
+    "frontend/dist/assets/index-a1b2c3d4.js",
   ]) {
-    rejects(cruise((root) => edge(root, "frontend/src/app/page.tsx", target)),
-      target.startsWith("frontend/.next/") ? "frontend-does-not-import-build-output" : "frontend-does-not-import-host-or-tooling")
+    rejects(cruise((root) => edge(root, "frontend/src/routes/index.tsx", target)),
+      target.startsWith("frontend/dist/") ? "frontend-does-not-import-build-output" : "frontend-does-not-import-host-or-tooling")
   }
 })
 
@@ -104,13 +104,13 @@ test("backend cannot import frontend", () => {
 })
 
 test("frontend cannot bypass source boundaries through runtime or operational scripts", () => {
-  for (const source of ["frontend/src/lib/client.ts", "frontend/src/app/api/qwbe/route.ts"]) {
-    for (const target of ["frontend/scripts/validate-runtime.mjs", "scripts/efactura-fixtures.mjs"]) {
+  for (const source of ["frontend/src/lib/client.ts", "frontend/src/routes/index.tsx", "frontend/src/main.tsx"]) {
+    for (const target of ["frontend/scripts/route-tree.ts", "scripts/efactura-fixtures.mjs"]) {
       for (const kind of ["import", "export", "dynamic"]) {
         rejects(cruise((root) => {
           edge(root, source, target, kind)
           const downstream = target.startsWith("frontend/")
-            ? "frontend/src/lib/server/config.ts" : "kernel/runtime.ts"
+            ? "frontend/src/lib/value.ts" : "kernel/runtime.ts"
           write(root, downstream)
           write(root, target, `import "${posix.relative(posix.dirname(target), downstream)}"\nexport const value = 1\n`)
         }), "frontend-does-not-import-host-or-tooling")
@@ -119,54 +119,43 @@ test("frontend cannot bypass source boundaries through runtime or operational sc
   }
 })
 
-test("browser modules cannot import server modules directly, by re-export, or dynamically", () => {
+const browserSources = [
+  "lib/browser.ts", "hooks/browser.ts", "components/browser.ts", "views/browser.ts",
+  "routes/index.tsx", "routes/invoices/$id.tsx", "main.tsx", "routeTree.gen.ts",
+]
+
+test("browser code cannot import the Vite config or its build-time packages, directly or through a bridge", () => {
   for (const kind of ["import", "export", "dynamic"]) {
-    rejects(cruise((root) => edge(root, "frontend/src/hooks/source.ts", "frontend/src/lib/server/private.ts", kind)),
-      "frontend-browser-does-not-import-server")
+    for (const source of ["frontend/src/hooks/source.ts", "frontend/src/routes/index.tsx", "frontend/src/main.tsx"]) {
+      rejects(cruise((root) => edge(root, source, "frontend/vite.config.ts", kind)), "frontend-browser-does-not-import-server")
+    }
   }
   rejects(cruise((root) => {
-    edge(root, "frontend/src/components/source.ts", "frontend/src/lib/server-bridge.ts")
-    edge(root, "frontend/src/lib/server-bridge.ts", "frontend/src/lib/server/private.ts", "export")
+    edge(root, "frontend/src/components/source.ts", "frontend/src/lib/config-bridge.ts")
+    edge(root, "frontend/src/lib/config-bridge.ts", "frontend/vite.config.ts", "export")
   }), "frontend-browser-does-not-import-server")
+  for (const dependency of ["vite", "@vitejs/plugin-react", "@tailwindcss/vite", "@tanstack/router-plugin"]) {
+    rejects(cruise((root) => {
+      fakePackage(root, dependency)
+      write(root, "frontend/src/routes/index.tsx", `import "${dependency}"\n`)
+    }), "frontend-browser-does-not-import-server")
+  }
 })
 
-test("browser modules cannot import Node builtins, while server modules can", () => {
-  for (const source of ["lib/browser.ts", "hooks/browser.ts", "components/browser.ts", "views/browser.ts"]) {
+test("no browser module imports Node builtins, routes and entrypoint included", () => {
+  for (const source of browserSources) {
     rejects(cruise((root) => write(root, `frontend/src/${source}`, 'import "node:fs"\n')),
       "frontend-browser-does-not-import-node")
   }
-  const allowed = cruise((root) => write(root, "frontend/src/lib/server/runtime.ts", 'import "node:fs"\n'))
-  assert.equal(allowed.status, 0, allowed.output)
 })
 
-test("Node-based frontend tests may exercise a pure browser security helper", () => {
+test("Node-based frontend tests may exercise a pure browser helper", () => {
   const result = cruise((root) => {
-    write(root, "frontend/src/lib/security-headers.ts", "export const headers = {}\n")
-    write(root, "frontend/src/lib/security-headers.test.ts",
-      'import assert from "node:assert/strict"\nimport { headers } from "./security-headers.ts"\nassert.ok(headers)\n')
-    write(root, "frontend/src/proxy.ts", 'import { headers } from "./lib/security-headers.ts"\nvoid headers\n')
+    write(root, "frontend/src/lib/search-params.ts", "export const parse = () => ({})\n")
+    write(root, "frontend/src/lib/search-params.test.ts",
+      'import assert from "node:assert/strict"\nimport { parse } from "./search-params.ts"\nassert.ok(parse())\n')
+    write(root, "frontend/src/main.tsx", 'import { parse } from "./lib/search-params.ts"\nvoid parse\n')
   })
-  assert.equal(result.status, 0, result.output)
-})
-
-test("non-route app modules cannot import server modules but route modules can", () => {
-  for (const module of [
-    "frontend/src/app/page.ts",
-    "frontend/src/app/invoices/page.tsx",
-    "frontend/src/app/layout.tsx",
-    "frontend/src/app/error.tsx",
-    "frontend/src/app/global-error.tsx",
-  ]) {
-    rejects(cruise((root) => {
-      edge(root, module, "frontend/src/lib/server/private.ts")
-      if (module.endsWith("error.tsx")) {
-        const target = posix.relative(posix.dirname(module), "frontend/src/lib/server/private.ts")
-        write(root, module, `"use client"\nimport type { Value } from "${target.startsWith(".") ? target : `./${target}`}"\nexport type Alias = Value\n`)
-      }
-    }), "frontend-app-does-not-import-server")
-  }
-  const result = cruise((root) => edge(root,
-    "frontend/src/app/api/qwbe/route.ts", "frontend/src/lib/server/private.ts"))
   assert.equal(result.status, 0, result.output)
 })
 
@@ -176,12 +165,12 @@ test("unresolved frontend dependencies fail without path alias exceptions", () =
   }
 })
 
-test("resolved Next, React, TanStack, and server-only package imports are accepted", () => {
+test("resolved React and TanStack runtime package imports are accepted", () => {
   const result = cruise((root) => {
-    for (const dependency of ["next", "react", "@tanstack/react-query", "server-only"]) fakePackage(root, dependency)
-    write(root, "frontend/src/app/page.tsx", 'import "next/navigation"\nimport "react"\n')
-    write(root, "frontend/src/hooks/query.ts", 'import "@tanstack/react-query"\n')
-    write(root, "frontend/src/app/api/qwbe/route.ts", 'import "server-only"\nimport "next/server"\n')
+    for (const dependency of ["react", "react-dom", "@tanstack/react-query", "@tanstack/react-router"]) fakePackage(root, dependency)
+    write(root, "frontend/src/main.tsx", 'import "react-dom/client"\nimport "@tanstack/react-router"\n')
+    write(root, "frontend/src/routes/index.tsx", 'import "@tanstack/react-router"\nimport "react"\n')
+    write(root, "frontend/src/hooks/query.ts", 'import "@tanstack/react-query"\nimport "@tanstack/react-router"\n')
   })
   assert.equal(result.status, 0, result.output)
 })

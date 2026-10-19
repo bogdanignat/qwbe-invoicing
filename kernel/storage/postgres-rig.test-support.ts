@@ -15,6 +15,7 @@ import {
   type PostgresRuntime,
   type PostgresSettings,
 } from "./postgres-pool.ts"
+import { parseTrustedProxies } from "../http/trusted-proxy.ts"
 
 /**
  * The one PostgreSQL test rig: a fresh, empty database per test file (and per
@@ -494,6 +495,11 @@ const fixtureOn = (database: string): TestFixture => {
       organizationId: "org-1",
       pgSettings: configured,
       plugins: allPlugins,
+      // No PUBLIC_ORIGIN: the server pins the loopback address it listens on.
+      publicOrigin: undefined,
+      bearerApi: false,
+      trustedProxies: parseTrustedProxies(undefined),
+      uiDirectory: undefined,
       ...overrides,
     }),
     childEnv: (overrides = {}) => {

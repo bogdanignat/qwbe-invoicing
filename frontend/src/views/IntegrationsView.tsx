@@ -1,5 +1,3 @@
-"use client"
-
 import { ErrorAlert, Loading } from "../components/AsyncState.tsx"
 import { CompanyLookupCard } from "../components/settings/integrations/CompanyLookupCard.tsx"
 import { Page } from "../components/Page.tsx"

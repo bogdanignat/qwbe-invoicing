@@ -4,7 +4,7 @@ import tseslint from "typescript-eslint"
 
 export default tseslint.config(
   {
-    ignores: ["**/node_modules/**", "probes/fixtures/**", "frontend/.next/**", "frontend/next-env.d.ts"],
+    ignores: ["**/node_modules/**", "probes/fixtures/**", "frontend/dist/**", "frontend/.tanstack/**"],
   },
   eslint.configs.recommended,
   ...tseslint.configs.strictTypeChecked,

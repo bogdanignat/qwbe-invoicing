@@ -1,5 +1,3 @@
-"use client"
-
 import { Button } from "../Button.tsx"
 import type { CompanyLookupModel } from "../../hooks/use-company-lookup.ts"
 import type { CompanyProposal } from "../../lib/company-lookup-model.ts"

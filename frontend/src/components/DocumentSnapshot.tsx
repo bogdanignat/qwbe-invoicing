@@ -1,5 +1,4 @@
-import Link from "next/link"
-
+import { AppLink } from "./ui/AppLink.tsx"
 import type { DocumentSnapshotView } from "../lib/document-projection.ts"
 
 export const DocumentSnapshot = ({ view }: { readonly view: DocumentSnapshotView }) => <article className="card document">
@@ -11,7 +10,7 @@ export const DocumentSnapshot = ({ view }: { readonly view: DocumentSnapshotView
   </header>
   {view.originalInvoice === null
     ? null
-    : <p className="document-origin"><Link href={view.originalInvoice.href}>{view.originalInvoice.label}</Link></p>}
+    : <p className="document-origin"><AppLink href={view.originalInvoice.href}>{view.originalInvoice.label}</AppLink></p>}
   <div className="parties">
     {view.parties.map((party) => <section key={party.heading}>
       <h3>{party.heading}</h3>

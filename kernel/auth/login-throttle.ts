@@ -31,21 +31,31 @@ export interface LoginThrottle {
   readonly succeeded: (peer: string) => void
 }
 
-// Socket addresses only. Unusable addresses share a fail-closed bucket; forwarded
-// headers and caller-controlled credentials never participate in this key.
-export const loginPeerKey = (address: string | undefined): string => {
-  if (address === undefined) return "peer:unknown"
+/**
+ * One spelling per address: an IPv4-mapped IPv6 address is its IPv4 address and
+ * IPv6 is compressed and lower-cased, so a throttle key or a trust decision
+ * cannot be dodged by writing the same address differently. Not an address:
+ * `undefined`.
+ */
+export const normalizedAddress = (address: string | undefined): string | undefined => {
+  if (address === undefined) return undefined
   const unscoped = address.split("%", 1)[0] ?? ""
-  if (isIP(unscoped) === 4) return `peer:${unscoped}`
-  if (isIP(unscoped) !== 6) return "peer:unknown"
+  if (isIP(unscoped) === 4) return unscoped
+  if (isIP(unscoped) !== 6) return undefined
   const normalized = new URL(`http://[${unscoped}]/`).hostname.slice(1, -1)
   const mapped = /^::ffff:([0-9a-f]+):([0-9a-f]+)$/.exec(normalized)
-  if (mapped !== null) {
-    const high = Number.parseInt(mapped[1] ?? "", 16)
-    const low = Number.parseInt(mapped[2] ?? "", 16)
-    return `peer:${String(high >>> 8)}.${String(high & 255)}.${String(low >>> 8)}.${String(low & 255)}`
-  }
-  return `peer:${normalized}`
+  if (mapped === null) return normalized
+  const high = Number.parseInt(mapped[1] ?? "", 16)
+  const low = Number.parseInt(mapped[2] ?? "", 16)
+  return `${String(high >>> 8)}.${String(high & 255)}.${String(low >>> 8)}.${String(low & 255)}`
+}
+
+// The client address the edge resolved: the socket peer, or the forwarded client
+// when that peer is a trusted proxy (`kernel/http/client-address.ts`). Unusable
+// addresses share a fail-closed bucket; credentials never participate in this key.
+export const loginPeerKey = (address: string | undefined): string => {
+  const normalized = normalizedAddress(address)
+  return normalized === undefined ? "peer:unknown" : `peer:${normalized}`
 }
 
 export const createLoginThrottle = ({

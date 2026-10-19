@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { useRouter } from "next/navigation"
+import { useNavigate } from "@tanstack/react-router"
 import { useEffect, useState } from "react"
 
 import { useAuth } from "./auth-context.ts"
@@ -55,7 +55,7 @@ export const useInvoiceIssuance = (input: InvoiceIssuanceInput): InvoiceIssuance
   const auth = useAuth()
   const clients = useInvoicingClients()
   const queryClient = useQueryClient()
-  const router = useRouter()
+  const navigate = useNavigate()
   // The reconciliation read is tracked: its request dies with the screen or
   // the session (a status change is a session boundary), instead of wandering
   // off with a signal nobody can abort. Re-authentication gets a fresh one,
@@ -78,7 +78,7 @@ export const useInvoiceIssuance = (input: InvoiceIssuanceInput): InvoiceIssuance
     alive: () => lifetime.isAlive(),
     effects: {
       onIssued: (invoice, draftId) => {
-        router.push(`/invoices/${encodeURIComponent(invoice.id)}`)
+        void navigate({ to: `/invoices/${encodeURIComponent(invoice.id)}` })
         // The draft is gone as a draft: its cache entry is dropped now, not on
         // a timer nobody owns and an unmount would leave running.
         if (draftId !== undefined) {

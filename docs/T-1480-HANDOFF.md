@@ -8,7 +8,7 @@ Branch feat/T-1480-postgresql, cod NECOMIS. Fara deploy/reset; workerii de imple
 ## Handoff istoric de la pauza (pasii de reluare de mai jos sunt incheiati)
 
 ## Stare
-Repo `/home/bogdan/projects/invoicing-qwbe`, branch `feat/T-1480-postgresql`, HEAD `b3ebd4c`. Implementarea este APROBATA; nu mai cere acord pe plan. Working tree mare, inclusiv fisiere NOI UNTRACKED si stergeri/rename STAGED. Toate sunt munca taskului: NU reset/clean/checkout peste ele. Fara commit/push/deploy/reset al datelor existente. La pauza nu mai exista worker sau teste active cu cwd-ul repo-ului.
+Repo `~/projects/invoicing-qwbe`, branch `feat/T-1480-postgresql`, HEAD `b3ebd4c`. Implementarea este APROBATA; nu mai cere acord pe plan. Working tree mare, inclusiv fisiere NOI UNTRACKED si stergeri/rename STAGED. Toate sunt munca taskului: NU reset/clean/checkout peste ele. Fara commit/push/deploy/reset al datelor existente. La pauza nu mai exista worker sau teste active cu cwd-ul repo-ului.
 
 PG16-only standalone, Docker-only, Effect/porturi pastrate, fara migrare date/mother/dual-engine. Schema, adaptoare, pool/tx, sesiuni async, HTTP/CLI, fingerprint/drift, backup/restore, compose x3 si boundaries implementate. Vechile module SQLite eliminate; JSON-urile `kernel/parity/sqlite-*` sunt golden fixtures istorice, NU recaptura/sterge.
 

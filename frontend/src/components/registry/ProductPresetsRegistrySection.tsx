@@ -1,5 +1,3 @@
-"use client"
-
 import { Button } from "../Button.tsx"
 import { EmptyState } from "../AsyncState.tsx"
 import { LoadMore } from "../LoadMore.tsx"

@@ -1,7 +1,4 @@
-"use client"
-
-import Link from "next/link"
-
+import { AppLink } from "./ui/AppLink.tsx"
 import { Button } from "./Button.tsx"
 import { EmptyState, ErrorAlert, Loading } from "./AsyncState.tsx"
 import { LoadMore } from "./LoadMore.tsx"
@@ -32,14 +29,14 @@ export const DraftsSection = ({ drafts }: { readonly drafts: DraftsListModel }) 
         <div>
           {drafts.items.map((draft) => <div className="draft-item" key={draft.id}>
             <div className="draft-item-main">
-              <Link href={`/drafts/${encodeURIComponent(draft.id)}`}><strong>{draft.customer.name}</strong></Link>
+              <AppLink href={`/drafts/${encodeURIComponent(draft.id)}`}><strong>{draft.customer.name}</strong></AppLink>
               <small>
                 Serie {draft.series} · {draft.issueDate}
                 {draft.dueDate === null ? "" : ` · scadență ${draft.dueDate}`} · {draft.lines.length}{" "}linii · {money(draft.totalIncludingVat, draft.currency)}
               </small>
             </div>
             <div className="draft-item-actions">
-              <Link className="button secondary small" href={`/drafts/${encodeURIComponent(draft.id)}`}>Deschide</Link>
+              <AppLink className="button secondary small" href={`/drafts/${encodeURIComponent(draft.id)}`}>Deschide</AppLink>
               {drafts.canDeleteDraft(draft)
                 ? <Button className="danger small" disabled={drafts.removalPending} onClick={() => { drafts.removeDraft(draft) }}>Șterge</Button>
                 : null}

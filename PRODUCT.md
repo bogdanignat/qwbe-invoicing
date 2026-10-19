@@ -520,7 +520,7 @@ durable workflow seam are stable.
 
 ### Phase 2 — usable standalone product
 
-- React 19 + TypeScript UI styled with Tailwind CSS 4: a Next.js 16 App Router application (`frontend/`) that reaches the kernel only through its BFF under `/api/qwbe/*`, with TanStack Query as the React server-state adapter;
+- React 19 + TypeScript UI styled with Tailwind CSS 4: a Vite single-page application with TanStack Router (`frontend/`), served by the kernel on the same origin as `/api`, with TanStack Query as the React server-state adapter;
 - PDF rendering and preserved artifacts;
 - payment recording and status calculation;
 - correction documents;
@@ -555,7 +555,26 @@ The following decisions must be explicit before their relevant implementation:
    domestic VAT and non-VAT-registered issuers?
 3. Resolved for the first usable release: delivery is PDF download. Email remains a
    future capability; proforma delivery specifically means download, not email.
-4. Resolved: React 19 + TypeScript + Tailwind CSS 4 in a Next.js 16 App Router application (the Vite UI was removed in T-1649), same-origin and API-first through the BFF under `/api/qwbe/*`; TanStack Query holds React server state. The kernel exchanges the local API token for a revocable, opaque 30-day session persisted server-side and referenced by an HttpOnly `SameSite=Strict` cookie. The browser keeps only the per-session CSRF token in memory; bearer authentication remains for direct API clients on the internal network.
+4. Resolved (T-1910): React 19 + TypeScript + Tailwind CSS 4 in a single-page application
+   built with Vite and routed with TanStack Router (file routes in `frontend/src/routes/`);
+   TanStack Query holds React server state. One image: the kernel serves the build
+   (`QWBE_UI_DIR`), the API under `/api/*` and the Swagger page (`GET /api`) on one origin,
+   `PUBLIC_ORIGIN`, behind the operator's TLS proxy, and owns the whole public edge itself:
+   `Host`/`Origin` pinning, CSRF, CSP and the request deadline. The kernel exchanges the
+   local API token for a revocable, opaque 30-day session persisted server-side and
+   referenced by an HttpOnly `SameSite=Strict` cookie scoped to `/api`. The browser keeps
+   only the per-session CSRF token in memory. The Bearer API is off on the public listener
+   unless `QWBE_BEARER_API=on`; the CLI inside the container is the operator's interface.
+
+   Superseded decisions, kept as history: from T-1400 to T-1649 a Next.js App Router
+   application (`frontend/`) ran next to the first Vite UI and replaced it at the T-1649
+   cutover (2026-10-09). It was a second service and a second image, and reached the
+   kernel only through a backend-for-frontend under `/api/qwbe/*` that held the session
+   cookie, CSRF and `Origin` checks, while the kernel stayed internal. T-1910 removed it:
+   a server-rendering framework bought nothing for a UI behind a login, and the second
+   process doubled the edge that had to be secured, the images to pin and the self-host
+   steps. Its guards moved into the kernel (T-1911) and the UI became a static Vite build
+   the kernel serves (T-1912 to T-1914).
 5. What retention policy and backup targets are promised to operators?
 6. Resolved: no mandatory dependency on `qwbe-core`; shapes are copied and declared
    locally.

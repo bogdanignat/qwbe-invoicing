@@ -23,7 +23,7 @@ no adapter, no ops change.
 Verified properties: `node --version` = v24.19.0 and `pnpm --version` = 11.22.0
 inside the container; Alpine 3.24.1; the four volume mount points owned by
 `1000:1000`; the host `node_modules` tree is shadowed, never shared; fixtures
-written through the bind mount are host-owned (`bogdan bogdan`).
+written through the bind mount are host-owned (the host user and group).
 
 Two harness defects were found and fixed by running it, not by reading it:
 

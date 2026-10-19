@@ -1,26 +1,24 @@
 name: qwbe-invoicing
 
-# Production bundle — copy as compose.yaml on the host or include via `docker compose -f compose.prod.yaml up -d`.
-# No Warden network, no published app port by default. Put Caddy (profile `proxy`) in front for TLS.
-# Two images, one version: `app` (backend, internal) and `frontend` (Next, the public
-# UI and the only route to the API). Each is pinned by its own digest from image-digests.txt:
-#   IMAGE_TAG=0.3.0@sha256:<app-digest> FRONTEND_IMAGE_TAG=0.3.0@sha256:<frontend-digest> \
-#   FRONTEND_ORIGIN=https://invoice.example.com docker compose -f compose.prod.yaml --profile proxy up -d
+# Production / self-host bundle: `docker compose -f compose.prod.yaml up -d`, with the
+# values in `.env` next to it (see .env.example and the README "Quick start (self-host)").
+# No Warden, no Traefik labels and no published port by default. One image: `app` serves
+# the UI and `/api` on PUBLIC_ORIGIN; `migrate` runs the same image once before it.
 #
-# Before the first `up`, the operator creates the three secret files. They are never in
-# this file, never in the image and never in an environment variable:
-#   install -d -m 700 /opt/qwbe-invoicing/secrets
-#   openssl rand -hex 32 > /opt/qwbe-invoicing/secrets/api-token
-#   openssl rand -hex 32 > /opt/qwbe-invoicing/secrets/pg-password
-#   openssl rand -hex 32 > /opt/qwbe-invoicing/secrets/company-lookup-key
-#   chmod 600 /opt/qwbe-invoicing/secrets/*
-#   AUTH_TOKEN_PATH=/opt/qwbe-invoicing/secrets/api-token \
-#   PG_PASSWORD_PATH=/opt/qwbe-invoicing/secrets/pg-password \
-#   COMPANY_LOOKUP_KEY_PATH=/opt/qwbe-invoicing/secrets/company-lookup-key docker compose -f compose.prod.yaml up -d
-# The company-lookup key encrypts the openapi.ro key at rest; it is never rotated
-# in place: a new one makes the stored openapi.ro key unreadable until it is entered again.
-# All three paths are required (`:?`) rather than defaulted: a production stack that starts
-# with a guessable fallback credential is worse than one that refuses to start.
+# TLS, one of:
+#   - the bundled Caddy:  docker compose -f compose.prod.yaml --profile proxy up -d
+#     (publishes 80/443; copy Caddyfile.example to Caddyfile first)
+#   - a reverse proxy already on this host (nginx, Caddy, Traefik):
+#     docker compose -f compose.prod.yaml -f compose.loopback.yaml up -d
+#     (publishes `app` on 127.0.0.1:${APP_LOOPBACK_PORT} only)
+#
+# Before the first `up`, create the three secret files (`scripts/init-secrets.sh` does it,
+# from the paths in .env). They are never in this file, never in the image and never in
+# an environment variable. The company-lookup key encrypts the openapi.ro key at rest;
+# it is never rotated in place: a new one makes the stored openapi.ro key unreadable
+# until it is entered again. Every path, the image tag and PUBLIC_ORIGIN are required
+# (`:?`) rather than defaulted: a stack that starts with a guessable fallback credential
+# or the wrong origin is worse than one that refuses to start.
 
 x-postgres-environment: &postgres-environment
   PGHOST: db
@@ -62,7 +60,7 @@ services:
     restart: unless-stopped
 
   migrate:
-    image: ghcr.io/bogdanignat/qwbe-invoicing:${IMAGE_TAG:-0.1.0}
+    image: ${QWBE_IMAGE:-ghcr.io/bogdanignat/qwbe-invoicing}:${IMAGE_TAG:?Set IMAGE_TAG, e.g. local for your own build or 0.3.0@sha256:<digest> for a release}
     command: ["node", "bin/qwbe-invoicing.ts", "migrate", "--apply", "--confirm-production", "--json"]
     environment:
       <<: *postgres-environment
@@ -84,7 +82,7 @@ services:
     restart: "no"
 
   app:
-    image: ghcr.io/bogdanignat/qwbe-invoicing:${IMAGE_TAG:-0.1.0}
+    image: ${QWBE_IMAGE:-ghcr.io/bogdanignat/qwbe-invoicing}:${IMAGE_TAG:?Set IMAGE_TAG, e.g. local for your own build or 0.3.0@sha256:<digest> for a release}
     environment:
       <<: *postgres-environment
       NODE_ENV: production
@@ -98,6 +96,18 @@ services:
       # Optional plugins, comma-separated (`payments`, `efactura`, `company-lookup`). Passed through
       # only when set: unset means every plugin runs, empty means none. Restart to apply.
       QWBE_PLUGINS:
+      # Required to serve in production: the kernel pins Host, X-Forwarded-Host/-Proto
+      # and Origin to it. Scheme and host exactly as the browser sees them, no path.
+      PUBLIC_ORIGIN: ${PUBLIC_ORIGIN:?Set PUBLIC_ORIGIN to the public https origin, e.g. https://invoice.example.com}
+      # Off by default: any Authorization header is refused. `on` serves the Bearer API
+      # on this same listener; see the README before switching it on.
+      QWBE_BEARER_API: ${QWBE_BEARER_API:-off}
+      # Unset trusts no proxy's X-Forwarded-For, so the login throttle keys on the
+      # proxy itself (README, Configuration). Passed through only when set.
+      QWBE_TRUSTED_PROXY:
+      # The Vite build the kernel serves; the image sets the same value. Required in
+      # production: `serve` refuses to start without an index.html there.
+      QWBE_UI_DIR: /app/frontend/dist
       # `backup` and `restore` stage into a `mkdtemp` under TMPDIR and the archive
       # bounds allow 1 GiB expanded, so staging is a disk volume and not the small
       # tmpfs below: a 1 GiB staging tree in `/tmp` would be 1 GiB of RAM.
@@ -131,32 +141,6 @@ services:
       retries: 5
       start_period: 10s
 
-  # The public application. The backend stays internal; the browser reaches the API only
-  # through this BFF at /api/qwbe/<path>.
-  frontend:
-    image: ghcr.io/bogdanignat/qwbe-invoicing-frontend:${FRONTEND_IMAGE_TAG:-0.1.0}
-    environment:
-      # No default: the public origin is the operator's, and Next refuses to start on a
-      # value that is not one canonical origin.
-      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:?Set FRONTEND_ORIGIN to the public https origin, e.g. https://invoice.example.com}
-      INVOICING_API_URL: http://app:3000
-    # No depends_on app: the UI must still boot and report an unavailable upstream.
-    expose:
-      - "3000"
-    restart: unless-stopped
-    init: true
-    read_only: true
-    tmpfs:
-      # Bounded like the backend's /tmp; uid 1000 is `node` in the image.
-      - /tmp:size=64m
-      - /app/frontend/.next/cache:uid=1000,gid=1000,size=64m
-    healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/healthz"]
-      interval: 15s
-      timeout: 3s
-      retries: 5
-      start_period: 10s
-
   caddy:
     image: caddy:2-alpine
     profiles: ["proxy"]
@@ -165,8 +149,6 @@ services:
     # an application that would answer 503 to every `/api` request.
     depends_on:
       app:
-        condition: service_healthy
-      frontend:
         condition: service_healthy
     ports:
       - "80:80"
@@ -196,7 +178,8 @@ volumes:
   # fills up cannot take the artifact store with it.
   invoicing-backup-staging:
     name: qwbe-invoicing-backup-staging
+  # Prefixed, so a Caddy of another stack on the same host keeps its own certificates.
   caddy-data:
-    name: caddy-data
+    name: qwbe-invoicing-caddy-data
   caddy-config:
-    name: caddy-config
+    name: qwbe-invoicing-caddy-config

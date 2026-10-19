@@ -78,6 +78,13 @@ services:
       # Optional plugins, comma-separated (`payments`, `efactura`, `company-lookup`). Passed through
       # only when set: unset means every plugin runs, empty means none. Restart to apply.
       QWBE_PLUGINS:
+      # The one origin the browser reaches: the kernel pins Host, X-Forwarded-* and
+      # Origin to it, and serves the UI (QWBE_UI_DIR, set in the image) and /api on it.
+      PUBLIC_ORIGIN: https://${APP_DOMAIN:-invoice.test}
+      # Off by default; `QWBE_BEARER_API=on` in .env serves the Bearer API on the same origin.
+      QWBE_BEARER_API: ${QWBE_BEARER_API:-off}
+      # Unset trusts no proxy's X-Forwarded-For (README, Configuration). Passed through only when set.
+      QWBE_TRUSTED_PROXY:
       # `backup` and `restore` stage into a `mkdtemp` under TMPDIR, and the archive
       # bounds allow 1 GiB expanded: staging is a disk volume, not the small tmpfs
       # below, because a 1 GiB staging tree in `/tmp` would be 1 GiB of RAM.
@@ -94,30 +101,11 @@ services:
     volumes:
       - invoicing-data:/data
       - invoicing-backup-staging:/var/backups/staging
-    # Internal since T-1649: only the Compose network reaches the backend. The browser
-    # and API callers go through the Next BFF at https://invoice.test/api/qwbe/<path>.
+    # No published port: Warden's Traefik terminates TLS for https://invoice.test and
+    # reaches the kernel over the external `warden` network. This network and these
+    # labels exist only in the local development stack; compose.prod.yaml has neither.
     expose:
       - "3000"
-    restart: unless-stopped
-    stop_grace_period: 15s
-    init: true
-    read_only: true
-    tmpfs:
-      # Bounded: with TMPDIR on the staging volume nothing large lands here, and an
-      # unbounded tmpfs is a way to consume the host's memory.
-      - /tmp:size=64m
-
-  # The Next application (frontend/) owns https://invoice.test. Its healthcheck on
-  # /healthz comes from frontend/Dockerfile.
-  frontend:
-    image: qwbe-invoicing-frontend:${IMAGE_TAG:-local}
-    build:
-      context: .
-      dockerfile: frontend/Dockerfile
-    environment:
-      FRONTEND_ORIGIN: https://${APP_DOMAIN:-invoice.test}
-      INVOICING_API_URL: http://app:3000
-    # No depends_on app: the UI must still boot and report an unavailable upstream.
     networks:
       - default
       - warden
@@ -129,12 +117,13 @@ services:
       traefik.http.routers.qwbe-invoicing.tls: "true"
       traefik.http.services.qwbe-invoicing.loadbalancer.server.port: "3000"
     restart: unless-stopped
+    stop_grace_period: 15s
     init: true
     read_only: true
     tmpfs:
-      # Bounded like the backend's /tmp; uid 1000 is `node` in the image.
+      # Bounded: with TMPDIR on the staging volume nothing large lands here, and an
+      # unbounded tmpfs is a way to consume the host's memory.
       - /tmp:size=64m
-      - /app/frontend/.next/cache:uid=1000,gid=1000,size=64m
 
 secrets:
   api_token:

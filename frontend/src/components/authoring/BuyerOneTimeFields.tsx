@@ -1,5 +1,3 @@
-"use client"
-
 import type { InvoiceAuthoringForm, PartyType } from "../../lib/invoice-authoring-model.ts"
 import { CompanyNameField } from "../company-lookup/CompanyNameField.tsx"
 import { CompanyProposalCard } from "../company-lookup/CompanyProposalCard.tsx"

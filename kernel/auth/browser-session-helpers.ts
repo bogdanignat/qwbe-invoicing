@@ -27,16 +27,25 @@ export const secureOrigin = (origin: string | undefined): boolean => {
   }
 }
 
-export const cookieValue = (header: string | undefined): string | undefined => {
-  if (header === undefined) return undefined
-  let found: string | undefined
-  for (const part of header.split(";")) {
-    const [name, ...value] = part.trim().split("=")
-    if (name !== cookieName) continue
-    if (found !== undefined) return undefined
-    found = value.join("=") || undefined
+/**
+ * Every `qwbe_session` value in a Cookie header, empty ones included. Split on
+ * `,` as well as `;`, so a folded header cannot hide a second session cookie.
+ */
+export const sessionCookieValues = (header: string | undefined): ReadonlyArray<string> => {
+  if (header === undefined) return []
+  const values: Array<string> = []
+  for (const item of header.split(/[;,]/u)) {
+    const separator = item.indexOf("=")
+    const name = (separator < 0 ? item : item.slice(0, separator)).trim()
+    if (name === cookieName) values.push(separator < 0 ? "" : item.slice(separator + 1).trim())
   }
-  return found
+  return values
+}
+
+/** The session id, only when exactly one non-empty session cookie was sent. */
+export const cookieValue = (header: string | undefined): string | undefined => {
+  const values = sessionCookieValues(header)
+  return values.length === 1 && values[0] !== "" ? values[0] : undefined
 }
 
 export const sha256 = (value: string): string => createHash("sha256").update(value).digest("hex")

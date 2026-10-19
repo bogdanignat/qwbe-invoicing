@@ -5,7 +5,7 @@ Source snapshot: QWBE mother repository at `a98d9ef` (main, 31 August 2026; prev
 Conformance review against that snapshot: 2 September 2026, section 18 (historical)
 Package manager: pnpm
 Runtime: Node.js + TypeScript + **Effect 3.x as primary runtime** (`effect`, `@effect/platform`, `@effect/platform-node`) — all cube application logic, host capabilities (Clock, Store, IdGenerator, Auth), and HTTP handling are modelled as `Effect`
-UI: React 19 + TypeScript styled with Tailwind CSS 4, a Next.js 16 App Router application in `frontend/` that reaches the kernel only through its BFF under `/api/qwbe/*`; TanStack Query integrates server state with React. The boundary remains API-first: every cube use-case has a corresponding authenticated HTTP endpoint, and the UI contains no fiscal business logic
+UI: React 19 + TypeScript styled with Tailwind CSS 4, a single-page application in `frontend/` built with Vite and routed with TanStack Router (file routes in `frontend/src/routes/`); the kernel serves the build (`QWBE_UI_DIR`) and the API (`/api/*`) on one origin, `PUBLIC_ORIGIN`, so the browser calls `/api` directly with its session cookie; TanStack Query integrates server state with React. The boundary remains API-first: every cube use-case has a corresponding authenticated HTTP endpoint, and the UI contains no fiscal business logic
 
 ## 1. Purpose
 
@@ -78,7 +78,7 @@ encryption of the openapi.ro key are the host's.
 
 The mother installs, mounts, or hosts nothing of this application, and invoicing data
 never moves into its database. If a mother is connected later, it is an external caller of
-this application's API from its own BFF, under section 19. That is not implemented.
+this application's API from its own backend, under section 19. That is not implemented.
 
 The cubes depend on host-provided contracts and never embed an authentication
 implementation in business logic. The kernel is a composition root and operational shell,
@@ -571,7 +571,7 @@ qwbe-invoicing/
 │   ├── company-lookup/         ANAF and openapi.ro clients, lookup cache, openapi.ro key cipher
 │   ├── ops/                    CLI, backup, restore
 │   └── parity/                 SQLite baseline fixtures for the PostgreSQL schema gate
-├── frontend/                   browser UI: Next App Router, BFF under /api/qwbe
+├── frontend/                   browser UI: Vite + TanStack Router, built into frontend/dist and served by the kernel
 ├── bin/                        CLI entry point and container command
 ├── probes/                     package, persistence, gate, and decoupling checks
 ├── scripts/                    fixtures and local helpers
@@ -681,7 +681,7 @@ mother may call this application. A valid signature alone is not enough.
 - **Authorization.** Grants are local and checked on every operation and resource. Roles
   declared by the mother never become local permissions automatically.
 - **Transport.** HTTPS only. The token never appears in a URL or a log. Calls come from the
-  mother's BFF (server to server), not from a browser.
+  mother's backend (server to server), not from a browser.
 - **Replay.** A bearer token is reusable until `exp`; `jti` alone does not prevent that.
   The remaining exposure is bounded by the short lifetime. If a one-time assertion exchanged
   for a session is chosen later, the assertion is consumed once. Idempotency keys on fiscal
@@ -697,5 +697,6 @@ Current limits that block it today:
 
 - `kernel/auth/auth.ts` yields one principal, `kernel-owner`, with fixed permissions and the
   configured organization; there is no multi-user authorization yet;
-- the BFF refuses the `Authorization` header (`frontend/src/lib/server/proxy-headers.ts`),
-  and the session endpoint is cookie-only. Neither is a route for a mother caller.
+- the kernel refuses the `Authorization` header unless `QWBE_BEARER_API=on`
+  (`kernel/http/edge-guard.ts`), the only Bearer credential is the owner's API token, and
+  the session endpoint is cookie-only. None of these is a route for a mother caller.

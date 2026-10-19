@@ -62,7 +62,7 @@ void test("plugin off: availability is never asked", async () => {
   await observe((queryClient) => new QueryObserver(queryClient, companyLookupAvailabilityQuery(client, false)))
   assert.equal(requested.length, 0)
   const on = await observe((queryClient) => new QueryObserver(queryClient, companyLookupAvailabilityQuery(client, true)))
-  assert.deepEqual([requested.map((request) => request.path), on.data], [["/api/qwbe/company-lookup/availability"], anaf])
+  assert.deepEqual([requested.map((request) => request.path), on.data], [["/api/company-lookup/availability"], anaf])
 })
 
 void test("provider none, a refused availability, or a CUI under the threshold: no lookup leaves", async () => {
@@ -78,7 +78,7 @@ void test("an eligible CUI is one POST with CSRF and the normalized body; the an
   const { client, requested } = countingTransport(proposal)
   const result = await observe((queryClient) => new QueryObserver(queryClient, companyLookupQuery(client, () => "csrf-1", "anaf", cuiLookupQuery(anaf, "RO13548146"))))
   assert.deepEqual(result.data, proposal)
-  assert.deepEqual(requested.map((request) => request.path), ["/api/qwbe/company-lookup/lookup"])
+  assert.deepEqual(requested.map((request) => request.path), ["/api/company-lookup/lookup"])
   const init = requested[0]?.init ?? {}
   assert.equal(init.method, "POST")
   assert.equal(new Headers(init.headers).get("x-csrf-token"), "csrf-1")
@@ -92,7 +92,7 @@ void test("suggestions only with nameSearch, and only from six letters", async (
   assert.equal(requested.length, 0)
   const found = await observe((queryClient) => new QueryObserver(queryClient, companySearchQuery(client, () => "csrf-1", "openapi", nameSearchQuery(openapi, "Exemplu"))))
   assert.deepEqual(found.data, [{ cui: "13548146", name: "Exemplu SRL" }])
-  assert.deepEqual(requested.map((request) => request.path), ["/api/qwbe/company-lookup/search"])
+  assert.deepEqual(requested.map((request) => request.path), ["/api/company-lookup/search"])
   assert.deepEqual(JSON.parse(typeof requested[0]?.init?.body === "string" ? requested[0].init.body : ""), { q: "Exemplu" })
 })
 

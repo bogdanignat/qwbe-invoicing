@@ -1,5 +1,3 @@
-"use client"
-
 import type { ProformaAuthoringSession } from "../../hooks/proforma-authoring-session-types.ts"
 import { BuyerEditor } from "./BuyerEditor.tsx"
 import { Field } from "../ui/Field.tsx"

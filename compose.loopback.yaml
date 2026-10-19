@@ -1,0 +1,14 @@
+# Optional overlay on compose.prod.yaml, for a host that already runs its own reverse
+# proxy (nginx, Caddy, Traefik) and leaves TLS to it:
+#
+#   docker compose -f compose.prod.yaml -f compose.loopback.yaml up -d
+#
+# It publishes `app` on the host's loopback interface only, on APP_LOOPBACK_PORT. The
+# address is fixed here on purpose and is not configurable: the port is never reachable
+# from another machine, only from the proxy on this host. The proxy must pass the public
+# Host and `X-Forwarded-Proto` (README, "Quick start (self-host)"), and PUBLIC_ORIGIN is
+# the origin the browser sees, not this loopback address.
+services:
+  app:
+    ports:
+      - "127.0.0.1:${APP_LOOPBACK_PORT:?Set APP_LOOPBACK_PORT to a free port on this host, e.g. 3180}:3000"

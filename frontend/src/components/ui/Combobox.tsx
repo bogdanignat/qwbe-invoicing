@@ -1,5 +1,3 @@
-"use client"
-
 import { useId, useState, type ComponentPropsWithRef, type KeyboardEvent, type ReactNode } from "react"
 
 import { comboboxInputAttributes, comboboxKey, comboboxOptionAria } from "../../lib/combobox.ts"

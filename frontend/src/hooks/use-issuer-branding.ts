@@ -1,5 +1,3 @@
-"use client"
-
 import { useState } from "react"
 
 import { readBrandingImage } from "../lib/branding-image-file.ts"

@@ -14,6 +14,7 @@ import {
   HistoryNotReplayable, historyDrift, historyFrom, readHistory, resetFingerprintCache, schemaDrift,
 } from "./postgres-schema-fingerprint.ts"
 import { replayFingerprint, ScratchNotRolledBack } from "./postgres-schema-replay.ts"
+import { parseTrustedProxies } from "../http/trusted-proxy.ts"
 
 /**
  * The corrupt-history signal, on a real PostgreSQL 16 server.
@@ -38,6 +39,10 @@ const config = (runtime: TestRuntime): RuntimeConfig => ({
   organizationId: undefined,
   pgSettings: { ...runtime.pool.options, password: "" } as RuntimeConfig["pgSettings"],
   plugins: allPlugins,
+  publicOrigin: undefined,
+  bearerApi: false,
+  trustedProxies: parseTrustedProxies(undefined),
+  uiDirectory: undefined,
 })
 
 /** The pool still works, and nothing is stuck in an aborted transaction. */

@@ -1,5 +1,3 @@
-"use client"
-
 import { CustomerEditorSection } from "../components/registry/CustomerEditorSection.tsx"
 import { CustomersRegistrySection } from "../components/registry/CustomersRegistrySection.tsx"
 import { ErrorAlert, Loading } from "../components/AsyncState.tsx"

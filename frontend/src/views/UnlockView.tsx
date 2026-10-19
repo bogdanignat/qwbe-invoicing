@@ -1,5 +1,3 @@
-"use client"
-
 import { ErrorAlert, Loading } from "../components/AsyncState.tsx"
 import { Button } from "../components/Button.tsx"
 import { Page } from "../components/Page.tsx"
