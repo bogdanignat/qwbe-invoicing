@@ -53,6 +53,7 @@ export const edgeConfig = (overrides: Partial<RuntimeConfig> = {}): RuntimeConfi
     publicOrigin,
     bearerApi: false,
     trustedProxies: parseTrustedProxies(undefined),
+    uiDirectory: undefined,
     ...overrides,
   }
 }

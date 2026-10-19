@@ -13,6 +13,7 @@ import { cachedReadiness, readinessIntervalMs } from "./readiness.ts"
 import { assertServableOrigin, edgePolicyFor, hardenTransport } from "./edge-server.ts"
 import type { EdgePolicy } from "./edge-guard.ts"
 import { createRequestListener } from "./http-request-listener.ts"
+import { uiBundleFor } from "./ui-bundle.ts"
 
 export { route } from "./http-request-listener.ts"
 
@@ -95,6 +96,7 @@ export const startServer = async (
   dependencies: ServerDependencies = {},
 ): Promise<RunningServer> => {
   assertServableOrigin(config)
+  const ui = uiBundleFor(config)
   const ready = isReady ?? cachedReadiness(
     applicationReady(config, pool, dependencies.barrierHeld ?? (() => false)),
     readinessIntervalMs,
@@ -119,6 +121,7 @@ export const startServer = async (
     api,
     isReady: ready,
     renderApiDocs,
+    ui,
     edge: () => edge,
     trustedProxies: config.trustedProxies,
     ...(dependencies.requestDeadlineMs === undefined ? {} : { deadlineMs: dependencies.requestDeadlineMs }),
@@ -145,5 +148,6 @@ export const startServer = async (
     throw error
   }
   console.log(`QWBE Invoicing listening on http://${config.host}:${String(config.port)}`)
+  if (ui === undefined) console.log("UI not served: QWBE_UI_DIR is unset or has no index.html; UI routes answer 503")
   return { server, close }
 }

@@ -38,7 +38,8 @@ void test("every answer the kernel writes carries the security headers, errors a
       ["docs redirect", 303, { path: "/api" }],
       ["invalid target", 400, { path: "/api/%2e%2e/x" }],
       ["origin", 403, { method: "POST", path: "/api/customers", body: "{}" }],
-      ["not found", 404, { path: "/nothing-here" }],
+      ["not found", 404, { path: "/health/nothing-here" }],
+      ["no UI built", 503, { path: "/invoices" }],
       ["method", 405, { method: "POST", path: "/", headers: unsafe, body: "{}" }],
       ["too large", 413, { method: "POST", path: "/api/customers", headers: unsafe, body: "x".repeat(1_000_001) }],
     ]

@@ -14,6 +14,8 @@ import { requestTarget } from "./edge-target.ts"
 import { forwardApiRequest } from "./http-api-forward.ts"
 import { serveApiDocs } from "./http-docs-route.ts"
 import { send } from "./http-request-io.ts"
+import type { UiBundle } from "./ui-bundle.ts"
+import { serveUi, uiPath } from "./ui-route.ts"
 
 interface HttpResponse {
   readonly status: number
@@ -24,15 +26,13 @@ export const route = (method: string | undefined, path: string, ready: boolean):
   if (method !== "GET") return { status: 405, body: { status: "method_not_allowed" } }
   if (path === "/health/live" || path === "/healthz") return { status: 200, body: { status: "live" } }
   if (path === "/health/ready") return ready ? { status: 200, body: { status: "ready" } } : { status: 503, body: { status: "not_ready" } }
-  if (path === "/") return { status: 200, body: { application: "QWBE Invoicing", status: "invoice_core" } }
   return { status: 404, body: { status: "not_found" } }
 }
 
 /**
  * Which paths are allowed to pay for a readiness evaluation. Only
  * `/health/ready` is: liveness (`/health/live` and its alias `/healthz`), the
- * root document and the 404/405 answers are decided without touching the
- * database, so a slow or absent server cannot turn a liveness probe into a
+ * UI and the 404/405 answers are decided without touching the database, so a slow or absent server cannot turn a liveness probe into a
  * restart loop. `route` stays synchronous and the caller passes `false` for the
  * paths that never consult readiness.
  */
@@ -45,6 +45,8 @@ interface ListenerDependencies {
   readonly api: ApiHandler
   readonly isReady: () => Promise<boolean>
   readonly renderApiDocs: () => Promise<ApiDocsResponse>
+  /** The Vite build, loaded once at startup; `undefined` when the server runs without a UI. */
+  readonly ui: UiBundle | undefined
   /** The public edge. Known once the server listens; before that nothing is served. */
   readonly edge: () => EdgePolicy | undefined
   readonly deadlineMs?: number
@@ -56,6 +58,8 @@ interface ListenerDependencies {
  * The order is the security contract: the deadline starts first, the raw
  * request-target and the edge guard run before the path is branched on, before
  * readiness, before the body is read and before a credential is looked at.
+ * Then the API and the health checks, then the SPA: a file of the build, else
+ * `index.html`.
  */
 export const createRequestListener = (dependencies: ListenerDependencies): RequestListener => (request, response) => {
   const { api, authenticate, browserSession, isReady, throttle } = dependencies
@@ -93,6 +97,7 @@ export const createRequestListener = (dependencies: ListenerDependencies): Reque
       await forwardApiRequest(forward, request, response, path)
       return
     }
+    if (uiPath(path)) { serveUi(dependencies.ui, request.method, path, response); return }
     const ready = needsReadiness(path) ? await untilAborted(isReady(), signal) : false
     const result = route(request.method, path, ready)
     send(response, result.status, result.body)

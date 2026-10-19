@@ -105,6 +105,9 @@ services:
       # Required to serve in production: the kernel pins Host, X-Forwarded-* and Origin to it.
       # The same value as the frontend's FRONTEND_ORIGIN (the BFF rewrites both headers to it).
       PUBLIC_ORIGIN: ${FRONTEND_ORIGIN:?Set FRONTEND_ORIGIN to the public https origin, e.g. https://invoice.example.com}
+      # The Vite build the kernel serves; the image fills it (T-1910 step D). Required in
+      # production: `serve` refuses to start without an index.html there.
+      QWBE_UI_DIR: /app/frontend/dist
       # `backup` and `restore` stage into a `mkdtemp` under TMPDIR and the archive
       # bounds allow 1 GiB expanded, so staging is a disk volume and not the small
       # tmpfs below: a 1 GiB staging tree in `/tmp` would be 1 GiB of RAM.

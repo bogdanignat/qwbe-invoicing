@@ -42,6 +42,7 @@ const config = (runtime: TestRuntime): RuntimeConfig => ({
   publicOrigin: undefined,
   bearerApi: false,
   trustedProxies: parseTrustedProxies(undefined),
+  uiDirectory: undefined,
 })
 
 /** The pool still works, and nothing is stuck in an aborted transaction. */

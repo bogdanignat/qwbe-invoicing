@@ -267,7 +267,7 @@ void test("CLI distinguishes invalid input, guard refusal, and execution failure
 void test("readiness is observable over the HTTP contract", () => {
   assert.equal(route("GET", "/health/ready", false).status, 503)
   assert.equal(route("GET", "/health/ready", true).status, 200)
-  assert.equal(route("POST", "/", true).status, 405)
+  assert.equal(route("POST", "/health/ready", true).status, 405)
 })
 
 void test("production Compose confirms the guarded migration apply", () => {

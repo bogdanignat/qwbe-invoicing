@@ -47,6 +47,7 @@ const configFor = (port: number, tokenFile: string): RuntimeConfig => ({
   publicOrigin: undefined,
   bearerApi: false,
   trustedProxies: parseTrustedProxies(undefined),
+  uiDirectory: undefined,
 })
 
 const tokenFile = (): string => {

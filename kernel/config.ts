@@ -29,6 +29,12 @@ export interface RuntimeConfig {
   readonly publicOrigin: string | undefined
   /** `QWBE_BEARER_API=on`: the Bearer API is served on the public listener. Off by default. */
   readonly bearerApi: boolean
+  /**
+   * `QWBE_UI_DIR`, the Vite build (`index.html` and `assets/`). Read once when a
+   * server starts (`kernel/http/ui-bundle.ts`); required to serve in production,
+   * optional elsewhere. Empty means unset.
+   */
+  readonly uiDirectory: string | undefined
   /** `QWBE_TRUSTED_PROXY`: whose `X-Forwarded-For` keys the login throttle. Nobody by default. */
   readonly trustedProxies: TrustedProxies
 }
@@ -136,5 +142,6 @@ export const runtimeConfig = (environment: NodeJS.ProcessEnv = process.env): Run
     publicOrigin: canonicalOrigin(environment.PUBLIC_ORIGIN),
     bearerApi: bearerSwitch(environment.QWBE_BEARER_API),
     trustedProxies: parseTrustedProxies(environment.QWBE_TRUSTED_PROXY),
+    uiDirectory: environment.QWBE_UI_DIR === "" ? undefined : environment.QWBE_UI_DIR,
   }
 }

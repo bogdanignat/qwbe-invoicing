@@ -10,6 +10,7 @@ import { edgeRequest } from "./edge-transport.test-support.ts"
 import { startServer } from "./http.ts"
 import { allPlugins } from "../plugins.ts"
 import { withMigrated, type TestFixture } from "../storage/postgres-rig.test-support.ts"
+import { writeFakeUiDist } from "./ui-dist.test-support.ts"
 
 /**
  * The session exchange end to end. Two ports: the server takes the application
@@ -126,7 +127,9 @@ const sessionCookiePolicy = async (
   const tokenFile = join(fixture.dataDirectory, "api-token")
   writeFileSync(tokenFile, token, { mode: 0o600 })
   const running = await startServer(
-    fixture.config({ port: 0, authTokenFile: tokenFile, nodeEnvironment, publicOrigin }),
+    // Production refuses to serve without a UI build; the fake one is enough here.
+    fixture.config({ port: 0, authTokenFile: tokenFile, nodeEnvironment, publicOrigin,
+      uiDirectory: writeFakeUiDist({}, fixture.dataDirectory) }),
     fixture.pool,
     () => Promise.resolve(true),
   )

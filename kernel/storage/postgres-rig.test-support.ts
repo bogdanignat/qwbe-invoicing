@@ -499,6 +499,7 @@ const fixtureOn = (database: string): TestFixture => {
       publicOrigin: undefined,
       bearerApi: false,
       trustedProxies: parseTrustedProxies(undefined),
+      uiDirectory: undefined,
       ...overrides,
     }),
     childEnv: (overrides = {}) => {
