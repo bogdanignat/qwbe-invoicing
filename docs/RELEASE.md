@@ -197,7 +197,7 @@ docker compose -f compose.prod.yaml exec app node bin/qwbe-invoicing.ts doctor -
 docker compose -f compose.prod.yaml exec app node bin/qwbe-invoicing.ts migrate --json
 ```
 
-Separately protect `.env` (`PUBLIC_ORIGIN`, `ORGANIZATION_ID`, `IMAGE_TAG`), the contents of the three secret files, `Caddyfile`/`compose.prod.yaml` edits and `image-digests.txt` — they are operator config, not part of the data backup. A restored database needs the same `ORGANIZATION_ID`; sessions do not survive a restore, so users unlock again.
+Separately protect `.env` (`PUBLIC_ORIGIN`, `ORGANIZATION_ID`, `IMAGE_TAG`), the contents of the four secret files, `Caddyfile`/`compose.prod.yaml` edits and `image-digests.txt` — they are operator config, not part of the data backup. A restored database needs the same `ORGANIZATION_ID`; sessions do not survive a restore, so users unlock again.
 
 ## Rollback
 

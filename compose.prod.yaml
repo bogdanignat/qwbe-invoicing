@@ -12,9 +12,10 @@ name: qwbe-invoicing
 #     docker compose -f compose.prod.yaml -f compose.loopback.yaml up -d
 #     (publishes `app` on 127.0.0.1:${APP_LOOPBACK_PORT} only)
 #
-# Before the first `up`, create the three secret files (`scripts/init-secrets.sh` does it,
-# from the paths in .env). They are never in this file, never in the image and never in
-# an environment variable. The company-lookup key encrypts the openapi.ro key at rest;
+# Before the first `up`, create the four secret files (`scripts/init-secrets.sh` does it,
+# from the paths in .env); this file mounts three, compose.anaf.yaml the ANAF token key.
+# They are never in this file, never in the image and never in an environment variable.
+# The company-lookup key encrypts the openapi.ro key at rest;
 # it is never rotated in place: a new one makes the stored openapi.ro key unreadable
 # until it is entered again. Every path, the image tag and PUBLIC_ORIGIN are required
 # (`:?`) rather than defaulted: a stack that starts with a guessable fallback credential
