@@ -122,7 +122,7 @@ a rewrite.
   `COMPOSE_FILE=compose.yaml:compose.anaf.yaml` (self-host: `compose.prod.yaml:compose.anaf.yaml`);
   without it the XML is downloaded and uploaded on another channel. Documents to a private
   person (B2C) go to ANAF's `uploadb2c`; the 5-working-day deadline is not tracked. Nothing
-  is submitted automatically, and the cycle is confirmed on ANAF TEST only (B2C not yet). A PDF is a visual representation, not the structured XML the law requires.
+  is submitted automatically, and the cycle is confirmed on ANAF TEST only (B2C included). A PDF is a visual representation, not the structured XML the law requires.
 - No simplified invoice, delivery note, receipt or fiscal receipt.
 - No email delivery. Delivery means PDF download.
 - No foreign issuers, foreign billing addresses or invoices in other currencies.
