@@ -105,17 +105,18 @@ Instalarea dintr-un release publicat (imagine din registry, fixată pe digest):
 O schimbare cere repornirea (`docker compose up -d`). Tabelul complet:
 [Configuration](../README.md#configuration).
 
-Primii pași în aplicație:
+Primii pași în aplicație (până îi termini, pagina **Acasă** arată cardul „Configurare
+incompletă”, cu ce mai lipsește și linkul spre locul unde se rezolvă):
 
 1. **Login.** Deschide `PUBLIC_ORIGIN`, introdu tokenul API (conținutul fișierului de la
    `AUTH_TOKEN_PATH`) și apasă „Deblochează aplicația”. Browserul păstrează doar o sesiune.
-2. **Firma emitentă.** În **Setări → Emitent → Date firmă**: forma juridică (SRL sau PFA),
+2. **Firma emitentă.** În **Setări** (pagina **Date firmă**): forma juridică (SRL sau PFA),
    denumirea, CUI-ul, Registrul Comerțului, capitalul social (la SRL), adresa, IBAN-ul și
    regimul TVA. Fără Registrul Comerțului (și capital, la SRL) nu se poate emite.
 3. **Seriile.** Pe aceeași pagină, în **Serii de documente**, adaugi cu „Adaugă seria” cel
    puțin o serie pentru „Factură” (și una pentru „Proformă”, dacă le folosești). O serie
    adăugată nu se mai editează.
-4. **Căutarea firmelor** (opțional). În **Setări → Integrări** alegi furnizorul: ANAF
+4. **Căutarea firmelor** (opțional). În **Integrări** alegi furnizorul: ANAF
    (gratuit, fără cheie) sau openapi.ro (cu cheia ta); cel mult unul pornit.
 5. **Primul client** (opțional). În **Clienți**: o firmă cu CUI valid sau o persoană fizică,
    cu CNP opțional. Poți factura și unui cumpărător scris direct în factură.
@@ -160,7 +161,7 @@ Pași:
    Toate valorile sau niciuna: o configurare parțială oprește Compose sau aplicația.
    `ANAF_REDIRECT_URI` este exact cel înregistrat la ANAF.
 4. Repornește: `docker compose up -d`.
-5. În **Setări → Integrări → ANAF e-Factura** apasă „Conectează cu certificatul”: browserul
+5. În **Integrări → ANAF e-Factura** apasă „Conectează cu certificatul”: browserul
    merge la ANAF, alegi certificatul, ANAF te trimite înapoi la callback. Aplicația verifică
    dreptul pe CUI-ul emitentului și nu salvează conexiunea fără el; tokenurile rămân în bază,
    criptate.

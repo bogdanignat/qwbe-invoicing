@@ -1,5 +1,5 @@
-import { Switch } from "../../ui/Switch.tsx"
-import type { CompanyLookupSettings, SwitchableProvider } from "../../../lib/company-lookup-settings.ts"
+import { Switch } from "../ui/Switch.tsx"
+import type { CompanyLookupSettings, SwitchableProvider } from "../../lib/company-lookup-settings.ts"
 
 interface ProviderSwitchesProps {
   readonly settings: CompanyLookupSettings

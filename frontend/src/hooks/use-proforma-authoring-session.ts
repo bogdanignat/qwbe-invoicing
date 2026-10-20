@@ -86,7 +86,6 @@ export const useProformaAuthoringSession = (input: ProformaAuthoringSessionInput
     status: {
       pending,
       canSave: save.canSave,
-      seriesMissing: readiness.seriesMissing,
       recoveryBlocked: recovery.blocked || knownNotice !== undefined,
       recoveryPending: recovery.pending,
     },

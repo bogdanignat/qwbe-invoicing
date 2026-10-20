@@ -30,7 +30,6 @@ export interface ProformaSaveReadiness {
    * discovered on the document screen.
    */
   readonly dueDateNote: string | null
-  readonly seriesMissing: boolean
 }
 
 export const PROFORMA_DUE_DATE_NOTE = "Fără scadență, proforma va putea fi transformată doar în draft de factură, nu direct în factură emisă."
@@ -40,7 +39,6 @@ export const proformaSaveReadiness = (input: ProformaSaveReadinessInput): Profor
   const seriesChosen = input.form.series !== "" && input.seriesOptions.includes(input.form.series)
   return {
     notesIssue,
-    seriesMissing: input.seriesOptions.length === 0,
     canSave: seriesChosen
       && documentLinesReady(input.lines)
       && notesIssue === null

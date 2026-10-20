@@ -6,8 +6,7 @@ import { Button } from "../Button.tsx"
  *
  * No totals are shown: the server computes them when it answers, and a proforma
  * is authored in one request, so there is no saved state to preview against.
- * A missing series is a setup note here rather than a refusal state — the form
- * stays fillable, only the save is closed.
+ * A missing series never reaches this screen: the page says so before the form.
  */
 export const ProformaAuthoringActions = ({ session }: { readonly session: ProformaAuthoringSession }) => {
   const { status } = session
@@ -18,9 +17,6 @@ export const ProformaAuthoringActions = ({ session }: { readonly session: Profor
     </section>
     <section className="card authoring-section">
       <h2>Acțiuni proformă</h2>
-      {status.seriesMissing
-        ? <p className="status-note warning" role="status">Nu există nicio serie de proforme configurată. Adaugă o serie pentru proforme în aplicația existentă, apoi revino aici.</p>
-        : null}
       <Button className="full-width" type="submit" disabled={!status.canSave}>
         {status.pending ? "Se salvează…" : "Salvează proforma"}
       </Button>

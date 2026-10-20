@@ -4,7 +4,6 @@ import { IssuerSettingsCard } from "../components/settings/IssuerSettingsCard.ts
 import { Page } from "../components/Page.tsx"
 import { PrivateScreen } from "../components/PrivateScreen.tsx"
 import { SettingsHelpDialog } from "../components/settings/SettingsHelpDialog.tsx"
-import { SettingsSectionsNav } from "../components/settings/SettingsSectionsNav.tsx"
 import { useAuthenticatedShell } from "../hooks/use-authenticated-shell.ts"
 import { useDocumentSeries } from "../hooks/use-document-series.ts"
 import { useIssuerSettings } from "../hooks/use-issuer-settings.ts"
@@ -27,7 +26,6 @@ export const SettingsView = () => {
       <a className="button secondary" href="/api" target="_blank" rel="noopener noreferrer">Documentație API<span className="sr-only"> (se deschide într-o fereastră nouă)</span></a>
       <SettingsHelpDialog />
     </>}>
-      <SettingsSectionsNav current="issuer" />
       {shell.error === undefined ? null : <ErrorAlert error={shell.error} />}
       {load.kind === "loading" ? <Loading label="Se încarcă datele firmei…" /> : null}
       {load.kind === "error" ? <ErrorAlert error={load.error} onRetry={issuer.retry} /> : null}

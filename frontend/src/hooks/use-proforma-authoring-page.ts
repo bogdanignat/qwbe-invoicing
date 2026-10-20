@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query"
 
 import { useAuth } from "./auth-context.ts"
+import { documentSeriesQuery, issuerQuery } from "./reference-queries.ts"
 import { useAuthoringPagedList } from "./use-authoring-paged-list.ts"
 import { useInvoicingClients } from "./use-invoicing-clients.ts"
 import type { BackgroundError } from "./invoice-authoring-session-types.ts"
@@ -22,6 +23,7 @@ export type ProformaAuthoringPageState =
   | { readonly kind: "error"; readonly error: Error; readonly retry: () => void }
   | { readonly kind: "issuer-required" }
   | { readonly kind: "vat-catalogue-empty" }
+  | { readonly kind: "proforma-series-required" }
   | { readonly kind: "unit-catalogue-empty" }
   | { readonly kind: "ready"; readonly session: ProformaAuthoringSessionInput }
 
@@ -29,15 +31,11 @@ export const useProformaAuthoringPage = (): ProformaAuthoringPageState => {
   const { status } = useAuth()
   const clients = useInvoicingClients()
   const enabled = status === "authenticated"
-  const issuer = useQuery({
-    queryKey: ["issuer"], enabled, queryFn: ({ signal }) => clients.reference.getIssuer(signal),
-  })
+  const issuer = useQuery(issuerQuery(clients.reference, enabled))
   const vatCatalogue = useQuery({
     queryKey: ["vat-regimes"], enabled, queryFn: ({ signal }) => clients.reference.getVatCatalogue(signal),
   })
-  const series = useQuery({
-    queryKey: ["document-series"], enabled, queryFn: ({ signal }) => clients.reference.listDocumentSeries(signal),
-  })
+  const series = useQuery(documentSeriesQuery(clients.reference, enabled))
   const units = useQuery({
     queryKey: ["unit-of-measures"], enabled, queryFn: ({ signal }) => clients.reference.listUnitOfMeasures(signal),
   })

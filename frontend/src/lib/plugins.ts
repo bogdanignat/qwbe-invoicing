@@ -7,3 +7,7 @@ import type { AuthSnapshot } from "./auth-session.ts"
  */
 export const pluginActive = (session: Pick<AuthSnapshot, "status" | "plugins">, name: PluginName): boolean =>
   session.status === "authenticated" && session.plugins.includes(name)
+
+/** Integrări exists while an integration plugin runs: company lookup or e-Factura. */
+export const integrationsActive = (session: Pick<AuthSnapshot, "status" | "plugins">): boolean =>
+  pluginActive(session, "company-lookup") || pluginActive(session, "efactura")

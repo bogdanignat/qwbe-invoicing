@@ -164,7 +164,7 @@ void test("production serves the build it was given", async () => {
   const directory = writeFakeUiDist()
   const server = await startEdgeServer({ config: { nodeEnvironment: "production", uiDirectory: directory } })
   try {
-    const page = await edgeRequest(server.port, { path: "/settings/integrations", headers: { host: publicHost } })
+    const page = await edgeRequest(server.port, { path: "/integrations", headers: { host: publicHost } })
     assert.equal(page.status, 200)
     assert.equal(page.body, fakeIndex)
   } finally {

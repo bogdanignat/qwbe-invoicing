@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from "./routes/__root.tsx"
 import { Route as IndexRouteImport } from "./routes/index.tsx"
 import { Route as AppRouteImport } from "./routes/app.tsx"
 import { Route as CustomersRouteImport } from "./routes/customers.tsx"
+import { Route as IntegrationsRouteImport } from "./routes/integrations.tsx"
 import { Route as ProductsRouteImport } from "./routes/products.tsx"
 import { Route as UnlockRouteImport } from "./routes/unlock.tsx"
 import { Route as CorrectionsIdRouteImport } from "./routes/corrections/$id.tsx"
@@ -23,7 +24,6 @@ import { Route as ProformasIndexRouteImport } from "./routes/proformas/index.tsx
 import { Route as ProformasIdRouteImport } from "./routes/proformas/$id.tsx"
 import { Route as ProformasNewRouteImport } from "./routes/proformas/new.tsx"
 import { Route as SettingsIndexRouteImport } from "./routes/settings/index.tsx"
-import { Route as SettingsIntegrationsRouteImport } from "./routes/settings/integrations.tsx"
 
 const IndexRoute = IndexRouteImport.update({
   id: "/",
@@ -38,6 +38,11 @@ const AppRoute = AppRouteImport.update({
 const CustomersRoute = CustomersRouteImport.update({
   id: "/customers",
   path: "/customers",
+  getParentRoute: () => rootRouteImport,
+} as any)
+const IntegrationsRoute = IntegrationsRouteImport.update({
+  id: "/integrations",
+  path: "/integrations",
   getParentRoute: () => rootRouteImport,
 } as any)
 const ProductsRoute = ProductsRouteImport.update({
@@ -95,16 +100,12 @@ const SettingsIndexRoute = SettingsIndexRouteImport.update({
   path: "/settings/",
   getParentRoute: () => rootRouteImport,
 } as any)
-const SettingsIntegrationsRoute = SettingsIntegrationsRouteImport.update({
-  id: "/settings/integrations",
-  path: "/settings/integrations",
-  getParentRoute: () => rootRouteImport,
-} as any)
 
 export interface FileRoutesByFullPath {
   "/": typeof IndexRoute
   "/app": typeof AppRoute
   "/customers": typeof CustomersRoute
+  "/integrations": typeof IntegrationsRoute
   "/products": typeof ProductsRoute
   "/unlock": typeof UnlockRoute
   "/corrections/$id": typeof CorrectionsIdRoute
@@ -113,7 +114,6 @@ export interface FileRoutesByFullPath {
   "/invoices/new": typeof InvoicesNewRoute
   "/proformas/$id": typeof ProformasIdRoute
   "/proformas/new": typeof ProformasNewRoute
-  "/settings/integrations": typeof SettingsIntegrationsRoute
   "/invoices/": typeof InvoicesIndexRoute
   "/proformas/": typeof ProformasIndexRoute
   "/settings/": typeof SettingsIndexRoute
@@ -122,6 +122,7 @@ export interface FileRoutesByTo {
   "/": typeof IndexRoute
   "/app": typeof AppRoute
   "/customers": typeof CustomersRoute
+  "/integrations": typeof IntegrationsRoute
   "/products": typeof ProductsRoute
   "/unlock": typeof UnlockRoute
   "/corrections/$id": typeof CorrectionsIdRoute
@@ -130,7 +131,6 @@ export interface FileRoutesByTo {
   "/invoices/new": typeof InvoicesNewRoute
   "/proformas/$id": typeof ProformasIdRoute
   "/proformas/new": typeof ProformasNewRoute
-  "/settings/integrations": typeof SettingsIntegrationsRoute
   "/invoices": typeof InvoicesIndexRoute
   "/proformas": typeof ProformasIndexRoute
   "/settings": typeof SettingsIndexRoute
@@ -140,6 +140,7 @@ export interface FileRoutesById {
   "/": typeof IndexRoute
   "/app": typeof AppRoute
   "/customers": typeof CustomersRoute
+  "/integrations": typeof IntegrationsRoute
   "/products": typeof ProductsRoute
   "/unlock": typeof UnlockRoute
   "/corrections/$id": typeof CorrectionsIdRoute
@@ -148,7 +149,6 @@ export interface FileRoutesById {
   "/invoices/new": typeof InvoicesNewRoute
   "/proformas/$id": typeof ProformasIdRoute
   "/proformas/new": typeof ProformasNewRoute
-  "/settings/integrations": typeof SettingsIntegrationsRoute
   "/invoices/": typeof InvoicesIndexRoute
   "/proformas/": typeof ProformasIndexRoute
   "/settings/": typeof SettingsIndexRoute
@@ -159,6 +159,7 @@ export interface FileRouteTypes {
     | "/"
     | "/app"
     | "/customers"
+    | "/integrations"
     | "/products"
     | "/unlock"
     | "/corrections/$id"
@@ -167,7 +168,6 @@ export interface FileRouteTypes {
     | "/invoices/new"
     | "/proformas/$id"
     | "/proformas/new"
-    | "/settings/integrations"
     | "/invoices/"
     | "/proformas/"
     | "/settings/"
@@ -176,6 +176,7 @@ export interface FileRouteTypes {
     | "/"
     | "/app"
     | "/customers"
+    | "/integrations"
     | "/products"
     | "/unlock"
     | "/corrections/$id"
@@ -184,7 +185,6 @@ export interface FileRouteTypes {
     | "/invoices/new"
     | "/proformas/$id"
     | "/proformas/new"
-    | "/settings/integrations"
     | "/invoices"
     | "/proformas"
     | "/settings"
@@ -193,6 +193,7 @@ export interface FileRouteTypes {
     | "/"
     | "/app"
     | "/customers"
+    | "/integrations"
     | "/products"
     | "/unlock"
     | "/corrections/$id"
@@ -201,7 +202,6 @@ export interface FileRouteTypes {
     | "/invoices/new"
     | "/proformas/$id"
     | "/proformas/new"
-    | "/settings/integrations"
     | "/invoices/"
     | "/proformas/"
     | "/settings/"
@@ -211,6 +211,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AppRoute: typeof AppRoute
   CustomersRoute: typeof CustomersRoute
+  IntegrationsRoute: typeof IntegrationsRoute
   ProductsRoute: typeof ProductsRoute
   UnlockRoute: typeof UnlockRoute
   CorrectionsIdRoute: typeof CorrectionsIdRoute
@@ -219,7 +220,6 @@ export interface RootRouteChildren {
   InvoicesNewRoute: typeof InvoicesNewRoute
   ProformasIdRoute: typeof ProformasIdRoute
   ProformasNewRoute: typeof ProformasNewRoute
-  SettingsIntegrationsRoute: typeof SettingsIntegrationsRoute
   InvoicesIndexRoute: typeof InvoicesIndexRoute
   ProformasIndexRoute: typeof ProformasIndexRoute
   SettingsIndexRoute: typeof SettingsIndexRoute
@@ -246,6 +246,13 @@ declare module "@tanstack/react-router" {
       path: "/customers"
       fullPath: "/customers"
       preLoaderRoute: typeof CustomersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    "/integrations": {
+      id: "/integrations"
+      path: "/integrations"
+      fullPath: "/integrations"
+      preLoaderRoute: typeof IntegrationsRouteImport
       parentRoute: typeof rootRouteImport
     }
     "/products": {
@@ -325,13 +332,6 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof SettingsIndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    "/settings/integrations": {
-      id: "/settings/integrations"
-      path: "/settings/integrations"
-      fullPath: "/settings/integrations"
-      preLoaderRoute: typeof SettingsIntegrationsRouteImport
-      parentRoute: typeof rootRouteImport
-    }
   }
 }
 
@@ -339,6 +339,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AppRoute: AppRoute,
   CustomersRoute: CustomersRoute,
+  IntegrationsRoute: IntegrationsRoute,
   ProductsRoute: ProductsRoute,
   UnlockRoute: UnlockRoute,
   CorrectionsIdRoute: CorrectionsIdRoute,
@@ -347,7 +348,6 @@ const rootRouteChildren: RootRouteChildren = {
   InvoicesNewRoute: InvoicesNewRoute,
   ProformasIdRoute: ProformasIdRoute,
   ProformasNewRoute: ProformasNewRoute,
-  SettingsIntegrationsRoute: SettingsIntegrationsRoute,
   InvoicesIndexRoute: InvoicesIndexRoute,
   ProformasIndexRoute: ProformasIndexRoute,
   SettingsIndexRoute: SettingsIndexRoute,

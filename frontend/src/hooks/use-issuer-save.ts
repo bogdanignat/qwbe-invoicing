@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useState } from "react"
 
 import { useAuth } from "./auth-context.ts"
+import { referenceQueryKeys } from "./reference-queries.ts"
 import { useInvoicingClients } from "./use-invoicing-clients.ts"
 import { sessionWrite } from "../lib/session-write.ts"
 import {
@@ -50,8 +51,8 @@ export const useIssuerSave = (guard: RevisionGuard, onReplaced: () => void): Iss
     },
     onSuccess: (answer) => {
       if (answer === undefined) return
-      queryClient.setQueryData(["issuer"], answer.saved)
-      void queryClient.invalidateQueries({ queryKey: ["issuer"] })
+      queryClient.setQueryData(referenceQueryKeys.issuer, answer.saved)
+      void queryClient.invalidateQueries({ queryKey: referenceQueryKeys.issuer })
       const replaces = savedFormReplacesEdits(guard, answer.revision)
       if (replaces) onReplaced()
       setNotice(replaces ? ISSUER_SAVED : ISSUER_SAVED_WHILE_EDITING)

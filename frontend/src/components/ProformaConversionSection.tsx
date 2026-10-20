@@ -49,7 +49,7 @@ export const ProformaConversionSection = ({ conversion }: { readonly conversion:
             {conversion.seriesOptions.map((series) => <option key={series} value={series}>{series}</option>)}
           </Select>
         </Field>
-        {conversion.seriesMissing ? <p className="status-note warning" id={SERIES_NOTE}>{CONVERSION_SERIES_MISSING}</p> : null}
+        {conversion.seriesMissing ? <p className="status-note warning" id={SERIES_NOTE}>{CONVERSION_SERIES_MISSING} <AppLink href="/settings">Deschide Setări</AppLink></p> : null}
         {conversion.dueDateIssue === null ? null : <p className="status-note warning" id={DUE_DATE_NOTE}>{conversion.dueDateIssue}</p>}
         <div className="button-row">
           <Button

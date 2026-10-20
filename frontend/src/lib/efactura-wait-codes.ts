@@ -6,7 +6,7 @@ import type { EFacturaSubmission } from "./efactura-submissions.ts"
  * so the panel and the history read them as the same sentences, from here.
  */
 const WAIT_REASONS: ReadonlyMap<string, string> = new Map(Object.entries({
-  neconectat: "Trimiterea așteaptă: aplicația nu are o conexiune ANAF utilizabilă. Reconectează-te din Setări → Integrări.",
+  neconectat: "Trimiterea așteaptă: aplicația nu are o conexiune ANAF utilizabilă. Reconectează-te din Integrări.",
   conexiune_alt_cif: "Trimiterea așteaptă: conexiunea ANAF este verificată pentru alt CIF decât cel de pe document.",
 }))
 

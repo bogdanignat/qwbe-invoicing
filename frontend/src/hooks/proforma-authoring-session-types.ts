@@ -66,8 +66,6 @@ export interface ProformaAuthoringSession {
   readonly status: {
     readonly pending: boolean
     readonly canSave: boolean
-    /** The catalogue holds no proforma series: a setup note next to a closed save, not a failure. */
-    readonly seriesMissing: boolean
     readonly recoveryBlocked: boolean
     readonly recoveryPending: boolean
   }

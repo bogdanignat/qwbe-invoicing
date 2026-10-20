@@ -15,9 +15,9 @@ interface InvoiceAuthoringViewProps {
 /**
  * The authoring screen's frame: session, then prerequisites, then the form.
  *
- * Each missing prerequisite is its own state with its own explanation, naming
- * where the setup has to happen — this frontend has no settings, catalog or
- * master-data screens yet, so pointing at one would be pointing at nothing.
+ * Each missing prerequisite is its own state with its own explanation: what the
+ * user sets up links to Setări; the VAT and unit catalogues come from the
+ * server, so those say so instead.
  */
 export const InvoiceAuthoringView = ({ id }: InvoiceAuthoringViewProps) => {
   const shell = useAuthenticatedShell()
@@ -30,10 +30,10 @@ export const InvoiceAuthoringView = ({ id }: InvoiceAuthoringViewProps) => {
     >
       {page.kind === "loading" ? <Loading label="Se pregătește formularul…" />
         : page.kind === "error" ? <ErrorAlert error={page.error} onRetry={page.retry} />
-        : page.kind === "issuer-required" ? <p className="setup-note">Nu există încă un profil de emitent. Configurează firma emitentă (datele firmei și seria de facturi) în aplicația existentă, apoi revino aici.</p>
-        : page.kind === "vat-catalogue-empty" ? <p className="setup-note">Catalogul de regimuri TVA nu este disponibil. Verifică configurarea TVA a organizației în aplicația existentă, apoi reîncearcă.</p>
-        : page.kind === "invoice-series-required" ? <p className="setup-note">Nu există nicio serie de facturi configurată. Adaugă o serie pentru facturi în aplicația existentă, apoi revino aici.</p>
-        : page.kind === "unit-catalogue-empty" ? <p className="setup-note">Catalogul de unități de măsură este gol. Verifică configurarea organizației în aplicația existentă, apoi reîncearcă.</p>
+        : page.kind === "issuer-required" ? <p className="setup-note">Datele firmei emitente nu sunt completate. Completează-le în <AppLink href="/settings">Setări</AppLink>, împreună cu o serie pentru facturi, apoi revino aici.</p>
+        : page.kind === "vat-catalogue-empty" ? <p className="setup-note">Catalogul de regimuri TVA nu a venit de la server; nu se completează din aplicație. Reîncarcă pagina, iar dacă problema rămâne, verifică instalarea serverului.</p>
+        : page.kind === "invoice-series-required" ? <p className="setup-note">Nu există nicio serie pentru facturi. Adaug-o în <AppLink href="/settings">Setări</AppLink>, apoi revino aici.</p>
+        : page.kind === "unit-catalogue-empty" ? <p className="setup-note">Catalogul de unități de măsură a venit gol de la server; nu se completează din aplicație. Reîncarcă pagina, iar dacă problema rămâne, verifică instalarea serverului.</p>
         : page.kind === "draft-missing" ? <p className="setup-note">Draftul cerut nu există sau nu mai este disponibil. <AppLink href="/invoices">Întoarce-te la registrul de facturi</AppLink>.</p>
         : page.kind === "locked" ? <LockedDraftReadonly
           title={page.title} notice={page.notice}

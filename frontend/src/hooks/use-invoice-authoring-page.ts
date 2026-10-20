@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query"
 
 import { useAuth } from "./auth-context.ts"
+import { documentSeriesQuery, issuerQuery } from "./reference-queries.ts"
 import { useInvoicingClients } from "./use-invoicing-clients.ts"
 import { useAuthoringPagedList } from "./use-authoring-paged-list.ts"
 import type { InvoiceAuthoringPageState } from "./invoice-authoring-page-types.ts"
@@ -24,28 +25,20 @@ const normalizedFailure = (cause: unknown): Error =>
 /**
  * Everything an authoring screen needs before a form can be filled, with the
  * session asked once per concern and every missing prerequisite named as its
- * own state — the screen explains what to set up instead of linking to a page
- * this frontend does not have.
+ * own state, shown before the form: the screen says what is missing and links
+ * to Setări where the user can set it up, so nothing typed is lost on the way.
  */
 export const useInvoiceAuthoringPage = (id: string | undefined): InvoiceAuthoringPageState => {
   const { status } = useAuth()
   const clients = useInvoicingClients()
   const enabled = status === "authenticated"
-  const issuer = useQuery({
-    queryKey: ["issuer"],
-    enabled,
-    queryFn: ({ signal }) => clients.reference.getIssuer(signal),
-  })
+  const issuer = useQuery(issuerQuery(clients.reference, enabled))
   const vatCatalogue = useQuery({
     queryKey: ["vat-regimes"],
     enabled,
     queryFn: ({ signal }) => clients.reference.getVatCatalogue(signal),
   })
-  const series = useQuery({
-    queryKey: ["document-series"],
-    enabled,
-    queryFn: ({ signal }) => clients.reference.listDocumentSeries(signal),
-  })
+  const series = useQuery(documentSeriesQuery(clients.reference, enabled))
   const unitOfMeasures = useQuery({
     queryKey: ["unit-of-measures"],
     enabled,

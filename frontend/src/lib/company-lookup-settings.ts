@@ -1,7 +1,7 @@
 import { boolean, nullableText, object } from "./model-decoder.ts"
 
 /**
- * The company-lookup integration as Setări → Integrări edits it: which provider
+ * The company-lookup integration as Integrări edits it: which provider
  * fills companies in from a CUI, and whether an openapi.ro key is stored.
  *
  * The key is write-only. The answer says only that one exists and how it ends,

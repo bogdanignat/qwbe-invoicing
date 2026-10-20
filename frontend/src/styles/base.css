@@ -158,8 +158,6 @@ td small { display: block; margin-top: .2rem; color: var(--color-invoice-muted);
 .branding-preview { display: flex; flex-wrap: wrap; gap: .8rem; align-items: center; padding: .8rem; border: 1px solid var(--color-invoice-border); border-radius: var(--radius-invoice-control); background: var(--color-invoice-secondary-surface); }
 .branding-preview img { max-width: min(18rem, 100%); height: auto; }
 .document-series-form { gap: .9rem; }
-.settings-sections { display: flex; flex-wrap: wrap; gap: .5rem; margin-bottom: 1.5rem; }
-.settings-sections a[aria-current] { border-color: var(--color-invoice-primary); background: var(--color-invoice-primary-soft); }
 .settings-help-dialog { width: min(46rem, 92vw); max-height: 86vh; padding: 0; border: 1px solid var(--color-invoice-border); border-radius: var(--radius-invoice-panel); color: var(--color-invoice-ink); background: var(--color-invoice-surface); }
 .settings-help-dialog::backdrop { background: rgb(23 33 27 / 45%); }
 .settings-help-dialog header { display: flex; gap: 1rem; align-items: flex-start; justify-content: space-between; padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--color-invoice-border); }

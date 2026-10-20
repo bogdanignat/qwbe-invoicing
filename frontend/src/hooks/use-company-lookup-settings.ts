@@ -13,7 +13,7 @@ import { pluginActive } from "../lib/plugins.ts"
 import { sessionWrite } from "../lib/session-write.ts"
 
 /**
- * Setări → Integrări: the stored settings, the one write, and the key draft.
+ * Integrări: the stored settings, the one write, and the key draft.
  *
  * Every rule is `lib/company-lookup-settings.ts`; this hook only sends what a
  * rule decided. Nothing is optimistic: the switches show the backend's answer,

@@ -4,8 +4,8 @@ import test from "node:test"
 import { CALLBACK_OUTCOMES, attemptOutcome, callbackTarget, cifOutcome, spvCif, usableCode } from "./callback.ts"
 
 void test("the callback lands on one fixed page, with one of a fixed set of plain codes", () => {
-  assert.equal(callbackTarget("conectat"), "/settings/integrations?anaf=conectat")
-  for (const outcome of CALLBACK_OUTCOMES) assert.match(callbackTarget(outcome), /^\/settings\/integrations\?anaf=[a-z_]+$/u)
+  assert.equal(callbackTarget("conectat"), "/integrations?anaf=conectat")
+  for (const outcome of CALLBACK_OUTCOMES) assert.match(callbackTarget(outcome), /^\/integrations\?anaf=[a-z_]+$/u)
   for (const outcome of [...Object.values(attemptOutcome), ...Object.values(cifOutcome)]) assert.ok(CALLBACK_OUTCOMES.includes(outcome))
 })
 
