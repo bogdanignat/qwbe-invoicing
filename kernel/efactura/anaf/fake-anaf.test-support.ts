@@ -6,9 +6,12 @@ import type { Transport } from "../../outbound/send.ts"
 /**
  * A fake ANAF on 127.0.0.1, reached only through the transport it hands out.
  * The code under test keeps building the real, constant ANAF URLs
- * (`endpoints.ts`); the transport rewrites `https://api.anaf.ro` and
- * `https://logincert.anaf.ro` to this listener and refuses every other host,
- * so no test can reach ANAF or anything else on the network.
+ * (`endpoints.ts`); the transport rewrites `https://api.anaf.ro`,
+ * `https://logincert.anaf.ro` and the public validator on
+ * `https://webservicesp.anaf.ro` to this listener and refuses every other
+ * host, so no test can reach ANAF or anything else on the network. As on ANAF,
+ * `validare` answers only on the public host, without a token; under
+ * `api.anaf.ro` it is a 404.
  *
  * Each operation answers like ANAF by default and can be switched to one of
  * the scenarios ANAF (or the road to it) produces: an error inside HTTP 200, a
@@ -24,6 +27,8 @@ export type FakeScenario =
 
 export interface FakeCall {
   readonly operation: FakeOperation | "unknown"
+  /** The host the code under test asked for, e.g. `https://webservicesp.anaf.ro`. */
+  readonly origin: string
   readonly method: string
   /** Path and query as ANAF would have received them, e.g. `/test/FCTEL/rest/upload?standard=UBL&cif=1`. */
   readonly path: string
@@ -45,16 +50,20 @@ export interface FakeAnaf {
 export const FAKE_ZIP = Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x14, 0x00, 0x00, 0x00, 0x08, 0x00, 0x61, 0x6e, 0x61, 0x66])
 export const FAKE_RETRY_AFTER = "7"
 const OVERSIZED_BYTES = 12 * 1024 * 1024
-const ANAF_ORIGINS = new Set(["https://api.anaf.ro", "https://logincert.anaf.ro"])
+const PUBLIC_ORIGIN = "https://webservicesp.anaf.ro"
+const ANAF_ORIGINS = new Set(["https://api.anaf.ro", "https://logincert.anaf.ro", PUBLIC_ORIGIN])
+/** Carries the asked-for host from the transport to the listener. */
+const ORIGIN_HEADER = "x-fake-anaf-origin"
 
-const operationOf = (pathname: string): FakeOperation | "unknown" => {
+const operationOf = (origin: string, pathname: string): FakeOperation | "unknown" => {
+  if (origin === PUBLIC_ORIGIN) return /^\/prod\/FCTEL\/rest\/validare\/(?:FACT1|FCN)$/u.test(pathname) ? "validare" : "unknown"
   if (pathname === "/anaf-oauth2/v1/token") return "token"
   if (pathname === "/anaf-oauth2/v1/revoke") return "revoke"
-  const operation = /^\/(?:test|prod)\/FCTEL\/rest\/(validare\/(?:FACT1|FCN)|upload|stareMesaj|listaMesajePaginatieFactura|descarcare)$/u.exec(pathname)?.[1]
+  const operation = /^\/(?:test|prod)\/FCTEL\/rest\/(upload|stareMesaj|listaMesajePaginatieFactura|descarcare)$/u.exec(pathname)?.[1]
   if (operation === undefined) return "unknown"
-  if (operation.startsWith("validare")) return "validare"
   return operation === "listaMesajePaginatieFactura" ? "lista" : operation as FakeOperation
 }
+const originOf = (request: IncomingMessage): string => String(request.headers[ORIGIN_HEADER] ?? "")
 
 const xml = (attributes: string, children = "") =>
   `<?xml version="1.0" encoding="UTF-8"?><header xmlns="mfp:anaf:dgti:spv:respUploadFisier:v1" dateResponse="202610191200" ${attributes}>${children}</header>`
@@ -118,10 +127,11 @@ export const startFakeAnaf = async (): Promise<FakeAnaf> => {
 
   const respond = (request: IncomingMessage, response: ServerResponse, body: Buffer) => {
     const url = new URL(request.url ?? "/", "http://fake.invalid")
-    const operation = operationOf(url.pathname)
-    calls.push({ operation, method: request.method ?? "", path: `${url.pathname}${url.search}`, authorization: request.headers.authorization, body })
+    const origin = originOf(request)
+    const operation = operationOf(origin, url.pathname)
+    calls.push({ operation, origin, method: request.method ?? "", path: `${url.pathname}${url.search}`, authorization: request.headers.authorization, body })
     if (operation === "unknown") return response.writeHead(404).end()
-    const needsToken = operation !== "token" && operation !== "revoke"
+    const needsToken = operation !== "token" && operation !== "revoke" && operation !== "validare"
     if (needsToken && !/^Bearer access-\d+$/u.test(request.headers.authorization ?? "")) return response.writeHead(401).end()
     const scenario = scenarios.get(operation) ?? "normal"
     if (scenario === "timeout_after_send") {
@@ -151,7 +161,7 @@ export const startFakeAnaf = async (): Promise<FakeAnaf> => {
   const server = createServer((request, response) => {
     const chunks: Array<Buffer> = []
     request.on("data", (chunk: Buffer) => chunks.push(chunk))
-    const delayMs = delays.get(operationOf(new URL(request.url ?? "/", "http://fake.invalid").pathname)) ?? 0
+    const delayMs = delays.get(operationOf(originOf(request), new URL(request.url ?? "/", "http://fake.invalid").pathname)) ?? 0
     request.on("end", () => { setTimeout(() => { respond(request, response, Buffer.concat(chunks)) }, delayMs) })
   })
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve))
@@ -160,7 +170,9 @@ export const startFakeAnaf = async (): Promise<FakeAnaf> => {
   const transport: Transport = async (url, init) => {
     const target = new URL(url)
     if (!ANAF_ORIGINS.has(target.origin)) throw new Error(`the fake ANAF transport refuses ${target.origin}`)
-    return fetch(`http://127.0.0.1:${String(port)}${target.pathname}${target.search}`, init)
+    const headers = new Headers(init.headers)
+    headers.set(ORIGIN_HEADER, target.origin)
+    return fetch(`http://127.0.0.1:${String(port)}${target.pathname}${target.search}`, { ...init, headers })
   }
 
   return {

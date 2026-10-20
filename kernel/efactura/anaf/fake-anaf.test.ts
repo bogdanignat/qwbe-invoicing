@@ -29,7 +29,7 @@ const reply = <Body>(answer: { readonly status: number; readonly headers: Header
 
 const calls = (fake: FakeAnaf) => ({
   token: () => call(fake, ANAF_OAUTH.token, { method: "POST", body: "grant_type=authorization_code&code=abc" }, "utf8"),
-  validare: () => call(fake, api.validate("FACT1"), { method: "POST", headers: bearer, body: xmlBody }, "utf8"),
+  validare: () => call(fake, api.validate("FACT1"), { method: "POST", body: xmlBody }, "utf8"),
   upload: () => call(fake, api.upload("UBL", "12345674"), { method: "POST", headers: bearer, body: xmlBody }, "utf8"),
   stareMesaj: () => call(fake, api.status("5000000001"), { headers: bearer }, "utf8"),
   lista: () => call(fake, api.list(window), { headers: bearer }, "utf8"),
@@ -48,13 +48,13 @@ void test("the fake answers like ANAF at the constant URLs, and the answers clas
     assert.ok(listed.kind === "messages" && listed.messages[0]?.uploadIndex === "5000000001")
     const download = classifyDownload(reply(await anaf.descarcare()))
     assert.ok(download.kind === "archive" && Buffer.from(download.archive).equals(FAKE_ZIP))
-    assert.deepEqual(fake.calls.map(({ method, path }) => `${method} ${path}`), [
-      "POST /anaf-oauth2/v1/token",
-      "POST /test/FCTEL/rest/validare/FACT1",
-      "POST /test/FCTEL/rest/upload?standard=UBL&cif=12345674",
-      "GET /test/FCTEL/rest/stareMesaj?id_incarcare=5000000001",
-      `GET /test/FCTEL/rest/listaMesajePaginatieFactura?startTime=${String(window.startTime)}&endTime=${String(window.endTime)}&cif=12345674&pagina=1`,
-      "GET /test/FCTEL/rest/descarcare?id=3000000001",
+    assert.deepEqual(fake.calls.map(({ method, origin, path }) => `${method} ${origin}${path}`), [
+      "POST https://logincert.anaf.ro/anaf-oauth2/v1/token",
+      "POST https://webservicesp.anaf.ro/prod/FCTEL/rest/validare/FACT1",
+      "POST https://api.anaf.ro/test/FCTEL/rest/upload?standard=UBL&cif=12345674",
+      "GET https://api.anaf.ro/test/FCTEL/rest/stareMesaj?id_incarcare=5000000001",
+      `GET https://api.anaf.ro/test/FCTEL/rest/listaMesajePaginatieFactura?startTime=${String(window.startTime)}&endTime=${String(window.endTime)}&cif=12345674&pagina=1`,
+      "GET https://api.anaf.ro/test/FCTEL/rest/descarcare?id=3000000001",
     ])
   })
 })
@@ -109,9 +109,11 @@ void test("an XML answer with a DOCTYPE is refused before any entity is read", a
   })
 })
 
-void test("the fake transport reaches only ANAF's two hosts, and the API wants a token", async () => {
+void test("the fake transport reaches only ANAF's three hosts, and the API wants a token", async () => {
   await withFake(async (fake) => {
     await assert.rejects(fake.transport("https://example.com/", {}), /refuses https:\/\/example.com/u)
+    const testValidare = await call(fake, "https://api.anaf.ro/test/FCTEL/rest/validare/FACT1", { method: "POST", headers: bearer, body: xmlBody }, "utf8")
+    assert.equal(testValidare.status, 404, "as on ANAF TEST, validare is not served under api.anaf.ro")
     const anonymous = await call(fake, api.status("1"), {}, "utf8")
     assert.equal(anonymous.status, 401)
     assert.deepEqual(classifyStatus(reply(anonymous)), { kind: "auth_refused" })
