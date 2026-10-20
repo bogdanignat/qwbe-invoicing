@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { dispatchRig, type DispatchRig } from "../efactura/dispatch/dispatch.test-support.ts"
+import { SYNTHETIC_CNP, dispatchRig, privateBuyer, type DispatchRig } from "../efactura/dispatch/dispatch.test-support.ts"
 import { customer, dueDate, issueDate, lines, ok } from "../http/plugins-http.test-support.ts"
 import { withMigrated } from "../storage/postgres-rig.test-support.ts"
 
@@ -21,9 +21,6 @@ const conflict = (reply: { readonly status: number; readonly body: unknown }, co
   assert.deepEqual([reply.status, reply.body], [409, { error: "DomainConflict", code }], code)
 }
 
-const privateBuyer = { name: "Ion Popescu", partyType: "individual", fiscalIdentifier: "", vatRegistered: false,
-  address: { countryCode: "RO", city: "Iași", street: "Strada 3", county: "RO-IS" } }
-
 void test("two concurrent submits of one document queue exactly one submission", () => withRig("efs_concurrent", async (rig) => {
   await rig.connect()
   const invoiceId = await rig.invoice("inv-1")
@@ -40,17 +37,13 @@ void test("two concurrent submits of one document queue exactly one submission",
   assert.equal(await rig.status("issued_invoices", invoiceId), "queued")
 }))
 
-void test("submit refuses without a connection, for another CIF, for a private buyer and for a proforma",
+void test("submit refuses without a connection, for another CIF and for a proforma",
   () => withRig("efs_refusals", async (rig) => {
     const invoiceId = await rig.invoice("inv-1")
     conflict(await rig.submit(invoiceId), "efactura_not_connected")
     await rig.connect({ cif: "18547290" })
     conflict(await rig.submit(invoiceId), "efactura_cif_mismatch")
     await rig.connect()
-    const privateInvoice = await rig.invoice("inv-b2c", { customer: privateBuyer, series: "QWBE", issueDate, dueDate, currency: "RON", lines })
-    conflict(await rig.submit(privateInvoice), "efactura_b2c_refused")
-    const storno = await ok(rig.server.call("POST", `/api/invoices/${privateInvoice}/corrections`, { reason: "Anulare" }, "storno-b2c"), "storno")
-    conflict(await rig.submit(String(storno.id), "corrections"), "efactura_b2c_refused")
     const proforma = await ok(rig.server.call("POST", "/api/proformas",
       { customer, proformaSeries: "PRO", issueDate, dueDate, currency: "RON", lines }, "proforma-1"), "proforma")
     assert.equal((await rig.submit(String(proforma.id))).status, 404, "a proforma has no e-Factura")
@@ -122,3 +115,24 @@ void test("a correction is submitted as a CreditNote, and its status shows in th
   const history = await ok(rig.server.call("GET", `/api/corrections/${String(storno.id)}/efactura/submissions`), "history")
   assert.equal((history.submissions as ReadonlyArray<unknown>).length, 1)
 }))
+
+void test("an invoice and a storno for a private person are queued like any other, the buyer kept with the submission",
+  () => withRig("efs_b2c", async (rig) => {
+    await rig.connect()
+    const anonymous = await rig.invoiceTo("inv-b2c", privateBuyer())
+    const identified = await rig.invoiceTo("inv-cnp", privateBuyer(SYNTHETIC_CNP))
+    const company = await rig.invoice("inv-b2b")
+    const storno = await rig.storno(anonymous, "storno-b2c")
+    const queued = [await rig.submitted(anonymous), await rig.submitted(identified), await rig.submitted(storno, "corrections"),
+      await rig.submitted(company)]
+    const flags = await rig.sql("SELECT id, standard, buyer_is_individual FROM efactura_submissions")
+    assert.deepEqual(queued.map((id) => flags.find((row) => row.id === id)).map((row) => [row?.standard, row?.buyer_is_individual]),
+      [["UBL", true], ["UBL", true], ["CN", true], ["UBL", false]])
+    assert.equal(await rig.status("issued_invoices", anonymous), "queued")
+    assert.equal(await rig.status("correction_documents", storno), "queued")
+    const [withCnp] = await rig.sql("SELECT convert_from(xml,'UTF8') AS xml FROM efactura_submissions WHERE id=$1", [queued[1]])
+    assert.match(String(withCnp?.xml), new RegExp(`<cbc:CompanyID>${SYNTHETIC_CNP}</cbc:CompanyID>`, "u"), "the CNP only in the XML")
+    const history = await rig.server.call("GET", `/api/invoices/${identified}/efactura/submissions`)
+    const audit = await rig.sql("SELECT reason FROM audit_events WHERE target_id=ANY($1)", [queued])
+    assert.doesNotMatch(JSON.stringify([history.body, audit]), new RegExp(SYNTHETIC_CNP, "u"), "never in the API answer or the audit")
+  }))

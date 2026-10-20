@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { cutAfter } from "../efactura/dispatch/dispatch.test-support.ts"
+import { cutAfter, privateBuyer } from "../efactura/dispatch/dispatch.test-support.ts"
 import { candidates, conflict, link, listCalls, withRig } from "./efactura-reconciliation.test-support.ts"
 
 /**
@@ -54,4 +54,26 @@ void test("an index ANAF lists links the unknown submission, and the dispatcher'
     assert.equal(await rig.status("issued_invoices", invoiceId), "accepted")
     conflict(await link(rig, id, { uploadIndex: "5000000001", confirmed: true }), "efactura_not_unknown")
     assert.equal(rig.calls("upload"), 2, "linking never uploads")
+  }))
+
+void test("a private buyer's upload whose answer was lost is found by the issuer's CIF, linked and accepted without a second upload",
+  () => withRig("efr_link_b2c", async (rig) => {
+    await rig.connect()
+    rig.dispatcher(cutAfter(rig.fake.transport, 1_500))
+    rig.fake.answer("upload", "timeout_after_send")
+    const invoiceId = await rig.invoiceTo("inv-pf", privateBuyer())
+    const id = await rig.submitted(invoiceId)
+    await rig.reaches(id, "unknown")
+    assert.deepEqual(rig.fake.calls.filter((call) => call.operation === "upload").map((call) => call.path),
+      ["/test/FCTEL/rest/uploadb2c?standard=UBL&cif=12345674"])
+
+    const listed = await candidates(rig, id)
+    assert.deepEqual((listed.body as { candidates: ReadonlyArray<{ uploadIndex: string; linked: boolean }> }).candidates
+      .map(({ linked, uploadIndex }) => [uploadIndex, linked]), [["5000000001", false]])
+    assert.deepEqual(listCalls(rig).map(({ cif }) => cif), ["12345674"], "the issuer's CIF, never the buyer's")
+    const linked = await link(rig, id, { uploadIndex: "5000000001", confirmed: true })
+    assert.equal(linked.status, 200, JSON.stringify(linked.body))
+    await rig.reaches(id, "accepted", "stored")
+    assert.equal(await rig.status("issued_invoices", invoiceId), "accepted")
+    assert.equal(rig.calls("upload"), 1, "linking never uploads")
   }))

@@ -36,12 +36,13 @@ export const submissionsAdapter = (client: TransactionClient, environment: AnafE
     }),
     insert: (submission) => write("save e-Factura submission", async () => {
       const { rows } = await client.query(
-        `INSERT INTO efactura_submissions(id,organization_id,environment,document_kind,document_id,standard,cif,xml,xml_sha256,xml_size,
-          state,next_attempt_at,created_by,created_at,updated_at)
-          VALUES($1,$2,$3,$4,$5,$6,$7,$8::bytea,encode(sha256($8::bytea),'hex'),octet_length($8::bytea),'queued',$9,$10,$9,$9)
+        `INSERT INTO efactura_submissions(id,organization_id,environment,document_kind,document_id,standard,cif,buyer_is_individual,xml,
+          xml_sha256,xml_size,state,next_attempt_at,created_by,created_at,updated_at)
+          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9::bytea,encode(sha256($9::bytea),'hex'),octet_length($9::bytea),'queued',$10,$11,$10,$10)
           RETURNING ${SUBMISSION_COLUMNS}`,
         [submission.id, submission.organizationId, submission.environment, submission.documentKind, submission.documentId,
-          STANDARDS[submission.documentKind], submission.cif, submission.xml, submission.createdAt, submission.createdBy])
+          STANDARDS[submission.documentKind], submission.cif, submission.buyerIsIndividual, submission.xml, submission.createdAt,
+          submission.createdBy])
       const row = firstRow(rows)
       if (row === undefined) throw new Error("insert returned no row")
       return submissionFrom(row)

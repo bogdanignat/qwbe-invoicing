@@ -21,9 +21,9 @@ void test("exact bytes bind as Uint8Array through the query layer and read back 
       onCommitFailure: () => new Error("commit failed"),
     })
     const insert = insertStatement("efactura_submissions", pairs(
-      ["id", "organization_id", "environment", "document_kind", "document_id", "standard", "cif", "xml", "xml_sha256", "xml_size",
-        "state", "next_attempt_at", "created_by", "created_at", "updated_at"],
-      ["s-1", "org-1", "test", "invoice", "inv-1", "UBL", "12345674", xml, createHash("sha256").update(xml).digest("hex"), xml.byteLength,
+      ["id", "organization_id", "environment", "document_kind", "document_id", "standard", "cif", "buyer_is_individual", "xml", "xml_sha256",
+        "xml_size", "state", "next_attempt_at", "created_by", "created_at", "updated_at"],
+      ["s-1", "org-1", "test", "invoice", "inv-1", "UBL", "12345674", false, xml, createHash("sha256").update(xml).digest("hex"), xml.byteLength,
         "queued", "2026-10-19T10:00:00.000Z", "user-1", "2026-10-19T10:00:00.000Z", "2026-10-19T10:00:00.000Z"],
     ))
     const row = await Effect.runPromise(run((client) => Effect.promise(async () => {

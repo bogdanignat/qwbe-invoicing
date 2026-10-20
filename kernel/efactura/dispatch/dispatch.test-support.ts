@@ -8,7 +8,9 @@ import { connectionHost } from "../anaf/connection-host.ts"
 import { startFakeAnaf, type FakeAnaf } from "../anaf/fake-anaf.test-support.ts"
 import type { Transport } from "../../outbound/send.ts"
 import { allPlugins } from "../../plugins.ts"
-import { issueInvoice, ok, seed, serve, type Reply, type ServeOptions } from "../../http/plugins-http.test-support.ts"
+import {
+  dueDate, issueDate, issueInvoice, lines, ok, seed, serve, type Reply, type ServeOptions,
+} from "../../http/plugins-http.test-support.ts"
 import type { TestFixture } from "../../storage/postgres-rig.test-support.ts"
 import { startDispatcher, type Dispatcher } from "./dispatcher.ts"
 
@@ -28,6 +30,13 @@ export const connectionWrite = (at: Date, overrides: ConnectionOverrides = {}): 
     accessExpiresAt: new Date(at.getTime() + (overrides.accessExpiresInDays ?? 80) * DAY_MS).toISOString() },
   updatedBy: "user-1", updatedAt: at.toISOString(),
 })
+
+/** A synthetic CNP with a valid control digit: never a real person's. */
+export const SYNTHETIC_CNP = "1800101221144"
+
+/** A private buyer (B2C), without a CNP unless one is given. */
+export const privateBuyer = (fiscalIdentifier = "") => ({ name: "Ion Popescu", partyType: "individual", fiscalIdentifier,
+  vatRegistered: false, address: { countryCode: "RO", city: "Iași", street: "Strada 3", county: "RO-IS" } })
 
 /** The dispatcher's lock in THIS database: `pg_locks` lists every database of the cluster, and other tests run alongside. */
 export const DISPATCHER_LOCK = "pg_locks WHERE locktype='advisory' AND classid=1480 AND objid=8 AND granted"
@@ -78,6 +87,10 @@ export const dispatchRig = async (fixture: TestFixture, grants?: ServeOptions["g
   const invoice = async (key: string, body?: Record<string, unknown>): Promise<string> =>
     String((body === undefined ? await issueInvoice(server.call, key) : await ok(server.call("POST", "/api/invoices", body, key), "issue"))
       .id)
+  const invoiceTo = (key: string, customer: Record<string, unknown>): Promise<string> =>
+    invoice(key, { customer, series: "QWBE", issueDate, dueDate, currency: "RON", lines })
+  const storno = async (invoiceId: string, key: string): Promise<string> =>
+    String((await ok(server.call("POST", `/api/invoices/${invoiceId}/corrections`, { reason: "Anulare" }, key), "storno")).id)
   const submit = (id: string, kind: "invoices" | "corrections" = "invoices"): Promise<Reply> =>
     server.call("POST", `/api/${kind}/${id}/efactura/submission`, {})
   const submitted = async (id: string, kind: "invoices" | "corrections" = "invoices"): Promise<string> => {
@@ -130,7 +143,7 @@ export const dispatchRig = async (fixture: TestFixture, grants?: ServeOptions["g
     await fake.close()
   }
   return {
-    fake, settings, clock, now, server, host, connect, invoice, submit, submitted, dispatcher, row, until, reaches, calls, audit,
+    fake, settings, clock, now, server, host, connect, invoice, invoiceTo, storno, submit, submitted, dispatcher, row, until, reaches, calls, audit,
     attempts, status, sql, close,
   }
 }

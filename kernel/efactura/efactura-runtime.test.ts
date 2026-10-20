@@ -17,10 +17,10 @@ import { startEFacturaRuntime, type EFacturaRuntimeOptions } from "./efactura-ru
  */
 
 const storedIn = async (pool: Pool, environment: "test" | "prod") => {
-  await pool.query(`INSERT INTO efactura_submissions(id,organization_id,environment,document_kind,document_id,standard,cif,xml,xml_sha256,
-    xml_size,state,next_attempt_at,created_by,created_at,updated_at) VALUES('s-1','org-1',$1,'invoice','inv-1','UBL','12345674',
-    '\\x3c782f3e'::bytea,encode(sha256('\\x3c782f3e'::bytea),'hex'),4,'unknown','2026-10-19T00:00:00.000Z','user-1',
-    '2026-10-19T00:00:00.000Z','2026-10-19T00:00:00.000Z')`, [environment])
+  await pool.query(`INSERT INTO efactura_submissions(id,organization_id,environment,document_kind,document_id,standard,cif,
+    buyer_is_individual,xml,xml_sha256,xml_size,state,next_attempt_at,created_by,created_at,updated_at)
+    VALUES('s-1','org-1',$1,'invoice','inv-1','UBL','12345674',false,'\\x3c782f3e'::bytea,encode(sha256('\\x3c782f3e'::bytea),'hex'),4,
+    'unknown','2026-10-19T00:00:00.000Z','user-1','2026-10-19T00:00:00.000Z','2026-10-19T00:00:00.000Z')`, [environment])
 }
 
 const leaders = async (pool: Pool) => Number((await pool.query<{ readonly n: string }>(

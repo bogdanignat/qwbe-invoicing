@@ -53,6 +53,13 @@ export const booleanInteger = (value: Row, field: string): boolean => {
   return result === 1
 }
 
+/** A `BOOLEAN` column: the driver hands back `true` or `false`. */
+export const flag = (value: Row, field: string): boolean => {
+  const result = value[field]
+  if (typeof result !== "boolean") throw new Error(`invalid ${field}`)
+  return result
+}
+
 export const optionalInteger = (value: Row, field: string): number | undefined => {
   const result = value[field]
   if (result === null || result === undefined) return undefined

@@ -44,6 +44,8 @@ export const anafApi = (environment: AnafEnvironment) => {
   return {
     validate: (standard: "FACT1" | "FCN") => `${VALIDATION_BASE}/validare/${standard}`,
     upload: (standard: "UBL" | "CN", cif: string) => `${base}/upload?${query({ standard, cif })}`,
+    /** A document for a private person (B2C): same query, same answer as `upload`. */
+    uploadB2c: (standard: "UBL" | "CN", cif: string) => `${base}/uploadb2c?${query({ standard, cif })}`,
     status: (uploadIndex: string) => `${base}/stareMesaj?${query({ id_incarcare: uploadIndex })}`,
     list: (window: ListWindow) => `${base}/listaMesajePaginatieFactura?${query({
       startTime: String(window.startTime), endTime: String(window.endTime), cif: window.cif, pagina: String(window.page),

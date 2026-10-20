@@ -81,7 +81,9 @@ and an explicit VAT registration flag. VAT identifiers are derived from that fla
 and the canonical CUI, never inferred from user-entered prefixes. For natural persons,
 VAT registration must be false and CNP is
 optional and is requested or stored only when the transaction and legal obligation
-require it. Personal data is otherwise kept to the minimum necessary.
+require it. Personal data is otherwise kept to the minimum necessary. Invoices and
+stornos to natural persons are still submitted to RO e-Factura (B2C, ANAF's `uploadb2c`);
+without a CNP the XML carries `0000000000000` as the buyer identifier (BT-47).
 
 ### 3.3 Numbering sequences
 

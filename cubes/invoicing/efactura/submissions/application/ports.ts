@@ -20,6 +20,8 @@ export interface SubmissionRecord {
   readonly documentId: string
   readonly standard: "UBL" | "CN"
   readonly cif: string
+  /** The buyer is a private person: the upload goes to `uploadb2c`. Fixed with the XML. */
+  readonly buyerIsIndividual: boolean
   readonly state: FiscalState
   readonly archiveState: ArchiveState
   readonly uploadIndex: string | null
@@ -42,6 +44,7 @@ export interface NewSubmission {
   readonly documentKind: SubmittedKind
   readonly documentId: string
   readonly cif: string
+  readonly buyerIsIndividual: boolean
   readonly xml: Uint8Array
   readonly createdBy: string
   readonly createdAt: string
