@@ -158,6 +158,12 @@ void test("a line that is not an object fails the document", () => {
   assert.throws(() => decodeIssuedInvoice({ ...invoiceJson, lines: {} }), /invalid lines/u)
 })
 
+void test("a VAT category other than S or O fails the document, on a line or in the breakdown", () => {
+  assert.throws(() => decodeIssuedInvoice({ ...invoiceJson, lines: [{ ...line, vatCategoryCode: "Z" }] }), /invalid vatCategoryCode/u)
+  assert.throws(() => decodeIssuedInvoice({ ...invoiceJson, vatBreakdown: [{ ...body.vatBreakdown[0], vatCategoryCode: "E" }] }),
+    /invalid vatCategoryCode/u)
+})
+
 void test("a correction without its reason is refused", () => {
   assert.throws(() => decodeCorrectionDocument(without(correctionJson, "reason")), /invalid reason/u)
 })

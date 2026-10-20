@@ -13,6 +13,9 @@
  */
 import type { EFacturaStatus } from "./invoice-register.ts"
 
+/** The only VAT categories the contract admits (cubes/invoicing/domain/invoice.ts). */
+export type VatCategoryCode = "S" | "O"
+
 export interface Address {
   readonly countryCode: string
   readonly city: string
@@ -55,7 +58,7 @@ export interface DocumentLine {
   readonly unitOfMeasure: UnitOfMeasure
   readonly vatRateCode: string
   readonly vatRate: string
-  readonly vatCategoryCode: string
+  readonly vatCategoryCode: VatCategoryCode
   readonly vatExemptionReason: string | null
   readonly totalExcludingVat: string
   readonly vatAmount: string
@@ -65,7 +68,7 @@ export interface DocumentLine {
 export interface VatBreakdownEntry {
   readonly code: string
   readonly rate: string
-  readonly vatCategoryCode: string
+  readonly vatCategoryCode: VatCategoryCode
   readonly vatExemptionReason: string | null
   readonly vatBaseAmount: string
   readonly vatAmount: string

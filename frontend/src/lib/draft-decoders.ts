@@ -1,7 +1,7 @@
 import {
   array, boolean, decodePage, nullableText, object, optionalText, text, type Decoder,
 } from "./model-decoder.ts"
-import { decodeBuyer, decodeUnitOfMeasure } from "./document-snapshot-decoders.ts"
+import { decodeBuyer, decodeUnitOfMeasure, decodeVatCategoryCode } from "./document-snapshot-decoders.ts"
 import type { Deleted, DraftInvoice, VatCategoryCode } from "./draft-models.ts"
 import { parseDecimal } from "./money.ts"
 
@@ -20,12 +20,6 @@ import { parseDecimal } from "./money.ts"
 export const ARTICLE_310_EXEMPTION_REASON = "Regim special de scutire conform art. 310 din Codul fiscal"
 export const isTaxableVatCode = (code: string): boolean =>
   ["RO_STANDARD", "RO_REDUCED", "RO_REDUCED_5"].includes(code)
-
-export const decodeVatCategoryCode = (input: unknown): VatCategoryCode => {
-  const value = text(input, "vatCategoryCode")
-  if (value !== "S" && value !== "O") throw new Error("invalid vatCategoryCode")
-  return value
-}
 
 // The two treatments the backend can issue, stated as one exhaustive rule:
 // a per-category `if` accepts anything the server later rejects simply by

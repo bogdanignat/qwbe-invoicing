@@ -1,5 +1,5 @@
 import { formatRate } from "./money.ts"
-import type { Issuer, VatCatalogue } from "./draft-models.ts"
+import type { Issuer, VatCatalogue, VatCategoryCode } from "./draft-models.ts"
 import { issuerVatRegistrationOn, sameVatRate, vatRatesForIssuer } from "./vat-defaults.ts"
 
 interface DraftTaxLine {
@@ -55,7 +55,7 @@ export const issuerForIssueDate = (
  * A draft line carries the percentage as `vatRate`, a snapshot or the catalogue as `rate`.
  */
 export const vatTreatmentLabel = (treatment: {
-  readonly vatCategoryCode: string
+  readonly vatCategoryCode: VatCategoryCode
   readonly rate?: string
   readonly vatRate?: string
 }): string => treatment.vatCategoryCode === "O"

@@ -8,10 +8,10 @@
  * issued document — so they are imported, not redefined.
  */
 import type {
-  Address, BuyerSnapshot, DocumentLine, UnitOfMeasure, VatBreakdownEntry,
+  Address, BuyerSnapshot, DocumentLine, UnitOfMeasure, VatBreakdownEntry, VatCategoryCode,
 } from "./document-snapshot.ts"
 
-export type { Address, BuyerSnapshot, UnitOfMeasure }
+export type { Address, BuyerSnapshot, UnitOfMeasure, VatCategoryCode }
 export type DraftLine = DocumentLine
 export type VatBreakdown = VatBreakdownEntry
 
@@ -57,7 +57,6 @@ export interface DocumentSeries {
   readonly series: string
 }
 
-export type VatCategoryCode = "S" | "O"
 export type NonVatBasis = "article_310"
 
 export interface VatConfiguration {

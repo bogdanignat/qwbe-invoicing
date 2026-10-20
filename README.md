@@ -668,9 +668,11 @@ and no legacy-snapshot fallback.
 
 Money columns are `BIGINT` in bani (minor units): `123.45` RON is stored as `12345`,
 a storno total as a negative integer, an absent social capital as `NULL`. The API, the
-domain, the PDF and e-Factura keep two-decimal strings; the one conversion is
+domain and e-Factura keep two-decimal strings; the one conversion is
 `kernel/storage/postgres-money.ts`, without floating point. Quantities (four decimals)
-and VAT rates stay `TEXT`. The historical probes (`probes/pg-schema-*.mjs`) and the
+and VAT rates stay `TEXT`. The PDF and the UI show amounts to people as `6,600.00`
+(quantity `4,800.0000`, VAT rate `21`), through `kernel/documents/pdf-format.ts` and
+`frontend/src/lib/money.ts`; the machine format (API, XML, database, inputs) does not change. The historical probes (`probes/pg-schema-*.mjs`) and the
 SQLite captures in `kernel/parity/` describe the earlier TEXT money schema.
 
 Registries (`GET /api/customers`, `/api/product-presets`, `/api/drafts`, `/api/invoice-register`, `/api/invoices`, `/api/proformas`)
