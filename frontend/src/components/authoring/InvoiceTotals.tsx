@@ -1,4 +1,5 @@
 import { orDash } from "../../lib/format.ts"
+import { money } from "../../lib/money.ts"
 import { vatTreatmentLabel } from "../../lib/vat-snapshots.ts"
 import type { DraftInvoice } from "../../lib/draft-models.ts"
 
@@ -18,12 +19,12 @@ export const InvoiceTotals = ({ draft }: { readonly draft: DraftInvoice | undefi
   return <section className="card authoring-section">
     <h2>Totaluri</h2>
     <dl className="totals-list">
-      <div><dt>Total fără TVA</dt><dd>{draft.totalExcludingVat} {draft.currency}</dd></div>
+      <div><dt>Total fără TVA</dt><dd>{money(draft.totalExcludingVat, draft.currency)}</dd></div>
       {draft.vatBreakdown.map((entry) => <div key={`${entry.code}-${entry.vatBaseAmount}`}>
-        <dt>{vatTreatmentLabel(entry)}</dt><dd>{entry.vatAmount} {draft.currency}</dd>
+        <dt>{vatTreatmentLabel(entry)}</dt><dd>{money(entry.vatAmount, draft.currency)}</dd>
       </div>)}
-      <div><dt>Total TVA</dt><dd>{draft.vatTotal} {draft.currency}</dd></div>
-      <div className="grand-total"><dt>Total cu TVA</dt><dd>{draft.totalIncludingVat} {draft.currency}</dd></div>
+      <div><dt>Total TVA</dt><dd>{money(draft.vatTotal, draft.currency)}</dd></div>
+      <div className="grand-total"><dt>Total cu TVA</dt><dd>{money(draft.totalIncludingVat, draft.currency)}</dd></div>
       <div><dt>Scadență</dt><dd>{orDash(draft.dueDate)}</dd></div>
     </dl>
   </section>

@@ -1,4 +1,4 @@
-import { parseDecimal } from "./money.ts"
+import { formatDecimal, formatRate, parseDecimal } from "./money.ts"
 
 /**
  * The vertical scale of the revenue chart, as a pure function of the amounts.
@@ -6,8 +6,8 @@ import { parseDecimal } from "./money.ts"
  * Everything is in minor units (bani) and integers: the domain and the ticks
  * are exact multiples of a round step (1, 2 or 5 × 10ⁿ bani), so the labels on
  * the axis are round amounts. The only approximation is the pixel geometry the
- * component draws with; the amounts themselves are shown as the backend wrote
- * them, in the bar titles and the accessible table.
+ * component draws with; the amounts themselves are shown exact, formatted from
+ * the strings the backend wrote, in the bar titles and the accessible table.
  *
  * The domain always contains zero, so a negative month (a storno, a reversed
  * payment) hangs below the zero line instead of shifting it. A series that is
@@ -68,7 +68,5 @@ export const barRect = (scale: ChartScale, value: number, height: number): { rea
   return { y: Math.min(zero, end), height: Math.abs(zero - end) }
 }
 
-const tickFormat = new Intl.NumberFormat("ro-RO", { maximumFractionDigits: 2, useGrouping: true })
-
-/** An axis label: a round amount in the currency's major unit, without the currency. */
-export const tickLabel = (value: number): string => tickFormat.format(value / 100)
+/** An axis label: a round amount in the currency's major unit, without the currency or idle zeros (`1,000,000`, `0.5`). */
+export const tickLabel = (value: number): string => formatRate(formatDecimal(BigInt(value), 2))

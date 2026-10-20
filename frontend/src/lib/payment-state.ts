@@ -1,6 +1,5 @@
 import type { CorrectionRef } from "./correction-state.ts"
-import { money } from "./format.ts"
-import { compareDecimal } from "./money.ts"
+import { compareDecimal, money } from "./money.ts"
 import type { PaymentInput, PaymentStatus, PaymentSummary } from "./payment-models.ts"
 
 /**

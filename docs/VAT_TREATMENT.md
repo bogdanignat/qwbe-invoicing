@@ -64,7 +64,7 @@ preserves a valid offered snapshot even if it must be edited before later issuan
 Full correction preserves the original treatment and negates amounts, normalizing
 zero to `0.00`; it does not reinterpret the source using the current issuer profile.
 
-PDF templates invoice-v9/proforma-v8 display the legal reason from the snapshot.
+PDF templates invoice-v10/proforma-v9 display the legal reason from the snapshot.
 No exemption is inferred during rendering.
 
 ## Preferred VAT rate on a product (T-1399)

@@ -6,6 +6,7 @@ import { CIUS_TEXT_LIMITS } from "../../lib/cius-text-limits.ts"
 import { Select } from "../ui/Select.tsx"
 import { Button } from "../Button.tsx"
 import { UnitOfMeasureOptions } from "../UnitOfMeasureOptions.tsx"
+import { money } from "../../lib/money.ts"
 import { vatTreatmentLabel } from "../../lib/vat-snapshots.ts"
 
 interface InvoiceLineRowProps {
@@ -28,7 +29,7 @@ export const InvoiceLineRow = (props: InvoiceLineRowProps) => {
     {productPresets.length === 0 ? null : <Field label="Produs predefinit">
       <Select disabled={pending} value="" onChange={(event) => { props.onApplyPreset(line.key, event.currentTarget.value) }}>
         <option value="">Alege pentru precompletare</option>
-        {productPresets.map((preset) => <option key={preset.id} value={preset.id}>{preset.description} — {preset.unitPrice} RON</option>)}
+        {productPresets.map((preset) => <option key={preset.id} value={preset.id}>{preset.description} — {money(preset.unitPrice, "RON")}</option>)}
       </Select>
     </Field>}
     <div className="line-fields">

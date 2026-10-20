@@ -117,6 +117,18 @@ void test("the panel view formats totals in the invoice currency and keys the fo
   assert.equal(view.rows.length, 1)
 })
 
+void test("the balance reads grouped on the label while the form's default and the request keep the bare amount", () => {
+  const view = paymentsView(summary("partially_paid", "6600.00", [payment("p1", { amount: "1250.00" })]), "RON")
+  assert.equal(view.remaining, "6,600.00 RON")
+  const [row] = view.rows
+  assert.ok(row !== undefined)
+  assert.equal(row.amount, "1,250.00 RON")
+  assert.equal(row.reverseLabel, "Anulează plata 1,250.00 RON · 2026-08-31")
+  assert.equal(view.remainingAmount, "6600.00")
+  const input = paymentInputFrom(form({ amount: view.remainingAmount, paymentDate: "2026-10-01", method: "transfer" }), "RON")
+  assert.equal(input.amount, "6600.00")
+})
+
 const correctedBy = { id: "cor-1", series: "FCT", number: 13, issueDate: "2026-10-09" }
 
 void test("a reversed invoice with collected payments closes the form and says the payments stay recorded", () => {

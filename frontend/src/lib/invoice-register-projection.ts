@@ -1,4 +1,4 @@
-import { money } from "./format.ts"
+import { money } from "./money.ts"
 import type { EFacturaStatus, InvoiceRegisterRow } from "./invoice-register.ts"
 
 /**

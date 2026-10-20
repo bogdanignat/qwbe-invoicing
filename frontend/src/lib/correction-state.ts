@@ -1,5 +1,5 @@
 import type { CorrectionDocument, CorrectionInput, IssuedInvoice } from "./document-snapshot.ts"
-import { money } from "./format.ts"
+import { money } from "./money.ts"
 import { correctionDetailHref } from "./invoice-register-projection.ts"
 import type { RecoverySummary } from "./operation-recovery-types.ts"
 

@@ -14,7 +14,9 @@ import { createPdfRenderer } from "../kernel/documents/pdf-renderer.ts"
 // T-1905: the money arithmetic moved into one module. These digests were taken
 // from the code *before* that refactor, so the shared module has to reproduce
 // every amount, XML byte and PDF byte exactly. Change an expectation here only
-// together with a deliberate, reviewed change of output.
+// together with a deliberate, reviewed change of output. The one so far: T-1908
+// prints amounts as `6,600.00` (invoice-v10, storno-v2), so the four PDF digests
+// changed and nothing else; the PDF text differs only in its separators.
 
 const sha256 = (value) => createHash("sha256").update(value).digest("hex")
 const article310 = "Regim special de scutire conform art. 310 din Codul fiscal"
@@ -110,13 +112,13 @@ void test("calculated snapshots, their XML and their PDFs are the ones from befo
     "taxed.snapshot": "9854fd4902bbaaf5c3068ac8d76ec75040a7c59af528bace2794d923dba50c4a",
     "taxed.invoice.xml": "59d57dbee2dd79fd489b0a371c963a9e04952f12fdff0ae49740cd0810685557",
     "taxed.credit-note.xml": "f56b46ccc7182074f4f4e40f483b411210ed75f91d18fe926c27bdf4a0bc5fec",
-    "taxed.invoice.pdf": "c9caaa15c869682589f7231dfc89565afeb3d3f0f10bce2e1cf862c14dd65f4a",
-    "taxed.storno.pdf": "72a935b9dc47ee50e38526972be213962f3fcba7d0389d0ceefbda77d6637269",
+    "taxed.invoice.pdf": "d27786af7029df2270e851994e1408b5d7be7f02ff8884b86cc70a6d47eadc9b",
+    "taxed.storno.pdf": "7ac1158c79aa86978425ceeef71ab276fdf5c02fa156c71451e8f8a8f889ead8",
     "article310.snapshot": "3a0af2fe5dd56bbe49cf15ca0e758de63b81e0ed997fb1e7c69283ae3105b3c2",
     "article310.invoice.xml": "776e53bf51eff0e0c6f680ecb32921fc9b4a9012c8e53ca238febd8ff06c7fd3",
     "article310.credit-note.xml": "f340d8b1e3e425695d37cc6be115f64e9b69a4354828113881e7a4cb9154d42e",
-    "article310.invoice.pdf": "02b350a6d49a94d90df1789967fd8001da16c8f06c47d14b5c23e7d3bb11665e",
-    "article310.storno.pdf": "da5058250827b426f0883fe72e86e51105a157f1b6dadf4ffb11f66add8da48c",
+    "article310.invoice.pdf": "4e76179b962acfb44c67724df2f20c98a23d188c430c5fe977ced96045db2e81",
+    "article310.storno.pdf": "807dc86dea256a280195c6fb8352c343c75a123f0a91856d0de67628fb1ae7b1",
   })
 })
 

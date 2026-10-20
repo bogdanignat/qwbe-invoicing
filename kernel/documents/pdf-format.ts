@@ -1,3 +1,4 @@
+import { formatDecimal, parseDecimal } from "../../cubes/invoicing/contracts/money.ts"
 import { romanianCountyName } from "../../cubes/invoicing/index.ts"
 import type {
   RenderableCorrection, RenderableInvoice, RenderableParty, RenderableProforma,
@@ -6,20 +7,25 @@ import type {
 export type RenderableDocument = RenderableInvoice | RenderableProforma | RenderableCorrection
 export type RenderableLine = RenderableInvoice["lines"][number]
 
+/**
+ * An amount for people: thousands grouped with a comma, a point before the
+ * fraction and the scale it came with, so money keeps `.DD` and a quantity
+ * `.DDDD` (`6,600.00`, `-1,250,000.00`, `4,800.0000`). Zero is never signed.
+ * Text that is no decimal is printed as it came. The browser writes the same
+ * (frontend/src/lib/money.ts, held equal by probes/frontend-cube-parity.test.mjs).
+ */
 export const formatAmount = (value: string): string => {
-  const match = /^(-?)(\d+)(?:\.(\d+))?$/.exec(value.trim())
-  if (match === null) return value
-  const sign = match[1] ?? ""
-  const whole = (match[2] ?? "0").replace(/\B(?=(\d{3})+(?!\d))/g, ".")
-  const fraction = match[3]
-  return fraction === undefined ? `${sign}${whole}` : `${sign}${whole},${fraction}`
+  const scale = value.split(".")[1]?.length ?? 0
+  const parsed = parseDecimal(value, scale)
+  if (!parsed.ok) return value
+  const [whole = "", fraction] = formatDecimal(parsed.units, scale).split(".")
+  const grouped = whole.replace(/\B(?=(\d{3})+$)/gu, ",")
+  return fraction === undefined ? grouped : `${grouped}.${fraction}`
 }
 
-export const formatRate = (rate: string): string => {
-  if (!rate.includes(".")) return rate
-  const stripped = rate.replace(/0+$/, "").replace(/\.$/, "")
-  return formatAmount(stripped === "" ? "0" : stripped)
-}
+/** A VAT rate without its idle zeros: `21.00` is `21`, `20.50` is `20.5`. */
+export const formatRate = (rate: string): string =>
+  formatAmount(rate.includes(".") ? rate.replace(/\.?0+$/u, "") : rate)
 
 export const partyIdentifierLine = (party: RenderableParty): string | undefined => party.fiscalIdentifier === ""
   ? undefined

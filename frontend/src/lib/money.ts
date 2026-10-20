@@ -4,7 +4,8 @@
  * 2^53 stays exact. These are the primitives only; whether a caller trims, allows
  * a sign, refuses zero or wants a canonical form is its own rule, next to it.
  * The browser cannot import the cube, so this mirrors cubes/invoicing/contracts/money.ts
- * line for line (probes/frontend-cube-parity.test.mjs holds the two equal).
+ * line for line, and the labels at the end mirror the PDF's (kernel/documents/pdf-format.ts);
+ * probes/frontend-cube-parity.test.mjs holds both equal.
  */
 export type ParsedDecimal =
   | { readonly ok: true; readonly units: bigint }
@@ -57,3 +58,27 @@ export const compareDecimal = (left: string, right: string): -1 | 0 | 1 | undefi
   if (!a.ok || !b.ok) return undefined
   return a.units < b.units ? -1 : a.units > b.units ? 1 : 0
 }
+
+/**
+ * An amount for people: thousands grouped with a comma, a point before the
+ * fraction and the scale it came with, so money keeps `.DD` and a quantity
+ * `.DDDD` (`6,600.00`, `-1,250,000.00`, `4,800.0000`). Zero is never signed.
+ * Text that is no decimal is shown as it came. Only labels go through here:
+ * an input, a payload or a chart keeps the bare string. The PDF writes the same
+ * (kernel/documents/pdf-format.ts, held equal by the parity probe).
+ */
+export const formatAmount = (value: string): string => {
+  const scale = fractionDigits(value)
+  const parsed = parseDecimal(value, scale)
+  if (!parsed.ok) return value
+  const [whole = "", fraction] = formatDecimal(parsed.units, scale).split(".")
+  const grouped = whole.replace(/\B(?=(\d{3})+$)/gu, ",")
+  return fraction === undefined ? grouped : `${grouped}.${fraction}`
+}
+
+/** A VAT rate, or a round axis value, without its idle zeros: `21.00` is `21`, `20.50` is `20.5`. */
+export const formatRate = (rate: string): string =>
+  formatAmount(rate.includes(".") ? rate.replace(/\.?0+$/u, "") : rate)
+
+/** `money("6600.00", "RON")` is `6,600.00 RON`. */
+export const money = (value: string, currency: string): string => `${formatAmount(value)} ${currency}`

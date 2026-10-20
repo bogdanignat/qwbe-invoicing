@@ -1,4 +1,4 @@
-import { money } from "./format.ts"
+import { money } from "./money.ts"
 import type { CollectionsReport, RevenueReport } from "./report-models.ts"
 import type { ReportRange } from "./report-period.ts"
 

@@ -10,12 +10,12 @@ import { normalizeIssuerDetails, validateIssuerForIssuance } from "../cubes/invo
 import { romanianVatRates } from "../cubes/invoicing/issuer/domain/vat-catalogue.ts"
 import { CIUS_TEXT_LIMITS as FRONTEND_CIUS_TEXT_LIMITS } from "../frontend/src/lib/cius-text-limits.ts"
 import { canonicalVatTreatment } from "../frontend/src/lib/draft-decoders.ts"
-import { vatTreatmentLabel } from "../frontend/src/lib/format.ts"
+import * as pdfFormat from "../kernel/documents/pdf-format.ts"
 import { issuerIssuanceWarning } from "../frontend/src/lib/invoice-authoring-workflow.ts"
 import { socialCapitalValue } from "../frontend/src/lib/issuer-legal.ts"
 import * as frontendMoney from "../frontend/src/lib/money.ts"
 import { ROMANIAN_COUNTIES as FRONTEND_COUNTIES } from "../frontend/src/lib/romanian-counties.ts"
-import { vatTreatmentLabel as snapshotVatTreatmentLabel } from "../frontend/src/lib/vat-snapshots.ts"
+import { vatTreatmentLabel } from "../frontend/src/lib/vat-snapshots.ts"
 
 // The frontend mirrors these rules instead of importing the cube. Nothing else
 // notices when one side changes alone (T-1651), so this probe holds them equal.
@@ -56,7 +56,8 @@ const decimals = ["0", "-0", "-0.00", "0.00", "-0.05", "12.30", "01.00", "-02.00
 const units = [0n, 1n, -1n, 5n, -5n, 1234n, -1234n, 9007199254740993n, -9007199254740993n, 10n ** 25n]
 
 void test("the browser's money arithmetic is the cube's: parse, sign, format, half up and compare", () => {
-  assert.deepEqual(Object.keys(frontendMoney).sort(), Object.keys(cubeMoney).sort())
+  const labels = ["formatAmount", "formatRate", "money"]
+  assert.deepEqual(Object.keys(frontendMoney).filter((name) => !labels.includes(name)).sort(), Object.keys(cubeMoney).sort())
   for (const scale of [0, 2, 4]) {
     for (const value of decimals) {
       assert.deepEqual(frontendMoney.parseDecimal(value, scale), cubeMoney.parseDecimal(value, scale), `${value} @ ${String(scale)}`)
@@ -79,6 +80,20 @@ void test("the browser's money arithmetic is the cube's: parse, sign, format, ha
       assert.equal(frontendMoney.compareDecimal(left, right), cubeMoney.compareDecimal(left, right), `${left} ? ${right}`)
     }
   }
+})
+
+void test("the browser labels an amount and a VAT rate exactly as the PDF prints them", () => {
+  const amounts = ["0", "0.00", "-0", "-0.00", "-0.0000", "7", "999", "999.99", "-999.99", "1000", "1000.00", "-1000.00",
+    "6600.00", "-1250000.00", "4800.0000", "12345678.9", "90071992547409.93", "9007199254740993.0000", "-24851819463866056.53",
+    "007.50", "", " 1", "abc", "1,5", "1.2.3"]
+  for (const value of amounts) assert.equal(frontendMoney.formatAmount(value), pdfFormat.formatAmount(value), JSON.stringify(value))
+  assert.deepEqual(["6600.00", "-1250000.00", "0.00", "-0.00", "4800.0000", "1000", "999.99", "9007199254740993.0000"].map(pdfFormat.formatAmount),
+    ["6,600.00", "-1,250,000.00", "0.00", "0.00", "4,800.0000", "1,000", "999.99", "9,007,199,254,740,993.0000"])
+  for (const rate of ["21.00", "21", "20.50", "9.5", "0.00", "0", "100.00", "10.0", "11"]) {
+    assert.equal(frontendMoney.formatRate(rate), pdfFormat.formatRate(rate), rate)
+  }
+  assert.deepEqual(["21.00", "20.50", "0.00", "100.00", "10.0"].map(pdfFormat.formatRate), ["21", "20.5", "0", "100", "10"])
+  assert.equal(frontendMoney.money("6600.00", "RON"), `${pdfFormat.formatAmount("6600.00")} RON`)
 })
 
 void test("a storno amount negates to the opposite sign at the same scale, read alike on both sides", () => {
@@ -105,10 +120,7 @@ void test("the browser admits a VAT rate exactly when the cube does", () => {
   }
 })
 
-void test("a VAT treatment is labelled alike on every screen, and article 310 as the catalogue names it", () => {
-  for (const treatment of [{ vatCategoryCode: "S", rate: "21.00" }, { vatCategoryCode: "S", rate: "9.5" }, { vatCategoryCode: "O", rate: "0.00" }]) {
-    assert.equal(snapshotVatTreatmentLabel(treatment), vatTreatmentLabel(treatment))
-  }
+void test("an article 310 treatment is labelled as the catalogue names it", () => {
   const exemption = romanianVatRates.find(({ code }) => code === "RO_NON_VAT")
   assert.equal(vatTreatmentLabel({ vatCategoryCode: "O", rate: exemption.rate }), exemption.label)
 })

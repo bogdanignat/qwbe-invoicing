@@ -57,12 +57,13 @@ void test("a mixed series keeps zero inside the domain: positive bars above it, 
   assert.ok(up.height > down.height)
 })
 
-void test("ticks are 1, 2 or 5 × 10ⁿ apart and labelled in whole units with Romanian grouping", () => {
+void test("ticks are 1, 2 or 5 × 10ⁿ apart and labelled in whole units grouped with commas", () => {
   const steps = [["7.00"], ["99.99"], ["1234.00"], ["98765.43"], ["0.03"]].map((amounts) => {
     const scale = chartScale(amounts)
     return (scale.ticks[1] ?? 0) - (scale.ticks[0] ?? 0)
   })
   for (const step of steps) assert.match(String(step), /^[125]0*$/u)
-  assert.equal(tickLabel(100000000), "1.000.000")
-  assert.equal(tickLabel(-150000), "-1.500")
+  assert.equal(tickLabel(100000000), "1,000,000")
+  assert.equal(tickLabel(-150000), "-1,500")
+  assert.equal(tickLabel(50), "0.5")
 })

@@ -54,6 +54,20 @@ void test("with collections the chart pairs each month, a missing month as zero,
   assert.deepEqual(chart.groups.map((group) => group.yearLabel), ["2026", undefined, undefined])
 })
 
+void test("past a thousand the cards, bar titles and axis read grouped while the chart's data stays bare", () => {
+  const large: RevenueReport = {
+    ...revenue,
+    months: [{ month: "2026-07", revenueExcludingVat: "5454.55", invoicedIncludingVat: "6600.00", invoiceCount: 1, correctionCount: 0 }],
+    totals: { revenueExcludingVat: "5454.55", invoicedIncludingVat: "6600.00", invoiceCount: 1, correctionCount: 0 },
+  }
+  const view = periodView(large, undefined)
+  assert.deepEqual(view.cards.map((card) => card.value), ["5,454.55 RON", "6,600.00 RON"])
+  assert.equal(view.months[0]?.invoiced, "6600.00")
+  const chart = revenueChartModel(view.months, "RON")
+  assert.equal(chart.groups[0]?.bars[0]?.title, "Facturat cu TVA, iul. 2026: 6,600.00 RON")
+  assert.equal(chart.ticks.at(-1)?.label, "8,000")
+})
+
 void test("collections for another period, still loading or failed, never reach the chart", () => {
   const stale = periodView(revenue, { report: { ...collections, from: "2026-06-01" }, failed: false })
   assert.equal(stale.cards[2]?.value, "Se încarcă…")

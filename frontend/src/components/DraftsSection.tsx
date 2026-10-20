@@ -3,7 +3,7 @@ import { Button } from "./Button.tsx"
 import { EmptyState, ErrorAlert, Loading } from "./AsyncState.tsx"
 import { LoadMore } from "./LoadMore.tsx"
 import type { DraftsListModel } from "../hooks/use-drafts.ts"
-import { money } from "../lib/format.ts"
+import { money } from "../lib/money.ts"
 
 /**
  * The drafts area of the invoices screen, with states of its own: a failing or

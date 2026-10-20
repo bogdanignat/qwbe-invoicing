@@ -1,5 +1,6 @@
 import { activeOn, configurationRegistration, sameVatRate } from "./vat-defaults.ts"
 import type { NonVatBasis, VatCatalogue, VatConfiguration } from "./draft-models.ts"
+import { formatRate } from "./money.ts"
 
 /**
  * The regime the issuer is *not* in today, and the regimes it has been in.
@@ -72,7 +73,7 @@ export const vatRegistrationHistory = (
       ...(group[0].effectiveTo === undefined ? {} : { effectiveTo: group[0].effectiveTo }),
       rates: group.map((configuration) => catalogue.rates.find((rate) =>
         rate.code === configuration.code && sameVatRate(rate.rate, configuration.rate))?.label
-        ?? `${configuration.rate}%`).join(", "),
+        ?? `${formatRate(configuration.rate)}%`).join(", "),
       registered: configurationRegistration(group),
     }))
     .sort((left, right) => right.effectiveFrom.localeCompare(left.effectiveFrom))
