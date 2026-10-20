@@ -12,11 +12,12 @@ import type { NameCursor, PageQuery } from "../../cubes/invoicing/index.ts"
  */
 
 /**
- * Everything the adapters bind. Dates travel as TEXT, booleans as 0/1, money
- * as the int8 value in bani written out as a string (`postgres-money.ts`), and
- * exact bytes (the e-Factura XML and ZIP) as `Uint8Array` into `bytea`.
+ * Everything the adapters bind. Dates travel as TEXT, booleans as 0/1 into the
+ * INTEGER flag columns and as `boolean` into a BOOLEAN one, money as the int8
+ * value in bani written out as a string (`postgres-money.ts`), and exact bytes
+ * (the e-Factura XML and ZIP) as `Uint8Array` into `bytea`.
  */
-export type QueryValue = string | number | null | Uint8Array
+export type QueryValue = string | number | boolean | null | Uint8Array
 
 export interface SqlFragment {
   readonly sql: string

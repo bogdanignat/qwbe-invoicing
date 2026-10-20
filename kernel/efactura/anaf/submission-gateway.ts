@@ -7,6 +7,9 @@ import { ANAF_HTTP, anafApi, type ListWindow } from "./endpoints.ts"
 
 type Reply<D extends BodyDecoding> = Effect.Effect<AnafReply<SendReply<D>["body"]>, SendFailure>
 
+/** `uploadB2c` for a document to a private person, `upload` for any other. */
+export type UploadRoute = "upload" | "uploadB2c"
+
 /**
  * The e-Factura calls the dispatcher (and a reconciliation request) makes. The URLs are the constants of
  * `endpoints.ts`; the token goes only into the header, and never to `validare`. A transport failure is
@@ -24,7 +27,8 @@ export const createSubmissionGateway = (environment: AnafEnvironment, transport:
   return {
     /** The public validator: no token goes to it (see `endpoints.ts`). */
     validate: (standard: "UBL" | "CN", xml: Uint8Array) => request("utf8", api.validate(standard === "UBL" ? "FACT1" : "FCN"), {}, xml),
-    upload: (token: Redacted.Redacted, standard: "UBL" | "CN", cif: string, xml: Uint8Array) => call("utf8", api.upload(standard, cif), token, xml),
+    upload: (token: Redacted.Redacted, route: UploadRoute, standard: "UBL" | "CN", cif: string, xml: Uint8Array) =>
+      call("utf8", api[route](standard, cif), token, xml),
     status: (token: Redacted.Redacted, uploadIndex: string) => call("utf8", api.status(uploadIndex), token),
     download: (token: Redacted.Redacted, downloadId: string) => call("bytes", api.download(downloadId), token),
     /** `listaMesajePaginatieFactura`: read-only, asked by a reconciliation request. */

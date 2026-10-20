@@ -36,13 +36,18 @@ const printable = (text: string): string => Array.from(text, (character) => {
   return code < 0x20 || code === 0x7f ? " " : character
 }).join("").replace(/\s+/gu, " ").trim()
 
+/** A CNP is exactly 13 digits; a longer run of digits is some other number and stays. */
+const CNP = /(?<![0-9])[0-9]{13}(?![0-9])/gu
+export const CNP_MASK = "*".repeat(13)
+
 /**
- * ANAF's own error texts, kept for the user: strings only, control characters
+ * ANAF's own error texts, kept for the user: strings only, any CNP ANAF echoes
+ * back masked first (before a cut could leave part of it), control characters
  * folded to spaces, each cut to 500 characters and at most 20 of them.
  */
 export const sanitizedMessages = (messages: ReadonlyArray<unknown>): ReadonlyArray<string> => messages
   .filter((message): message is string => typeof message === "string")
-  .map((message) => printable(message).slice(0, MAX_MESSAGE_CHARS))
+  .map((message) => printable(message.replace(CNP, CNP_MASK)).slice(0, MAX_MESSAGE_CHARS))
   .filter((message) => message.length > 0)
   .slice(0, MAX_MESSAGES)
 

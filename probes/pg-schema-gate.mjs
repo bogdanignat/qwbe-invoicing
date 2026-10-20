@@ -267,7 +267,7 @@ const main = async () => {
     // its table, event, column list and message, and held to exactly that.
     const postCaptureTriggers = {
       efactura_submissions_content_no_update: ["efactura_submissions", "UPDATE", "e-Factura submission content is immutable",
-        ["organization_id", "environment", "document_kind", "document_id", "standard", "cif", "xml", "xml_sha256", "xml_size", "created_by", "created_at"]],
+        ["organization_id", "environment", "document_kind", "document_id", "standard", "cif", "buyer_is_individual", "xml", "xml_sha256", "xml_size", "created_by", "created_at"]],
       efactura_submissions_no_delete: ["efactura_submissions", "DELETE", "e-Factura submissions are kept", []],
       efactura_resubmissions_no_update: ["efactura_resubmissions", "UPDATE", "e-Factura resubmissions are append-only", []],
       efactura_resubmissions_no_delete: ["efactura_resubmissions", "DELETE", "e-Factura resubmissions are append-only", []],

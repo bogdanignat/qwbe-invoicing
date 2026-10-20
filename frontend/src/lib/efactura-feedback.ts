@@ -12,7 +12,6 @@ const MESSAGES: ReadonlyMap<string, string> = new Map(Object.entries({
   efactura_not_connected: "Aplicația nu este conectată la ANAF. Conectează-te cu certificatul din Setări → Integrări.",
   efactura_issuer_cif_invalid: "Datele firmei nu au un CIF pe care ANAF să-l poată verifica. Corectează CIF-ul în Setări → Emitent.",
   efactura_cif_mismatch: "CIF-ul emitentului de pe document nu este CIF-ul pentru care a fost verificată conexiunea ANAF.",
-  efactura_b2c_refused: "Documentele către persoane fizice nu se trimit în e-Factura din această aplicație.",
   efactura_xml_too_large: "XML-ul documentului depășește limita ANAF de 10 MB.",
   efactura_not_unknown: "Trimiterea nu mai are starea „necunoscut” (a fost legată, retrimisă sau a avansat). Reîncarcă pagina.",
   efactura_connection_refreshing: `Conexiunea cu ANAF se reîmprospătează. ${RETRY_SOON}`,

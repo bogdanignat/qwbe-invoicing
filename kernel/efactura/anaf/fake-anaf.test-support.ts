@@ -11,7 +11,8 @@ import type { Transport } from "../../outbound/send.ts"
  * `https://webservicesp.anaf.ro` to this listener and refuses every other
  * host, so no test can reach ANAF or anything else on the network. As on ANAF,
  * `validare` answers only on the public host, without a token; under
- * `api.anaf.ro` it is a 404.
+ * `api.anaf.ro` it is a 404. `uploadb2c` is the `upload` operation, with the
+ * same scenarios; the recorded path tells the two routes apart.
  *
  * Each operation answers like ANAF by default and can be switched to one of
  * the scenarios ANAF (or the road to it) produces: an error inside HTTP 200, a
@@ -59,8 +60,9 @@ const operationOf = (origin: string, pathname: string): FakeOperation | "unknown
   if (origin === PUBLIC_ORIGIN) return /^\/prod\/FCTEL\/rest\/validare\/(?:FACT1|FCN)$/u.test(pathname) ? "validare" : "unknown"
   if (pathname === "/anaf-oauth2/v1/token") return "token"
   if (pathname === "/anaf-oauth2/v1/revoke") return "revoke"
-  const operation = /^\/(?:test|prod)\/FCTEL\/rest\/(upload|stareMesaj|listaMesajePaginatieFactura|descarcare)$/u.exec(pathname)?.[1]
+  const operation = /^\/(?:test|prod)\/FCTEL\/rest\/(upload|uploadb2c|stareMesaj|listaMesajePaginatieFactura|descarcare)$/u.exec(pathname)?.[1]
   if (operation === undefined) return "unknown"
+  if (operation === "uploadb2c") return "upload"
   return operation === "listaMesajePaginatieFactura" ? "lista" : operation as FakeOperation
 }
 const originOf = (request: IncomingMessage): string => String(request.headers[ORIGIN_HEADER] ?? "")

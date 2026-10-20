@@ -19,14 +19,16 @@ interface Submission {
   readonly archive?: string
   readonly superseded?: boolean
   readonly xmlSha256?: string
+  readonly buyerIsIndividual?: boolean | null
 }
 
 const submission = (row: Submission): readonly [string, ReadonlyArray<unknown>] => [
-  `INSERT INTO efactura_submissions(id,organization_id,environment,document_kind,document_id,standard,cif,xml,xml_sha256,xml_size,state,
-     upload_index,download_id,archive_state,superseded,next_attempt_at,created_by,created_at,updated_at)
-   VALUES($1,'org-1',$2,'invoice',$3,'UBL','12345674',$4,$5,$6,$7,$8,$9,$10,$11,$12,'user-1',$12,$12)`,
+  `INSERT INTO efactura_submissions(id,organization_id,environment,document_kind,document_id,standard,cif,buyer_is_individual,xml,xml_sha256,
+     xml_size,state,upload_index,download_id,archive_state,superseded,next_attempt_at,created_by,created_at,updated_at)
+   VALUES($1,'org-1',$2,'invoice',$3,'UBL','12345674',$13,$4,$5,$6,$7,$8,$9,$10,$11,$12,'user-1',$12,$12)`,
   [row.id, row.environment ?? "test", row.documentId ?? `doc-${row.id}`, XML, row.xmlSha256 ?? sha256(XML), XML.byteLength, row.state ?? "queued",
-    row.uploadIndex ?? null, row.downloadId ?? null, row.archive ?? "none", row.superseded ?? false, NOW],
+    row.uploadIndex ?? null, row.downloadId ?? null, row.archive ?? "none", row.superseded ?? false, NOW,
+    row.buyerIsIndividual === undefined ? false : row.buyerIsIndividual],
 ]
 
 void test("one live submission per document: a rejected one makes room, an unknown one only once superseded", async () => {
@@ -42,6 +44,18 @@ void test("one live submission per document: a rejected one makes room, an unkno
     await sql.query(...submission({ id: "s-6", documentId: "inv-3" }))
     const index = await sql.rejects(...submission({ id: "s-7", state: "processing", uploadIndex: "11" }))
     assert.deepEqual([index.code, index.constraint], ["23505", "efactura_submissions_upload_index"])
+  })
+})
+
+void test("every submission says whether its buyer is a private person: no default, no NULL", async () => {
+  await withMigrated("efactura_buyer", async ({ sql }) => {
+    assert.equal((await sql.rejects(...submission({ id: "a", buyerIsIndividual: null }))).code, "23502")
+    const withoutFlag = `INSERT INTO efactura_submissions(id,organization_id,environment,document_kind,document_id,standard,cif,xml,xml_sha256,
+      xml_size,state,next_attempt_at,created_by,created_at,updated_at) VALUES('b','org-1','test','invoice','doc-b','UBL','12345674',$1,$2,$3,
+      'queued',$4,'user-1',$4,$4)`
+    assert.equal((await sql.rejects(withoutFlag, [XML, sha256(XML), XML.byteLength, NOW])).code, "23502", "no default to fall back on")
+    await sql.query(...submission({ id: "c", buyerIsIndividual: true }))
+    assert.deepEqual(await sql.query("SELECT buyer_is_individual FROM efactura_submissions WHERE id='c'"), [{ buyer_is_individual: true }])
   })
 })
 
@@ -83,6 +97,8 @@ void test("the sent XML never changes and nothing of the history is deleted or r
     const refusal = async (statement: string) => (await sql.rejects(statement)).message
     assert.equal(await refusal("UPDATE efactura_submissions SET xml='\\x00'::bytea WHERE id='new'"), "e-Factura submission content is immutable")
     assert.equal(await refusal("UPDATE efactura_submissions SET cif='99' WHERE id='new'"), "e-Factura submission content is immutable")
+    assert.equal(await refusal("UPDATE efactura_submissions SET buyer_is_individual=true WHERE id='new'"),
+      "e-Factura submission content is immutable", "the route ANAF gets is fixed with the XML")
     assert.equal(await refusal("DELETE FROM efactura_submissions WHERE id='new'"), "e-Factura submissions are kept")
     await sql.query(`INSERT INTO efactura_resubmissions(previous_id,next_id,organization_id,actor_id,created_at,duplicate_risk_confirmed)
       VALUES('old','new','org-1','user-1',$1,true)`, [NOW])

@@ -50,13 +50,12 @@ const uploadCif = (configured: boolean, connection: ConnectionState | undefined,
 }
 
 /**
- * Every check a new submission passes before it is stored, then its XML: a
- * private buyer is refused, the CIF must be the connection's, and the bytes
- * must fit ANAF's 10 MB. The XML is generated only once the rest passed.
+ * Every check a new submission passes before it is stored, then its XML: the
+ * CIF must be the connection's, and the bytes must fit ANAF's 10 MB. The XML
+ * is generated only once the rest passed.
  */
 export const checkedUpload = (configured: boolean, connection: ConnectionState | undefined, document: SubmissionDocument, at: Date) =>
   Effect.gen(function*() {
-    if (document.buyerIsIndividual) return yield* conflict("efactura_b2c_refused", "documents for a private person are not sent to e-Factura")
     const cif = yield* uploadCif(configured, connection, document, at)
     const xml = yield* document.xml
     if (xml.byteLength > MAX_XML_BYTES) return yield* conflict("efactura_xml_too_large", "the e-Factura XML is larger than 10 MB")
@@ -87,7 +86,7 @@ export const createSubmissionsService = (dependencies: SubmissionsDependencies) 
       const raced = yield* current(transaction)
       if (raced !== undefined) return { submission: raced, created: false }
       const stored = yield* transaction.insert({ id, organizationId, environment, documentKind: document.kind, documentId: document.id,
-        cif, xml, createdBy: context.identity.id, createdAt: at })
+        cif, buyerIsIndividual: document.buyerIsIndividual, xml, createdBy: context.identity.id, createdAt: at })
       yield* transaction.project(organizationId, document.kind, document.id, documentStatus(stored.state))
       yield* transaction.appendAuditEvent(submissionAudit(auditId, stored, context.identity.id, at, "queued", `${document.kind}:${document.id}`))
       return { submission: stored, created: true }

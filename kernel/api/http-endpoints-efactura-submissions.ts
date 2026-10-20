@@ -28,9 +28,9 @@ export const EFacturaSubmissionHistory = Schema.Struct({
 const EFacturaResponse = HttpApiSchema.Uint8Array({ contentType: "application/zip" })
 
 const submitDescription = [
-  "Queues the document for ANAF e-Factura; the dispatcher validates, uploads and polls it. 202 with the new submission,",
-  "or 200 with the document's live, unknown or accepted one. 409: e-Factura not configured or not connected, the issuer CIF",
-  "is not the connection's, the buyer is a private person, or the XML is over 10 MB.",
+  "Queues the document for ANAF e-Factura; the dispatcher validates, uploads and polls it. A document for a private person",
+  "goes to `uploadb2c`, any other to `upload`. 202 with the new submission, or 200 with the document's live, unknown or",
+  "accepted one. 409: e-Factura not configured or not connected, the issuer CIF is not the connection's, or the XML is over 10 MB.",
 ].join(" ")
 
 /** The submission routes of the e-Factura plugin. */

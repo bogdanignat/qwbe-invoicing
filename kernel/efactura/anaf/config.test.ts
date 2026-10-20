@@ -53,6 +53,9 @@ void test("the URLs are constants: test is api.anaf.ro/test, prod is api.anaf.ro
   assert.equal(ANAF_API_BASES.prod, "https://api.anaf.ro/prod/FCTEL/rest")
   assert.equal(anafApi("test").upload("CN", "12345674"), "https://api.anaf.ro/test/FCTEL/rest/upload?standard=CN&cif=12345674")
   for (const environment of ["test", "prod"] as const) {
+    assert.equal(anafApi(environment).uploadB2c("UBL", "12345674"),
+      `https://api.anaf.ro/${environment}/FCTEL/rest/uploadb2c?standard=UBL&cif=12345674`, "B2C: the same query, its own route")
+    assert.equal(anafApi(environment).uploadB2c("CN", "12345674"), `https://api.anaf.ro/${environment}/FCTEL/rest/uploadb2c?standard=CN&cif=12345674`)
     assert.equal(anafApi(environment).validate("FCN"), "https://webservicesp.anaf.ro/prod/FCTEL/rest/validare/FCN", "validare is the public validator")
   }
   assert.equal(anafApi("test").status("1&x=2"), "https://api.anaf.ro/test/FCTEL/rest/stareMesaj?id_incarcare=1%26x%3D2")

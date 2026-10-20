@@ -11,7 +11,6 @@ void test("a 409 of the plugin reads as its own Romanian sentence, not as the ba
     assert.match(efacturaFailureMessage(conflict(code)), /Reîncearcă peste un minut\.$/u, code)
   }
   assert.match(efacturaFailureMessage(conflict("efactura_not_connected")), /Conectează-te cu certificatul/u)
-  assert.match(efacturaFailureMessage(conflict("efactura_b2c_refused")), /persoane fizice/u)
   assert.match(efacturaFailureMessage(conflict("efactura_index_not_listed")), /nu apare în lista ANAF/u)
   assert.doesNotMatch(efacturaFailureMessage(conflict("efactura_cif_mismatch")), /DomainConflict/u)
 })

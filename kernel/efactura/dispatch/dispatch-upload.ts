@@ -9,7 +9,8 @@ import type { AccessToken } from "./credentials.ts"
 
 /**
  * A queued submission: `validare`, then `uploading` committed, then the one
- * upload and ANAF's answer to it. Starting clears the reason it waited for.
+ * upload (to `uploadb2c` for a private buyer) and ANAF's answer to it.
+ * Starting clears the reason it waited for.
  * `validare` carries no token, so a 401 there is only a retry, never a refresh.
  */
 export const upload = (ctx: StepContext, submission: SubmissionRecord, token: AccessToken) => Effect.gen(function*() {
@@ -27,7 +28,8 @@ export const upload = (ctx: StepContext, submission: SubmissionRecord, token: Ac
   })
   if (uploading === undefined) return
   // `uploading` is committed: from here on, nothing but ANAF's own answer sends it anywhere but `unknown`.
-  const sent = yield* timed(ctx, ctx.gateway.upload(token.access, submission.standard, submission.cif, xml))
+  const route = submission.buyerIsIndividual ? "uploadB2c" : "upload"
+  const sent = yield* timed(ctx, ctx.gateway.upload(token.access, route, submission.standard, submission.cif, xml))
   const result = kindOf(sent, classifyUpload, { kind: "ambiguous" } as const)
   const patch: Patch = result.kind === "indexed" ? { uploadIndex: result.uploadIndex, polls: 0, nextAttemptAt: nextPollAt(sent.at, 0).toISOString() }
     : result.kind === "refused" ? { errors: result.errors } : result.kind === "auth_refused" ? { nextAttemptAt: later(sent.at, RETRY_WAIT_MS) } : {}

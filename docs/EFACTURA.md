@@ -400,14 +400,40 @@ All of them belong to the `efactura` plugin: off, they answer 404 and are absent
 with its SHA-256 and size. It is refused with `409` when e-Factura is not
 configured (`efactura_not_configured`), not connected (`efactura_not_connected`),
 when the issuer's CIF in the snapshot is not the CIF the connection was verified
-for (`efactura_cif_mismatch`), when the buyer is a private person, for an invoice
-and for a correction alike (`efactura_b2c_refused`), and when the XML is too large
+for (`efactura_cif_mismatch`), and when the XML is too large
 (`efactura_xml_too_large`); a proforma is not an issued document and answers
-`404`. A document whose current submission is live, `unknown` or `accepted` gets
+`404`. A document for a private person is submitted like any other (see B2C below). A document whose current submission is live, `unknown` or `accepted` gets
 that submission back (`200`); after `rejected` or `refused` a new one is queued.
 The partial unique index on the current submission makes two concurrent submits
 queue exactly one. The row, the document's status and the audit row
 `efactura_submission.queued` are written in one transaction.
+
+**B2C: documents for a private person.** The law (OUG 120/2021 art. 10^1, as
+amended by OUG 138/2024) makes every taxable person established in Romania, VAT
+registered or not, send its invoices to private persons through RO e-Factura,
+within 5 working days of issue; Legea 88/2026 lifts this only for sellers
+identified by a CNP, and the issuer here always has a CUI. A storno to a private
+person is an invoice too. Whether the buyer is a private person is read from the
+document's frozen snapshot (`customer.partyType = individual`) and stored with the
+submission (`buyer_is_individual`, `NOT NULL`, immutable like the XML): the
+dispatcher uploads such a submission to
+`POST {base}/uploadb2c?standard={UBL|CN}&cif=<issuer CIF>` instead of `upload`, and
+so does every later upload of it (a retry after a 401/403, a resubmit). `validare`,
+`stareMesaj`, the list, `descarcare` and the reading of their answers are the same
+as for B2B, and reconciliation still searches ANAF's list by the issuer's CIF, never
+by the buyer's. BT-47 carries the buyer's CNP only when the customer has one
+(their choice to be identified, art. 10^1 alin. (3)), otherwise `0000000000000`.
+The 5-day deadline is not tracked by the application.
+
+**The CNP is personal data.** It lives only in the frozen snapshot, in the
+submitted XML and in ANAF's ZIP (which holds that XML), and those bytes are read
+only with `efactura:read` (`/xml`, `/response`). It is never in the call log
+(`efactura_submission_attempts` has no URL or body), the audit or the logs; and
+because ANAF may echo a CNP back in its messages, every run of exactly 13 digits
+in ANAF's texts (errors and the list's `detalii`) is masked as `*************`
+before the text is cut to size and stored or shown
+(`submissions/domain/replies.ts`). ANAF's indexes and ids are separate fields and
+are not touched.
 
 **States.** `queued → validating → uploading → processing → accepted | rejected`,
 plus `refused` (ANAF said why, nothing was taken) and `unknown` (nobody can tell
@@ -440,7 +466,7 @@ the XML as `text/plain` and **no token**. ANAF TEST does not serve it (checked
 token and 404 with one), while the public service answers `{"stare":"ok"}` for
 fixtures 05 (`FACT1`) and 06 (`FCN`). It only checks the XML and registers
 nothing in SPV; the address is a constant in `endpoints.ts`. Every other call
-(upload, `stareMesaj`, the list, `descarcare`) stays on
+(`upload` or `uploadb2c`, `stareMesaj`, the list, `descarcare`) stays on
 `api.anaf.ro/{test|prod}/FCTEL/rest` with the Bearer token, which never leaves
 for another host.
 
@@ -574,8 +600,8 @@ ANAF's list does not prove the upload never arrived, and that **ANAF may end up
 holding the document twice**. The application gives no technical guarantee against
 that duplicate: the resubmission is explicit, confirmed and audited, and that is
 all. The XML is generated again from the frozen snapshot and passes every check of
-a submit (configured, connected, issuer CIF = the connection's, no private buyer,
-at most 10 MB). In one transaction under the submissions key: the old submission is
+a submit (configured, connected, issuer CIF = the connection's, at most 10 MB);
+for a private buyer it goes to `uploadb2c` again. In one transaction under the submissions key: the old submission is
 marked `superseded` (its state stays `unknown`; an accepted submission can never be
 superseded, a CHECK enforces it), the new one is queued, `efactura_resubmissions`
 records the link with you and the confirmation, the document shows `queued`, and

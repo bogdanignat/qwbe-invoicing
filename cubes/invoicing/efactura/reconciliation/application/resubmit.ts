@@ -55,7 +55,7 @@ export const resubmit = <E>(dependencies: ReconciliationDependencies, id: string
     yield* resubmittable(dependencies, latest)
     yield* transaction.supersede(latest, at)
     const next = yield* transaction.insert({ id: nextId, organizationId, environment, documentKind: latest.documentKind,
-      documentId: latest.documentId, cif, xml, createdBy: actorId, createdAt: at })
+      documentId: latest.documentId, cif, buyerIsIndividual: document.buyerIsIndividual, xml, createdBy: actorId, createdAt: at })
     yield* transaction.recordResubmission(organizationId, { previousId: latest.id, nextId, actorId, createdAt: at })
     yield* transaction.project(organizationId, next.documentKind, next.documentId, documentStatus(next.state))
     yield* transaction.appendAuditEvent(submissionAudit(resubmittedAudit, latest, actorId, at, "resubmitted", `next:${nextId}`))
