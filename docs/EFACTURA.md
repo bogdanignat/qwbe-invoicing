@@ -646,6 +646,17 @@ stays empty. After a restore, reconnecting with the certificate uploads nothing.
   Fixtures 09 and 10 themselves were not uploaded. Fixtures 01–08 regenerate
   byte for byte identical after T-1383 and after the move to two notes, so what
   ANAF did accept has not drifted.
+- **B2C is accepted by the SPV on ANAF TEST** (2026-10-20). An invoice to a
+  private person without a CNP (`HINT 2`, BT-47 `0000000000000`, no
+  `PartyTaxScheme`) went to `uploadb2c` and reached `accepted` at the first
+  `stareMesaj`, with no `Errors` in any answer (`validare`, upload,
+  `stareMesaj`). ANAF's ZIP holds the submitted XML byte for byte plus its
+  signature (`CN=ANAF TEST`, digest = the SHA-256 of that XML). The feared "nu
+  poate fi comunicata catre destinatar (BT-47-lipsa identificator)" did not come
+  back as an error, so the answers are read exactly as for B2B. The same day an
+  invoice to a company (`HINT 1`) went to `upload` and was accepted the same way.
+  Not yet tried on ANAF TEST: a storno to a private person (`CN` on `uploadb2c`)
+  and an invoice to a private person identified by a CNP.
 - The validator checks schema and Schematron. It does not check that the
   document states the truth: correct totals with the wrong VAT category pass.
 - Nothing has been sent to the production SPV yet; the documents below went to
