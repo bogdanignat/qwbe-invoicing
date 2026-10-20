@@ -170,3 +170,20 @@ void test("the release publishes one image and verifies through the Docker harne
   assert.equal(digests.length, 2, "the version, then one digest")
   assert.match(digests[1] ?? "", /\/qwbe-invoicing@sha256:[0-9a-f]{64}$/u)
 })
+
+void test("ANAF: the environment is test unless written out; the client and its secrets come only with the overlay, all required", () => {
+  for (const name of ["compose.yaml", "compose.prod.yaml"]) {
+    const app = serviceBlock(code(name), "app")
+    assert.match(app, /ANAF_ENVIRONMENT: \$\{ANAF_ENVIRONMENT:-test\}/u, name)
+    assert.doesNotMatch(code(name), /ANAF_CLIENT|ANAF_REDIRECT|ANAF_TOKEN|anaf_/u, `${name} carries no ANAF client`)
+  }
+  const overlay = code("compose.anaf.yaml")
+  assert.deepEqual(services(overlay), ["app"])
+  for (const variable of ["ANAF_CLIENT_ID", "ANAF_REDIRECT_URI", "ANAF_CLIENT_SECRET_PATH", "ANAF_TOKEN_KEY_PATH"]) {
+    assert.match(overlay, new RegExp(`\\$\\{${variable}:\\?`, "u"), variable)
+  }
+  // Secrets travel as mounted files, never as environment values.
+  assert.match(overlay, /ANAF_CLIENT_SECRET_FILE: \/run\/secrets\/anaf_client_secret\n/u)
+  assert.match(overlay, /ANAF_TOKEN_KEY_FILE: \/run\/secrets\/anaf_token_key\n/u)
+  assert.doesNotMatch(overlay, /ANAF_CLIENT_SECRET:|ANAF_ENVIRONMENT/u)
+})

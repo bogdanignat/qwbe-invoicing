@@ -496,13 +496,14 @@ Sources: QWBE root `package.json`, `core/package.json`, and `core/tsconfig.json`
 The package copies the `crm-pack` structure: one plugin pack, a parent with children.
 
 - One `qwbe-package.json` at the package root, which is the repository root:
-  `name: "invoicing-pack"`, `kind: "plugin"`, and a `cubes` array listing all 12 units,
-  `invoicing` and `invoicing/<child>`, plugins included. There are no per-directory manifests.
+  `name: "invoicing-pack"`, `kind: "plugin"`, and a `cubes` array listing all 14 units,
+  `invoicing`, `invoicing/<child>` and `invoicing/efactura/<child>`, plugins included. There are no per-directory manifests.
 - The inventory is static. Neither the gates nor the migrations filter it by configuration;
   migrations always run for every unit, so a disabled plugin keeps its schema and data.
 - Each unit's `manifest` declares `name` (equal to its path leaf), `parent` for children,
   and `required`: `true` for `invoicing` and its eight components, `false` for `payments`,
-  `efactura` and `company-lookup`. The field has the `qwbe-core` manifest shape; the semantics are this
+  `efactura` and `company-lookup`; `efactura`'s own children (`connection`, `submissions`)
+  are `true`: required inside the plugin, so they are on exactly when it is. The field has the `qwbe-core` manifest shape; the semantics are this
   kernel's own.
 - `QWBE_PLUGINS` selects the plugins at start (`kernel/config.ts`, `kernel/plugins.ts`):
   absent means every plugin, empty means none, any name that is not a plugin refuses start,
@@ -538,7 +539,7 @@ This is the shape the repository has; a new directory appears only when a file n
 ```text
 qwbe-invoicing/
 ├── FOUNDATION.md
-├── qwbe-package.json           invoicing-pack, kind "plugin", all 12 units
+├── qwbe-package.json           invoicing-pack, kind "plugin", all 14 units
 ├── qwbe.config.json            gate roots and caps
 ├── package.json
 ├── pnpm-lock.yaml
@@ -559,6 +560,8 @@ qwbe-invoicing/
 │       ├── documents/          rendered artifacts
 │       ├── payments/           plugin: payment records and derived payment status
 │       ├── efactura/           plugin: RO e-Factura UBL, CIUS-RO limits, EN 16931 validation
+│       │   ├── connection/     ANAF OAuth connection: environment, token pair state, attempts
+│       │   └── submissions/    ANAF submissions: states, answers, polling, call budgets
 │       └── company-lookup/     plugin: company lookup settings, thresholds, ANAF/openapi.ro mapping
 ├── kernel/                     kernel and adapters
 │   ├── config.ts, failure-log.ts
@@ -567,8 +570,10 @@ qwbe-invoicing/
 │   ├── api/                    HttpApi contract, schemas, handlers
 │   ├── storage/                PostgreSQL pool and store, row mappers, migration runner, schema fingerprint
 │   ├── documents/              PDF renderer, artifact store and recovery, fonts
-│   ├── efactura/               host mapping into the e-Factura plugin
+│   ├── efactura/               host mapping into the e-Factura plugin; anaf/: ANAF config and endpoints
 │   ├── company-lookup/         ANAF and openapi.ro clients, lookup cache, openapi.ro key cipher
+│   ├── crypto/                 secrets at rest (AES-256-GCM with caller-owned associated data)
+│   ├── outbound/               outbound HTTP: bounded reads, no redirects, not_sent | ambiguous
 │   ├── ops/                    CLI, backup, restore
 │   └── parity/                 SQLite baseline fixtures for the PostgreSQL schema gate
 ├── frontend/                   browser UI: Vite + TanStack Router, built into frontend/dist and served by the kernel

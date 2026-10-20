@@ -16,7 +16,7 @@ The dev host is the machine that runs Docker and Warden.
 pnpm local:setup             # dry-run
 pnpm local:setup --apply     # starts Warden services and signs invoice.test once
 cp -n .env.example .env      # default secret paths: ./.local/...
-scripts/init-secrets.sh      # api-token, pg-password, company-lookup-key; 0600, never overwritten
+scripts/init-secrets.sh      # api-token, pg-password, company-lookup-key, anaf-token-key; 0600, never overwritten
 docker compose build         # one image; its ui-builder stage runs `pnpm build:frontend`
 docker compose up -d
 docker compose ps
@@ -30,16 +30,18 @@ container in front of the kernel) moves to the single image with
 volumes stay. If `migrate` then refuses the database as drift, the baseline changed
 since the cluster was created; see README, "Schema during development".
 
-`scripts/init-secrets.sh` creates the three secret files once and keeps them on every
+`scripts/init-secrets.sh` creates the four secret files once and keeps them on every
 later run. Never regenerate `.local/pg-password` after the
 cluster exists (PostgreSQL keeps the first password and `migrate` then fails with
 `password authentication failed`), and never regenerate an existing `.local/api-token`.
 A new `.local/company-lookup-key` makes a stored openapi.ro key unreadable: the
-provider reads as off until the key is entered again in Setări → Integrări.
+provider reads as off until the key is entered again in Setări → Integrări. A new
+`.local/anaf-token-key` makes the stored ANAF tokens unreadable: e-Factura asks for the
+certificate again.
 To change the password, or to start over, see README, [Database
 password](../README.md#database-password).
 
-All three secrets are files the operator creates. Nothing in this repository holds a
+All the secrets are files the operator creates. Nothing in this repository holds a
 credential, no default password exists, and the PostgreSQL password is never passed
 as `PGPASSWORD`: the server reads it through `POSTGRES_PASSWORD_FILE` and the
 application through `PGPASSWORD_FILE`, so it reaches neither a child process nor
@@ -117,6 +119,7 @@ Every cube use-case is an `Effect` and has a 1:1 authenticated HTTP endpoint. Au
 - `POST /api/invoices/:id/payments` (record payment; requires `Idempotency-Key`) / `POST /api/invoices/:id/payments/:paymentId/reversal` (reverse one payment in full with an immutable counter-row; requires `Idempotency-Key`, optional `reason`) / `GET /api/invoices/:id/payments` (list payments with derived status `unpaid`/`partially_paid`/`paid`/`overpaid`/`overdue`, `paidAmount`/`remainingAmount`)
 - `POST /api/invoices/:id/corrections` (storno fiscal — creează document nou imuabil cu referință la factura originală, motiv obligatoriu; cantitate negativă, preț unitar pozitiv, totaluri negative; XML-ul e-Factura e CreditNote cu valori pozitive) / `GET /api/invoices/:id/corrections` / `GET /api/corrections/:id` — după emitere nu se mai editează factura, doar storno
 - Issued invoices have no `DELETE` endpoint and allocated invoice numbers are never reused; mistakes are handled through correction documents
+- `POST /api/efactura/connection/start` / `GET /api/anaf/callback` / `GET|DELETE /api/efactura/connection` — the ANAF OAuth connection of the `efactura` plugin (404 when it is off): start answers ANAF's `authorizeUrl` and sets the attempt cookie (`efactura:connection.manage`, 409 without the ANAF variables), the callback answers only a 303 to `/settings/integrations?anaf=<code>`, the status never carries a token (`efactura:read`); see docs/EFACTURA.md
 - `GET|PUT /api/settings/company-lookup` (`settings.manage`; `provider` `none`/`anaf`/`openapi`, write-only `openapiKey`, `clearOpenapiKey`; answers only `openapiKeyLast4`) / `GET /api/company-lookup/availability` / `POST /api/company-lookup/lookup` `{cui}` / `POST /api/company-lookup/search` `{q}` — the `company-lookup` plugin (404 when it is off); a CUI under 4 digits or with a wrong check digit and a name under 6 letters answer 400 without asking ANAF or openapi.ro
 
 T-1069 proforma route inventory (seven authenticated routes):
@@ -163,6 +166,57 @@ Until the first real release, local development data is disposable and may be re
 deliberately. The `-v` form of `down` still must not be used as an accidental or
 routine stop command: it deletes the PostgreSQL cluster volume, the artifact volume
 and the backup staging volume in one go.
+
+## ANAF e-Factura (OAuth client)
+
+Sending invoices to ANAF needs an OAuth client registered at ANAF and two secret files.
+Without them the stack runs as before and e-Factura answers "not configured"; nothing
+else changes. Development always talks to ANAF **TEST** (`https://api.anaf.ro/test`):
+`ANAF_ENVIRONMENT` is `test` unless `prod` is written out, and `prod` belongs only on a
+production host. The tests never call ANAF; they use a fake server on loopback.
+
+On a new installation:
+
+1. **Register the application at ANAF** (logged in on anaf.ro with the qualified
+   certificate, ANAF's OAuth application registration, "Editare profil Oauth"): grant
+   type Authorization Code, callback URL exactly `https://invoice.test/api/anaf/callback`
+   for development (a production host registers `https://<its host>/api/anaf/callback`).
+   ANAF shows the client id and the client secret once; keep the secret out of chats,
+   tickets and shell history.
+2. **Write the client secret to its file**, mode 0600, without echoing it:
+
+   ```bash
+   (umask 077; cat > .local/anaf-client-secret)   # paste the secret, Enter, Ctrl-D
+   ```
+
+3. **Fill `.env`** (the paths are relative to it; `.local/` and `.env` are ignored by git
+   and by the Docker build):
+
+   ```bash
+   COMPOSE_FILE=compose.yaml:compose.anaf.yaml
+   ANAF_ENVIRONMENT=test
+   ANAF_CLIENT_ID=<client id from ANAF>
+   ANAF_REDIRECT_URI=https://invoice.test/api/anaf/callback
+   ANAF_CLIENT_SECRET_PATH=./.local/anaf-client-secret
+   ANAF_TOKEN_KEY_PATH=./.local/anaf-token-key
+   ```
+
+4. **Create the token key** if this checkout predates it: `scripts/init-secrets.sh` (it
+   keeps every existing file and adds `.local/anaf-token-key`).
+5. **Restart**: `docker compose up -d`. `compose.anaf.yaml` mounts both files as Docker
+   secrets (`ANAF_CLIENT_SECRET_FILE`, `ANAF_TOKEN_KEY_FILE`); a missing value stops
+   Compose, and the application refuses a partial or malformed setup at startup (all four
+   client values or none; the redirect URI must be `https://<PUBLIC_ORIGIN host>/api/anaf/callback`;
+   the token key must differ from the company-lookup key).
+6. **Connect** in Setări → Integrări → e-Factura with "Conectează cu certificatul"
+   (T-1346): the browser goes to ANAF, the certificate is chosen there, and ANAF sends it
+   back to the callback. The tokens stay in the backend, encrypted with the token key.
+   The flow, its codes and its residual
+   risk are in [EFACTURA.md](EFACTURA.md#connecting-to-anaf-oauth-t-1346).
+
+Keep `.local/anaf-token-key` for as long as the connection should survive: a new key
+makes the stored tokens unreadable and the organization reconnects with its certificate. Backups never carry the
+connection: after a restore, connect again.
 
 ## Laptop hosts and certificate trust
 
@@ -238,7 +292,7 @@ proformas, conversion metadata, artifact metadata and the PDFs travel together.
 `browser_sessions` is dumped without its rows (`--exclude-table-data`): the table
 definition stays, so the restored schema does not drift, but no live session is
 carried over. Operator-provided configuration (`ORGANIZATION_ID`, `PUBLIC_ORIGIN`,
-the three secret files), image digests and externally stored recovery secrets are
+the secret files), image digests and externally stored recovery secrets are
 **not** in the backup; include them separately in your runbook.
 
 Staging is a volume, not RAM: `TMPDIR` is `/var/backups/staging` inside the container

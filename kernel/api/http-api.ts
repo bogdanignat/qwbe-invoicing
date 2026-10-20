@@ -1,5 +1,6 @@
 import { HttpApi, type HttpApiEndpoint, HttpApiGroup, OpenApi } from "@effect/platform"
 
+import { efacturaOperationNames, withEFactura } from "./http-api-efactura.ts"
 import { companyLookupEndpoints as l } from "./http-endpoints-company-lookup.ts"
 import { draftEndpoints as d } from "./http-endpoints-drafts.ts"
 import { fiscalEndpoints as f } from "./http-endpoints-fiscal.ts"
@@ -20,7 +21,7 @@ export const operationNames = [
   "addDraftLine", "updateDraftLine", "deleteDraftLine", "issueDraftInvoice", "issueInvoice",
   "listPayments", "recordPayment", "reversePayment", "createCorrection", "listCorrections", "getCorrection",
   "listInvoiceRegister", "getRevenueReport", "getCollectionsReport", "listIssuedInvoices", "getIssuedInvoice", "renderInvoicePdf", "downloadInvoicePdf",
-  "downloadInvoiceEFactura", "downloadCorrectionEFactura",
+  ...efacturaOperationNames,
   "issueDraftProforma", "issueProforma", "listProformas", "getProforma", "issueInvoiceFromProforma", "createDraftInvoiceFromProforma",
   "renderProformaPdf", "downloadProformaPdf", "downloadCorrectionPdf", "getSession", "createSession", "deleteSession",
   "getCompanyLookupSettings", "updateCompanyLookupSettings", "getCompanyLookupAvailability", "lookupCompany", "searchCompanies",
@@ -43,8 +44,6 @@ const invoicing = HttpApiGroup.make("invoicing")
 type InvoicingGroup<E extends HttpApiEndpoint.HttpApiEndpoint.Any, R> = HttpApiGroup.HttpApiGroup<"invoicing", E, never, R, boolean>
 const withPayments = <E extends HttpApiEndpoint.HttpApiEndpoint.Any, R>(group: InvoicingGroup<E, R>) =>
   group.add(f.listPayments).add(f.recordPayment).add(f.reversePayment).add(f.getCollectionsReport)
-const withEFactura = <E extends HttpApiEndpoint.HttpApiEndpoint.Any, R>(group: InvoicingGroup<E, R>) =>
-  group.add(f.downloadInvoiceEFactura).add(f.downloadCorrectionEFactura)
 const withCompanyLookup = <E extends HttpApiEndpoint.HttpApiEndpoint.Any, R>(group: InvoicingGroup<E, R>) =>
   group.add(l.getCompanyLookupSettings).add(l.updateCompanyLookupSettings).add(l.getCompanyLookupAvailability)
     .add(l.lookupCompany).add(l.searchCompanies)

@@ -49,6 +49,7 @@ export const useProformaDetail = (id: string): ProformaDetailModel => {
       error: query.error,
       retry: retryAction(query.error, () => { void query.refetch() }),
       downloads: [pdf],
+      reference: proforma,
     },
     conversion,
   }

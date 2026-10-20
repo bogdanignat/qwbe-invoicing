@@ -80,6 +80,7 @@ const counts = async (pool: Pool): Promise<Record<string, number>> => {
       WHERE n.nspname = 'public'
     UNION ALL SELECT 'ledger', count(*) FROM schema_migrations
     UNION ALL SELECT 'sessions', count(*) FROM browser_sessions
+    UNION ALL SELECT 'efactura', (SELECT count(*) FROM efactura_connections) + (SELECT count(*) FROM efactura_oauth_attempts)
   `)
   return Object.fromEntries(rows.map((row) => [row.kind, Number(row.count)]))
 }
@@ -89,6 +90,20 @@ const insertSession = async (pool: Pool): Promise<void> => {
     `INSERT INTO browser_sessions (session_hash, credential_hash, csrf_token, created_at, expires_at)
      VALUES ($1, $2, $3, $4, $5)`,
     ["s".repeat(64), "c".repeat(64), "t".repeat(64), 1_700_000_000_000, 1_900_000_000_000],
+  )
+}
+
+/** A live ANAF connection and an attempt: sealed tokens that must never cross a backup. */
+const insertAnafConnection = async (pool: Pool): Promise<void> => {
+  await pool.query(
+    `INSERT INTO efactura_connections (organization_id, environment, status, generation, revision, access_token_ciphertext,
+      refresh_token_ciphertext, access_expires_at, refresh_expires_at, verified_cif, connected_by, connected_at, updated_by, updated_at)
+      VALUES ('org-1', 'test', 'connected', 1, 0, 'v1.a.b.c', 'v1.d.e.f', '2027-01-01T00:00:00.000Z', '2027-10-01T00:00:00.000Z',
+        '12345674', 'user-1', '2026-10-01T00:00:00.000Z', 'user-1', '2026-10-01T00:00:00.000Z')`,
+  )
+  await pool.query(
+    `INSERT INTO efactura_oauth_attempts (organization_id, nonce_sha256, generation, created_by, created_at, expires_at)
+      VALUES ('org-1', $1, 1, 'user-1', '2026-10-01T00:00:00.000Z', '2026-10-01T00:10:00.000Z')`, ["a".repeat(64)],
   )
 }
 
@@ -120,8 +135,10 @@ void test("backup and restore round-trip the schema, the ledger and the artifact
     const artifact = seedArtifact(sourceData)
     const artifactDigest = await sha256Stream(artifact)
     await insertSession(source.pool)
+    await insertAnafConnection(source.pool)
     const before = await counts(source.pool)
     assert.equal(before.sessions, 1, "the source must hold a live session before the backup")
+    assert.equal(before.efactura, 2, "the source must hold an ANAF connection and an attempt before the backup")
     assert.ok((before.tables ?? 0) >= 26, `expected the real schema, saw ${String(before.tables)} tables`)
     assert.ok((before.triggers ?? 0) >= 60)
     assert.ok((before.functions ?? 0) >= 1, "the foundation trigger functions must exist")
@@ -142,6 +159,7 @@ void test("backup and restore round-trip the schema, the ledger and the artifact
     assert.equal(after.functions, before.functions)
     assert.equal(after.ledger, before.ledger)
     assert.equal(after.sessions, 0, "browser_sessions data must not cross a backup")
+    assert.equal(after.efactura, 0, "ANAF tokens and attempts must not cross a backup: reconnect after a restore")
     assert.equal(
       await sha256Stream(join(targetData, artifactMember)),
       artifactDigest,

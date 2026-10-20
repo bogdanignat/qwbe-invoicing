@@ -171,7 +171,14 @@ void test("a freshly migrated database matches the migration contract", async ()
 // TEXT money is drift to recreate, never something the BIGINT decoder reads.
 void test("a money column left as TEXT is drift", async () => {
   await withMigrated("drift_money", async ({ sql, pool }) => {
-    await tamper(sql, ["ALTER TABLE correction_documents ALTER COLUMN total_including_tax TYPE TEXT"])
+    // The immutability trigger names its columns (`UPDATE OF`), so the type changes under the same trigger, put back as it was.
+    await tamper(sql, [`DO $$ DECLARE definition text := pg_get_triggerdef(
+      (SELECT oid FROM pg_trigger WHERE tgname='correction_documents_no_update' AND tgrelid='correction_documents'::regclass));
+    BEGIN
+      EXECUTE 'DROP TRIGGER correction_documents_no_update ON correction_documents';
+      ALTER TABLE correction_documents ALTER COLUMN total_including_tax TYPE TEXT;
+      EXECUTE definition;
+    END $$`])
     resetFingerprintCache()
     assert.deepEqual(driftedTables(await schemaDrift(pool)), ["correction_documents"])
     assert.equal(await databaseReady(pool), false)

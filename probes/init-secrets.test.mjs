@@ -7,8 +7,8 @@ import { URL, fileURLToPath } from "node:url"
 import test from "node:test"
 
 const script = fileURLToPath(new URL("../scripts/init-secrets.sh", import.meta.url))
-const keys = ["AUTH_TOKEN_PATH", "PG_PASSWORD_PATH", "COMPANY_LOOKUP_KEY_PATH"]
-const files = { AUTH_TOKEN_PATH: "api-token", PG_PASSWORD_PATH: "pg-password", COMPANY_LOOKUP_KEY_PATH: "company-lookup-key" }
+const keys = ["AUTH_TOKEN_PATH", "PG_PASSWORD_PATH", "COMPANY_LOOKUP_KEY_PATH", "ANAF_TOKEN_KEY_PATH"]
+const files = { AUTH_TOKEN_PATH: "api-token", PG_PASSWORD_PATH: "pg-password", COMPANY_LOOKUP_KEY_PATH: "company-lookup-key", ANAF_TOKEN_KEY_PATH: "anaf-token-key" }
 
 /** A scratch directory with a `.env` of the given lines; removed after the test. */
 const scratch = (t, lines) => {
@@ -22,7 +22,7 @@ const defaultLines = keys.map((key) => `${key}=./.local/${files[key]}`)
 const run = (...args) => spawnSync("sh", [script, ...args], { encoding: "utf8" })
 const mode = (path) => statSync(path).mode & 0o777
 
-void test("creates the three secrets as 64 hex characters, 0600 in a 0700 directory, and prints none of them", (t) => {
+void test("creates the four secrets as 64 hex characters, 0600 in a 0700 directory, and prints none of them", (t) => {
   const root = scratch(t, defaultLines)
   const result = run(join(root, ".env"))
   assert.equal(result.status, 0, result.stderr)
@@ -65,6 +65,11 @@ void test("refuses a missing key, a missing env file and extra arguments", (t) =
   const missingKey = run(join(root, ".env"))
   assert.equal(missingKey.status, 1)
   assert.match(missingKey.stderr, /COMPANY_LOOKUP_KEY_PATH is not set/u)
+  const withoutAnafKey = scratch(t, defaultLines.slice(0, 3))
+  const missingAnafKey = run(join(withoutAnafKey, ".env"))
+  assert.equal(missingAnafKey.status, 1)
+  assert.match(missingAnafKey.stderr, /ANAF_TOKEN_KEY_PATH is not set/u)
+  assert.equal(existsSync(join(withoutAnafKey, ".local")), false, "no secret is written while one path is missing")
   assert.equal(existsSync(join(root, ".local")), false)
   assert.equal(run(join(root, "absent.env")).status, 1)
   assert.equal(run(join(root, ".env"), "extra").status, 2)
@@ -87,4 +92,12 @@ void test("refuses an empty secret file and a symlink instead of replacing them"
   assert.match(linkResult.stderr, /is a symlink/u)
   assert.equal(existsSync(join(linked, "elsewhere")), false)
   assert.ok(lstatSync(join(linked, ".local", "api-token")).isSymbolicLink())
+})
+
+void test("never generates the ANAF client secret: it comes from ANAF's portal", (t) => {
+  const root = scratch(t, [...defaultLines, "ANAF_CLIENT_SECRET_PATH=./.local/anaf-client-secret"])
+  const result = run(join(root, ".env"))
+  assert.equal(result.status, 0, result.stderr)
+  assert.equal(existsSync(join(root, ".local", "anaf-client-secret")), false)
+  assert.doesNotMatch(result.stdout, /ANAF_CLIENT_SECRET_PATH/u)
 })

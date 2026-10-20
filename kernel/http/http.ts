@@ -109,7 +109,7 @@ export const startServer = async (
     ...(dependencies.securityLogger === undefined ? {} : { logger: dependencies.securityLogger }) })
   const apiFactory = dependencies.apiHandlerFactory ?? createApiHandler
   const api = apiFactory({ authenticate, pool, dataDirectory: config.dataDirectory, browserSession, plugins: config.plugins,
-    companyLookupKey: config.companyLookupKey })
+    companyLookupKey: config.companyLookupKey, anaf: config.anaf })
   let disposePromise: Promise<void> | undefined
   const dispose = () => disposePromise ??= api.dispose()
   let closePromise: Promise<void> | undefined

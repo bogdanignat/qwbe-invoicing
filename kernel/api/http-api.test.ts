@@ -11,6 +11,10 @@ import {
 import * as S from "./http-schemas.ts"
 import { allPlugins } from "../plugins.ts"
 
+const submissionRoutes = ["POST /api/invoices/:id/efactura/submission", "POST /api/corrections/:id/efactura/submission",
+  "GET /api/invoices/:id/efactura/submissions", "GET /api/corrections/:id/efactura/submissions",
+  "GET /api/efactura/submissions/:id/response", "GET /api/efactura/submissions/:id/xml",
+  "GET /api/efactura/submissions/:id/candidates", "POST /api/efactura/submissions/:id/link", "POST /api/efactura/submissions/:id/resubmit"]
 const inventory = [
   "GET /api/issuer", "PUT /api/issuer", "GET /api/document-series", "POST /api/document-series",
   "GET /api/unit-of-measures", "GET /api/vat-regimes",
@@ -22,6 +26,8 @@ const inventory = [
   "POST /api/invoices/:invoiceId/corrections", "GET /api/invoices/:invoiceId/corrections", "GET /api/corrections/:id",
   "GET /api/invoice-register", "GET /api/reports/revenue", "GET /api/reports/collections", "GET /api/invoices", "GET /api/invoices/:id", "POST /api/invoices/:invoiceId/pdf", "GET /api/invoices/:invoiceId/pdf",
   "GET /api/invoices/:id/efactura.xml", "GET /api/corrections/:id/efactura.xml",
+  "GET /api/efactura/connection", "POST /api/efactura/connection/start", "DELETE /api/efactura/connection", "GET /api/anaf/callback",
+  ...submissionRoutes,
   "POST /api/invoices",
   "POST /api/drafts/:draftId/proformas", "GET /api/proformas", "GET /api/proformas/:id",
   "POST /api/proformas", "POST /api/proformas/:id/invoice", "POST /api/proformas/:id/draft-invoice",
@@ -33,19 +39,21 @@ const inventory = [
 
 const paymentRoutes = ["GET /api/invoices/:invoiceId/payments", "POST /api/invoices/:invoiceId/payments",
   "POST /api/invoices/:invoiceId/payments/:paymentId/reversal", "GET /api/reports/collections"]
-const efacturaRoutes = ["GET /api/invoices/:id/efactura.xml", "GET /api/corrections/:id/efactura.xml"]
+const efacturaRoutes = ["GET /api/invoices/:id/efactura.xml", "GET /api/corrections/:id/efactura.xml",
+  "GET /api/efactura/connection", "POST /api/efactura/connection/start", "DELETE /api/efactura/connection", "GET /api/anaf/callback",
+  ...submissionRoutes]
 const companyLookupRoutes = ["GET /api/settings/company-lookup", "PUT /api/settings/company-lookup",
   "GET /api/company-lookup/availability", "POST /api/company-lookup/lookup", "POST /api/company-lookup/search"]
 
-void test("the contract with every plugin on exposes exactly the current 57 operations", () => {
+void test("the contract with every plugin on exposes exactly the current 70 operations", () => {
   const applicationRoutes: Array<{ readonly method: string, readonly operationId: string, readonly path: string }> = []
   HttpApi.reflect(activeHttpApi(allPlugins), { onGroup() {}, onEndpoint({ endpoint }) {
     applicationRoutes.push({ method: endpoint.method, operationId: endpoint.name, path: endpoint.path })
   } })
-  assert.equal(operationNames.length, 57)
-  assert.equal(new Set(operationNames).size, 57)
-  assert.equal(applicationRoutes.length, 57)
-  assert.equal(new Set(applicationRoutes.map((route) => route.operationId)).size, 57)
+  assert.equal(operationNames.length, 70)
+  assert.equal(new Set(operationNames).size, 70)
+  assert.equal(applicationRoutes.length, 70)
+  assert.equal(new Set(applicationRoutes.map((route) => route.operationId)).size, 70)
   assert.ok(operationNames.includes("listVatRegimes"))
   assert.deepEqual(applicationRoutes.map((route) => `${route.method} ${route.path}`).sort(), inventory)
   assert.equal(applicationRoutes.some((route) => route.path === "/api"), false)
@@ -289,7 +297,8 @@ void test("OpenAPI 3.1 mirrors paths, PDF encoding, and authentication metadata"
       }, operation.operationId)
     }
   }
-  assert.equal(throttledOperations, operationNames.length - 2)
+  // getSession, deleteSession and the ANAF callback: no credential is throttled on them.
+  assert.equal(throttledOperations, operationNames.length - 3)
 
   const tagStatuses = new Map<string, Set<string>>()
   for (const item of Object.values(spec.paths)) {

@@ -3,7 +3,13 @@ import { writeFileSync } from "node:fs"
 import type { AddressInfo } from "node:net"
 import { join } from "node:path"
 
+import { Effect } from "effect"
+
 import { startServer } from "./http.ts"
+import { createApiHandler } from "../api/api.ts"
+import type { RequestAuthenticator } from "../auth/auth.ts"
+import type { AnafSettings } from "../efactura/anaf/config.ts"
+import type { Transport } from "../outbound/send.ts"
 import type { PluginSelection } from "../plugins.ts"
 import type { TestFixture } from "../storage/postgres-rig.test-support.ts"
 
@@ -33,14 +39,32 @@ export interface Served {
   readonly cookie: string
   /** What the login answered, for the session contract. */
   readonly login: Record<string, unknown>
+  readonly csrfToken: string
 }
 
+export interface ServeOptions {
+  /** The ANAF client. */
+  readonly settings?: AnafSettings
+  /** The outbound HTTP that reaches the fake ANAF. */
+  readonly transport?: Transport
+  /** Narrows what the logged-in owner may do, for the permission checks. */
+  readonly grants?: (permissions: ReadonlyArray<string>) => ReadonlyArray<string>
+}
+
+const narrowed = (authenticate: RequestAuthenticator, grants: NonNullable<ServeOptions["grants"]>): RequestAuthenticator =>
+  (authorization) => ({ current: Effect.map(authenticate(authorization).current,
+    (context) => ({ ...context, identity: { ...context.identity, permissions: grants(context.identity.permissions) } })) })
+
 /** Start, prove readiness, log in: the session cookie and its CSRF token carry every later call. */
-export const serve = async (fixture: TestFixture, plugins: PluginSelection): Promise<Served> => {
+export const serve = async (fixture: TestFixture, plugins: PluginSelection, options: ServeOptions = {}): Promise<Served> => {
   const tokenFile = join(fixture.dataDirectory, "api-token")
   writeFileSync(tokenFile, token, { mode: 0o600 })
-  const running = await startServer(fixture.config({ port: 0, authTokenFile: tokenFile, plugins }), fixture.pool,
-    undefined, undefined, { barrierHeld: () => true })
+  const { transport, grants } = options
+  const running = await startServer(fixture.config({ port: 0, authTokenFile: tokenFile, plugins, anaf: options.settings }), fixture.pool,
+    undefined, undefined, { barrierHeld: () => true,
+      ...(transport === undefined && grants === undefined ? {} : { apiHandlerFactory: (runtime) => createApiHandler({ ...runtime,
+        ...(transport === undefined ? {} : { transport }),
+        ...(grants === undefined ? {} : { authenticate: narrowed(runtime.authenticate, grants) }) }) }) })
   try {
     const origin = `http://127.0.0.1:${String((running.server.address() as AddressInfo).port)}`
     assert.equal((await fetch(`${origin}/health/ready`)).status, 200)
@@ -60,7 +84,7 @@ export const serve = async (fixture: TestFixture, plugins: PluginSelection): Pro
       return { status: response.status, type,
         body: type.includes("json") ? await response.json() : type.includes("pdf") ? undefined : await response.text() }
     }
-    return { call, close: running.close, origin, cookie, login: loginBody }
+    return { call, close: running.close, origin, cookie, login: loginBody, csrfToken }
   } catch (error) {
     await running.close()
     throw error

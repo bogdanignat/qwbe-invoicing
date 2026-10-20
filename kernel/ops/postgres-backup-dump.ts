@@ -2,6 +2,7 @@ import { spawn } from "node:child_process"
 
 import type { PostgresSettings } from "../storage/postgres-pool.ts"
 import { redactSecrets } from "../storage/postgres-errors.ts"
+import { EFACTURA_RESTORE_SQL } from "./efactura-restore.ts"
 
 /**
  * `pg_dump` and `psql`, run as bounded child processes.
@@ -168,8 +169,13 @@ const connection = (settings: PostgresSettings): ReadonlyArray<string> => [
   "--no-password",
 ]
 
-/** The table whose rows are excluded while its definition is kept. */
-export const excludedTableData = ["public.browser_sessions"] as const
+/**
+ * The tables whose rows are excluded while their definitions are kept: the
+ * browser sessions, and the ANAF connection with its OAuth attempts. A backup
+ * never carries a live cookie or an ANAF token; after a restore the connection
+ * is made again with the certificate.
+ */
+export const excludedTableData = ["public.browser_sessions", "public.efactura_connections", "public.efactura_oauth_attempts"] as const
 
 /**
  * Plain format, argued. The alternative is `--format=custom`, whose archive
@@ -188,7 +194,7 @@ export const excludedTableData = ["public.browser_sessions"] as const
  * on the source instead: `assertSinglePublicSchema` refuses a backup of a database
  * that has any other user schema, which makes the whole-database dump and the
  * `public`-only dump the same artifact. `--exclude-table-data` drops exactly the rows of
- * `public.browser_sessions` and keeps its definition, so the restored schema does
+ * the tables in `excludedTableData` and keeps their definitions, so the restored schema does
  * not drift and `migrate` and `doctor` still recognise it.
  */
 export const dumpDatabase = async (
@@ -208,6 +214,11 @@ export const dumpDatabase = async (
   ], { password: settings.password, timeoutMillis })
 }
 
+/**
+ * The dump, then the e-Factura transformation (`efactura-restore.ts`), in one
+ * transaction: psql wraps every `--file` and `--command` of a
+ * `--single-transaction` run in the same BEGIN/COMMIT, in the order given.
+ */
 export const restoreDatabase = async (
   settings: PostgresSettings,
   dump: string,
@@ -220,5 +231,6 @@ export const restoreDatabase = async (
     "--single-transaction",
     "--set=ON_ERROR_STOP=1",
     `--file=${dump}`,
+    `--command=${EFACTURA_RESTORE_SQL}`,
   ], { password: settings.password, timeoutMillis })
 }

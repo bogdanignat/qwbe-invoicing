@@ -7,6 +7,7 @@ import { renderToString } from "react-dom/server"
 
 import { AuthContext, type AuthController } from "./auth-context.ts"
 import { useCorrectionDetail, useInvoiceDetail } from "./use-document-detail.ts"
+import { useEFacturaDocument } from "./use-efactura-document.ts"
 import { invoicePaymentsQueries } from "./invoice-payments-query.ts"
 import { collectionsQueryOptions, invalidateCollections, invalidateIssuedDocuments, revenueQueryOptions } from "./report-queries.ts"
 import { useInvoicePayments } from "./use-invoice-payments.ts"
@@ -87,11 +88,18 @@ void test("payments off: none of the panel's three reads fetches, even when the 
   })
 })
 
-void test("e-Factura off: invoice and storno offer the PDF alone, no XML action", () => {
+void test("invoice and storno offer the PDF alone: the XML export gave way to the e-Factura submission", () => {
   for (const hook of [() => useInvoiceDetail("inv-1"), () => useCorrectionDetail("cor-1")]) {
-    const off = renderHook(["payments"], hook)
-    assert.deepEqual(off.result?.downloads.map((action) => action.key), ["pdf"])
-    assert.deepEqual(renderHook(["efactura"], hook).result?.downloads.map((action) => action.key), ["pdf", "efactura"])
+    for (const plugins of [["payments"], ["efactura"]] satisfies ReadonlyArray<ReadonlyArray<PluginName>>) {
+      assert.deepEqual(renderHook(plugins, hook).result?.downloads.map((action) => action.key), ["pdf"], JSON.stringify(plugins))
+    }
+  }
+})
+
+void test("e-Factura off: no submission panel on an invoice or a storno; on, there is one", () => {
+  for (const kind of ["invoice", "correction"] as const) {
+    assert.equal(renderHook(["payments"], () => useEFacturaDocument(kind, "doc-1", undefined)).result, undefined, kind)
+    assert.equal(typeof renderHook(["efactura"], () => useEFacturaDocument(kind, "doc-1", undefined)).result?.submit, "function", kind)
   }
 })
 

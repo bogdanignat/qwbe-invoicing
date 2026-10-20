@@ -3,7 +3,6 @@ import { queryOptions, useQuery } from "@tanstack/react-query"
 import { useAuth } from "./auth-context.ts"
 import { useDocumentDownload, type DocumentDownloadAction } from "./use-document-download.ts"
 import { useInvoicingClients, type InvoicingClients } from "./use-invoicing-clients.ts"
-import { usePluginEnabled } from "./use-plugin-enabled.ts"
 import { isTransientFailure } from "../lib/api-errors.ts"
 import { documentFilename } from "../lib/browser-download.ts"
 import { projectCorrectionDocument, projectIssuedInvoice, type DocumentSnapshotView } from "../lib/document-projection.ts"
@@ -16,6 +15,8 @@ export interface DocumentDetailModel {
   /** Present only when asking again could plausibly answer differently. */
   readonly retry: (() => void) | undefined
   readonly downloads: ReadonlyArray<DocumentDownloadAction>
+  /** Series and number, once loaded: what a file of this document is named after. */
+  readonly reference: { readonly series: string; readonly number: number } | undefined
 }
 
 /**
@@ -28,11 +29,6 @@ export interface DocumentDetailModel {
  */
 export const retryAction = (error: unknown, refetch: () => void): (() => void) | undefined =>
   isTransientFailure(error) ? refetch : undefined
-
-/** The PDF always; the e-Factura XML only with that plugin on, so its route, absent then, is never asked. */
-export const detailDownloads = (
-  pdf: DocumentDownloadAction, xml: DocumentDownloadAction, eFactura: boolean,
-): ReadonlyArray<DocumentDownloadAction> => eFactura ? [pdf, xml] : [pdf]
 
 /** One definition of the invoice read, shared by the detail and the payments panel that needs its currency. */
 export const invoiceQueryOptions = (
@@ -54,7 +50,6 @@ export const correctionsQueryOptions = (
 
 export const useInvoiceDetail = (id: string): DocumentDetailModel => {
   const { status } = useAuth()
-  const eFactura = usePluginEnabled("efactura")
   const clients = useInvoicingClients()
   const query = useQuery(invoiceQueryOptions(clients, id, status === "authenticated"))
   const invoice = query.data
@@ -65,30 +60,23 @@ export const useInvoiceDetail = (id: string): DocumentDetailModel => {
     request: (csrfToken) => clients.documents.downloadInvoicePdf(id, requireCsrf(csrfToken)),
     filename: invoice === undefined ? undefined : documentFilename("factura", invoice, "pdf"),
   })
-  const xml = useDocumentDownload({
-    key: "efactura",
-    label: "Descarcă XML e-Factura",
-    pendingLabel: "Se generează…",
-    request: () => clients.documents.downloadInvoiceEFactura(id),
-    filename: invoice === undefined ? undefined : documentFilename("efactura", invoice, "xml"),
-  })
   return {
     view: invoice === undefined ? undefined : projectIssuedInvoice(invoice),
     isPending: query.isPending,
     error: query.error,
     retry: retryAction(query.error, () => { void query.refetch() }),
-    downloads: detailDownloads(pdf, xml, eFactura),
+    downloads: [pdf],
+    reference: invoice,
   }
 }
 
 /**
- * A correction offers its PDF and its XML, both plain reads: the backend renders
- * the storno PDF on request from the immutable correction, so unlike an
- * invoice's there is no render step and no CSRF token.
+ * A correction's PDF is a plain read: the backend renders the storno PDF on
+ * request from the immutable correction, so unlike an invoice's there is no
+ * render step and no CSRF token. Its e-Factura submission is `use-efactura-document.ts`.
  */
 export const useCorrectionDetail = (id: string): DocumentDetailModel => {
   const { status } = useAuth()
-  const eFactura = usePluginEnabled("efactura")
   const clients = useInvoicingClients()
   const query = useQuery({
     queryKey: ["correction", id],
@@ -103,18 +91,12 @@ export const useCorrectionDetail = (id: string): DocumentDetailModel => {
     request: () => clients.documents.downloadCorrectionPdf(id),
     filename: correction === undefined ? undefined : documentFilename("storno", correction, "pdf"),
   })
-  const xml = useDocumentDownload({
-    key: "efactura",
-    label: "Descarcă XML e-Factura",
-    pendingLabel: "Se generează…",
-    request: () => clients.documents.downloadCorrectionEFactura(id),
-    filename: correction === undefined ? undefined : documentFilename("efactura-storno", correction, "xml"),
-  })
   return {
     view: correction === undefined ? undefined : projectCorrectionDocument(correction),
     isPending: query.isPending,
     error: query.error,
     retry: retryAction(query.error, () => { void query.refetch() }),
-    downloads: detailDownloads(pdf, xml, eFactura),
+    downloads: [pdf],
+    reference: correction,
   }
 }

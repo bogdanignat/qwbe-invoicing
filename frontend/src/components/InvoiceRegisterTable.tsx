@@ -31,7 +31,7 @@ export const InvoiceRegisterTable = ({ rows, eFactura }: InvoiceRegisterTablePro
           <td data-label="Emisă">{row.issueDate}</td>
           <td data-label="Scadență">{row.dueDate}</td>
           <td data-label="Total" className="numeric">{row.total}</td>
-          {eFactura ? <td data-label="e-Factura"><span className="badge">{row.status}</span></td> : null}
+          {eFactura ? <td data-label="e-Factura"><span className={row.statusClass}>{row.status}</span></td> : null}
         </tr>)}
       </tbody>
     </table>

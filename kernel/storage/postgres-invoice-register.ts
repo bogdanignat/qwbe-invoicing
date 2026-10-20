@@ -1,7 +1,7 @@
 import type {
   CorrectionsTransaction, InvoiceRegisterCursor, InvoiceRegisterRow,
 } from "../../cubes/invoicing/corrections/index.ts"
-import type { EFacturaStatus, PageQuery } from "../../cubes/invoicing/index.ts"
+import { E_FACTURA_STATUSES, type EFacturaStatus, type PageQuery } from "../../cubes/invoicing/index.ts"
 import { read } from "./postgres-errors.ts"
 import { money } from "./postgres-money.ts"
 import { integer, nullableText, text, type Row } from "./postgres-rows.ts"
@@ -10,12 +10,10 @@ import { sourceFilter } from "./postgres-document-query.ts"
 import type { TransactionClient } from "./postgres-transaction.ts"
 
 type RegisterTransaction = Pick<CorrectionsTransaction, "listInvoiceRegister">
-const statuses = new Set<EFacturaStatus>(["not_sent", "pending", "sent", "accepted", "rejected"])
-
 const statusFrom = (value: Row): EFacturaStatus => {
-  const status = text(value, "e_factura_status")
-  if (!statuses.has(status as EFacturaStatus)) throw new Error("invalid e_factura_status")
-  return status as EFacturaStatus
+  const status = E_FACTURA_STATUSES.find((known) => known === text(value, "e_factura_status"))
+  if (status === undefined) throw new Error("invalid e_factura_status")
+  return status
 }
 
 const registerRowFrom = (value: Row): InvoiceRegisterRow => {
@@ -27,7 +25,7 @@ const registerRowFrom = (value: Row): InvoiceRegisterRow => {
     return { kind, ...common, dueDate: nullableText(value, "due_date"), eFacturaStatus: statusFrom(value) }
   }
   if (kind === "correction") {
-    return { kind, ...common, dueDate: null, eFacturaStatus: null,
+    return { kind, ...common, dueDate: null, eFacturaStatus: statusFrom(value),
       originalReference: { id: text(value, "original_id"), series: text(value, "original_series"),
         number: integer(value, "original_number") } }
   }
@@ -73,7 +71,7 @@ export const invoiceRegisterTransactionAdapter = (client: TransactionClient): Re
         FROM issued_invoices i WHERE i.organization_id=$1${invoiceSource.sql}
         UNION ALL
         SELECT 'correction' AS kind,c.id,c.series,c.number,c.issue_date,c.customer_legal_name AS customer_name,
-          c.currency,c.total_including_tax,NULL AS due_date,NULL AS e_factura_status,
+          c.currency,c.total_including_tax,NULL AS due_date,c.e_factura_status,
           o.id AS original_id,o.series AS original_series,o.number AS original_number
         FROM correction_documents c
         JOIN issued_invoices o ON o.organization_id=c.organization_id AND o.id=c.original_invoice_id

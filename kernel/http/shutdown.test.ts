@@ -42,6 +42,7 @@ const steps = (overrides: Overrides = {}): ShutdownSteps & Recorder => {
     order,
     failures,
     abandoned: () => abandoned,
+    stopWorkers: () => Promise.resolve(),
     drain: () => { order.push("drain"); return Promise.resolve() },
     destroyConnections: () => { order.push("destroy") },
     endQueries: () => { order.push("queries"); return Promise.resolve() },
@@ -191,4 +192,26 @@ void test("a drain that rejects after the escalation destroys the sockets only o
   assert.deepEqual(recorded.order, ["destroy", "queries", "barrier", "pools"])
   // Reported twice on purpose: once for the escalation, once for the rejection.
   assert.deepEqual(recorded.failures, ["drain", "drain"])
+})
+
+void test("the workers stop first, before the drain, and a failed stop is reported without skipping a step", async () => {
+  const recorded = steps((order) => ({ stopWorkers: () => { order.push("workers"); return Promise.resolve() } }))
+  assert.equal(await runShutdown(recorded), 0)
+  assert.deepEqual(recorded.order, ["workers", "drain", "queries", "barrier", "pools"])
+
+  const failing = steps((order) => ({ stopWorkers: () => { order.push("workers"); return Promise.reject(new Error("dispatcher stop failed")) } }))
+  assert.equal(await runShutdown(failing), 1)
+  assert.deepEqual(failing.order, ["workers", "drain", "queries", "barrier", "pools"])
+  assert.deepEqual(failing.failures, ["workers"])
+})
+
+void test("workers that never stop are abandoned at the deadline, with the barrier still held", async () => {
+  const recorded = steps((order) => ({
+    stopWorkers: () => { order.push("workers"); return new Promise<void>(() => {}) },
+    deadlineMs: 30,
+  }))
+  void runShutdown(recorded)
+  await new Promise((resolve) => { setTimeout(resolve, 60) })
+  assert.deepEqual(recorded.order, ["workers"])
+  assert.equal(recorded.abandoned(), 1)
 })

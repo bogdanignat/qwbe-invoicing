@@ -40,7 +40,7 @@ for (const plugins of combinations) {
         const register = await ok(call("GET", "/api/invoice-register"), "register") as
           { items: ReadonlyArray<{ kind: string, eFacturaStatus: unknown }> }
         assert.deepEqual(register.items.map((row) => [row.kind, row.eFacturaStatus]).sort(),
-          [["correction", null], ["invoice", status], ["invoice", status]], "register")
+          [["correction", status], ["invoice", status], ["invoice", status]], "register")
 
         await ok(call("POST", `/api/invoices/${id}/pdf`, {}), "render invoice pdf")
         for (const path of [`/api/invoices/${id}/pdf`, `/api/corrections/${String(correction.id)}/pdf`]) {
@@ -59,6 +59,15 @@ for (const plugins of combinations) {
         if (!plugins.payments) await plugin(false, "POST", `/api/invoices/${id}/payments/any/reversal`, { reason: "x" }, "rev-1")
         await plugin(plugins.efactura, "GET", `/api/invoices/${id}/efactura.xml`)
         await plugin(plugins.efactura, "GET", `/api/corrections/${String(correction.id)}/efactura.xml`)
+        await plugin(plugins.efactura, "GET", "/api/efactura/connection")
+        await plugin(plugins.efactura, "GET", `/api/invoices/${id}/efactura/submissions`)
+        await plugin(plugins.efactura, "GET", `/api/corrections/${String(correction.id)}/efactura/submissions`)
+        if (!plugins.efactura) {
+          await plugin(false, "POST", `/api/invoices/${id}/efactura/submission`, {})
+          await plugin(false, "GET", "/api/efactura/submissions/any/candidates")
+          await plugin(false, "POST", "/api/efactura/submissions/any/link", { uploadIndex: "5000000001", confirmed: true })
+          await plugin(false, "POST", "/api/efactura/submissions/any/resubmit", { confirmed: true })
+        }
         const lookup = plugins["company-lookup"]
         await plugin(lookup, "GET", "/api/settings/company-lookup")
         await plugin(lookup, "PUT", "/api/settings/company-lookup", { provider: "none" })
@@ -73,6 +82,9 @@ for (const plugins of combinations) {
         assert.equal(paths.includes("/api/invoices/{invoiceId}/payments/{paymentId}/reversal"), plugins.payments)
         assert.equal(paths.includes("/api/invoices/{id}/efactura.xml"), plugins.efactura, "e-Factura in OpenAPI")
         assert.equal(paths.includes("/api/corrections/{id}/efactura.xml"), plugins.efactura)
+        assert.equal(paths.includes("/api/efactura/connection"), plugins.efactura)
+        assert.equal(paths.includes("/api/anaf/callback"), plugins.efactura)
+        assert.equal(paths.includes("/api/efactura/submissions/{id}/resubmit"), plugins.efactura, "reconciliation in OpenAPI")
         assert.equal(paths.includes("/api/company-lookup/lookup"), lookup, "company lookup in OpenAPI")
       } finally {
         await served.close()

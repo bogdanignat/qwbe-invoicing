@@ -75,6 +75,13 @@ export const epoch = (value: Row, field: string): number => {
   return parsed
 }
 
+/** A `bytea` column: the driver hands back a Buffer holding exactly the bytes that were bound. */
+export const bytes = (value: Row, field: string): Uint8Array => {
+  const result = value[field]
+  if (!(result instanceof Uint8Array)) throw new Error(`invalid ${field}`)
+  return result
+}
+
 /** A boolean bound back as the 0/1 integer the CHECK constraints expect. */
 export const booleanValue = (value: boolean): number => value ? 1 : 0
 

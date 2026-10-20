@@ -224,7 +224,7 @@ export const memoryStore = (state: MemoryState): InvoicingDependencies["store"] 
             return original?.organizationId !== organizationId ? [] : [{ kind: "correction" as const, id: correction.id,
               series: correction.series, number: correction.number, issueDate: correction.issueDate,
               customer: { name: correction.customer.name }, currency: correction.currency,
-              totalIncludingVat: correction.totalIncludingVat, dueDate: null, eFacturaStatus: null,
+              totalIncludingVat: correction.totalIncludingVat, dueDate: null, eFacturaStatus: "not_sent",
               originalReference: { id: original.id, series: original.series, number: original.number } }]
           })
         return paged([...invoices, ...corrections].sort((a, b) => b.issueDate.localeCompare(a.issueDate)

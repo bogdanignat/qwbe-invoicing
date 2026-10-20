@@ -16,6 +16,8 @@ interface DocumentDetailProps {
   readonly backLabel?: string
   /** Sections a particular document adds under its snapshot, such as a proforma's conversion. */
   readonly children?: ReactNode
+  /** A head action beside the downloads, such as the e-Factura submission. */
+  readonly action?: ReactNode
 }
 
 /**
@@ -24,11 +26,11 @@ interface DocumentDetailProps {
  * nothing to save under.
  */
 export const DocumentDetail = ({
-  title, eyebrow, model, backHref = "/invoices", backLabel = "← Înapoi la registru", children,
+  title, eyebrow, model, backHref = "/invoices", backLabel = "← Înapoi la registru", children, action,
 }: DocumentDetailProps) => <Page
   title={title}
   eyebrow={eyebrow}
-  actions={model.view === undefined ? undefined : <DocumentDownloads actions={model.downloads} />}
+  actions={model.view === undefined ? undefined : <><DocumentDownloads actions={model.downloads} />{action}</>}
 >
   <p className="back-link"><AppLink href={backHref}>{backLabel}</AppLink></p>
   {model.downloads.map((action) => action.error === null

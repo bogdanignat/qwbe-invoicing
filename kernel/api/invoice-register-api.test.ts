@@ -51,7 +51,7 @@ void test("invoice register exposes invoices and corrections without changing /a
     assert.equal(items.length, 2)
     assert.deepEqual(items[0], { kind: "correction", id: (correction.body as { id: string }).id, series: "REG", number: 2,
       issueDate: "2026-09-05", customer: { name: "Client SRL" }, currency: "RON", totalIncludingVat: "-121.00",
-      dueDate: null, eFacturaStatus: null, originalReference: { id: invoiceId, series: "REG", number: 1 } })
+      dueDate: null, eFacturaStatus: "not_sent", originalReference: { id: invoiceId, series: "REG", number: 1 } })
     assert.deepEqual(items[1], { kind: "invoice", id: invoiceId, series: "REG", number: 1, issueDate: "2026-09-04",
       customer: { name: "Client SRL" }, currency: "RON", totalIncludingVat: "121.00", dueDate: "2026-09-20", eFacturaStatus: "not_sent" })
     assert.equal(Object.hasOwn(items[1] as object, "originalReference"), false)

@@ -6,8 +6,9 @@ import type { ArtifactService } from "../../cubes/invoicing/documents/index.ts"
 import type { PaymentsService } from "../../cubes/invoicing/payments/index.ts"
 import type { RequestAuthenticator } from "../auth/auth.ts"
 import type { MasterKey } from "../company-lookup/key-cipher.ts"
-import type { Transport } from "../company-lookup/provider-http.ts"
+import type { Transport } from "../outbound/send.ts"
 import type { BrowserSession } from "../auth/browser-session.ts"
+import type { AnafSettings } from "../efactura/anaf/config.ts"
 import type { PluginSelection } from "../plugins.ts"
 import type { CurrentRequest } from "./api-context.ts"
 
@@ -28,7 +29,9 @@ export interface ApiRuntime {
   readonly plugins: PluginSelection
   /** `RuntimeConfig.companyLookupKey`: without it the openapi.ro key cannot be stored. */
   readonly companyLookupKey?: MasterKey | undefined
-  /** Outbound HTTP to the company-lookup providers: `fetch` unless a test hands in a fake. */
+  /** `RuntimeConfig.anaf`: the ANAF environment and OAuth client. Absent: e-Factura is not configured, `test`. */
+  readonly anaf?: AnafSettings | undefined
+  /** Outbound HTTP to the company-lookup providers and to ANAF: `fetch` unless a test hands in a fake. */
   readonly transport?: Transport
 }
 export interface ApiServices {

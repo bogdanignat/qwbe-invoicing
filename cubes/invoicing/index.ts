@@ -38,6 +38,7 @@ export type { Page, PageRequest } from "./application/support.ts"
 export type { DocumentCursor, DraftCursor, NameCursor, PageQuery } from "./application/ports.ts"
 export type { InvoicingDependencies, InvoicingService, InvoicingTransaction } from "./application/invoicing.ts"
 export type * from "./domain/invoice.ts"
+export { E_FACTURA_STATUSES } from "./domain/invoice.ts"
 export type * from "./domain/inputs.ts"
 export type { BrandingNormalizer, IssuerProfile, ConfigureIssuerInput, RawIssuerBrandingImage, RawIssuerBranding, VatChange } from "./issuer/index.ts"
 export type { Proforma, ProformaSummary, ProformaConversion, ProformaInvoiceConversion,

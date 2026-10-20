@@ -1,0 +1,27 @@
+# ANAF e-Factura for the `app` service: the OAuth client and the two secrets it needs.
+#
+# An overlay, so an installation without e-Factura needs none of these files and its
+# application answers "not configured". Add it after compose.yaml (development) or
+# compose.prod.yaml (self-host), e.g. in .env:
+#   COMPOSE_FILE=compose.yaml:compose.anaf.yaml
+# Every value is required here, and the application refuses a partial setup as well.
+# The secrets are files mounted as Docker secrets, never environment values:
+#  - ANAF_TOKEN_KEY_PATH: 64 hex characters, created by scripts/init-secrets.sh;
+#  - ANAF_CLIENT_SECRET_PATH: the client secret from ANAF's portal, written by the operator.
+# ANAF_ENVIRONMENT (test by default) is passed by the base compose file.
+services:
+  app:
+    environment:
+      ANAF_CLIENT_ID: ${ANAF_CLIENT_ID:?Set ANAF_CLIENT_ID to the client id of the ANAF OAuth application}
+      ANAF_REDIRECT_URI: ${ANAF_REDIRECT_URI:?Set ANAF_REDIRECT_URI to https://<host>/api/anaf/callback, exactly as registered at ANAF}
+      ANAF_CLIENT_SECRET_FILE: /run/secrets/anaf_client_secret
+      ANAF_TOKEN_KEY_FILE: /run/secrets/anaf_token_key
+    secrets:
+      - anaf_client_secret
+      - anaf_token_key
+
+secrets:
+  anaf_client_secret:
+    file: ${ANAF_CLIENT_SECRET_PATH:?Set ANAF_CLIENT_SECRET_PATH to the file holding the ANAF client secret}
+  anaf_token_key:
+    file: ${ANAF_TOKEN_KEY_PATH:?Set ANAF_TOKEN_KEY_PATH to the key file scripts/init-secrets.sh creates}

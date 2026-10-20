@@ -94,9 +94,9 @@ cp /path/to/release/.env.example .env
 #   QWBE_IMAGE=ghcr.io/<owner>/qwbe-invoicing   (the registry path of the release)
 #   IMAGE_TAG=0.3.0@sha256:<digest>             (required, from image-digests.txt)
 #   ORGANIZATION_ID=...                         (once, never changed afterwards)
-#   AUTH_TOKEN_PATH / PG_PASSWORD_PATH / COMPANY_LOOKUP_KEY_PATH (required; .local/ by default)
+#   AUTH_TOKEN_PATH / PG_PASSWORD_PATH / COMPANY_LOOKUP_KEY_PATH / ANAF_TOKEN_KEY_PATH (required; .local/ by default)
 
-# 2. The three secrets, at those paths: mode 0600, never overwritten, never printed
+# 2. The four secrets, at those paths: mode 0600, never overwritten, never printed
 scripts/init-secrets.sh
 
 # 3. TLS, one of:

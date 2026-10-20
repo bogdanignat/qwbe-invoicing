@@ -11,6 +11,8 @@ import { doctorReport } from "../kernel/ops/cli-doctor.ts"
 import { runtimeConfig } from "../kernel/config.ts"
 import { applicationReady, startServer } from "../kernel/http/http.ts"
 import { runShutdown } from "../kernel/http/shutdown.ts"
+import { ANAF_NOT_CONFIGURED } from "../kernel/efactura/anaf/connection-host.ts"
+import { startEFacturaRuntime } from "../kernel/efactura/efactura-runtime.ts"
 import { applyMigrations, planMigrations, schemaDrift } from "../kernel/storage/migrations.ts"
 import { startMaintenanceSession } from "../kernel/storage/postgres-maintenance-session.ts"
 import { cliRedactor, failureMessage } from "../kernel/ops/cli-redaction.ts"
@@ -89,8 +91,10 @@ if (command !== undefined) {
       // process that merely hangs. `startServer` has already disposed the API
       // handler by the time it rejects; the barrier and both pools are ours.
       let running: Awaited<ReturnType<typeof startServer>>
+      let environmentChecked = () => false
       try {
-        running = await startServer(config, runtime.pool, async () => acceptingTraffic && await ready())
+        // Traffic also waits for the e-Factura environment guard below: no submit may write before it passed.
+        running = await startServer(config, runtime.pool, async () => acceptingTraffic && environmentChecked() && await ready())
       } catch (error) {
         acceptingTraffic = false
         // The failure code is set before anything is awaited. The abandon timer
@@ -109,6 +113,21 @@ if (command !== undefined) {
         clearTimeout(abandon)
         throw new ServeAborted()
       }
+      // Set when the e-Factura environment guard refuses: the shutdown then ends with 1 whatever its steps answer.
+      let refused = false
+      // Once the database is ready: `ANAF_ENVIRONMENT` is checked against the stored submissions whatever `QWBE_PLUGINS`
+      // says, before any traffic; the dispatcher runs only with e-Factura on.
+      const efactura = startEFacturaRuntime({
+        pool: runtime.pool, settings, anaf: config.anaf ?? ANAF_NOT_CONFIGURED, pluginOn: config.plugins.efactura,
+        ready: async () => acceptingTraffic && await ready(), barrierHeld: barrier.held,
+        report: (message) => { console.error(redact(message)) },
+        onRefused: (message) => {
+          console.error(`serve refused to start: ${message}`)
+          refused = true
+          close()
+        },
+      })
+      environmentChecked = efactura.environmentChecked
       const close = () => {
         if (!acceptingTraffic) return
         acceptingTraffic = false
@@ -130,6 +149,8 @@ if (command !== undefined) {
         // A completed sequence overwrites it with its own answer.
         process.exitCode = 1
         void runShutdown({
+          // The dispatcher first: it stops taking work and aborts its ANAF call while the barrier is still held.
+          stopWorkers: () => efactura.stop(),
           drain: () => running.close(),
           destroyConnections: () => { running.server.closeAllConnections() },
           endQueries: () => runtime.closeQueries(),
@@ -141,7 +162,7 @@ if (command !== undefined) {
           // it is still awaited by `endQueries` before the barrier goes.
           escalateMs: 5_000,
           deadlineMs: 10_000,
-        }).then((code) => { process.exitCode = code })
+        }).then((code) => { process.exitCode = refused ? 1 : code })
       }
       process.once("SIGINT", close)
       process.once("SIGTERM", close)

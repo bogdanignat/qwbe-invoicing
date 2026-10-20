@@ -78,6 +78,9 @@ services:
       # Optional plugins, comma-separated (`payments`, `efactura`, `company-lookup`). Passed through
       # only when set: unset means every plugin runs, empty means none. Restart to apply.
       QWBE_PLUGINS:
+      # The ANAF e-Factura environment: `test` unless `prod` is written out in .env. The
+      # OAuth client and its secrets come only with compose.anaf.yaml (docs/LOCAL_DEVELOPMENT.md).
+      ANAF_ENVIRONMENT: ${ANAF_ENVIRONMENT:-test}
       # The one origin the browser reaches: the kernel pins Host, X-Forwarded-* and
       # Origin to it, and serves the UI (QWBE_UI_DIR, set in the image) and /api on it.
       PUBLIC_ORIGIN: https://${APP_DOMAIN:-invoice.test}

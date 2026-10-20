@@ -19,6 +19,16 @@ export const today = (): string => {
 /** The zone the organization's fiscal dates are read in (cubes/invoicing/domain/validation.ts:16). */
 export const ORGANIZATION_TIME_ZONE = "Europe/Bucharest"
 
+const DATE_TIME = new Intl.DateTimeFormat("ro-RO", {
+  timeZone: ORGANIZATION_TIME_ZONE, day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit",
+})
+
+/** A moment the server recorded (ISO 8601), read in Europe/Bucharest; text that is no date stays as it came. */
+export const dateTime = (iso: string): string => {
+  const at = new Date(iso)
+  return Number.isNaN(at.getTime()) ? iso : DATE_TIME.format(at)
+}
+
 /**
  * The calendar date in a named zone, independent of the browser's own.
  *

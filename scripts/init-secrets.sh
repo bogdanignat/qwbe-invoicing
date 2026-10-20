@@ -1,12 +1,16 @@
 #!/bin/sh
-# Create the three secret files a Compose stack mounts, at the paths named in `.env`:
-# AUTH_TOKEN_PATH (API token), PG_PASSWORD_PATH (PostgreSQL password) and
-# COMPANY_LOOKUP_KEY_PATH (company-lookup master key). Each one is 32 random bytes
-# as 64 hex characters, mode 0600, in a directory created 0700 when it is missing.
+# Create the four secret files a Compose stack mounts, at the paths named in `.env`:
+# AUTH_TOKEN_PATH (API token), PG_PASSWORD_PATH (PostgreSQL password),
+# COMPANY_LOOKUP_KEY_PATH (company-lookup master key) and ANAF_TOKEN_KEY_PATH (the key
+# that seals the ANAF e-Factura tokens, mounted by compose.anaf.yaml). Each one is 32
+# random bytes as 64 hex characters, mode 0600, in a directory created 0700 when it is
+# missing. The ANAF client secret is not generated: it comes from ANAF's portal and the
+# operator writes it to ANAF_CLIENT_SECRET_PATH (docs/LOCAL_DEVELOPMENT.md).
 #
 # Idempotent: an existing secret is never overwritten, so a second run changes
 # nothing. That matters: PostgreSQL keeps the password it was created with, and a new
-# company-lookup key makes the stored openapi.ro key unreadable. Secrets are never
+# company-lookup key makes the stored openapi.ro key unreadable, a new ANAF token key the
+# stored ANAF tokens (the organization then reconnects with its certificate). Secrets are never
 # printed; only their paths and whether they were created or kept.
 #
 # Usage: scripts/init-secrets.sh [path/to/.env]     (default: ./.env)
@@ -71,6 +75,6 @@ create_secret() {
 }
 
 umask 077
-# All three paths are validated before the first file is written.
-for key in AUTH_TOKEN_PATH PG_PASSWORD_PATH COMPANY_LOOKUP_KEY_PATH; do path_of "$key" > /dev/null; done
-for key in AUTH_TOKEN_PATH PG_PASSWORD_PATH COMPANY_LOOKUP_KEY_PATH; do create_secret "$key"; done
+# All four paths are validated before the first file is written.
+for key in AUTH_TOKEN_PATH PG_PASSWORD_PATH COMPANY_LOOKUP_KEY_PATH ANAF_TOKEN_KEY_PATH; do path_of "$key" > /dev/null; done
+for key in AUTH_TOKEN_PATH PG_PASSWORD_PATH COMPANY_LOOKUP_KEY_PATH ANAF_TOKEN_KEY_PATH; do create_secret "$key"; done

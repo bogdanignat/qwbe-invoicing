@@ -1,6 +1,6 @@
 import { Cause, Effect, Exit } from "effect"
 
-import type { Transport } from "./provider-http.ts"
+import type { Transport } from "../outbound/send.ts"
 
 export interface Sent {
   readonly url: string

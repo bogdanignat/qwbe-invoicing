@@ -58,6 +58,7 @@ module.exports = {
         pathNot: [
           "^cubes/[^/]+/(index[.]ts|contracts/)",
           "^cubes/[^/]+/[^/]+/(index[.]ts|contracts/)",
+          "^cubes/[^/]+/[^/]+/[^/]+/(index[.]ts|contracts/)",
         ]
       },
     },

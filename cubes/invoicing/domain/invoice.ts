@@ -170,7 +170,13 @@ export interface NumberedDocumentSnapshot extends DocumentContent {
   readonly issuer: IssuerSnapshot
 }
 
-export type EFacturaStatus = "not_sent" | "pending" | "sent" | "accepted" | "rejected"
+/**
+ * What a fiscal document shows of its current e-Factura submission: a
+ * projection written in the submission's own transaction, never part of the
+ * snapshot. `processing` covers validating, uploading and waiting for ANAF.
+ */
+export const E_FACTURA_STATUSES = ["not_sent", "queued", "processing", "accepted", "rejected", "refused", "unknown"] as const
+export type EFacturaStatus = (typeof E_FACTURA_STATUSES)[number]
 export interface IssuedInvoice extends NumberedDocumentSnapshot {
   readonly draftId: string | null
   readonly sourceProformaId: string | null

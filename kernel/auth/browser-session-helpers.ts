@@ -31,13 +31,13 @@ export const secureOrigin = (origin: string | undefined): boolean => {
  * Every `qwbe_session` value in a Cookie header, empty ones included. Split on
  * `,` as well as `;`, so a folded header cannot hide a second session cookie.
  */
-export const sessionCookieValues = (header: string | undefined): ReadonlyArray<string> => {
+export const sessionCookieValues = (header: string | undefined, wanted: string = cookieName): ReadonlyArray<string> => {
   if (header === undefined) return []
   const values: Array<string> = []
   for (const item of header.split(/[;,]/u)) {
     const separator = item.indexOf("=")
     const name = (separator < 0 ? item : item.slice(0, separator)).trim()
-    if (name === cookieName) values.push(separator < 0 ? "" : item.slice(separator + 1).trim())
+    if (name === wanted) values.push(separator < 0 ? "" : item.slice(separator + 1).trim())
   }
   return values
 }

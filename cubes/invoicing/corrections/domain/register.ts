@@ -21,7 +21,7 @@ export interface InvoiceRegisterInvoiceRow extends RegisterRow {
 export interface InvoiceRegisterCorrectionRow extends RegisterRow {
   readonly kind: "correction"
   readonly dueDate: null
-  readonly eFacturaStatus: null
+  readonly eFacturaStatus: EFacturaStatus
   readonly originalReference: { readonly id: string; readonly series: string; readonly number: number }
 }
 

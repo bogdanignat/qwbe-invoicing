@@ -5,8 +5,8 @@ import { decodePage, integer, nullableText, object, text, type Decoder } from ".
  *
  * The backend returns invoices and corrections in a single cursor-ordered feed,
  * and the two are told apart only by `kind`. Each kind fixes the other fields:
- * an invoice carries an e-Factura status and may have a due date, a correction
- * carries neither and always names the invoice it reverses. Decoding asserts
+ * an invoice may have a due date, a correction never has one and always names
+ * the invoice it reverses. Both carry an e-Factura status. Decoding asserts
  * that exclusivity instead of accepting a row that claims both, so a view can
  * branch on `kind` alone.
  */
@@ -24,15 +24,17 @@ interface InvoiceRegisterCommon {
   readonly totalIncludingVat: string
 }
 
-export type EFacturaStatus = "not_sent" | "pending" | "sent" | "accepted" | "rejected"
+const eFacturaStatuses = ["not_sent", "queued", "processing", "accepted", "rejected", "refused", "unknown"] as const
 
-const eFacturaStatuses: ReadonlyArray<string> = ["not_sent", "pending", "sent", "accepted", "rejected"]
+/** The document's view of its current e-Factura submission; `processing` covers validation, upload and ANAF's verdict. */
+export type EFacturaStatus = (typeof eFacturaStatuses)[number]
 
-/** `null` is an invoice of an installation that runs no e-Factura plugin; any other value is the closed enum. */
+/** `null` is a document of an installation that runs no e-Factura plugin; any other value is the closed enum. */
 export const decodeEFacturaStatus = (input: unknown): EFacturaStatus | null => {
   if (input === null) return null
-  if (typeof input !== "string" || !eFacturaStatuses.includes(input)) throw new Error("invalid eFacturaStatus")
-  return input as EFacturaStatus
+  const status = eFacturaStatuses.find((known) => known === input)
+  if (status === undefined) throw new Error("invalid eFacturaStatus")
+  return status
 }
 
 export interface InvoiceRegisterInvoiceRow extends InvoiceRegisterCommon {
@@ -45,7 +47,7 @@ export interface InvoiceRegisterInvoiceRow extends InvoiceRegisterCommon {
 export interface InvoiceRegisterCorrectionRow extends InvoiceRegisterCommon {
   readonly kind: "correction"
   readonly dueDate: null
-  readonly eFacturaStatus: null
+  readonly eFacturaStatus: EFacturaStatus | null
   readonly originalReference: {
     readonly id: string
     readonly series: string
@@ -83,13 +85,12 @@ export const decodeInvoiceRegisterRow: Decoder<InvoiceRegisterRow> = (input) => 
   if (value.kind === "correction") {
     const common = decodeCommon(value)
     if (value.dueDate !== null) throw new Error("invalid dueDate")
-    if (value.eFacturaStatus !== null) throw new Error("invalid eFacturaStatus")
     const original = object(value.originalReference)
     return {
       kind: "correction",
       ...common,
       dueDate: null,
-      eFacturaStatus: null,
+      eFacturaStatus: decodeEFacturaStatus(value.eFacturaStatus),
       originalReference: {
         id: text(original.id, "originalReference.id"),
         series: text(original.series, "originalReference.series"),
