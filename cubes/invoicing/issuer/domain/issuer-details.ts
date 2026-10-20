@@ -1,4 +1,5 @@
 import { ValidationFailure } from "../../contracts/failures.ts"
+import { formatDecimal, parseUnsignedDecimal } from "../../contracts/money.ts"
 import type { IssuerCompanySnapshot } from "../../domain/invoice.ts"
 
 type CompanyDetails = Pick<IssuerCompanySnapshot, "legalForm" | "tradeRegistryNumber" | "iban" | "bankName" | "socialCapital">
@@ -21,9 +22,11 @@ export const normalizeIssuerDetails = (input: CompanyDetails): CompanyDetails =>
   const rawCapital = text(input.socialCapital, "socialCapital").trim()
   let socialCapital = ""
   if (rawCapital !== "") {
-    const match = /^(\d{1,16})(?:\.(\d{1,2}))?$/.exec(rawCapital)
-    if (match === null) return fail("socialCapital must be nonnegative RON with at most 16 integer digits and 2 decimals")
-    socialCapital = `${(match[1] as string).replace(/^0+(?=\d)/, "")}.${(match[2] ?? "").padEnd(2, "0")}`
+    const parsed = parseUnsignedDecimal(rawCapital, 2)
+    if (!parsed.ok || (rawCapital.split(".")[0] ?? "").length > 16) {
+      return fail("socialCapital must be nonnegative RON with at most 16 integer digits and 2 decimals")
+    }
+    socialCapital = formatDecimal(parsed.units, 2)
   }
   const iban = text(input.iban, "iban").replace(/\s/gu, "").toUpperCase()
   if (iban !== "") {

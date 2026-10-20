@@ -2,6 +2,7 @@ import type {
   Issuer, NonVatBasis, VatCatalogue, VatConfiguration, VatRate,
 } from "./draft-models.ts"
 import { isTaxableVatCode } from "./draft-decoders.ts"
+import { parseUnsignedDecimal } from "./money.ts"
 
 export const romanianCuiPattern = "[1-9][0-9]{1,9}"
 /** Trimmed, upper-cased, without the `RO` VAT prefix and the space after it: `" ro 14399840"` is `"14399840"`. */
@@ -14,11 +15,11 @@ export const activeOn = (
 ): boolean => value.effectiveFrom <= date
   && (value.effectiveTo === undefined || date <= value.effectiveTo)
 
+/** A rate in hundredths of a percent: trimmed, at most three integer digits and two decimals. */
 const scaledVatRate = (rate: string): bigint | undefined => {
-  const match = /^(\d{1,3})(?:\.(\d{1,2}))?$/.exec(rate.trim())
-  return match === null
-    ? undefined
-    : BigInt(match[1] as string) * 100n + BigInt((match[2] ?? "").padEnd(2, "0"))
+  const text = rate.trim()
+  const parsed = /^\d{1,3}(?:\.|$)/u.test(text) ? parseUnsignedDecimal(text, 2) : undefined
+  return parsed?.ok === true ? parsed.units : undefined
 }
 
 export const sameVatRate = (left: string, right: string): boolean =>

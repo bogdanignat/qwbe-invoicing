@@ -158,6 +158,12 @@ void test("a line that is not an object fails the document", () => {
   assert.throws(() => decodeIssuedInvoice({ ...invoiceJson, lines: {} }), /invalid lines/u)
 })
 
+void test("a VAT category other than S or O fails the document, on a line or in the breakdown", () => {
+  assert.throws(() => decodeIssuedInvoice({ ...invoiceJson, lines: [{ ...line, vatCategoryCode: "Z" }] }), /invalid vatCategoryCode/u)
+  assert.throws(() => decodeIssuedInvoice({ ...invoiceJson, vatBreakdown: [{ ...body.vatBreakdown[0], vatCategoryCode: "E" }] }),
+    /invalid vatCategoryCode/u)
+})
+
 void test("a correction without its reason is refused", () => {
   assert.throws(() => decodeCorrectionDocument(without(correctionJson, "reason")), /invalid reason/u)
 })
@@ -171,7 +177,7 @@ void test("an invoice projects its facts, parties and totals as strings", () => 
     { label: "Monedă", value: "RON" },
     { label: "e-Factura", value: "Acceptată" },
   ])
-  assert.deepEqual(view.totals.map((total) => total.value), ["1000.00 RON", "210.00 RON", "1210.00 RON"])
+  assert.deepEqual(view.totals.map((total) => total.value), ["1,000.00 RON", "210.00 RON", "1,210.00 RON"])
   assert.deepEqual(view.parties.map((party) => party.heading), ["Furnizor", "Cumpărător"])
   assert.equal(view.originalInvoice, null)
 })
@@ -224,11 +230,19 @@ void test("a line carries its unit by name, its VAT treatment and its three amou
     description: "Abonament lunar",
     quantity: "2 bucată",
     unitPrice: "500.00 RON",
-    vat: "TVA 21.00%",
-    totalExcludingVat: "1000.00 RON",
+    vat: "TVA 21%",
+    totalExcludingVat: "1,000.00 RON",
     vatAmount: "210.00 RON",
-    totalIncludingVat: "1210.00 RON",
+    totalIncludingVat: "1,210.00 RON",
   })
+})
+
+void test("a quantity and the social capital read grouped, at the scale the snapshot froze", () => {
+  const view = projectIssuedInvoice(decodeIssuedInvoice({
+    ...invoiceJson, issuer: { ...issuer, socialCapital: "1250000.00" }, lines: [{ ...line, quantity: "4800.0000" }],
+  }))
+  assert.equal(view.lines[0]?.quantity, "4,800.0000 bucată")
+  assert.equal(view.parties[0]?.details.includes("Capital social 1,250,000.00 RON"), true)
 })
 
 // Category `O` is stored with rate "0.00" because the model requires a rate, but
@@ -246,7 +260,7 @@ void test("the exempt VAT breakdown row states the treatment and the legal reaso
   assert.deepEqual(view.vatRows[0], {
     key: "O-0.00",
     rate: "Scutit TVA — art. 310",
-    base: "1000.00 RON",
+    base: "1,000.00 RON",
     amount: "0.00 RON",
     note: article310Reason,
   })
@@ -274,8 +288,8 @@ void test("with the e-Factura plugin off the invoice decodes and its head names 
 // a reading of a fiscal document, not a recalculation of it.
 void test("a correction projects its negative totals unchanged", () => {
   const view = projectCorrectionDocument(decodeCorrectionDocument(correctionJson))
-  assert.deepEqual(view.totals.map((total) => total.value), ["-1000.00 RON", "-210.00 RON", "-1210.00 RON"])
-  assert.equal(view.lines[0]?.totalIncludingVat, "-1210.00 RON")
+  assert.deepEqual(view.totals.map((total) => total.value), ["-1,000.00 RON", "-210.00 RON", "-1,210.00 RON"])
+  assert.equal(view.lines[0]?.totalIncludingVat, "-1,210.00 RON")
   assert.equal(view.heading, "STR 4")
 })
 
@@ -293,6 +307,6 @@ void test("a correction states its reason and links back to the original invoice
 void test("a taxable VAT row states its rate and reads its absent reason as a dash", () => {
   const view = projectIssuedInvoice(decodeIssuedInvoice(invoiceJson))
   assert.deepEqual(view.vatRows[0], {
-    key: "S-21.00", rate: "TVA 21.00%", base: "1000.00 RON", amount: "210.00 RON", note: "—",
+    key: "S-21.00", rate: "TVA 21%", base: "1,000.00 RON", amount: "210.00 RON", note: "—",
   })
 })

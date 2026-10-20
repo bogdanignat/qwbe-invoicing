@@ -1,28 +1,23 @@
+import { parseUnsignedDecimal } from "../contracts/money.ts"
+
 /**
  * Exact decimal handling for the amounts the generator renders.
  *
  * Snapshot amounts arrive as decimal strings and must be compared exactly:
  * binary floating point would make a one-cent VAT discrepancy invisible here
- * and visible at ANAF. Everything is scaled into integers instead.
- *
- * The invoicing cube has equivalent helpers, but cubes may not import each
- * other, so this is a deliberate re-statement of the same arithmetic rather
- * than shared code.
+ * and visible at ANAF. Everything is scaled into integers by the invoicing
+ * cube's shared arithmetic (contracts/money.ts); what stays here is this
+ * plugin's rule: the value exactly as written, unsigned, every fault recorded.
  */
 
 /** Parses a non-negative decimal into a scaled integer, or records why not. */
 export const scaled = (value: string, scale: number, field: string, issues: Array<string>): bigint | null => {
-  const match = /^(\d+)(?:\.(\d+))?$/.exec(value)
-  if (match === null) {
-    issues.push(`${field} must be a non-negative decimal string, got "${value}"`)
-    return null
-  }
-  const fraction = match[2] ?? ""
-  if (fraction.length > scale) {
-    issues.push(`${field} carries more than ${String(scale)} decimal places`)
-    return null
-  }
-  return BigInt(match[1] ?? "0") * 10n ** BigInt(scale) + BigInt(fraction.padEnd(scale, "0") || "0")
+  const parsed = parseUnsignedDecimal(value, scale)
+  if (parsed.ok) return parsed.units
+  issues.push(parsed.reason === "syntax"
+    ? `${field} must be a non-negative decimal string, got "${value}"`
+    : `${field} carries more than ${String(scale)} decimal places`)
+  return null
 }
 
 /** Amounts are always two decimal places in RON. */

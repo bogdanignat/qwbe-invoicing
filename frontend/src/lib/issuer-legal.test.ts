@@ -37,6 +37,9 @@ void test("social capital — refuses a sum that is not a non-negative RON amoun
   assert.deepEqual(socialCapitalValue("200.005"), { kind: "issue", message })
   assert.deepEqual(socialCapitalValue("200,00"), { kind: "issue", message })
   assert.deepEqual(socialCapitalValue("1".repeat(17)), { kind: "issue", message })
+  for (const value of ["1.", ".5", "+1", "1e3", "1 000"]) assert.deepEqual(socialCapitalValue(value), { kind: "issue", message }, value)
+  assert.deepEqual(socialCapitalValue("00"), { kind: "ready", value: "0.00" })
+  assert.deepEqual(socialCapitalValue(`0${"9".repeat(15)}.5`), { kind: "ready", value: `${"9".repeat(15)}.50` })
   assert.equal(`${"9".repeat(16)}.99`.length, SOCIAL_CAPITAL_MAX_LENGTH)
 })
 

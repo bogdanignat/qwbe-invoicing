@@ -1,10 +1,10 @@
 import { array, integer, nullableText, object, optionalText, text, type Decoder } from "./model-decoder.ts"
-import { decodeAddress, decodeUnitOfMeasure } from "./document-snapshot-decoders.ts"
+import { decodeAddress, decodeUnitOfMeasure, decodeVatCategoryCode } from "./document-snapshot-decoders.ts"
 import { decodeIssuerBranding } from "./branding-decoder.ts"
 import type {
   DocumentSeries, Issuer, ProductPreset, VatCatalogue, VatConfiguration, VatRate, VatRegistration,
 } from "./draft-models.ts"
-import { canonicalVatTreatment, decodeVatCategoryCode } from "./draft-decoders.ts"
+import { canonicalVatTreatment } from "./draft-decoders.ts"
 
 /** Decoders for the reference data an authoring session reads: registries, catalogues and the issuer profile. */
 

@@ -42,7 +42,7 @@ void test("an invoice projects to its own detail route", () => {
   assert.equal(row.kindLabel, null)
   assert.equal(row.originalInvoice, null)
   assert.equal(row.number, "FCT 12")
-  assert.equal(row.total, "1190.00 RON")
+  assert.equal(row.total, "1,190.00 RON")
   assert.equal(row.status, "Acceptată")
 })
 
@@ -56,7 +56,7 @@ void test("a correction projects to the correction route and names its original"
 })
 
 void test("a correction's negative total is shown as stored, not flipped", () => {
-  assert.equal(projectInvoiceRegisterRow(correction).total, "-1190.00 RON")
+  assert.equal(projectInvoiceRegisterRow(correction).total, "-1,190.00 RON")
 })
 
 void test("a correction's due date, and its status with e-Factura off, read as a dash instead of blank", () => {

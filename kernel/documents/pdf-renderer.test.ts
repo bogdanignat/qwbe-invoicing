@@ -78,7 +78,7 @@ void test("renders deterministic valid PDFs with Romanian glyphs and fixed metad
 
 void test("renders canonical issuer legal details and omits empty optional detail lines", async () => {
   assert.deepEqual(issuerLegalLines(invoice.issuer), [
-    "Formă juridică: SRL", "Plătitor de TVA", "Nr. registrul comerțului: J22/123/2020", "Capital social: 1.000,00 RON",
+    "Formă juridică: SRL", "Plătitor de TVA", "Nr. registrul comerțului: J22/123/2020", "Capital social: 1,000.00 RON",
     "Bancă: Banca Română", "IBAN: RO49AAAA1B31007593840000",
   ])
   assert.deepEqual(issuerLegalLines({ ...invoice.issuer, tradeRegistryNumber: "", socialCapital: "", bankName: "", iban: "" }),
@@ -155,20 +155,22 @@ void test("renders deterministic non-fiscal proformas and omits a null due date"
   assert.equal(parsed.getProducer(), `QWBE Invoicing ${proformaTemplateVersion}`)
 })
 
-void test("formats amounts with Romanian grouping and leaves unknown shapes untouched", () => {
-  assert.equal(formatAmount("11761.00"), "11.761,00")
-  assert.equal(formatAmount("4800.0000"), "4.800,0000")
-  assert.equal(formatAmount("100.00"), "100,00")
+void test("formats amounts with comma grouping, a decimal point and their scale, leaving unknown shapes untouched", () => {
+  assert.equal(formatAmount("11761.00"), "11,761.00")
+  assert.equal(formatAmount("4800.0000"), "4,800.0000")
+  assert.equal(formatAmount("100.00"), "100.00")
   assert.equal(formatAmount("999"), "999")
-  assert.equal(formatAmount("1000"), "1.000")
-  assert.equal(formatAmount("-1234.56"), "-1.234,56")
+  assert.equal(formatAmount("1000"), "1,000")
+  assert.equal(formatAmount("-1234.56"), "-1,234.56")
+  assert.equal(formatAmount("-1250000.00"), "-1,250,000.00")
+  assert.equal(formatAmount("-0.00"), "0.00")
   assert.equal(formatAmount("n/a"), "n/a")
 })
 
 void test("compacts VAT rates without losing meaningful decimals", () => {
   assert.equal(formatRate("21.00"), "21")
   assert.equal(formatRate("0.00"), "0")
-  assert.equal(formatRate("20.50"), "20,5")
+  assert.equal(formatRate("20.50"), "20.5")
   assert.equal(formatRate("9"), "9")
 })
 
@@ -284,7 +286,7 @@ void test("renders a deterministic storno with negated totals, the reversed invo
   const first = await Effect.runPromise(renderer.renderCorrection(correction))
   const second = await Effect.runPromise(renderer.renderCorrection(correction))
   assert.equal(first.templateVersion, correctionTemplateVersion)
-  assert.equal(first.templateVersion, "storno-v1")
+  assert.equal(first.templateVersion, "storno-v2")
   assert.equal(Buffer.from(first.bytes.subarray(0, 5)).toString("ascii"), "%PDF-")
   assert.deepEqual(first.bytes, second.bytes)
   const parsed = await PDFDocument.load(first.bytes, { updateMetadata: false })
@@ -292,7 +294,7 @@ void test("renders a deterministic storno with negated totals, the reversed invo
   assert.equal(parsed.getTitle(), "Storno STORNO 3")
   assert.equal(parsed.getSubject(), "Factură storno")
   assert.equal(parsed.getProducer(), `QWBE Invoicing ${correctionTemplateVersion}`)
-  assert.equal(formatAmount(correction.totalIncludingVat), "-121,00")
+  assert.equal(formatAmount(correction.totalIncludingVat), "-121.00")
   // The reason block is the only content a storno adds beyond the reversed lines.
   const withoutReason = await Effect.runPromise(renderer.renderCorrection({ ...correction, reason: "" }))
   assert.ok(first.bytes.length > withoutReason.bytes.length)

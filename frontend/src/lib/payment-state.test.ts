@@ -24,6 +24,12 @@ void test("a balance that is not a well-formed positive amount closes the form",
   for (const remaining of ["-1.00", "1", "1.0", "", "abc", "1,00"]) {
     assert.equal(paymentActionState(summary("unpaid", remaining)).canRecordPayment, false, remaining)
   }
+  for (const remaining of [" 1.00", "1.00 ", "+1.00", "-0.00", "0.00", "00.00", "1.001"]) {
+    assert.equal(paymentActionState(summary("unpaid", remaining)).canRecordPayment, false, remaining)
+  }
+  for (const remaining of ["01.00", "90071992547409.93"]) {
+    assert.equal(paymentActionState(summary("unpaid", remaining)).canRecordPayment, true, remaining)
+  }
 })
 
 void test("identifies overpayment and closes the form with it", () => {
@@ -109,6 +115,18 @@ void test("the panel view formats totals in the invoice currency and keys the fo
   assert.equal(view.statusTone, "info")
   assert.equal(view.canRecordPayment, true)
   assert.equal(view.rows.length, 1)
+})
+
+void test("the balance reads grouped on the label while the form's default and the request keep the bare amount", () => {
+  const view = paymentsView(summary("partially_paid", "6600.00", [payment("p1", { amount: "1250.00" })]), "RON")
+  assert.equal(view.remaining, "6,600.00 RON")
+  const [row] = view.rows
+  assert.ok(row !== undefined)
+  assert.equal(row.amount, "1,250.00 RON")
+  assert.equal(row.reverseLabel, "Anulează plata 1,250.00 RON · 2026-08-31")
+  assert.equal(view.remainingAmount, "6600.00")
+  const input = paymentInputFrom(form({ amount: view.remainingAmount, paymentDate: "2026-10-01", method: "transfer" }), "RON")
+  assert.equal(input.amount, "6600.00")
 })
 
 const correctedBy = { id: "cor-1", series: "FCT", number: 13, issueDate: "2026-10-09" }

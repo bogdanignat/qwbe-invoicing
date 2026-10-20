@@ -1,5 +1,5 @@
 import { barRect, chartScale, minorUnits, scaleY, tickLabel } from "./chart-scale.ts"
-import { money } from "./format.ts"
+import { money } from "./money.ts"
 import { monthAbbreviation, type ChartMonth } from "./dashboard-view.ts"
 
 /**

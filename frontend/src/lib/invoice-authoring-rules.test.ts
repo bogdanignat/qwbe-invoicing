@@ -80,6 +80,22 @@ void test("a due date is required only when the fiscal total rounds positive", (
   assert.equal(positiveInvoiceRequiresDueDate("2026-02-01", "100.00", []), false)
 })
 
+void test("the server total decides by its sign at any precision; an unreadable one defers to the lines", () => {
+  for (const [total, required] of [["0.001", true], [" 0.01 ", true], ["-0.01", false], ["-0.00", false], ["0", false],
+    ["000.000", false], ["90071992547409.93", true], ["-90071992547409.93", false]] as const) {
+    assert.equal(positiveInvoiceRequiresDueDate(null, total, [{ quantity: "1", unitPrice: "1.00" }]), required, total)
+  }
+  for (const total of ["abc", "1e2", "+1", ".5", "1.", ""]) {
+    assert.equal(positiveInvoiceRequiresDueDate(null, total, [{ quantity: "1", unitPrice: "1.00" }]), true, total)
+    assert.equal(positiveInvoiceRequiresDueDate(null, total, [{ quantity: "1", unitPrice: "0.00" }]), false, total)
+  }
+  // Each edited line rounds on its own, half up at the half cent; a line that does not parse adds nothing.
+  for (const [quantity, unitPrice, required] of [["0.4999", "0.01", false], ["0.5", "0.01", true], [" 0.5 ", " 0.01 ", true],
+    ["0.00001", "1000.00", false], ["1", "0.001", false], ["-1", "1.00", false], ["1", "-1.00", false], ["1.0000", "007", true]] as const) {
+    assert.equal(positiveInvoiceRequiresDueDate(null, undefined, [{ quantity, unitPrice }]), required, `${quantity} × ${unitPrice}`)
+  }
+})
+
 void test("the issuance comparison catches a concurrent change on any sealed field", () => {
   const draft = draftOf()
   assert.equal(authoringPayloadMatchesDraft(payloadOf(), draft), true)

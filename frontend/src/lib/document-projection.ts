@@ -1,6 +1,8 @@
-import { money, orDash, vatTreatmentLabel } from "./format.ts"
+import { orDash } from "./format.ts"
+import { formatAmount, money } from "./money.ts"
 import { eFacturaStatusLabel, invoiceDetailHref } from "./invoice-register-projection.ts"
 import { romanianCountyName } from "./romanian-counties.ts"
+import { vatTreatmentLabel } from "./vat-snapshots.ts"
 import type {
   Address, BuyerSnapshot, CorrectionDocument, DocumentBody, DocumentLine, IssuedInvoice,
   IssuerSnapshot, VatBreakdownEntry,
@@ -87,7 +89,7 @@ const issuerView = (issuer: IssuerSnapshot): PartyView => ({
       ? `Cod TVA RO${issuer.fiscalIdentifier}`
       : vatNote(issuer.vatRegistered),
     issuer.tradeRegistryNumber === "" ? undefined : `Nr. Reg. Com. ${issuer.tradeRegistryNumber}`,
-    issuer.socialCapital === "" ? undefined : `Capital social ${issuer.socialCapital} RON`,
+    issuer.socialCapital === "" ? undefined : `Capital social ${money(issuer.socialCapital, "RON")}`,
     issuer.iban === "" ? undefined : `IBAN ${issuer.iban}`,
     issuer.bankName === "" ? undefined : `Bancă ${issuer.bankName}`,
     addressLine(issuer.address),
@@ -108,7 +110,7 @@ const customerView = (customer: BuyerSnapshot): PartyView => ({
 const lineView = (line: DocumentLine, currency: string): DocumentLineView => ({
   key: line.id,
   description: line.description,
-  quantity: `${line.quantity} ${line.unitOfMeasure.name}`,
+  quantity: `${formatAmount(line.quantity)} ${line.unitOfMeasure.name}`,
   unitPrice: money(line.unitPrice, currency),
   vat: vatTreatmentLabel({ vatCategoryCode: line.vatCategoryCode, rate: line.vatRate }),
   totalExcludingVat: money(line.totalExcludingVat, currency),

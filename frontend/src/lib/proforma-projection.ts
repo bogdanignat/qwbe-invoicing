@@ -1,5 +1,6 @@
 import { documentBodyView, type DocumentSnapshotView } from "./document-projection.ts"
-import { money, orDash } from "./format.ts"
+import { orDash } from "./format.ts"
+import { money } from "./money.ts"
 import type { Proforma } from "./proforma-models.ts"
 
 /**

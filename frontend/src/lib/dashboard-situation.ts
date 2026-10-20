@@ -1,5 +1,6 @@
 import { counted, type StatCard } from "./dashboard-view.ts"
-import { money, orDash } from "./format.ts"
+import { orDash } from "./format.ts"
+import { money } from "./money.ts"
 import { invoiceDetailHref } from "./invoice-register-projection.ts"
 import { paymentStatusLabel, paymentStatusTone, type PaymentStatusTone } from "./payment-state.ts"
 import type { CollectionsReport, CollectionsSituation } from "./report-models.ts"

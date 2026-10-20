@@ -3,6 +3,7 @@ import test from "node:test"
 import { Effect } from "effect"
 import { ValidationFailure, type InvoicingFailure } from "../../contracts/failures.ts"
 import type { ConfigureIssuerInput } from "../domain/issuer.ts"
+import { normalizeIssuerDetails } from "../domain/issuer-details.ts"
 import { createInvoicingService } from "../../application/invoicing.ts"
 import { brandingNormalizer, contextProvider, each, emptyState, fixedClock, identity, idempotent, memoryStore, sequentialIds } from "../../application/memory-store.test-support.ts"
 
@@ -102,4 +103,16 @@ void test("PFA issues without capital; conversion, correction, summaries and rep
   assert.deepEqual(correction.issuer, company)
   assert.deepEqual((await Effect.runPromise(service.listIssuedInvoices())).items[0]?.issuer, company)
   assert.deepEqual((await Effect.runPromise(service.listProformas())).items[0]?.issuer, company)
+})
+
+void test("social capital: at most 16 integer digits and 2 decimals, trimmed, unpadded, with one exact message", () => {
+  const capital = (socialCapital: string): string => normalizeIssuerDetails({ ...input, socialCapital }).socialCapital
+  for (const [raw, stored] of [["", ""], ["  ", ""], [" 5 ", "5.00"], ["0", "0.00"], ["00", "0.00"], ["0.5", "0.50"],
+    ["007.10", "7.10"], ["9".repeat(16), `${"9".repeat(16)}.00`], [`0${"9".repeat(15)}.99`, `${"9".repeat(15)}.99`]] as const) {
+    assert.equal(capital(raw), stored, JSON.stringify(raw))
+  }
+  for (const raw of ["9".repeat(17), `1${"0".repeat(16)}`, "1.001", "-1", "+1", "1e3", ".5", "1.", "1,00", "1 000"]) {
+    assert.throws(() => capital(raw), (error: unknown) => error instanceof ValidationFailure && error.issues.length === 1
+      && error.issues[0] === "socialCapital must be nonnegative RON with at most 16 integer digits and 2 decimals", raw)
+  }
 })

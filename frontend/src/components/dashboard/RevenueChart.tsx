@@ -1,7 +1,7 @@
 import { useId } from "react"
 
 import type { ChartMonth } from "../../lib/dashboard-view.ts"
-import { money } from "../../lib/format.ts"
+import { money } from "../../lib/money.ts"
 import { chartDescription, revenueChartModel } from "../../lib/revenue-chart.ts"
 
 interface RevenueChartProps {

@@ -44,6 +44,13 @@ void test("a listed storno closes the form, names itself, and reads with its min
   }])
 })
 
+void test("a storno over a thousand reads grouped on its caption, and its request carries no amount", () => {
+  const large = { ...correction, totalExcludingVat: "-5454.55", vatTotal: "-1145.45", totalIncludingVat: "-6600.00" }
+  assert.equal(correctionsView([large]).rows[0]?.caption, "2026-10-09 · -6,600.00 RON")
+  // The request names a reason and a date only: the backend negates the frozen amounts itself.
+  assert.deepEqual(Object.keys(correctionInputFrom(form({ reason: "Retur", issueDate: "2026-10-09" }))), ["reason", "issueDate"])
+})
+
 void test("the request body is trimmed, and a field the form did not carry reads as empty for the backend to refuse", () => {
   assert.deepEqual(correctionInputFrom(form({ reason: "  Retur  ", issueDate: " 2026-10-09 " })), {
     reason: "Retur", issueDate: "2026-10-09",

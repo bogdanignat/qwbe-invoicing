@@ -10,6 +10,7 @@ import {
   type RequestContext,
   type RequestContextProvider,
 } from "../contracts/index.ts"
+import { formatDecimal, parseDecimal } from "../contracts/money.ts"
 import type { BrandingNormalizer, IssuerTransaction } from "../issuer/index.ts"
 import type { CatalogTransaction, ProductPreset } from "../catalog/index.ts"
 import type { Customer, CustomersTransaction } from "../customers/index.ts"
@@ -21,15 +22,15 @@ import type { DocumentCursor, DraftCursor, NameCursor, PageQuery } from "./ports
 
 const sameSource = (value: { readonly source?: { readonly app: string; readonly kind: string; readonly id: string } }, source: { readonly app: string; readonly kind: string; readonly id: string } | undefined): boolean =>
   source === undefined || (value.source?.app === source.app && value.source.kind === source.kind && value.source.id === source.id)
-const bani = (amount: string): bigint => (amount.startsWith("-") ? -1n : 1n) * BigInt(amount.replace(/[-.]/gu, ""))
-const decimal = (value: bigint): string => {
-  const digits = (value < 0n ? -value : value).toString().padStart(3, "0")
-  return `${value < 0n ? "-" : ""}${digits.slice(0, -2)}.${digits.slice(-2)}`
+const bani = (amount: string): bigint => {
+  const parsed = parseDecimal(amount, 2)
+  if (!parsed.ok) throw new Error(`invalid money amount ${JSON.stringify(amount)}`)
+  return parsed.units
 }
 interface RevenueDocument { readonly kind: "invoice" | "correction"; readonly issueDate: string; readonly totalExcludingVat: string; readonly totalIncludingVat: string }
 const revenueFigures = (documents: ReadonlyArray<RevenueDocument>) => ({
-  revenueExcludingVat: decimal(documents.reduce((total, document) => total + bani(document.totalExcludingVat), 0n)),
-  invoicedIncludingVat: decimal(documents.reduce((total, document) => total + bani(document.totalIncludingVat), 0n)),
+  revenueExcludingVat: formatDecimal(documents.reduce((total, document) => total + bani(document.totalExcludingVat), 0n), 2),
+  invoicedIncludingVat: formatDecimal(documents.reduce((total, document) => total + bani(document.totalIncludingVat), 0n), 2),
   invoiceCount: documents.filter((document) => document.kind === "invoice").length,
   correctionCount: documents.filter((document) => document.kind === "correction").length,
 })

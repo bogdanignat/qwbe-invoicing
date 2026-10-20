@@ -1,7 +1,7 @@
 import { Button } from "../Button.tsx"
 import { EmptyState } from "../AsyncState.tsx"
 import { LoadMore } from "../LoadMore.tsx"
-import { money } from "../../lib/format.ts"
+import { money } from "../../lib/money.ts"
 import type { ProductPresetRow } from "../../hooks/use-product-presets.ts"
 
 interface ProductPresetsRegistrySectionProps {

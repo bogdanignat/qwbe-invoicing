@@ -5,7 +5,7 @@ import {
 import { decodeEFacturaStatus } from "./invoice-register.ts"
 import type {
   Address, BuyerSnapshot, CorrectionDocument, DocumentLine, IssuedInvoice, IssuerSnapshot,
-  UnitOfMeasure, VatBreakdownEntry,
+  UnitOfMeasure, VatBreakdownEntry, VatCategoryCode,
 } from "./document-snapshot.ts"
 
 /**
@@ -76,6 +76,13 @@ export const decodeUnitOfMeasure: Decoder<UnitOfMeasure> = (input) => {
   return { code: text(value.code, "unitOfMeasure.code"), name: text(value.name, "unitOfMeasure.name") }
 }
 
+/** A category outside the two the contract admits is a contract change, refused here rather than labelled. */
+export const decodeVatCategoryCode = (input: unknown): VatCategoryCode => {
+  const value = text(input, "vatCategoryCode")
+  if (value !== "S" && value !== "O") throw new Error("invalid vatCategoryCode")
+  return value
+}
+
 const decodeLine: Decoder<DocumentLine> = (input) => {
   const value = object(input)
   return {
@@ -86,7 +93,7 @@ const decodeLine: Decoder<DocumentLine> = (input) => {
     unitOfMeasure: decodeUnitOfMeasure(value.unitOfMeasure),
     vatRateCode: text(value.vatRateCode, "vatRateCode"),
     vatRate: text(value.vatRate, "vatRate"),
-    vatCategoryCode: text(value.vatCategoryCode, "vatCategoryCode"),
+    vatCategoryCode: decodeVatCategoryCode(value.vatCategoryCode),
     vatExemptionReason: nullableText(value.vatExemptionReason, "vatExemptionReason"),
     totalExcludingVat: text(value.totalExcludingVat, "totalExcludingVat"),
     vatAmount: text(value.vatAmount, "vatAmount"),
@@ -99,7 +106,7 @@ const decodeVatBreakdownEntry: Decoder<VatBreakdownEntry> = (input) => {
   return {
     code: text(value.code, "vatBreakdown.code"),
     rate: text(value.rate, "vatBreakdown.rate"),
-    vatCategoryCode: text(value.vatCategoryCode, "vatBreakdown.vatCategoryCode"),
+    vatCategoryCode: decodeVatCategoryCode(value.vatCategoryCode),
     vatExemptionReason: nullableText(value.vatExemptionReason, "vatBreakdown.vatExemptionReason"),
     vatBaseAmount: text(value.vatBaseAmount, "vatBaseAmount"),
     vatAmount: text(value.vatAmount, "vatBreakdown.vatAmount"),

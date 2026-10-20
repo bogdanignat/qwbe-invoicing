@@ -1,3 +1,4 @@
+import { formatDecimal, isCanonicalDecimal, parseDecimal } from "../../cubes/invoicing/contracts/money.ts"
 import type { Row } from "./postgres-rows.ts"
 
 /**
@@ -15,24 +16,25 @@ import type { Row } from "./postgres-rows.ts"
  * installed, so the reader takes exactly that string.
  */
 
-const decimal = /^(-?)(0|[1-9]\d*)\.(\d{2})$/u
 const minorUnits = /^-?\d+$/u
+
+/** Canonical up to the sign, so "-0.00" is read as zero too. */
+const canonicalMinor = (amount: string): bigint | undefined => {
+  const parsed = parseDecimal(amount, 2)
+  return parsed.ok && isCanonicalDecimal(amount.replace(/^-/u, ""), 2) ? parsed.units : undefined
+}
 
 /** "123.45" -> "12345", "-0.05" -> "-5", "-0.00" -> "0": the bound int8 value. */
 export const moneyValue = (amount: string): string => {
-  const match = decimal.exec(amount)
-  if (match === null) throw new Error(`invalid money amount ${JSON.stringify(amount)}`)
-  const [, sign = "", whole = "", fraction = ""] = match
-  const minor = BigInt(`${whole}${fraction}`)
-  return (sign === "-" ? -minor : minor).toString()
+  const minor = canonicalMinor(amount)
+  if (minor === undefined) throw new Error(`invalid money amount ${JSON.stringify(amount)}`)
+  return minor.toString()
 }
 
 /** "12345" -> "123.45", "-5" -> "-0.05": the decimal the domain expects. */
 export const moneyFrom = (minor: string): string => {
   if (!minorUnits.test(minor)) throw new Error(`invalid money minor units ${JSON.stringify(minor)}`)
-  const value = BigInt(minor)
-  const digits = (value < 0n ? -value : value).toString().padStart(3, "0")
-  return `${value < 0n ? "-" : ""}${digits.slice(0, -2)}.${digits.slice(-2)}`
+  return formatDecimal(BigInt(minor), 2)
 }
 
 /** A NOT NULL money column of a row. */
