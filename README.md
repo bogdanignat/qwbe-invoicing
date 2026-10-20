@@ -6,8 +6,11 @@ series with sequential numbering, CUI/CIF validation, VAT per line, immutable is
 documents, and correction by storno instead of editing.
 
 Jurisdiction and currency are fixed to Romania (`RO`) and Romanian leu (`RON`) in the first
-release. The data model is being prepared for RO e-Factura (EN 16931 / RO CIUS), but this version
-does **not** submit invoices to ANAF yet. See [What it does not do yet](#what-it-does-not-do-yet).
+release. The optional `efactura` plugin generates RO e-Factura XML (EN 16931 / RO CIUS) and,
+with your own ANAF OAuth client (`ANAF_*` variables and `compose.anaf.yaml`, see
+[`docs/ANAF.md`](./docs/ANAF.md)), submits invoices and stornos to the SPV one at a time, on a
+user's click. The full cycle is confirmed on ANAF TEST, not yet in production; see
+[`docs/EFACTURA.md`](./docs/EFACTURA.md).
 
 The product and engineering baseline is [`PRODUCT.md`](./PRODUCT.md), the architecture is
 [`FOUNDATION.md`](./FOUNDATION.md). This page is the short version: what it is, how it
@@ -24,6 +27,7 @@ works, how to install and run it.
 - [Installation](#installation)
 - [Database password](#database-password)
 - [Configuration](#configuration)
+- [e-Factura with ANAF](#e-factura-with-anaf)
 - [Data, backup and restore](#data-backup-and-restore)
 - [Upgrading](#upgrading)
 - [API](#api)
@@ -111,9 +115,12 @@ a rewrite.
 
 ## What it does not do yet
 
-- **No RO e-Factura submission.** Taxpayers under the e-Factura obligation need another
-  compliant channel for XML submission until the ANAF integration ships. A PDF is a visual
-  representation, not the structured XML the law requires.
+- **No e-Factura without your ANAF registration, and none to private persons.** Submission
+  needs the installation's own ANAF OAuth client, set with the `ANAF_*` variables and
+  `COMPOSE_FILE=compose.yaml:compose.anaf.yaml` (self-host: `compose.prod.yaml:compose.anaf.yaml`);
+  without it the XML is downloaded and uploaded on another channel. Documents to a private
+  person (B2C) are refused. Nothing is submitted automatically, and the cycle is confirmed on
+  ANAF TEST only. A PDF is a visual representation, not the structured XML the law requires.
 - No simplified invoice, delivery note, receipt or fiscal receipt.
 - No email delivery. Delivery means PDF download.
 - No foreign issuers, foreign billing addresses or invoices in other currencies.
@@ -196,9 +203,10 @@ cp .env.example .env
 # edit .env: PUBLIC_ORIGIN (e.g. https://invoice.example.com) and ORGANIZATION_ID.
 # QWBE_IMAGE=qwbe-invoicing and IMAGE_TAG=local already match the build in step 4.
 
-# 3. Secrets: the API token, the PostgreSQL password and the company-lookup key, at
-#    the paths in .env (default .local/), mode 0600. An existing file is kept, and
-#    nothing is printed. Never regenerate them while the database exists.
+# 3. Secrets: the API token, the PostgreSQL password, the company-lookup key and the
+#    ANAF token key, at the paths in .env (default .local/), mode 0600. An existing
+#    file is kept, and nothing is printed. Never regenerate them while the database
+#    exists. The same by hand: .env.example, "Secret files".
 scripts/init-secrets.sh
 
 # 4. The image, from this checkout: one image serves the UI and the API
@@ -276,7 +284,7 @@ Then open `PUBLIC_ORIGIN`, unlock the UI with the API token (the file at
 
 To skip `-f`/`--profile` on every command, set `COMPOSE_FILE` (and `COMPOSE_PROFILES`) in
 `.env`; `.env.example` shows both. e-Factura with ANAF needs your own registration:
-[`docs/ANAF.md`](./docs/ANAF.md).
+[e-Factura with ANAF](#e-factura-with-anaf).
 
 ## Installation
 
@@ -402,7 +410,7 @@ Everything is configured through environment variables, read once at startup.
 | `PGUSER` | `qwbe` | the role that owns the schema |
 | `PGPASSWORD_FILE` | none | path to the file holding the database password; required outside development, never read from `PGPASSWORD` |
 | `NODE_ENV` | `development` | `production` requires `--confirm-production` on destructive CLI operations and marks cookies `Secure` |
-| `ORGANIZATION_ID` | none | the legal entity this installation serves; every record is scoped to it |
+| `ORGANIZATION_ID` | none (`local-organization` in the Compose files) | the internal, stable id of the company this installation serves, e.g. `hint` or `ro12345678`; every record is scoped to it, the ANAF tokens included. Set it in production. Not a secret, and printed on no invoice, PDF or XML. Only an empty value is refused; use lowercase letters, digits and hyphens, no spaces. Chosen once, before the first start, and never changed: records under the old id would no longer be found, and a restore needs the same id |
 | `AUTH_TOKEN_FILE` | none | path to the file holding the API bearer token (the Compose secret mounts it at `/run/secrets/api_token`) |
 | `COMPANY_LOOKUP_KEY_FILE` | none | path to the company-lookup master key: 32 bytes as 64 hex characters (`openssl rand -hex 32`), mounted at `/run/secrets/company_lookup_key`. It encrypts the openapi.ro key at rest (AES-256-GCM). Unset: storing an openapi.ro key is refused (409 `company_lookup_key_storage_unavailable`) and everything else runs; set but unreadable or malformed: the application does not start. A different key makes the stored openapi.ro key unreadable: the provider reads as off until the key is entered again |
 | `PUBLIC_ORIGIN` | none | the canonical public origin, e.g. `https://invoice.example.com` (scheme and host, no path or trailing slash). `Host`, `X-Forwarded-Host`/`-Proto` and, on unsafe methods, `Origin` must match it, otherwise 400/403. Validated whenever it is set; required only to serve in production (`migrate`, `backup`, `restore` and `doctor` run without it). Outside production it may be left out only when `HOST` is a loopback address, and the origin is then the address the server listens on. In Compose it comes from `.env`, required with no fallback in `compose.prod.yaml`; `compose.yaml` derives it from `APP_DOMAIN` and `compose.vite.yaml` sets `http://localhost:5173` |
@@ -425,6 +433,59 @@ Variables used only by the Compose files, in `.env`:
 | `COMPANY_LOOKUP_KEY_PATH` | host path of the company-lookup master key file, mounted as a secret into the application (required with no fallback in `compose.prod.yaml`; `compose.yaml` defaults to `./.local/company-lookup-key`; the preview uses `PREVIEW_COMPANY_LOOKUP_KEY_PATH`) |
 | `PG_VOLUME_NAME` | name of the cluster volume, default `qwbe-invoicing-postgres` |
 | `BACKUP_STAGING_VOLUME_NAME` | name of the `backup`/`restore` staging volume, default `qwbe-invoicing-backup-staging` |
+
+## e-Factura with ANAF
+
+Optional, with the `efactura` plugin on. Without these settings the application runs as
+before, e-Factura answers "not configured" and the XML of each document can still be
+downloaded. What a company registers with ANAF is in [`docs/ANAF.md`](./docs/ANAF.md);
+the registration itself, step by step, in
+[`docs/LOCAL_DEVELOPMENT.md`](./docs/LOCAL_DEVELOPMENT.md), "ANAF e-Factura (OAuth client)".
+
+1. **Register the OAuth application at ANAF** (grant type Authorization Code) with the
+   callback `<PUBLIC_ORIGIN>/api/anaf/callback`, e.g.
+   `https://invoice.example.com/api/anaf/callback` (development:
+   `https://invoice.test/api/anaf/callback`). ANAF shows the client id and the client secret.
+2. **The token key** (`ANAF_TOKEN_KEY_PATH`) is one of the four files
+   `scripts/init-secrets.sh` creates. On a checkout that predates it, run the script
+   again: it keeps every existing file and adds only the missing one. The same by hand:
+   `.env.example`, "Secret files".
+3. **Write the client secret** (`ANAF_CLIENT_SECRET_PATH`) to its file. It is never
+   generated: it is the secret of your OAuth application in ANAF's portal. From the
+   repository root, in bash, paste it at the prompt; nothing is shown, and the secret
+   enters neither the shell history nor a process list:
+
+   ```bash
+   mkdir -p -m 700 .local
+   ( umask 077; set -C; printf 'ANAF client secret: '; IFS= read -rs secret; echo; printf '%s' "$secret" > .local/anaf-client-secret )
+   ```
+
+   The file is 0600, with no final newline. `set -C` refuses to overwrite an existing
+   file: delete it first to replace the secret. The application accepts one line of
+   printable characters and refuses anything else at startup.
+4. **Fill `.env`.** `COMPOSE_FILE` adds the overlay `compose.anaf.yaml`: on self-host
+   after `compose.prod.yaml` (and `compose.loopback.yaml`, if you use it), in development
+   `compose.yaml:compose.anaf.yaml`. `ANAF_REDIRECT_URI` is `<PUBLIC_ORIGIN>/api/anaf/callback`,
+   exactly as registered at ANAF; the application refuses any other spelling at startup.
+   `ANAF_ENVIRONMENT` is `test` unless `prod` is written out, and `prod` belongs only on
+   the production host.
+
+   ```bash
+   COMPOSE_FILE=compose.prod.yaml:compose.anaf.yaml
+   ANAF_ENVIRONMENT=test
+   ANAF_CLIENT_ID=<client id from ANAF>
+   ANAF_REDIRECT_URI=https://invoice.example.com/api/anaf/callback
+   ANAF_CLIENT_SECRET_PATH=./.local/anaf-client-secret
+   ANAF_TOKEN_KEY_PATH=./.local/anaf-token-key
+   ```
+
+   All four client values or none: a partial setup stops Compose or the application.
+5. **Restart**: `docker compose up -d` (with `COMPOSE_FILE` set, no `-f` is needed; the
+   bundled Caddy also needs `COMPOSE_PROFILES=proxy`).
+6. **Connect** in **Setări → Integrări → ANAF e-Factura** with "Conectează cu
+   certificatul": the certificate is chosen at ANAF, and the tokens stay in the backend,
+   encrypted with the token key. Each invoice or storno is then sent with "Trimite în
+   e-Factura" ([`docs/EFACTURA.md`](./docs/EFACTURA.md)).
 
 ## Data, backup and restore
 
@@ -558,8 +619,8 @@ Draft issuance rejects stale VAT without consuming a document number; saving a
 stale draft refreshes affected lines even when their VAT code is unchanged. Issued
 documents, external snapshots and proforma conversions retain their frozen values.
 
-The invoice public contract owns these immutable fiscal facts; the future e-Factura
-exporter must not reconstruct them from current profiles or private database tables.
+The invoice public contract owns these immutable fiscal facts; the e-Factura
+exporter never reconstructs them from current profiles or private database tables.
 Line/configuration/breakdown snapshots include `vatCategoryCode` and
 `vatExemptionReason`: `S` for positive standard/reduced rates (reason `null`),
 `E` at `0.00` for Article 310, with the frozen legal reason text.
@@ -567,8 +628,9 @@ The application supports Article 310 for its non-VAT issuer workflow and generat
 the associated metadata automatically; other exemptions and categories O/Z/AE are
 not supported. This bounded product rule is not an external fiscal-status lookup.
 See [the fiscal treatment contract and evidence](docs/VAT_TREATMENT.md).
-Readiness is **not complete**: no UBL/XML export, complete CIUS-RO validation or
-ANAF transport is included in this lot.
+The UBL/CIUS-RO export and the ANAF transport live in the `efactura` plugin
+([`docs/EFACTURA.md`](docs/EFACTURA.md)); the CIUS-RO Schematron is not run locally,
+ANAF's validator checks every submission before the upload.
 
 Numbered invoices, proformas and corrections expose a trusted `actorId`. Their
 issuance, issuer/series configuration, payments and reversals append fiscal events
@@ -826,8 +888,8 @@ nothing. A later integration would let the mother call this API from its backend
 contract in [`FOUNDATION.md`](./FOUNDATION.md) section 19; it is not implemented, and the
 kernel is the only way to run the product.
 
-Further cubes are planned inside the same application: ANAF e-Factura transport, RO CIUS
-XML export, and an export in the format accepted by SAGA.
+RO CIUS XML export and ANAF e-Factura transport are in the `efactura` plugin. A further
+cube is planned inside the same application: an export in the format accepted by SAGA.
 
 ## Documents
 

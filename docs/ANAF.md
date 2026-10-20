@@ -52,15 +52,19 @@ confirmă pe documentația oficială ANAF.
      adresele sunt constante în `kernel/efactura/anaf/endpoints.ts`, iar validarea merge
      în ambele medii la validatorul public ANAF.
 
-## Unde vor sta valorile
+## Unde stau valorile
 
-Azi nicio cheie de configurare nu le citește. Regula instalării se aplică și lor,
-când vor exista:
+Toate intră prin overlay-ul `compose.anaf.yaml`, adăugat în `.env` după fișierul de bază:
+`COMPOSE_FILE=compose.yaml:compose.anaf.yaml` (self-host:
+`compose.prod.yaml:compose.anaf.yaml`). Fără el aplicația răspunde „neconfigurat”; o
+configurare parțială e refuzată. Exemplul neutru e în `.env.example`.
 
-- Client secret-ul și orice token sunt secrete: fișiere montate ca Docker secrets, ca
-  `api-token` și `pg-password` (`AUTH_TOKEN_PATH`, `PG_PASSWORD_PATH` în `.env`), niciodată
-  variabile de mediu, niciodată în `.env`, în imagine sau în git.
-- Valorile publice (client id, callback) pot sta în `.env`, cu un exemplu neutru în
-  `.env.example`.
-- Numele cheilor se stabilesc în T-1346 și se adaugă atunci în `.env.example`,
-  `compose.prod.yaml` și README.
+- Valorile publice stau în `.env`: `ANAF_CLIENT_ID`, `ANAF_REDIRECT_URI` și
+  `ANAF_ENVIRONMENT` (`test` implicit).
+- Client secret-ul și cheia tokenurilor sunt fișiere montate ca Docker secrets, ca
+  `api-token` și `pg-password`: în `.env` stau doar căile (`ANAF_CLIENT_SECRET_PATH`,
+  `ANAF_TOKEN_KEY_PATH`), aplicația le citește din `ANAF_CLIENT_SECRET_FILE` și
+  `ANAF_TOKEN_KEY_FILE`. Niciodată ca valori în mediu, în `.env`, în imagine sau în git.
+- Cheia tokenurilor (64 de caractere hex) o creează `scripts/init-secrets.sh`; secretul
+  clientului îl scrie operatorul, din portalul ANAF. Tokenurile ANAF stau doar în bază,
+  criptate cu acea cheie.
