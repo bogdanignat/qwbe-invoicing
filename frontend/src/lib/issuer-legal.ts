@@ -14,6 +14,8 @@
  * four may be empty — the profile is saveable before it is complete, and the
  * missing pieces are refused at issuance, not here.
  */
+import { formatDecimal, parseUnsignedDecimal } from "./money.ts"
+
 export type LegalValue =
   | { readonly kind: "ready"; readonly value: string }
   | { readonly kind: "issue"; readonly message: string }
@@ -27,7 +29,6 @@ export const BANK_NAME_MAX_CODE_POINTS = 120
 export const SOCIAL_CAPITAL_MAX_DIGITS = 16
 /** The longest capital the field accepts: the digits, the point and two decimals. */
 export const SOCIAL_CAPITAL_MAX_LENGTH = SOCIAL_CAPITAL_MAX_DIGITS + 3
-const socialCapitalShape = new RegExp(`^(\\d{1,${String(SOCIAL_CAPITAL_MAX_DIGITS)}})(?:\\.(\\d{1,2}))?$`, "u")
 
 export const tradeRegistryValue = (input: string): LegalValue => {
   const value = input.trim().toUpperCase()
@@ -44,12 +45,11 @@ export const tradeRegistryValue = (input: string): LegalValue => {
 export const socialCapitalValue = (input: string): LegalValue => {
   const value = input.trim()
   if (value === "") return ready("")
-  const match = socialCapitalShape.exec(value)
-  if (match === null) {
+  const parsed = parseUnsignedDecimal(value, 2)
+  if (!parsed.ok || (value.split(".")[0] ?? "").length > SOCIAL_CAPITAL_MAX_DIGITS) {
     return issue(`Capitalul social trebuie să fie o sumă RON nenegativă, cu maximum ${String(SOCIAL_CAPITAL_MAX_DIGITS)} cifre întregi și 2 zecimale.`)
   }
-  const whole = (match[1] ?? "").replace(/^0+(?=\d)/u, "")
-  return ready(`${whole}.${(match[2] ?? "").padEnd(2, "0")}`)
+  return ready(formatDecimal(parsed.units, 2))
 }
 
 export const bankNameValue = (input: string): LegalValue => {

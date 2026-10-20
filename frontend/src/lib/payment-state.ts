@@ -1,5 +1,6 @@
 import type { CorrectionRef } from "./correction-state.ts"
 import { money } from "./format.ts"
+import { compareDecimal } from "./money.ts"
 import type { PaymentInput, PaymentStatus, PaymentSummary } from "./payment-models.ts"
 
 /**
@@ -14,7 +15,7 @@ export interface PaymentActionState {
 
 /** Only a well-formed, strictly positive balance (`"12.34"`) leaves room for a payment. */
 const hasPositiveBalance = (value: string): boolean =>
-  /^\d+\.\d{2}$/u.test(value) && BigInt(value.replace(".", "")) > 0n
+  /^\d+\.\d{2}$/u.test(value) && compareDecimal(value, "0") === 1
 
 export const paymentActionState = (summary: PaymentSummary): PaymentActionState => ({
   canRecordPayment: hasPositiveBalance(summary.remainingAmount),

@@ -3,6 +3,7 @@ import {
 } from "./model-decoder.ts"
 import { decodeBuyer, decodeUnitOfMeasure } from "./document-snapshot-decoders.ts"
 import type { Deleted, DraftInvoice, VatCategoryCode } from "./draft-models.ts"
+import { parseDecimal } from "./money.ts"
 
 /**
  * Decoding for the draft contract, on the same principles as the snapshot
@@ -35,11 +36,12 @@ export const canonicalVatTreatment = (
   vatCategoryCode: VatCategoryCode,
   vatExemptionReason: string | null,
 ): void => {
-  const numericRate = Number(rate)
-  if (!/^(?:0|[1-9]\d?|100)(?:\.\d{1,2})?$/.test(rate) || numericRate > 100) throw new Error("invalid rate")
+  // Hundredths of a percent, by the backend's grammar (cubes/invoicing/domain/validation.ts).
+  const parsed = /^(?:0|[1-9]\d?|100)(?:\.\d{1,2})?$/.test(rate) ? parseDecimal(rate, 2) : undefined
+  if (parsed?.ok !== true || parsed.units > 10_000n) throw new Error("invalid rate")
   const valid = vatCategoryCode === "S"
-    ? numericRate > 0 && vatExemptionReason === null && isTaxableVatCode(code)
-    : code === "RO_NON_VAT" && numericRate === 0 && vatExemptionReason === ARTICLE_310_EXEMPTION_REASON
+    ? parsed.units > 0n && vatExemptionReason === null && isTaxableVatCode(code)
+    : code === "RO_NON_VAT" && parsed.units === 0n && vatExemptionReason === ARTICLE_310_EXEMPTION_REASON
   if (!valid) throw new Error("invalid VAT treatment")
 }
 

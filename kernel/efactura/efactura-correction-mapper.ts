@@ -1,3 +1,4 @@
+import { compareDecimal, isCanonicalDecimal } from "../../cubes/invoicing/contracts/money.ts"
 import type { EFacturaDocument } from "../../cubes/invoicing/efactura/index.ts"
 import { EFacturaContractViolation, validateEFacturaDocument } from "../../cubes/invoicing/efactura/index.ts"
 import type { CorrectionDocument, DraftLine, IssuedInvoice, VatBreakdown } from "../../cubes/invoicing/index.ts"
@@ -13,11 +14,16 @@ import {
   seller,
 } from "./efactura-mapper-shared.ts"
 
+/** The sign is read and dropped on the text; a form the snapshot never holds is refused before anything reads its value. */
 const unnegate = (value: string, field: string, issues: Array<string>): string => {
-  if (value.startsWith("-")) return value.slice(1)
-  if (/^0+(?:\.0+)?$/.test(value)) return value
-  issues.push(`${field} is expected to be negative on a correction, got "${value}"`)
-  return value
+  const magnitude = value.startsWith("-") ? value.slice(1) : value
+  // Canonical at the scale the text carries, so "-02.0000" is never read as "-2.0000".
+  const canonical = !magnitude.startsWith("-") && isCanonicalDecimal(magnitude, magnitude.split(".")[1]?.length ?? 0)
+  if (!canonical) issues.push(`${field} is not a canonical decimal, got "${value}"`)
+  else if (magnitude === value && compareDecimal(value, "0") !== 0) {
+    issues.push(`${field} is expected to be negative on a correction, got "${value}"`)
+  }
+  return magnitude
 }
 
 const creditLine = (line: DraftLine, index: number, issues: Array<string>): DraftLine => {

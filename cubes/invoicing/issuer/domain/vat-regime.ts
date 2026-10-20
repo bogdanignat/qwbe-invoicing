@@ -1,4 +1,5 @@
 import { ValidationFailure } from "../../contracts/failures.ts"
+import { compareDecimal } from "../../contracts/money.ts"
 import type { DraftLine, VatConfiguration } from "../../domain/invoice.ts"
 import type { IssuerProfile, VatChange } from "./issuer.ts"
 import { validateVatTreatment } from "../../domain/validation.ts"
@@ -13,7 +14,7 @@ export type VatRegistration = VatRegistrationPeriod & (
   | { readonly registered: false; readonly nonVatBasis: "article_310" }
 )
 
-const sameRate = (left: string, right: string): boolean => Number(left) === Number(right)
+const sameRate = (left: string, right: string): boolean => compareDecimal(left, right) === 0
 
 const vatRegistrationOn = (
   configurations: ReadonlyArray<VatConfiguration>, date: string,

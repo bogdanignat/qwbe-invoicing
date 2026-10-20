@@ -11,6 +11,13 @@ void test("negates decimals symmetrically and keeps their scale", () => {
   assert.equal(negateDecimal("-0.00"), "0.00")
   assert.equal(negateDecimal("1.2500"), "-1.2500")
   assert.equal(negateDecimal("-0.0000"), "0.0000")
+  assert.equal(negateDecimal("0.0000"), "0.0000")
+  assert.equal(negateDecimal("-2.5000"), "2.5000")
+  assert.equal(negateDecimal("0.0001"), "-0.0001")
+  assert.equal(negateDecimal("-0.01"), "0.01")
+  assert.equal(negateDecimal("90071992547409.93"), "-90071992547409.93")
+  assert.equal(negateDecimal("-9007199254740993.0000"), "9007199254740993.0000")
+  for (const value of ["0.00", "-0.01", "1.2500", "12193263123451181.22"]) assert.equal(negateDecimal(negateDecimal(value)), value)
 })
 
 void test("validates correction input: original invoice, reason length and calendar date", () => {

@@ -1,3 +1,5 @@
+import { parseDecimal } from "./money.ts"
+
 /**
  * The vertical scale of the revenue chart, as a pure function of the amounts.
  *
@@ -23,13 +25,15 @@ export interface ChartScale {
 
 const TARGET_INTERVALS = 4
 
-/** `"-172.50"` → `-17250`. The decoder already refused anything else. */
+/**
+ * `"-172.50"` → `-17250`. The decoder already refused anything else. The chart
+ * draws with `number`, exact up to 2^53 bani (about 90 trillion lei); past that a
+ * bar is off by a few bani of height, while every amount shown stays the string.
+ */
 export const minorUnits = (amount: string): number => {
-  const negative = amount.startsWith("-")
-  const digits = (negative ? amount.slice(1) : amount).replace(".", "")
-  const value = Number(BigInt(digits))
-  // `0 - value`, not `-value`: "-0.00" is zero, never the float −0.
-  return negative ? 0 - value : value
+  const parsed = parseDecimal(amount, 2)
+  if (!parsed.ok) throw new SyntaxError(`invalid amount ${JSON.stringify(amount)}`)
+  return Number(parsed.units)
 }
 
 /** The smallest of 1, 2, 5 × 10ⁿ that is at least `raw`, never below one minor unit. */

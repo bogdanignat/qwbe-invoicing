@@ -11,6 +11,10 @@ void test("amounts become exact minor units, sign included", () => {
   assert.equal(minorUnits("-172.00"), -17200)
   assert.equal(minorUnits("-0.05"), -5)
   assert.ok(Object.is(minorUnits("-0.00"), 0))
+  // Past 2^53 bani (about 90 trillion lei) the chart's numbers stop being exact.
+  assert.equal(minorUnits("90071992547409.91"), 9007199254740991)
+  assert.equal(minorUnits("90071992547409.93"), 9007199254740992)
+  assert.equal(minorUnits("-90071992547409.93"), -9007199254740992)
 })
 
 void test("a positive series starts at zero and ends on a round tick above the maximum", () => {

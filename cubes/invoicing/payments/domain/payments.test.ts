@@ -1,7 +1,8 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import { calendarDate, formatMinor, moneyMinor } from "./payments.ts"
+import { ValidationFailure } from "../contracts/failures.ts"
+import { calendarDate, formatMinor, moneyMinor, validateRecordPaymentInput } from "./payments.ts"
 import { derivePaymentStatus } from "./settlement.ts"
 
 void test("formats the Romanian calendar day of an instant", () => {
@@ -24,4 +25,35 @@ void test("money in bani round-trips with its sign", () => {
   }
   assert.equal(moneyMinor("25.5"), 2550n)
   assert.throws(() => moneyMinor("-25.5"))
+})
+
+void test("reads a canonical amount signed and trimmed, and anything else as a strictly positive input", () => {
+  for (const [text, minor] of [[" -0.05 ", -5n], ["-0.00", 0n], ["007.50", 750n], ["-007.50", -750n], [" 25.5 ", 2550n],
+    ["25", 2500n], ["0.5", 50n], ["90071992547409.93", 9007199254740993n]] as const) {
+    assert.equal(moneyMinor(text), minor, text)
+  }
+  const refusal = (value: string): ReadonlyArray<string> => {
+    try { moneyMinor(value) } catch (error) { if (error instanceof ValidationFailure) return error.issues }
+    return []
+  }
+  for (const value of ["-25.5", "-1", "1.234", "-1.234", "+1.00", "1e2", ".5", "5.", "abc", ""]) {
+    assert.deepEqual(refusal(value), ["money must be a non-negative amount with at most two decimals"], value)
+  }
+  for (const value of ["0", "0.0", "00"]) assert.deepEqual(refusal(value), ["money must be greater than zero"], value)
+  for (const [minor, text] of [[-1n, "-0.01"], [-100n, "-1.00"], [-0n, "0.00"], [9007199254740993n, "90071992547409.93"],
+    [-9223372036854775808n, "-92233720368547758.08"]] as const) assert.equal(formatMinor(minor), text)
+  assert.equal(formatMinor(moneyMinor(" 007.5 ")), "7.50")
+})
+
+void test("a recorded payment amount is trimmed, positive and has at most two decimals, each fault named once", () => {
+  const base = { invoiceId: "invoice-1", amount: "10.00", currency: "RON", paymentDate: "2026-09-10", method: "bank_transfer" }
+  const issues = (amount: string): ReadonlyArray<string> => {
+    try { validateRecordPaymentInput({ ...base, amount }) } catch (error) { if (error instanceof ValidationFailure) return error.issues }
+    return []
+  }
+  for (const amount of [" 25.5 ", "25", "0.01", "007.50"]) assert.deepEqual(issues(amount), [], amount)
+  for (const amount of ["0", "0.00", " 0.0 "]) assert.deepEqual(issues(amount), ["amount must be greater than zero"], amount)
+  for (const amount of ["-1.00", "-0.00", "1.234", "1.", ".5", "+1", "1e2", "1,00", ""]) {
+    assert.deepEqual(issues(amount), ["amount must be a non-negative amount with at most two decimals"], amount)
+  }
 })

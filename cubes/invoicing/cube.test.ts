@@ -4,7 +4,7 @@ import test from "node:test"
 import { HttpApiGroup } from "@effect/platform"
 
 import { cube } from "./index.ts"
-import { invoicingMigrations } from "./contracts/migrations.ts"
+import { invoicingMigrations } from "./contracts/index.ts"
 
 void test("exports a minimal authenticated QWBE cube definition", () => {
   assert.equal(cube.manifest.name, "invoicing")

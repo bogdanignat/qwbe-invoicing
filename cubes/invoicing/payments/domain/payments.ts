@@ -1,3 +1,4 @@
+import { formatDecimal, parseDecimal, parseUnsignedDecimal } from "../../contracts/money.ts"
 import { ValidationFailure } from "../contracts/failures.ts"
 
 // Same rule as the invoicing cube: the fiscal "today" is the Romanian calendar day, not UTC.
@@ -47,12 +48,12 @@ export interface RecordPaymentInput {
   readonly note?: string
 }
 
+/** An amount typed in: trimmed, unsigned, at most two decimals and strictly positive. */
 const parseMoneyMinor = (value: string, field: string): bigint => {
-  const match = /^(\d+)(?:\.(\d{1,2}))?$/.exec(value.trim())
-  if (match === null) throw new ValidationFailure({ issues: [`${field} must be a non-negative amount with at most two decimals`] })
-  const total = BigInt(match[1] ?? "0") * 100n + BigInt((match[2] ?? "").padEnd(2, "0") || "0")
-  if (total <= 0n) throw new ValidationFailure({ issues: [`${field} must be greater than zero`] })
-  return total
+  const parsed = parseUnsignedDecimal(value.trim(), 2)
+  if (!parsed.ok) throw new ValidationFailure({ issues: [`${field} must be a non-negative amount with at most two decimals`] })
+  if (parsed.units <= 0n) throw new ValidationFailure({ issues: [`${field} must be greater than zero`] })
+  return parsed.units
 }
 const validateDate = (value: string, field: string): void => {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
@@ -88,12 +89,8 @@ export const validateReversePaymentInput = (input: ReversePaymentInput): void =>
 }
 /** A canonical amount ("12.50", "-0.05") or a validated input amount, in bani. */
 export const moneyMinor = (value: string): bigint => {
-  const match = /^(-?)(\d+)\.(\d{2})$/.exec(value.trim())
-  if (match === null) return parseMoneyMinor(value, "money")
-  const minor = BigInt(match[2] ?? "0") * 100n + BigInt(match[3] ?? "0")
-  return match[1] === "-" ? -minor : minor
+  const text = value.trim()
+  const parsed = parseDecimal(text, 2)
+  return parsed.ok && /\.\d{2}$/u.test(text) ? parsed.units : parseMoneyMinor(value, "money")
 }
-export const formatMinor = (value: bigint): string => {
-  const digits = (value < 0n ? -value : value).toString().padStart(3, "0")
-  return `${value < 0n ? "-" : ""}${digits.slice(0, -2)}.${digits.slice(-2)}`
-}
+export const formatMinor = (value: bigint): string => formatDecimal(value, 2)

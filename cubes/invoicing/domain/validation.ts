@@ -1,15 +1,22 @@
 import { ValidationFailure } from "../contracts/failures.ts"
+import { parseDecimal } from "../contracts/money.ts"
 import type { DocumentSeries, DocumentSource } from "./invoice.ts"
 
 export const maximumPaymentTermDays = 3650
 export const article310VatExemptionReason = "Regim special de scutire conform art. 310 din Codul fiscal"
 
+/** A rate in hundredths of a percent, from 0 to 100 with at most two decimals, written without padding. */
+const ratePercent = (rate: string): bigint | undefined => {
+  const parsed = /^(?:0|[1-9]\d?|100)(?:\.\d{1,2})?$/.test(rate) ? parseDecimal(rate, 2) : undefined
+  return parsed?.ok === true ? parsed.units : undefined
+}
+
 export const validateVatTreatment = (code: string, rate: string, category: string, reason: string | null): void => {
-  const amount = /^(?:0|[1-9]\d?|100)(?:\.\d{1,2})?$/.test(rate) ? Number(rate) : NaN
+  const percent = ratePercent(rate)
   const knownTaxable = ["RO_STANDARD", "RO_REDUCED", "RO_REDUCED_5"].includes(code)
   const valid = code === "RO_NON_VAT"
-    ? amount === 0 && category === "O" && reason === article310VatExemptionReason
-    : knownTaxable && amount > 0 && amount <= 100 && category === "S" && reason === null
+    ? percent === 0n && category === "O" && reason === article310VatExemptionReason
+    : knownTaxable && percent !== undefined && percent > 0n && percent <= 10_000n && category === "S" && reason === null
   if (!valid) throw new ValidationFailure({ issues: ["Invalid VAT tuple"] })
 }
 

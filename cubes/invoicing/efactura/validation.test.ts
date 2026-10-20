@@ -189,6 +189,44 @@ void test("refuses amounts that are negative or carry excess precision", () => {
   rejects(invoice({ lines: [{ ...standardLine, quantity: "0.0000" }] }), /quantity must be greater than zero/u)
 })
 
+void test("reads amounts exactly as written: no trim, no sign, leading zeros allowed, the issue named once", () => {
+  const issueOf = (document: EFacturaDocument): ReadonlyArray<string> =>
+    issues(document).filter((issue) => issue.startsWith("payableAmount"))
+  assert.deepEqual(issueOf(invoice({ payableAmount: "-121.00" })), ["payableAmount must be a non-negative decimal string, got \"-121.00\""])
+  for (const value of [" 121.00", "121.00 ", "+121.00", "1.21e2", ".5", "121.", "121,00", ""]) {
+    assert.deepEqual(issueOf(invoice({ payableAmount: value })), [`payableAmount must be a non-negative decimal string, got "${value}"`], value)
+  }
+  assert.deepEqual(issueOf(invoice({ payableAmount: "121.001" })), ["payableAmount carries more than 2 decimal places"])
+  assert.deepEqual(issues(invoice({ lines: [{ ...standardLine, quantity: "1.00001" }] }))
+    .filter((issue) => issue.includes("quantity")), ["lines[0].quantity carries more than 4 decimal places"])
+  validateEFacturaDocument(invoice({ payableAmount: "0121.00", taxInclusiveAmount: "121.0" }))
+})
+
+void test("rounds BR-CO-17 half up: just below, at and just above the half cent", () => {
+  const coIssues = (taxableAmount: string, taxAmount: string, inclusive: string): ReadonlyArray<string> => {
+    try {
+      validateEFacturaDocument(invoice({
+        lines: [{ ...standardLine, netAmount: taxableAmount, unitPrice: taxableAmount }],
+        taxSubtotals: [{ taxableAmount, taxAmount, category: "S", percent: "21.00", exemptionReason: null, exemptionReasonCode: null }],
+        lineExtensionAmount: taxableAmount, taxExclusiveAmount: taxableAmount, taxAmount,
+        taxInclusiveAmount: inclusive, payableAmount: inclusive,
+      }))
+      return []
+    } catch (error) {
+      assert.ok(error instanceof EFacturaContractViolation)
+      return error.issues
+    }
+  }
+  // 0.49 × 21% = 0.1029, 0.50 × 21% = 0.105, 0.55 × 21% = 0.1155.
+  assert.deepEqual(coIssues("0.49", "0.10", "0.59"), [])
+  assert.deepEqual(coIssues("0.50", "0.11", "0.61"), [])
+  assert.deepEqual(coIssues("0.55", "0.12", "0.67"), [])
+  for (const [taxable, tax, inclusive] of [["0.49", "0.11", "0.60"], ["0.50", "0.10", "0.60"], ["0.55", "0.11", "0.66"]] as const) {
+    assert.deepEqual(coIssues(taxable, tax, inclusive),
+      ["taxSubtotals[0].taxAmount is not the taxable amount times the rate, rounded half up (BR-CO-17)"], taxable)
+  }
+})
+
 void test("holds a credit note to its own shape: a reference, and no due date", () => {
   rejects(invoice({ kind: "credit_note", dueDate: null, precedingInvoice: null }), /BG-3/u)
   rejects(invoice({ kind: "credit_note", dueDate: "2026-10-17", precedingInvoice: { id: "QWBE 41", issueDate: "2026-09-01" } }), /BT-9/u)

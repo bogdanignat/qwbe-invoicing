@@ -340,3 +340,25 @@ void test("leaves a taxed document exactly as it was", () => {
   assert.equal(mapped.buyer.vatIdentifier, "RO87654329")
   assert.deepEqual(mapCorrection(correction, invoice).notes, ["Stornare integrală: servicii nelivrate"])
 })
+
+const unsignedZeroOf = (zero: string): CorrectionDocument => ({ ...article310Correction,
+  lines: article310Correction.lines.map((corrected) => ({ ...corrected, vatAmount: zero })),
+  vatBreakdown: article310Correction.vatBreakdown.map((group) => ({ ...group, vatAmount: zero })), vatTotal: zero })
+
+void test("reads the sign of a correction amount from its text and refuses a form that only parses alike", () => {
+  const withLine = (patch: Partial<DraftLine>): CorrectionDocument =>
+    ({ ...correction, lines: correction.lines.map((corrected) => ({ ...corrected, ...patch })) })
+  refuses(() => mapCorrection(withLine({ vatAmount: "63.00" }), invoice),
+    /^lines\[0\]\.vatAmount is expected to be negative on a correction, got "63\.00"$/u)
+  for (const quantity of ["-02.0000", "-2.00000", "-2", "--2.0000", "-+2.0000", "- 2.0000"]) {
+    assert.throws(() => mapCorrection(withLine({ quantity }), invoice), EFacturaContractViolation, quantity)
+  }
+  for (const quantity of ["-02.0000", "--2.0000", "-+2.0000", "- 2.0000", "-2.", "-", "02.0000"]) {
+    refuses(() => mapCorrection(withLine({ quantity }), invoice),
+      new RegExp(`^lines\\[0\\]\\.quantity is not a canonical decimal, got "${quantity.replace(/[.+]/gu, "\\$&")}"$`, "u"))
+  }
+  refuses(() => mapCorrection({ ...correction, vatTotal: "-063.00" }, invoice), /^vatTotal is not a canonical decimal, got "-063\.00"$/u)
+  refuses(() => mapCorrection(unsignedZeroOf("00.00"), article310Invoice), /is not a canonical decimal, got "00\.00"$/u)
+  assert.equal(mapCorrection(unsignedZeroOf("0.00"), article310Invoice).taxAmount, "0.00")
+  assert.equal(mapCorrection(article310Correction, article310Invoice).taxAmount, "0.00")
+})

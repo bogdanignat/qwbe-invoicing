@@ -24,6 +24,12 @@ void test("a balance that is not a well-formed positive amount closes the form",
   for (const remaining of ["-1.00", "1", "1.0", "", "abc", "1,00"]) {
     assert.equal(paymentActionState(summary("unpaid", remaining)).canRecordPayment, false, remaining)
   }
+  for (const remaining of [" 1.00", "1.00 ", "+1.00", "-0.00", "0.00", "00.00", "1.001"]) {
+    assert.equal(paymentActionState(summary("unpaid", remaining)).canRecordPayment, false, remaining)
+  }
+  for (const remaining of ["01.00", "90071992547409.93"]) {
+    assert.equal(paymentActionState(summary("unpaid", remaining)).canRecordPayment, true, remaining)
+  }
 })
 
 void test("identifies overpayment and closes the form with it", () => {

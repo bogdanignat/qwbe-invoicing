@@ -71,6 +71,17 @@ void test("issuance guard permits mixed standard/reduced lines and rejects stale
     error instanceof ValidationFailure && error.issues.includes("VAT pair RO_STANDARD/21.00 requires a VAT-registered issuer on 2026-01-01"))
 })
 
+void test("issuance matches a line's rate to the catalogue by value, not by its text", () => {
+  const registered = issuer(scheduleVatRegistration([], { registered: true, effectiveFrom: "2025-08-01" }))
+  for (const rate of ["21", "21.0", "21.00"]) {
+    assert.doesNotThrow(() => { validateVatForIssuance(registered, "2026-01-01", [taxableLine("RO_STANDARD", rate)]) }, rate)
+  }
+  for (const rate of ["21.01", "20.99", "11"]) {
+    assert.throws(() => { validateVatForIssuance(registered, "2026-01-01", [taxableLine("RO_STANDARD", rate)]) }, (error) =>
+      error instanceof ValidationFailure && error.issues.includes(`VAT pair RO_STANDARD/${rate} is not supported on 2026-01-01`), rate)
+  }
+})
+
 void test("requires explicit article 310 before same-state early return and rejects corrupted tuples", () => {
   const nonVat = scheduleVatRegistration([], { registered: false, effectiveFrom: "2025-08-01", nonVatBasis: "article_310" })
   assert.throws(() => { scheduleVatRegistration(nonVat, { registered: false, effectiveFrom: "2026-01-01" } as never) }, ValidationFailure)

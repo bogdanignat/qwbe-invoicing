@@ -1,3 +1,4 @@
+import { divideHalfUp } from "../contracts/money.ts"
 import type { EFacturaLine, EFacturaTaxSubtotal, EFacturaVatCategory } from "./contracts/document.ts"
 import { amountOrSkip, characterCount, normalizeSpace, scaled } from "./decimals.ts"
 
@@ -42,7 +43,7 @@ const percentage = (value: string | null, category: EFacturaVatCategory, where: 
 /** BR-CO-17 — the category tax amount is the taxable amount times the rate,
  * rounded half up to two decimals. Integer arithmetic throughout: the whole
  * point of the rule is the last cent. */
-const expectedTax = (base: bigint, percent: bigint): bigint => (2n * base * percent + 10_000n) / 20_000n
+const expectedTax = (base: bigint, percent: bigint): bigint => divideHalfUp(base * percent, 10_000n)
 
 /** BR-CO-17 for `S`, and BR-E-09 / BR-O-09 for the categories that must not
  * carry any VAT at all. */

@@ -1,17 +1,9 @@
 import type { EditableInvoiceLine } from "./invoice-authoring-model.ts"
-
-const decimal = (value: string): number | undefined => {
-  const trimmed = value.trim()
-  if (!/^-?\d+(?:\.\d+)?$/.test(trimmed)) return undefined
-  const parsed = Number(trimmed)
-  return Number.isFinite(parsed) ? parsed : undefined
-}
+import { compareDecimal, divideHalfUp, parseUnsignedDecimal } from "./money.ts"
 
 const nonNegativeScaled = (value: string, scale: number): bigint | undefined => {
-  const match = /^(\d+)(?:\.(\d+))?$/.exec(value.trim())
-  if (match === null || (match[2]?.length ?? 0) > scale) return undefined
-  return BigInt(match[1] ?? "0") * 10n ** BigInt(scale)
-    + BigInt((match[2] ?? "").padEnd(scale, "0"))
+  const parsed = parseUnsignedDecimal(value.trim(), scale)
+  return parsed.ok ? parsed.units : undefined
 }
 
 /**
@@ -28,13 +20,14 @@ export const positiveInvoiceRequiresDueDate = (
   lines: ReadonlyArray<Pick<EditableInvoiceLine, "quantity" | "unitPrice">> = [],
 ): boolean => {
   if (dueDate !== null && dueDate !== "") return false
-  const total = totalIncludingVat === undefined ? undefined : decimal(totalIncludingVat)
-  if (total !== undefined) return total > 0
+  // The server's total is read at whatever precision it carries, so "0.001" is positive.
+  const sign = totalIncludingVat === undefined ? undefined : compareDecimal(totalIncludingVat.trim(), "0")
+  if (sign !== undefined) return sign > 0
   return lines.some((line) => {
     const quantity = nonNegativeScaled(line.quantity, 4)
     const unitPrice = nonNegativeScaled(line.unitPrice, 2)
     return quantity !== undefined
       && unitPrice !== undefined
-      && (quantity * unitPrice + 5_000n) / 10_000n > 0n
+      && divideHalfUp(quantity * unitPrice, 10_000n) > 0n
   })
 }

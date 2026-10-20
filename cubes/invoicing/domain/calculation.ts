@@ -1,31 +1,19 @@
 import { ValidationFailure } from "../contracts/failures.ts"
+import { divideHalfUp, formatDecimal, parseUnsignedDecimal } from "../contracts/money.ts"
 import type { DraftInvoice, DraftLine, VatBreakdown, VatConfiguration } from "./invoice.ts"
 import { normalizeUnitOfMeasure, type UnitOfMeasure } from "./unit-of-measures.ts"
 import { validateVatTreatment } from "./validation.ts"
 
 const parseScaled = (value: string, scale: number, field: string): bigint => {
-  const match = /^(\d+)(?:\.(\d+))?$/.exec(value.trim())
-  if (match === null) throw new ValidationFailure({ issues: [`${field} must be a non-negative decimal`] })
-  const fraction = match[2] ?? ""
-  if (fraction.length > scale) {
-    throw new ValidationFailure({ issues: [`${field} supports at most ${String(scale)} decimal places`] })
-  }
-  return BigInt(match[1] ?? "0") * 10n ** BigInt(scale)
-    + BigInt(fraction.padEnd(scale, "0") || "0")
-}
-
-const divideHalfUp = (numerator: bigint, denominator: bigint): bigint =>
-  (numerator + denominator / 2n) / denominator
-
-const formatScaled = (value: bigint, scale: number): string => {
-  const divisor = 10n ** BigInt(scale)
-  const whole = value / divisor
-  const fraction = (value % divisor).toString().padStart(scale, "0")
-  return scale === 0 ? whole.toString() : `${whole.toString()}.${fraction}`
+  const parsed = parseUnsignedDecimal(value.trim(), scale)
+  if (parsed.ok) return parsed.units
+  throw new ValidationFailure({ issues: [parsed.reason === "syntax"
+    ? `${field} must be a non-negative decimal`
+    : `${field} supports at most ${String(scale)} decimal places`] })
 }
 
 export const normalizeMoney = (value: string, field = "money"): string =>
-  formatScaled(parseScaled(value, 2, field), 2)
+  formatDecimal(parseScaled(value, 2, field), 2)
 
 export const calculateLine = (input: {
   readonly id: string
@@ -46,16 +34,16 @@ export const calculateLine = (input: {
   return {
     id: input.id,
     description: input.description.trim(),
-    quantity: formatScaled(quantity, 4),
-    unitPrice: formatScaled(unitPrice, 2),
+    quantity: formatDecimal(quantity, 4),
+    unitPrice: formatDecimal(unitPrice, 2),
     unitOfMeasure: normalizeUnitOfMeasure(input.unitOfMeasure),
     vatRateCode: input.vat.code,
-    vatRate: formatScaled(vatRate, 2),
+    vatRate: formatDecimal(vatRate, 2),
     vatCategoryCode: input.vat.vatCategoryCode,
     vatExemptionReason: input.vat.vatExemptionReason,
-    totalExcludingVat: formatScaled(net, 2),
-    vatAmount: formatScaled(vat, 2),
-    totalIncludingVat: formatScaled(net + vat, 2),
+    totalExcludingVat: formatDecimal(net, 2),
+    vatAmount: formatDecimal(vat, 2),
+    totalIncludingVat: formatDecimal(net + vat, 2),
   }
 }
 
@@ -73,7 +61,7 @@ export const calculateTotals = (lines: ReadonlyArray<DraftLine>) => {
     const base = moneyToMinor(line.totalExcludingVat)
     totalExcludingVat += base
     // The zero beside O is a placeholder, so all O lines share one group.
-    const key = line.vatCategoryCode === "O" ? "O" : `${line.vatCategoryCode}:${formatScaled(parseScaled(line.vatRate, 2, "vatRate"), 2)}`
+    const key = line.vatCategoryCode === "O" ? "O" : `${line.vatCategoryCode}:${formatDecimal(parseScaled(line.vatRate, 2, "vatRate"), 2)}`
     const current = groups.get(key)
     if (current !== undefined && (current.line.vatRateCode !== line.vatRateCode
       || current.line.vatExemptionReason !== line.vatExemptionReason)) {
@@ -90,14 +78,14 @@ export const calculateTotals = (lines: ReadonlyArray<DraftLine>) => {
       rate: line.vatRate,
       vatCategoryCode: line.vatCategoryCode,
       vatExemptionReason: line.vatExemptionReason,
-      vatBaseAmount: formatScaled(base, 2),
-      vatAmount: formatScaled(vat, 2),
+      vatBaseAmount: formatDecimal(base, 2),
+      vatAmount: formatDecimal(vat, 2),
     }
   })
   return {
-    totalExcludingVat: formatScaled(totalExcludingVat, 2),
-    vatTotal: formatScaled(vatTotal, 2),
-    totalIncludingVat: formatScaled(totalExcludingVat + vatTotal, 2),
+    totalExcludingVat: formatDecimal(totalExcludingVat, 2),
+    vatTotal: formatDecimal(vatTotal, 2),
+    totalIncludingVat: formatDecimal(totalExcludingVat + vatTotal, 2),
     vatBreakdown,
   }
 }
