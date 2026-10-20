@@ -222,7 +222,7 @@ void test("a line carries its unit by name, its VAT treatment and its three amou
   assert.deepEqual(view.lines[0], {
     key: "line-1",
     description: "Abonament lunar",
-    quantity: "2 bucată (H87)",
+    quantity: "2 bucată",
     unitPrice: "500.00 RON",
     vat: "TVA 21.00%",
     totalExcludingVat: "1000.00 RON",

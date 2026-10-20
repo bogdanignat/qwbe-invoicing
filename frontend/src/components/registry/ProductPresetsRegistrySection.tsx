@@ -42,7 +42,7 @@ export const ProductPresetsRegistrySection = (props: ProductPresetsRegistrySecti
         <tbody>
           {props.rows.map((row) => <tr key={row.preset.id}>
             <td>{row.preset.description}</td>
-            <td>{row.preset.unitOfMeasure.name}<small>{row.preset.unitOfMeasure.code}</small></td>
+            <td>{row.preset.unitOfMeasure.name}</td>
             <td className="numeric">{money(row.preset.unitPrice, "RON")}</td>
             <td>{row.vatLabel}</td>
             <td><div className="draft-item-actions">

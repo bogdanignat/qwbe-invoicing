@@ -108,7 +108,7 @@ const customerView = (customer: BuyerSnapshot): PartyView => ({
 const lineView = (line: DocumentLine, currency: string): DocumentLineView => ({
   key: line.id,
   description: line.description,
-  quantity: `${line.quantity} ${line.unitOfMeasure.name} (${line.unitOfMeasure.code})`,
+  quantity: `${line.quantity} ${line.unitOfMeasure.name}`,
   unitPrice: money(line.unitPrice, currency),
   vat: vatTreatmentLabel({ vatCategoryCode: line.vatCategoryCode, rate: line.vatRate }),
   totalExcludingVat: money(line.totalExcludingVat, currency),
