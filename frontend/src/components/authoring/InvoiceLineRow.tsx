@@ -5,6 +5,7 @@ import { Input } from "../ui/Input.tsx"
 import { CIUS_TEXT_LIMITS } from "../../lib/cius-text-limits.ts"
 import { Select } from "../ui/Select.tsx"
 import { Button } from "../Button.tsx"
+import { UnitOfMeasureOptions } from "../UnitOfMeasureOptions.tsx"
 import { vatTreatmentLabel } from "../../lib/vat-snapshots.ts"
 
 interface InvoiceLineRowProps {
@@ -44,7 +45,7 @@ export const InvoiceLineRow = (props: InvoiceLineRowProps) => {
             if (selected !== undefined) props.onChange(line.key, { unitOfMeasure: selected })
           }}>
           <option value="" disabled>Alege U.M.</option>
-          {unitOfMeasures.map((unit) => <option key={unit.code} value={unit.code}>{unit.name} — {unit.code}</option>)}
+          <UnitOfMeasureOptions units={unitOfMeasures} />
         </Select>
       </Field>
       <Field label="Preț unitar fără TVA" required>

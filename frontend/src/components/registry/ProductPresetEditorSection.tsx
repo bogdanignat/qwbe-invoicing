@@ -1,4 +1,5 @@
 import { Button } from "../Button.tsx"
+import { UnitOfMeasureOptions } from "../UnitOfMeasureOptions.tsx"
 import { ErrorAlert } from "../AsyncState.tsx"
 import { Field } from "../ui/Field.tsx"
 import { Input } from "../ui/Input.tsx"
@@ -51,7 +52,7 @@ export const ProductPresetEditorSection = (props: ProductPresetEditorSectionProp
           <Select required disabled={pending} value={form.unitOfMeasureCode} {...aria("unitOfMeasure")}
             onChange={(event) => { props.onChange({ unitOfMeasureCode: event.currentTarget.value }) }}>
             <option value="" disabled>Alege unitatea</option>
-            {props.units.map((unit) => <option key={unit.code} value={unit.code}>{unit.name} ({unit.code})</option>)}
+            <UnitOfMeasureOptions units={props.units} />
           </Select>
           {refusal("unitOfMeasure")}
         </Field>
