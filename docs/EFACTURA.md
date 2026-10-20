@@ -655,8 +655,13 @@ stays empty. After a restore, reconnecting with the certificate uploads nothing.
   poate fi comunicata catre destinatar (BT-47-lipsa identificator)" did not come
   back as an error, so the answers are read exactly as for B2B. The same day an
   invoice to a company (`HINT 1`) went to `upload` and was accepted the same way.
-  Not yet tried on ANAF TEST: a storno to a private person (`CN` on `uploadb2c`)
-  and an invoice to a private person identified by a CNP.
+  The two other private-person cases were accepted the same way, also at the
+  first `stareMesaj` and with no `Errors`: an invoice to a private person
+  identified by a CNP (`HINT 3`, a synthetic valid CNP in BT-47) and the storno
+  of `HINT 2` (`HINT 4`, CreditNote 381 with `standard=CN` on `uploadb2c`, BT-47
+  `0000000000000`, billing reference `HINT 2`). Each ZIP again held the
+  submitted XML byte for byte, signed by `CN=ANAF TEST`, and the CNP did not
+  reach the stored errors, the audit or the logs.
 - The validator checks schema and Schematron. It does not check that the
   document states the truth: correct totals with the wrong VAT category pass.
 - Nothing has been sent to the production SPV yet; the documents below went to
