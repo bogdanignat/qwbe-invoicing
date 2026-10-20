@@ -1,8 +1,8 @@
-import { Button } from "../../Button.tsx"
-import { ErrorAlert } from "../../AsyncState.tsx"
-import { StatusNote } from "../../ui/StatusNote.tsx"
-import type { EFacturaConnectionModel } from "../../../hooks/use-efactura-connection.ts"
-import { badgeClass } from "../../../lib/invoice-register-projection.ts"
+import { Button } from "../Button.tsx"
+import { ErrorAlert } from "../AsyncState.tsx"
+import { StatusNote } from "../ui/StatusNote.tsx"
+import type { EFacturaConnectionModel } from "../../hooks/use-efactura-connection.ts"
+import { badgeClass } from "../../lib/invoice-register-projection.ts"
 
 /**
  * The ANAF e-Factura connection: the environment (set on the server, never

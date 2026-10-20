@@ -43,7 +43,7 @@ const assertIndex = (reply: EdgeReply, what: string): void => {
 void test("/ and every deep link answer index.html, no-store, with the security headers", async () => {
   await withUi(async (server) => {
     for (const path of ["/", "/index.html", "/app", "/unlock", "/invoices/abc", "/invoices/new", "/proformas/new",
-      "/proformas/p-1", "/drafts/customer%2F1", "/settings/integrations", "/does/not/exist", "/invoices?status=paid&status=overdue",
+      "/proformas/p-1", "/drafts/customer%2F1", "/integrations", "/does/not/exist", "/invoices?status=paid&status=overdue",
       "/assets", "/.vite/manifest.json"]) {
       assertIndex(await call(server, { path }), path)
     }

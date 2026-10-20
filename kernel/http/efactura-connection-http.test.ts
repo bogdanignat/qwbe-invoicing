@@ -41,7 +41,7 @@ void test("start sets the attempt cookie, the callback passes without a session 
 
       const callback = await raw(served, "GET", "/api/anaf/callback?code=LISTENER-CODE", { cookie: cookieOf(started) })
       assert.equal(callback.status, 303)
-      assert.equal(callback.headers.get("location"), "/settings/integrations?anaf=conectat")
+      assert.equal(callback.headers.get("location"), "/integrations?anaf=conectat")
       assert.equal(callback.headers.get("cache-control"), "no-store")
       assert.equal(callback.headers.get("referrer-policy"), "no-referrer")
       assert.deepEqual(callback.headers.getSetCookie(), ["qwbe_anaf_oauth=; Max-Age=0; Path=/api/anaf; HttpOnly; Secure; SameSite=Lax"])
@@ -51,9 +51,9 @@ void test("start sets the attempt cookie, the callback passes without a session 
         const refused = await raw(served, "GET", `/api/anaf/callback${query}`, headers)
         assert.equal(refused.status, 303)
         const location = refused.headers.get("location") ?? ""
-        assert.match(location, /^\/settings\/integrations\?anaf=[a-z_]+$/u)
+        assert.match(location, /^\/integrations\?anaf=[a-z_]+$/u)
         assert.ok(CALLBACK_OUTCOMES.some((outcome) => location.endsWith(`=${outcome}`)), location)
-        assert.notEqual(location, "/settings/integrations?anaf=conectat")
+        assert.notEqual(location, "/integrations?anaf=conectat")
       }
       assert.equal((await raw(served, "POST", "/api/anaf/callback", { origin: served.origin })).status, 405, "GET only")
 
@@ -76,7 +76,7 @@ void test("without the ANAF variables the status says so and start answers 409",
       const started = await served.call("POST", "/api/efactura/connection/start")
       assert.deepEqual([started.status, started.body], [409, { error: "DomainConflict", code: "efactura_not_configured" }])
       const callback = await raw(served, "GET", "/api/anaf/callback?code=x", { cookie: `qwbe_anaf_oauth=${"a".repeat(43)}` })
-      assert.equal(callback.headers.get("location"), "/settings/integrations?anaf=neconfigurat")
+      assert.equal(callback.headers.get("location"), "/integrations?anaf=neconfigurat")
     } finally {
       await served.close()
     }

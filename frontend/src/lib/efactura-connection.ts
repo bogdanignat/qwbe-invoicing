@@ -2,7 +2,7 @@ import { boolean, literal, nullableText, object } from "./model-decoder.ts"
 import { dateTime } from "./format.ts"
 
 /**
- * The ANAF connection as Setări → Integrări shows it (`GET /api/efactura/connection`).
+ * The ANAF connection as Integrări shows it (`GET /api/efactura/connection`).
  * The answer never holds a token: only the state, the environment, the CIF ANAF
  * proved and whether an attempt the user started never came back.
  */

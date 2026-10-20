@@ -24,14 +24,14 @@ void test("not sent and connected: the one button that sends", () => {
   assert.deepEqual([view.buttonLabel, view.canSubmit, view.reason, view.badgeLabel], ["Trimite în e-Factura", true, undefined, "Netrimisă"])
 })
 
-void test("not sent without a usable connection: disabled, and the reason names Setări → Integrări", () => {
+void test("not sent without a usable connection: disabled, and the reason names Integrări", () => {
   for (const connection of ["not_configured", "disconnected", "needs_reconnect", "loading", "unreadable"] as const) {
     const view = panelView("invoice", historyOf(null), connection)
     assert.equal(view.canSubmit, false, connection)
     assert.equal(view.buttonLabel, "Trimite în e-Factura")
     assert.ok(view.reason !== undefined && view.reason.length > 0, connection)
   }
-  assert.match(panelView("invoice", historyOf(null), "disconnected").reason ?? "", /Setări → Integrări/u)
+  assert.match(panelView("invoice", historyOf(null), "disconnected").reason ?? "", /din Integrări/u)
 })
 
 void test("„not known yet” only while the connection is read; a failed read says so instead", () => {

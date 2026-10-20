@@ -60,9 +60,9 @@ const CONNECTION_REASONS: Readonly<Record<ConnectionRead, string | undefined>> =
   connected: undefined,
   loading: "Starea conexiunii ANAF nu este cunoscută încă.",
   unreadable: "Starea conexiunii ANAF nu a putut fi citită, așa că documentul nu poate fi trimis acum.",
-  not_configured: "e-Factura nu este configurată pe server. Vezi Setări → Integrări.",
-  disconnected: "Aplicația nu este conectată la ANAF. Conectează-te cu certificatul din Setări → Integrări.",
-  needs_reconnect: "Conexiunea cu ANAF trebuie refăcută cu certificatul, din Setări → Integrări.",
+  not_configured: "e-Factura nu este configurată pe server. Vezi Integrări.",
+  disconnected: "Aplicația nu este conectată la ANAF. Conectează-te cu certificatul din Integrări.",
+  needs_reconnect: "Conexiunea cu ANAF trebuie refăcută cu certificatul, din Integrări.",
 }
 
 const noun = (kind: SubmittedKind): string => kind === "invoice" ? "factura" : "factura storno"

@@ -1,15 +1,15 @@
 import { ErrorAlert, Loading } from "../components/AsyncState.tsx"
-import { CompanyLookupCard } from "../components/settings/integrations/CompanyLookupCard.tsx"
-import { EFacturaCard } from "../components/settings/integrations/EFacturaCard.tsx"
+import { CompanyLookupCard } from "../components/integrations/CompanyLookupCard.tsx"
+import { EFacturaCard } from "../components/integrations/EFacturaCard.tsx"
 import { Page } from "../components/Page.tsx"
 import { PrivateScreen } from "../components/PrivateScreen.tsx"
-import { SettingsSectionsNav } from "../components/settings/SettingsSectionsNav.tsx"
+import { AppLink } from "../components/ui/AppLink.tsx"
 import { useAuthenticatedShell } from "../hooks/use-authenticated-shell.ts"
 import { useCompanyLookupSettings } from "../hooks/use-company-lookup-settings.ts"
 import { useEFacturaConnection } from "../hooks/use-efactura-connection.ts"
 
 /**
- * Setări → Integrări: company lookup and ANAF e-Factura, each only with its
+ * Integrări: company lookup and ANAF e-Factura, each only with its
  * plugin on. With both off the screen says so and asks nothing, since the
  * routes would answer `404`.
  */
@@ -19,11 +19,10 @@ export const IntegrationsView = () => {
   const eFactura = useEFacturaConnection()
   const { load } = model
   return <PrivateScreen shell={shell}>
-    <Page title="Integrări" eyebrow="Setări">
-      <SettingsSectionsNav current="integrations" />
+    <Page title="Integrări" eyebrow="Configurare">
       {shell.error === undefined ? null : <ErrorAlert error={shell.error} />}
       {load.kind === "off" && eFactura === undefined
-        ? <p className="status-note">Această instalare nu are integrări pornite. <a href="/settings">Înapoi la datele firmei</a></p>
+        ? <p className="status-note">Această instalare nu are integrări pornite. <AppLink href="/settings">Înapoi la datele firmei</AppLink></p>
         : null}
       <div className="grid gap-6">
         {eFactura === undefined ? null : <EFacturaCard model={eFactura} />}

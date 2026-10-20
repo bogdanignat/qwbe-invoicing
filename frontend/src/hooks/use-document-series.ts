@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useState } from "react"
 
 import { useAuth } from "./auth-context.ts"
+import { documentSeriesQuery, referenceQueryKeys } from "./reference-queries.ts"
 import { useInvoicingClients } from "./use-invoicing-clients.ts"
 import { registryLoad, registryReload, type RegistryLoad } from "../lib/registry-load.ts"
 import { sessionWrite } from "../lib/session-write.ts"
@@ -39,11 +40,7 @@ export const useDocumentSeries = (): DocumentSeriesModel => {
   const auth = useAuth()
   const clients = useInvoicingClients()
   const queryClient = useQueryClient()
-  const list = useQuery({
-    queryKey: ["document-series"],
-    enabled: auth.status === "authenticated",
-    queryFn: ({ signal }) => clients.reference.listDocumentSeries(signal),
-  })
+  const list = useQuery(documentSeriesQuery(clients.reference, auth.status === "authenticated"))
   const [form, setForm] = useState<DocumentSeriesForm>(newDocumentSeriesForm)
   const [issue, setIssue] = useState<RegistryEditorIssue<DocumentSeriesField> | undefined>(undefined)
   const [notice, setNotice] = useState<string | undefined>(undefined)
@@ -54,7 +51,7 @@ export const useDocumentSeries = (): DocumentSeriesModel => {
     },
     onSuccess: (created) => {
       if (created === undefined) return
-      void queryClient.invalidateQueries({ queryKey: ["document-series"] })
+      void queryClient.invalidateQueries({ queryKey: referenceQueryKeys.documentSeries })
       setNotice(documentSeriesNotice(created))
       setForm(newDocumentSeriesForm())
     },

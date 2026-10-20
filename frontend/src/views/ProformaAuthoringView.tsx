@@ -9,10 +9,9 @@ import { useProformaAuthoringPage } from "../hooks/use-proforma-authoring-page.t
 /**
  * The proforma authoring frame: prerequisites first, then the form.
  *
- * A missing proforma series is deliberately not one of these states — it is a
- * note beside a closed save inside the form, so the document can still be filled
- * while the series is added. What blocks here is what the form cannot be built
- * from at all: the issuer, the VAT catalogue and the units.
+ * Like the invoice screen, every missing prerequisite (the issuer, the VAT
+ * catalogue, the proforma series, the units) is said before the form, so the
+ * link to Setări never leaves a filled-in form behind.
  */
 export const ProformaAuthoringView = () => {
   const shell = useAuthenticatedShell()
@@ -25,9 +24,10 @@ export const ProformaAuthoringView = () => {
     >
       {page.kind === "loading" ? <Loading label="Se pregătește formularul…" />
         : page.kind === "error" ? <ErrorAlert error={page.error} onRetry={page.retry} />
-        : page.kind === "issuer-required" ? <p className="setup-note">Nu există încă un profil de emitent. Configurează firma emitentă (datele firmei și seriile de documente) în aplicația existentă, apoi revino aici.</p>
-        : page.kind === "vat-catalogue-empty" ? <p className="setup-note">Catalogul de regimuri TVA nu este disponibil. Verifică configurarea TVA a organizației în aplicația existentă, apoi reîncearcă.</p>
-        : page.kind === "unit-catalogue-empty" ? <p className="setup-note">Catalogul de unități de măsură este gol. Verifică configurarea organizației în aplicația existentă, apoi reîncearcă.</p>
+        : page.kind === "issuer-required" ? <p className="setup-note">Datele firmei emitente nu sunt completate. Completează-le în <AppLink href="/settings">Setări</AppLink>, împreună cu o serie pentru proforme, apoi revino aici.</p>
+        : page.kind === "vat-catalogue-empty" ? <p className="setup-note">Catalogul de regimuri TVA nu a venit de la server; nu se completează din aplicație. Reîncarcă pagina, iar dacă problema rămâne, verifică instalarea serverului.</p>
+        : page.kind === "proforma-series-required" ? <p className="setup-note">Nu există nicio serie pentru proforme. Adaug-o în <AppLink href="/settings">Setări</AppLink>, apoi revino aici.</p>
+        : page.kind === "unit-catalogue-empty" ? <p className="setup-note">Catalogul de unități de măsură a venit gol de la server; nu se completează din aplicație. Reîncarcă pagina, iar dacă problema rămâne, verifică instalarea serverului.</p>
         : <ProformaAuthoringSession {...page.session} />}
     </Page>
   </PrivateScreen>

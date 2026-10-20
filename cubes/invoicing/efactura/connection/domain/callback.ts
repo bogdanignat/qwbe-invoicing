@@ -10,7 +10,7 @@ export const CALLBACK_OUTCOMES = [
 ] as const
 export type CallbackOutcome = (typeof CALLBACK_OUTCOMES)[number]
 
-export const CALLBACK_TARGET_PATH = "/settings/integrations"
+export const CALLBACK_TARGET_PATH = "/integrations"
 
 export const callbackTarget = (outcome: CallbackOutcome): string => `${CALLBACK_TARGET_PATH}?anaf=${outcome}`
 

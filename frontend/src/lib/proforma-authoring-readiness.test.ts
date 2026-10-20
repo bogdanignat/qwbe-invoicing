@@ -34,7 +34,6 @@ void test("a complete proforma with a chosen series may be saved", () => {
 
   assert.equal(readiness.canSave, true)
   assert.equal(readiness.notesIssue, null)
-  assert.equal(readiness.seriesMissing, false)
   // The default form derives a due date from the issuer's payment terms.
   assert.equal(readiness.dueDateNote, null)
 })
@@ -81,10 +80,9 @@ void test("a zero-total proforma without a due date gets no note: nothing will b
   assert.equal(readiness.dueDateNote, null)
 })
 
-void test("an empty catalogue is reported as a missing series, not as a failure", () => {
+void test("a series outside the catalogue, or none at all, keeps the save closed", () => {
   const base = ready()
-  const readiness = proformaSaveReadiness({ ...base, seriesOptions: [], form: { ...base.form, series: "" } })
 
-  assert.equal(readiness.seriesMissing, true)
-  assert.equal(readiness.canSave, false)
+  assert.equal(proformaSaveReadiness({ ...base, seriesOptions: [], form: { ...base.form, series: "" } }).canSave, false)
+  assert.equal(proformaSaveReadiness({ ...base, seriesOptions: ["ALT"] }).canSave, false)
 })

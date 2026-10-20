@@ -1,9 +1,9 @@
-import { Button } from "../../Button.tsx"
-import { Field } from "../../ui/Field.tsx"
-import { Input } from "../../ui/Input.tsx"
-import type { OpenapiKeyEditor } from "../../../hooks/use-company-lookup-settings.ts"
-import { useFocusOnReturn } from "../../../hooks/use-focus-on-return.ts"
-import { keyStatus, type CompanyLookupSettings } from "../../../lib/company-lookup-settings.ts"
+import { Button } from "../Button.tsx"
+import { Field } from "../ui/Field.tsx"
+import { Input } from "../ui/Input.tsx"
+import type { OpenapiKeyEditor } from "../../hooks/use-company-lookup-settings.ts"
+import { useFocusOnReturn } from "../../hooks/use-focus-on-return.ts"
+import { keyStatus, type CompanyLookupSettings } from "../../lib/company-lookup-settings.ts"
 
 interface OpenapiKeyFieldProps {
   readonly settings: CompanyLookupSettings

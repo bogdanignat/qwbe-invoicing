@@ -250,7 +250,7 @@ Typing a company's details by hand is slow and error-prone. With the `company-lo
 plugin, the customer form, the one-time buyer on a document and the issuer settings
 propose them from the CUI:
 
-- **Settings → Integrations** has one switch per provider: **ANAF** (free, no key, CUI
+- **Integrations** (Integrări, its own menu entry) has one switch per provider: **ANAF** (free, no key, CUI
   only) and **openapi.ro** (needs the user's openapi.ro key, and also suggests companies
   by name). At most one is on; switching one on switches the other off; both may be off.
   openapi.ro cannot be switched on before its key is saved, and deleting the key switches

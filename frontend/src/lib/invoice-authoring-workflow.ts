@@ -50,7 +50,7 @@ export const authoringBackgroundErrors = (
 export const issuerIssuanceWarning = (
   issuer: Pick<Issuer, "legalForm" | "tradeRegistryNumber" | "socialCapital">,
 ): string | undefined => {
-  if (issuer.tradeRegistryNumber === "") return "Completează numărul de la Registrul Comerțului în setările firmei din aplicația existentă înainte de emitere."
-  if (issuer.legalForm === "srl" && issuer.socialCapital === "") return "Completează capitalul social în setările firmei din aplicația existentă înainte de emiterea pentru SRL."
+  if (issuer.tradeRegistryNumber === "") return "Completează numărul de la Registrul Comerțului în Setări, la datele firmei, înainte de emitere."
+  if (issuer.legalForm === "srl" && issuer.socialCapital === "") return "Completează capitalul social în Setări, la datele firmei, înainte de emiterea pentru SRL."
   return undefined
 }

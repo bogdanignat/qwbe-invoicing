@@ -109,7 +109,7 @@ a rewrite.
 - **Company lookup** (optional plugin `company-lookup`): the customer, one-time buyer and issuer
   forms propose a company's name, CUI, trade register number and address from its CUI, through
   ANAF (free, no key) or openapi.ro (with your key, which also suggests companies by name). The
-  provider is chosen in **Setări → Integrări**; at most one is on, and both may be off. A
+  provider is chosen in **Integrări**; at most one is on, and both may be off. A
   proposal is a card with a **Completează** button: nothing in the form changes without that
   click. The issuer's VAT regime is never changed from a lookup.
 - **Operations**: idempotent migrations, a `doctor` health report, artifact reconciliation,
@@ -487,7 +487,7 @@ the registration itself, step by step, in
    All four client values or none: a partial setup stops Compose or the application.
 5. **Restart**: `docker compose up -d` (with `COMPOSE_FILE` set, no `-f` is needed; the
    bundled Caddy also needs `COMPOSE_PROFILES=proxy`).
-6. **Connect** in **Setări → Integrări → ANAF e-Factura** with "Conectează cu
+6. **Connect** in **Integrări → ANAF e-Factura** with "Conectează cu
    certificatul": the certificate is chosen at ANAF, and the tokens stay in the backend,
    encrypted with the token key. Each invoice or storno is then sent with "Trimite în
    e-Factura" ([`docs/EFACTURA.md`](./docs/EFACTURA.md)).

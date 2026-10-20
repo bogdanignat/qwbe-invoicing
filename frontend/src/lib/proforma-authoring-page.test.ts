@@ -84,7 +84,7 @@ void test("a background refetch of data already held does not blank the form", (
   assert.equal(state.kind, "ready")
 })
 
-void test("the missing prerequisites are refused in order: issuer, then VAT, then units", () => {
+void test("the missing prerequisites are refused in order: issuer, then VAT, then series, then units", () => {
   const noIssuer = { ...ready, issuer: answered<Issuer | null>(null) }
 
   assert.equal(proformaAuthoringPageState(noIssuer).kind, "issuer-required")
@@ -94,17 +94,19 @@ void test("the missing prerequisites are refused in order: issuer, then VAT, the
     ...ready, vatCatalogue: { data: undefined, isPending: false, error: null },
   }).kind, "vat-catalogue-empty")
   assert.equal(proformaAuthoringPageState({ ...ready, units: answered<ReadonlyArray<UnitOfMeasure>>([]) }).kind, "unit-catalogue-empty")
+  const noSeries = { ...ready, series: answered<ReadonlyArray<DocumentSeries>>([]) }
+  assert.equal(proformaAuthoringPageState({ ...noSeries, units: answered<ReadonlyArray<UnitOfMeasure>>([]) }).kind, "proforma-series-required")
+  assert.equal(proformaAuthoringPageState({ ...noSeries, issuer: answered<Issuer | null>(null) }).kind, "issuer-required")
 })
 
 /**
- * A missing series is not a blocking state: the form opens and says so next to a
- * disabled save, because that is the one prerequisite the screen explains well.
+ * A missing series blocks before the form, as on the invoice screen: the note
+ * links to Setări, and nothing typed is left behind on the way there.
  */
-void test("no proforma series still opens the form, with an empty series list", () => {
+void test("no proforma series is its own state before the form; an invoice series does not stand for one", () => {
   const state = proformaAuthoringPageState({
     ...ready, series: answered<ReadonlyArray<DocumentSeries>>([{ organizationId: "org", documentType: "invoice", series: "FCT" }]),
   })
 
-  assert.equal(state.kind, "ready")
-  assert.deepEqual(state.proformaSeries, [])
+  assert.equal(state.kind, "proforma-series-required")
 })

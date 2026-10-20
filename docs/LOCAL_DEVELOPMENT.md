@@ -35,7 +35,7 @@ later run. Never regenerate `.local/pg-password` after the
 cluster exists (PostgreSQL keeps the first password and `migrate` then fails with
 `password authentication failed`), and never regenerate an existing `.local/api-token`.
 A new `.local/company-lookup-key` makes a stored openapi.ro key unreadable: the
-provider reads as off until the key is entered again in Setări → Integrări. A new
+provider reads as off until the key is entered again in Integrări. A new
 `.local/anaf-token-key` makes the stored ANAF tokens unreadable: e-Factura asks for the
 certificate again.
 To change the password, or to start over, see README, [Database
@@ -119,7 +119,7 @@ Every cube use-case is an `Effect` and has a 1:1 authenticated HTTP endpoint. Au
 - `POST /api/invoices/:id/payments` (record payment; requires `Idempotency-Key`) / `POST /api/invoices/:id/payments/:paymentId/reversal` (reverse one payment in full with an immutable counter-row; requires `Idempotency-Key`, optional `reason`) / `GET /api/invoices/:id/payments` (list payments with derived status `unpaid`/`partially_paid`/`paid`/`overpaid`/`overdue`, `paidAmount`/`remainingAmount`)
 - `POST /api/invoices/:id/corrections` (storno fiscal — creează document nou imuabil cu referință la factura originală, motiv obligatoriu; cantitate negativă, preț unitar pozitiv, totaluri negative; XML-ul e-Factura e CreditNote cu valori pozitive) / `GET /api/invoices/:id/corrections` / `GET /api/corrections/:id` — după emitere nu se mai editează factura, doar storno
 - Issued invoices have no `DELETE` endpoint and allocated invoice numbers are never reused; mistakes are handled through correction documents
-- `POST /api/efactura/connection/start` / `GET /api/anaf/callback` / `GET|DELETE /api/efactura/connection` — the ANAF OAuth connection of the `efactura` plugin (404 when it is off): start answers ANAF's `authorizeUrl` and sets the attempt cookie (`efactura:connection.manage`, 409 without the ANAF variables), the callback answers only a 303 to `/settings/integrations?anaf=<code>`, the status never carries a token (`efactura:read`); see docs/EFACTURA.md
+- `POST /api/efactura/connection/start` / `GET /api/anaf/callback` / `GET|DELETE /api/efactura/connection` — the ANAF OAuth connection of the `efactura` plugin (404 when it is off): start answers ANAF's `authorizeUrl` and sets the attempt cookie (`efactura:connection.manage`, 409 without the ANAF variables), the callback answers only a 303 to `/integrations?anaf=<code>`, the status never carries a token (`efactura:read`); see docs/EFACTURA.md
 - `GET|PUT /api/settings/company-lookup` (`settings.manage`; `provider` `none`/`anaf`/`openapi`, write-only `openapiKey`, `clearOpenapiKey`; answers only `openapiKeyLast4`) / `GET /api/company-lookup/availability` / `POST /api/company-lookup/lookup` `{cui}` / `POST /api/company-lookup/search` `{q}` — the `company-lookup` plugin (404 when it is off); a CUI under 4 digits or with a wrong check digit and a name under 6 letters answer 400 without asking ANAF or openapi.ro
 
 T-1069 proforma route inventory (seven authenticated routes):
@@ -206,7 +206,7 @@ On a new installation:
    Compose, and the application refuses a partial or malformed setup at startup (all four
    client values or none; the redirect URI must be `https://<PUBLIC_ORIGIN host>/api/anaf/callback`;
    the token key must differ from the company-lookup key).
-6. **Connect** in Setări → Integrări → ANAF e-Factura with "Conectează cu certificatul"
+6. **Connect** in Integrări → ANAF e-Factura with "Conectează cu certificatul"
    (T-1346): the browser goes to ANAF, the certificate is chosen there, and ANAF sends it
    back to the callback. The tokens stay in the backend, encrypted with the token key.
    The flow, its codes and its residual

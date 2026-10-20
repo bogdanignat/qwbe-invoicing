@@ -33,12 +33,8 @@ export const CONVERSION_CONFIRM = "Emiți factura din această proformă? Liniil
 
 export const CONVERSION_DUE_DATE_ISSUE = "Proforma are total pozitiv și nu are scadență. Creează un draft și completează scadența înainte de emiterea facturii."
 
-/**
- * Stated without a link on purpose: the series are configured on a screen this
- * frontend does not have yet, and pointing at a route that answers 404 would be
- * worse than naming the setup.
- */
-export const CONVERSION_SERIES_MISSING = "Nu există nicio serie de facturi configurată. Adaugă o serie pentru facturi în aplicația existentă, apoi revino aici."
+/** Text only: `ProformaConversionSection` puts the link to Setări next to it. */
+export const CONVERSION_SERIES_MISSING = "Nu există nicio serie pentru facturi. Adaug-o din Setări, apoi revino aici."
 
 /** The terms a conversion is judged by, which is all the fiscal rule below needs to know. */
 export interface ConversionTerms {

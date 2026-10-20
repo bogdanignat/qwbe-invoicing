@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query"
 import { useState } from "react"
 
 import { useAuth } from "./auth-context.ts"
+import { issuerQuery } from "./reference-queries.ts"
 import { useInvoicingClients } from "./use-invoicing-clients.ts"
 import { brandingActions, useIssuerBranding, type IssuerBrandingModel } from "./use-issuer-branding.ts"
 import { useIssuerSave } from "./use-issuer-save.ts"
@@ -61,9 +62,7 @@ export const useIssuerSettings = (): IssuerSettingsModel => {
   const { status } = useAuth()
   const clients = useInvoicingClients()
   const enabled = status === "authenticated"
-  const issuerQuery = useQuery({
-    queryKey: ["issuer"], enabled, queryFn: ({ signal }) => clients.reference.getIssuer(signal),
-  })
+  const issuerRead = useQuery(issuerQuery(clients.reference, enabled))
   const vatQuery = useQuery({
     queryKey: ["vat-regimes"], enabled, queryFn: ({ signal }) => clients.reference.getVatCatalogue(signal),
   })
@@ -77,7 +76,7 @@ export const useIssuerSettings = (): IssuerSettingsModel => {
   // Whether the VAT checkbox was answered during this edit. It is the only thing
   // that unlocks the save on a profile whose stored regime cannot be read.
   const [vatChosen, setVatChosen] = useState(false)
-  const issuer = issuerQuery.data ?? null
+  const issuer = issuerRead.data ?? null
   const editedBranding = useIssuerBranding(issuer?.branding ?? null, editGuard)
 
   // The regime is read against the date in Bucharest, and derived from the stored
@@ -129,13 +128,13 @@ export const useIssuerSettings = (): IssuerSettingsModel => {
   }
 
   const load = registryLoad([
-    ["issuer", { data: issuerQuery.data, isPending: issuerQuery.isPending, error: issuerQuery.error }],
+    ["issuer", { data: issuerRead.data, isPending: issuerRead.isPending, error: issuerRead.error }],
     ["vat", { data: vatQuery.data, isPending: vatQuery.isPending, error: vatQuery.error }],
   ])
   return {
     load,
     retry: registryReload(load, {
-      issuer: () => { void issuerQuery.refetch() },
+      issuer: () => { void issuerRead.refetch() },
       vat: () => { void vatQuery.refetch() },
     }),
     form,

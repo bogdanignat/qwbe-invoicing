@@ -295,7 +295,7 @@ HTTP); its rows in `efactura_connections` and `efactura_oauth_attempts`.
 | Route | Grant | What it does |
 | --- | --- | --- |
 | `POST /api/efactura/connection/start` | `efactura:connection.manage`, session + CSRF | a new attempt; answers ANAF's `authorize` URL and sets the attempt cookie; `409 efactura_not_configured` without the ANAF variables, `409 efactura_issuer_cif_invalid` when the issuer has no CIF the SPV can check |
-| `GET /api/anaf/callback` | none: the attempt cookie | ANAF's redirect; always `303` to `/settings/integrations?anaf=<code>` |
+| `GET /api/anaf/callback` | none: the attempt cookie | ANAF's redirect; always `303` to `/integrations?anaf=<code>` |
 | `GET /api/efactura/connection` | `efactura:read` | `not_configured`, `disconnected`, `connected` or `needs_reconnect`, the environment, the verified CIF, the refresh token's expiry, who connected and when, and whether your own attempt never came back. Never a token |
 | `DELETE /api/efactura/connection` | `efactura:connection.manage`, session + CSRF | a new generation, the tokens deleted; ANAF's `revoke` is asked after the commit, best effort |
 
@@ -533,7 +533,7 @@ each in the transaction of its transition; the dispatcher's actor is `efactura:d
 
 ### The interface
 
-Setări → Integrări → ANAF e-Factura (with the plugin on, even when it is the only
+Integrări → ANAF e-Factura (with the plugin on, even when it is the only
 integration) shows the environment as a label (`TEST` / `PRODUCȚIE`, never editable),
 the connection's state, the verified CIF, who connected and when, the refresh token's
 expiry with a warning 30 days before it, "Conectează cu certificatul" (a top-level

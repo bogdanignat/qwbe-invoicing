@@ -8,9 +8,9 @@ import { ApiFailure } from "./api-errors.ts"
  */
 const RETRY_SOON = "Reîncearcă peste un minut."
 const MESSAGES: ReadonlyMap<string, string> = new Map(Object.entries({
-  efactura_not_configured: "Serverul nu are configurată aplicația OAuth ANAF. Vezi Setări → Integrări.",
-  efactura_not_connected: "Aplicația nu este conectată la ANAF. Conectează-te cu certificatul din Setări → Integrări.",
-  efactura_issuer_cif_invalid: "Datele firmei nu au un CIF pe care ANAF să-l poată verifica. Corectează CIF-ul în Setări → Emitent.",
+  efactura_not_configured: "Serverul nu are configurată aplicația OAuth ANAF. Vezi Integrări.",
+  efactura_not_connected: "Aplicația nu este conectată la ANAF. Conectează-te cu certificatul din Integrări.",
+  efactura_issuer_cif_invalid: "Datele firmei nu au un CIF pe care ANAF să-l poată verifica. Corectează CIF-ul în Setări, la datele firmei.",
   efactura_cif_mismatch: "CIF-ul emitentului de pe document nu este CIF-ul pentru care a fost verificată conexiunea ANAF.",
   efactura_xml_too_large: "XML-ul documentului depășește limita ANAF de 10 MB.",
   efactura_not_unknown: "Trimiterea nu mai are starea „necunoscut” (a fost legată, retrimisă sau a avansat). Reîncarcă pagina.",

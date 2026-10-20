@@ -3,7 +3,7 @@ import type { ResourceSnapshot } from "./async-resource.ts"
 import { OPENAPI_NEEDS_KEY, type CompanyLookupSettings } from "./company-lookup-settings.ts"
 
 /**
- * What Setări → Integrări says when the backend refuses, in Romanian.
+ * What Integrări says when the backend refuses, in Romanian.
  *
  * The settings routes answer `settings.manage` with a `403`, whose shared
  * wording names a document; a `400` carries the domain's English issues

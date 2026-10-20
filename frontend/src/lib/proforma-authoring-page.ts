@@ -8,10 +8,10 @@ import type { DocumentSeries, Issuer, UnitOfMeasure, VatCatalogue } from "./draf
  *
  * It is pure so the order of the refusals is a tested fact rather than a
  * reading of hook code: the issuer first (without it there is no document at
- * all), then the VAT catalogue, then the units. The series is deliberately not
- * a blocking state — an organization with no proforma series still gets the
- * form, with a note next to a disabled save — because that is the one
- * prerequisite the screen itself explains well.
+ * all), then the VAT catalogue, then the proforma series, then the units — the
+ * invoice screen's order. A missing series blocks before the form, like the
+ * invoice's: its note links to Setări, and a form already filled in would be
+ * lost on the way there.
  */
 export type ProformaAuthoringResource = "issuer" | "vat-catalogue" | "series" | "units"
 
@@ -32,6 +32,7 @@ export type ProformaAuthoringPageState =
   | { readonly kind: "error"; readonly error: Error; readonly reload: ReadonlyArray<ProformaAuthoringResource> }
   | { readonly kind: "issuer-required" }
   | { readonly kind: "vat-catalogue-empty" }
+  | { readonly kind: "proforma-series-required" }
   | { readonly kind: "unit-catalogue-empty" }
   | {
     readonly kind: "ready"
@@ -64,13 +65,15 @@ export const proformaAuthoringPageState = (input: ProformaAuthoringPageInput): P
   if (issuer === null || issuer === undefined) return { kind: "issuer-required" }
   const vatCatalogue = input.vatCatalogue.data
   if (vatCatalogue === undefined) return { kind: "vat-catalogue-empty" }
+  const proformaSeries = authoringSeriesOptions(input.series.data ?? [], "proforma")
+  if (proformaSeries.length === 0) return { kind: "proforma-series-required" }
   const unitOfMeasures = input.units.data ?? []
   if (unitOfMeasures.length === 0) return { kind: "unit-catalogue-empty" }
   return {
     kind: "ready",
     issuer,
     vatCatalogue,
-    proformaSeries: authoringSeriesOptions(input.series.data ?? [], "proforma"),
+    proformaSeries,
     unitOfMeasures,
   }
 }

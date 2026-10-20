@@ -2,7 +2,7 @@ import { parseSearch, stringifySearch } from "./search-params.ts"
 
 /**
  * The code ANAF's callback leaves in `?anaf=` (`GET /api/anaf/callback`, always
- * a 303 to `/settings/integrations?anaf=<code>`), as Setări → Integrări says it.
+ * a 303 to `/integrations?anaf=<code>`), as Integrări says it.
  * The query is shown once and then dropped from the address, so a refresh or a
  * bookmark never repeats an outcome that is no longer current.
  */

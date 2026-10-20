@@ -1,7 +1,7 @@
 import { OpenapiKeyField } from "./OpenapiKeyField.tsx"
 import { ProviderSwitches } from "./ProviderSwitches.tsx"
-import type { CompanyLookupSettingsModel } from "../../../hooks/use-company-lookup-settings.ts"
-import type { CompanyLookupSettings } from "../../../lib/company-lookup-settings.ts"
+import type { CompanyLookupSettingsModel } from "../../hooks/use-company-lookup-settings.ts"
+import type { CompanyLookupSettings } from "../../lib/company-lookup-settings.ts"
 
 interface CompanyLookupCardProps {
   readonly model: CompanyLookupSettingsModel

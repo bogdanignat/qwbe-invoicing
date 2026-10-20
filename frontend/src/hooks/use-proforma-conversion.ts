@@ -2,6 +2,7 @@ import { useMutation, useQuery } from "@tanstack/react-query"
 import { useState } from "react"
 
 import { useAuth } from "./auth-context.ts"
+import { documentSeriesQuery } from "./reference-queries.ts"
 import { useAuthoringRecovery } from "./use-authoring-recovery.ts"
 import { useInvoicingClients } from "./use-invoicing-clients.ts"
 import { useProformaConversionController } from "./use-proforma-conversion-controller.ts"
@@ -67,11 +68,7 @@ export const useProformaConversion = (proforma: Proforma | undefined): ProformaC
   // The catalogue is only read while a conversion is still possible: a proforma
   // that already became a document offers a link, not a series.
   const outcome = proformaConversionOutcomeOf(proforma)
-  const series = useQuery({
-    queryKey: ["document-series"],
-    enabled: auth.status === "authenticated" && outcome.kind === "available",
-    queryFn: ({ signal }) => clients.reference.listDocumentSeries(signal),
-  })
+  const series = useQuery(documentSeriesQuery(clients.reference, auth.status === "authenticated" && outcome.kind === "available"))
   const seriesOptions = authoringSeriesOptions(series.data ?? [], "invoice")
   const selectedSeries = effectiveInvoiceSeries(seriesOptions, selected)
   const mutation = useMutation({

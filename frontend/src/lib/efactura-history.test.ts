@@ -44,7 +44,7 @@ void test("a queued submission's wait codes read as sentences; ANAF's own messag
   const queued: EFacturaSubmission = { ...base, state: "queued", uploadIndex: null, archiveState: "none", errors: ["neconectat", "conexiune_alt_cif"] }
   const [row] = historyRows({ current: queued, submissions: [queued], resubmissions: [] })
   assert.deepEqual(row?.errors, [
-    "Trimiterea așteaptă: aplicația nu are o conexiune ANAF utilizabilă. Reconectează-te din Setări → Integrări.",
+    "Trimiterea așteaptă: aplicația nu are o conexiune ANAF utilizabilă. Reconectează-te din Integrări.",
     "Trimiterea așteaptă: conexiunea ANAF este verificată pentru alt CIF decât cel de pe document.",
   ])
   const rejected: EFacturaSubmission = { ...base, state: "rejected", errors: ["neconectat"] }

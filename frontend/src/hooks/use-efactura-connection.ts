@@ -30,7 +30,7 @@ export interface EFacturaConnectionModel {
 }
 
 /**
- * Setări → Integrări → e-Factura: the connection read, „Conectează” and
+ * Integrări → e-Factura: the connection read, „Conectează” and
  * „Deconectează”. Connecting is a top-level navigation to ANAF's `authorize`
  * URL (the attempt cookie is already set by `start`), and ANAF's callback
  * brings the browser back here with `?anaf=<code>`: the code becomes a notice
@@ -52,7 +52,7 @@ export const useEFacturaConnection = (): EFacturaConnectionModel | undefined => 
 
   useEffect(() => {
     if (callbackCode(searchStr) === undefined) return
-    void navigate({ href: `/settings/integrations${withoutCallbackCode(searchStr)}`, replace: true, resetScroll: false })
+    void navigate({ href: `/integrations${withoutCallbackCode(searchStr)}`, replace: true, resetScroll: false })
   }, [searchStr, navigate])
 
   const connect = useMutation({

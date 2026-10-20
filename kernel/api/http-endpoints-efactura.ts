@@ -4,7 +4,7 @@ import { Schema } from "effect"
 import { ANAF_ENVIRONMENTS, CALLBACK_OUTCOMES, CALLBACK_TARGET_PATH } from "../../cubes/invoicing/efactura/connection/index.ts"
 import { body, conflict, invoicingBase } from "./http-api-shared.ts"
 
-/** Never a token: what Settings → Integrations shows about the ANAF connection. */
+/** Never a token: what Integrations (`/integrations`) shows about the ANAF connection. */
 export const EFacturaConnection = Schema.Struct({
   status: Schema.Literal("not_configured", "disconnected", "connected", "needs_reconnect"),
   environment: Schema.Literal(...ANAF_ENVIRONMENTS),
