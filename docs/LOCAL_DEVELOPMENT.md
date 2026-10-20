@@ -183,11 +183,9 @@ On a new installation:
    for development (a production host registers `https://<its host>/api/anaf/callback`).
    ANAF shows the client id and the client secret once; keep the secret out of chats,
    tickets and shell history.
-2. **Write the client secret to its file**, mode 0600, without echoing it:
-
-   ```bash
-   (umask 077; cat > .local/anaf-client-secret)   # paste the secret, Enter, Ctrl-D
-   ```
+2. **Write the client secret to its file**, mode 0600, without showing it or leaving it
+   in the shell history: the command is in the README,
+   [e-Factura with ANAF](../README.md#e-factura-with-anaf), step 3.
 
 3. **Fill `.env`** (the paths are relative to it; `.local/` and `.env` are ignored by git
    and by the Docker build):

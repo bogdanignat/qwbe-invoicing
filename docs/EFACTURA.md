@@ -264,7 +264,9 @@ single occurrence to 300 characters (BR-RO-L300), so joining the two into one
 text would make a mandatory legal reference eat into a mandatory storno reason.
 Neither is dropped or truncated: the note is the only place each of them exists.
 Fixtures 09 and 10 exist precisely because the accepted fixture 05 carries a
-single one-sentence BT-22 and says nothing about the two-note form.
+single one-sentence BT-22 and says nothing about the two-note form. The form
+itself was accepted by the SPV on ANAF TEST on 2026-10-20, for an invoice and a
+storno of an Article 310 issuer (see "What is still unverified").
 
 Document notes and correction reasons are capped at 300 characters on input too,
 so the product refuses at the keyboard what e-Factura would refuse at the gate.
@@ -343,9 +345,11 @@ writes a new revision of the pair. The refresh (`refreshConnection`, called only
 dispatcher, never from a request) asks ANAF outside any transaction and stores the
 answer only if the generation and revision it observed still hold; `invalid_grant`
 marks `needs_reconnect` under the same condition, so an old failure cannot invalidate a
-newer pair, and a refresh overtaken by another one or by a disconnect is dropped. ANAF
-does not say when a refresh token lapses: it is taken as 365 days from the connection
-and not extended by a refresh until ANAF TEST shows otherwise (task 6).
+newer pair, and a refresh overtaken by another one or by a disconnect is dropped. The
+access token lives as long as ANAF's `expires_in` says: 90 days on ANAF TEST (seen live,
+2026-10-20). ANAF does not say when a refresh token lapses: it is taken as 365 days from
+the connection and not extended by a refresh; that is still unconfirmed and followed
+separately.
 
 Connections, disconnections and `needs_reconnect` are audited
 (`efactura_connection.connected | .disconnected | .needs_reconnect`) in the transaction
@@ -370,9 +374,10 @@ CIF directly.
 
 Mitigations: the short window, the single-use attempt that a newer one replaces, the
 audit trail with the moment and the person who connected, and disconnect/reconnect at
-any time from Settings. PKCE (`code_challenge`) is not assumed: ANAF's support for it
-is tried once on ANAF TEST (task 6). If ANAF accepts it without closing the session it
-is added; otherwise this risk stays, accepted by Bogdan on 2026-10-19.
+any time from Settings. PKCE (`code_challenge`) is not assumed and has not been tried
+yet: it needs a new connection with the certificate on ANAF TEST, followed separately.
+Until that test the risk stays, accepted by Bogdan on 2026-10-19. If ANAF accepts PKCE
+without closing the session it is added; otherwise the acceptance stands.
 
 ## Submitting to ANAF (T-1346)
 
@@ -450,6 +455,13 @@ makes it `unknown`. Then `stareMesaj` 1, 2, 5, 10 and 30 minutes after the uploa
 and hourly after that → `accepted` or `rejected` with the download id (or
 `refused` for "XML cu erori nepreluat de sistem" without one) → `descarcare` →
 the ZIP in `efactura_responses`, archive `stored`.
+
+**ANAF's ZIP** holds two files: `<index>.xml`, byte for byte the submitted XML (same
+SHA-256), and `semnatura_<index>.xml`, ANAF's XMLDSig signature over it (`DigestValue`
+= the SHA-256 of the submitted XML, `rsa-sha1`). On ANAF TEST the signing certificate
+is `CN=ANAF TEST`, self-signed, valid 2021–2031; in production it is ANAF's own.
+Documents sent to ANAF TEST never show in the SPV portal: there the API's answer (this
+ZIP) is the only proof.
 
 **The connection's CIF** is checked again before every step: a submission whose
 CIF is not the one the organization's connection is now verified for makes no ANAF
@@ -600,31 +612,38 @@ stays empty. After a restore, reconnecting with the certificate uploads nothing.
   responses. Nothing here executes the Schematron: there is no XSLT engine in
   this environment, so a rule no fixture exercises is still a rule nobody has
   run.
-- **Fixtures 09 and 10 have not been uploaded.** They are the only documents
-  with two BT-22 occurrences — legal reference plus storno reason (09, `FCN`),
-  legal reference plus seller remarks (10, `FACT1`) — and the accepted fixture
-  05 carries exactly one. Extrapolating its acceptance to them would be a guess
-  about a fiscal document, so the repeated note stays unverified until ANAF
-  answers. Fixtures 01–08 regenerate byte for byte identical after T-1383 and
-  after the move to two notes, so what ANAF did accept has not drifted.
+- **Two BT-22 notes are accepted by the SPV on ANAF TEST** (2026-10-20), not only
+  by the validator. Both documents submitted that day carried two notes and
+  reached `accepted`: the invoice (`FACT1`) the Article 310 legal note plus the
+  seller's remarks, the shape of fixture 10; the storno (`FCN`, CreditNote 381)
+  the Article 310 legal note plus the storno reason, the shape of fixture 09.
+  Fixtures 09 and 10 themselves were not uploaded. Fixtures 01–08 regenerate
+  byte for byte identical after T-1383 and after the move to two notes, so what
+  ANAF did accept has not drifted.
 - The validator checks schema and Schematron. It does not check that the
   document states the truth: correct totals with the wrong VAT category pass.
-- Nothing here has been sent to the SPV. Acceptance by the validator is not
-  acceptance by the system that receives real invoices (T-1346).
+- Nothing has been sent to the production SPV yet; the documents below went to
+  ANAF TEST only.
 - `validare` is not served by ANAF TEST (404 with a token, 401 without, checked
   2026-10-20); the dispatcher uses the public production validator, without a
   token, whose answer for fixtures 05 and 06 was `{"stare":"ok","trace_id":…}`.
   Its `nok` was seen live the same day:
   `{"stare":"nok","Messages":[{"message":"Fisierul transmis nu este valid. …"}],"trace_id":…}`,
-  HTTP 200 with `Content-Type: text/plain`, like `ok`. The end-to-end cycle
-  (upload, poll, download) is still to be confirmed on ANAF TEST in task 6.
-- The ANAF connection runs only against the fake ANAF so far. The exact text of
-  "no right on the CIF", the positive list shape, the refresh token's lifetime after a
-  refresh and PKCE are confirmed on ANAF TEST in task 6.
-- The reconciliation runs only against the fake ANAF so far. The message types of
-  an upload in ANAF's list (`FACTURA TRIMISA`, `ERORI FACTURA`), the page size of
-  `listaMesajePaginatieFactura` and whether it accepts a window older than 60 days
-  are confirmed on ANAF TEST in task 6.
+  HTTP 200 with `Content-Type: text/plain`, like `ok`.
+- The ANAF connection with the certificate was confirmed live on ANAF TEST
+  (2026-10-20), without `state` and with `token_content_type=jwt`, the right on the
+  CIF verified, the access token's `expires_in` 90 days. The end-to-end cycle was
+  confirmed the same day, for an invoice (`UBL`, `FACT1`) and a storno (`CN`, `FCN`:
+  CreditNote type 381 with a BillingReference to the invoice, positive values):
+  `validare` 200 `ok` → upload 200 with an index → `stareMesaj` 200 `ok` at the first
+  poll (about a minute) → `descarcare` 200 → `accepted`, the ZIP stored.
+- Still unconfirmed on ANAF TEST, followed separately: PKCE (it needs a new
+  connection with the certificate); the refresh token's lifetime (still taken as 365
+  days); the exact text of "no right on the CIF". The reconciliation of an `unknown`
+  submission runs only against the fake ANAF: the shape of a
+  `listaMesajePaginatieFactura` list that holds messages, the message types of an
+  upload (`FACTURA TRIMISA`, `ERORI FACTURA`), the page size and whether a window
+  older than 60 days is accepted show only when such a submission is reconciled.
 
 ## Validating the fixtures
 
