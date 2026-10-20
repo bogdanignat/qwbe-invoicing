@@ -48,10 +48,13 @@ void test("prod only when written out; any other spelling refuses to start", () 
   }
 })
 
-void test("the URLs are constants: test is api.anaf.ro/test, prod is api.anaf.ro/prod, OAuth is logincert", () => {
+void test("the URLs are constants: test is api.anaf.ro/test, prod is api.anaf.ro/prod, validare is public in both, OAuth is logincert", () => {
   assert.equal(ANAF_API_BASES.test, "https://api.anaf.ro/test/FCTEL/rest")
   assert.equal(ANAF_API_BASES.prod, "https://api.anaf.ro/prod/FCTEL/rest")
   assert.equal(anafApi("test").upload("CN", "12345674"), "https://api.anaf.ro/test/FCTEL/rest/upload?standard=CN&cif=12345674")
+  for (const environment of ["test", "prod"] as const) {
+    assert.equal(anafApi(environment).validate("FCN"), "https://webservicesp.anaf.ro/prod/FCTEL/rest/validare/FCN", "validare is the public validator")
+  }
   assert.equal(anafApi("test").status("1&x=2"), "https://api.anaf.ro/test/FCTEL/rest/stareMesaj?id_incarcare=1%26x%3D2")
   assert.deepEqual(ANAF_OAUTH, {
     authorize: "https://logincert.anaf.ro/anaf-oauth2/v1/authorize",

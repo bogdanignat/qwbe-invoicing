@@ -136,24 +136,25 @@ void test("a 401 on upload refreshes once, goes back to the queue and uploads on
     assert.ok(Date.parse(waiting.next_attempt_at) > rig.now().getTime(), "it waits instead of looping")
   }))
 
-void test("a 401 at validation refreshes once, goes back to the queue and validates again with the fresh pair",
+void test("validare goes to the public validator without a token: a 401 there refreshes nothing and is retried a minute later",
   () => withRig("efd_validate_401", async (rig) => {
     await rig.connect()
-    const token = gated(rig.fake.transport, "/token")
-    const refresh = token.hold()
     rig.fake.answer("validare", "unauthorized")
     const { id } = await queued(rig, "inv-1")
-    rig.dispatcher(token.transport)
-    await refresh.reached
-    assert.equal((await rig.row(id)).state, "queued", "an explicit 401 at validation: back to the queue, nothing uploaded")
-    assert.equal(rig.calls("upload"), 0)
+    rig.dispatcher()
+    await rig.until("the refused validation", async () => (await rig.attempts(id)).includes("validare:auth_refused"))
+    await new Promise((resolve) => { setTimeout(resolve, 300) })
+    const waiting = await rig.row(id)
+    assert.equal(waiting.state, "queued", "back to the queue, nothing uploaded")
+    assert.ok(Date.parse(waiting.next_attempt_at) > rig.now().getTime(), "it waits instead of looping")
+    assert.deepEqual([rig.calls("token"), rig.calls("upload")], [0, 0], "no refresh: the token was never sent")
     rig.fake.answer("validare", "normal")
-    refresh.release()
+    rig.clock.offsetMs += 61_000
     await rig.reaches(id, "processing")
     assert.deepEqual(await rig.attempts(id), ["validare:auth_refused", "validare:answered", "upload:answered"])
-    assert.deepEqual(rig.fake.calls.filter((call) => call.operation === "validare").map((call) => call.authorization),
-      ["Bearer access-0", "Bearer access-1"])
-    assert.equal(rig.calls("token"), 1)
+    assert.deepEqual(rig.fake.calls.filter((call) => call.operation === "validare").map((call) => [call.origin, call.authorization]),
+      [["https://webservicesp.anaf.ro", undefined], ["https://webservicesp.anaf.ro", undefined]])
+    assert.equal(rig.calls("token"), 0)
   }))
 
 void test("a connection made again for another CIF sends nothing: the submission waits queued, and says why",
@@ -191,7 +192,7 @@ void test("an access token that expires within 7 days is refreshed before the ca
   rig.dispatcher()
   await rig.reaches(id, "processing")
   assert.equal(rig.calls("token"), 1)
-  assert.equal(rig.fake.calls.find((call) => call.operation === "validare")?.authorization, "Bearer access-1")
+  assert.equal(rig.fake.calls.find((call) => call.operation === "upload")?.authorization, "Bearer access-1")
 }))
 
 void test("after a crash: uploading turns unknown, validating starts over, processing and pending archives resume",

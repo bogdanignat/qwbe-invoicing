@@ -428,6 +428,17 @@ any of its transactions failing, interrupts the step in flight (its ANAF call is
 aborted), closes the connection and starts over as a candidate. On shutdown it is
 the first thing stopped, before the drain.
 
+**`validare` goes to ANAF's public validator** in both environments:
+`https://webservicesp.anaf.ro/prod/FCTEL/rest/validare/{FACT1|FCN}`, `POST` with
+the XML as `text/plain` and **no token**. ANAF TEST does not serve it (checked
+2026-10-20: `api.anaf.ro/test/FCTEL/rest/validare/FACT1` answers 401 without a
+token and 404 with one), while the public service answers `{"stare":"ok"}` for
+fixtures 05 (`FACT1`) and 06 (`FCN`). It only checks the XML and registers
+nothing in SPV; the address is a constant in `endpoints.ts`. Every other call
+(upload, `stareMesaj`, the list, `descarcare`) stays on
+`api.anaf.ro/{test|prod}/FCTEL/rest` with the Bearer token, which never leaves
+for another host.
+
 One step at a time: `queued` → `validare` (`refused` on ANAF's errors, back to
 `queued` on anything unclear) → `uploading`, **committed before the POST** →
 upload, outside any transaction → `processing` with ANAF's index, `refused` on
@@ -448,9 +459,11 @@ like a submission of an organization with no connection, 15 minutes at a time; a
 `neconectat` while the organization has no usable connection at all.
 It is never `refused`: ANAF refused nothing.
 
-**A 401/403 is the only automatic reupload.** An explicit 401/403 at `validare`
-or at the upload sends the submission back to `queued`, the token is refreshed
-once, and it goes through `validare` and the upload again. That is safe because
+**A 401/403 is the only automatic reupload.** An explicit 401/403 at the upload
+sends the submission back to `queued`, the token is refreshed once, and it goes
+through `validare` and the upload again. `validare` carries no token, so a
+401/403 there refreshes nothing: like any other unclear validation answer, the
+submission goes back to `queued` and is validated again a minute later. That is safe because
 ANAF refused the request at authentication, before processing it: nothing was
 taken. Every other unclear upload answer is `unknown`.
 
@@ -598,9 +611,13 @@ stays empty. After a restore, reconnecting with the certificate uploads nothing.
   document states the truth: correct totals with the wrong VAT category pass.
 - Nothing here has been sent to the SPV. Acceptance by the validator is not
   acceptance by the system that receives real invoices (T-1346).
-- The submissions run only against the fake ANAF so far: `validare` under the
-  environment's base, the shape of its answer and the end-to-end cycle are
-  confirmed on ANAF TEST in task 6.
+- `validare` is not served by ANAF TEST (404 with a token, 401 without, checked
+  2026-10-20); the dispatcher uses the public production validator, without a
+  token, whose answer for fixtures 05 and 06 was `{"stare":"ok","trace_id":…}`.
+  Its `nok` was seen live the same day:
+  `{"stare":"nok","Messages":[{"message":"Fisierul transmis nu este valid. …"}],"trace_id":…}`,
+  HTTP 200 with `Content-Type: text/plain`, like `ok`. The end-to-end cycle
+  (upload, poll, download) is still to be confirmed on ANAF TEST in task 6.
 - The ANAF connection runs only against the fake ANAF so far. The exact text of
   "no right on the CIF", the positive list shape, the refresh token's lifetime after a
   refresh and PKCE are confirmed on ANAF TEST in task 6.
@@ -638,3 +655,10 @@ the machine.
 Only synthetic documents go there: the validator is a third-party service and an
 uploaded file is out of our hands. Every identifier in the fixtures is invented
 and belongs to nobody.
+
+That rule is for the fixtures and for a manual upload. The dispatcher is
+different: before every upload, on `test` and on `prod` alike, it sends the real
+XML of the submission to ANAF's public validator,
+`webservicesp.anaf.ro/prod/FCTEL/rest/validare`, without a token. That validator
+is run by ANAF, the same operator as the SPV that receives the upload right
+after, and validating registers nothing in SPV.

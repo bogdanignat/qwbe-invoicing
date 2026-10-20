@@ -10,13 +10,14 @@ import type { AccessToken } from "./credentials.ts"
 /**
  * A queued submission: `validare`, then `uploading` committed, then the one
  * upload and ANAF's answer to it. Starting clears the reason it waited for.
+ * `validare` carries no token, so a 401 there is only a retry, never a refresh.
  */
 export const upload = (ctx: StepContext, submission: SubmissionRecord, token: AccessToken) => Effect.gen(function*() {
   const claimed = yield* reserved(ctx, submission, undefined, async (store) => ({
     xml: await store.xml(submission.id), validating: await store.move(submission, "validation_started", { errors: [] }) }))
   if (claimed === undefined) return
   const { xml, validating } = claimed.value
-  const checked = yield* timed(ctx, ctx.gateway.validate(token.access, submission.standard, xml))
+  const checked = yield* timed(ctx, ctx.gateway.validate(submission.standard, xml))
   const verdict = kindOf(checked, classifyValidation, { kind: "unrecognized" } as const)
   const uploading = yield* settle(ctx, validating, "validare", checked, verdict.kind, async (store, paused) => {
     if (verdict.kind === "invalid") return void await store.move(validating, "validation_failed", { errors: verdict.errors })
@@ -24,7 +25,6 @@ export const upload = (ctx: StepContext, submission: SubmissionRecord, token: Ac
     if (waitUntil !== undefined) return void await store.move(validating, "validation_retry", { nextAttemptAt: waitUntil })
     return store.move(validating, "validation_passed")
   })
-  if (verdict.kind === "auth_refused") yield* afterRefusal(ctx, { ...validating, state: "queued" }, token)
   if (uploading === undefined) return
   // `uploading` is committed: from here on, nothing but ANAF's own answer sends it anywhere but `unknown`.
   const sent = yield* timed(ctx, ctx.gateway.upload(token.access, submission.standard, submission.cif, xml))

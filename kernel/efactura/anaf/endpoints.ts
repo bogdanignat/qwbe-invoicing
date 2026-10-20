@@ -11,6 +11,14 @@ export const ANAF_API_BASES: Readonly<Record<AnafEnvironment, string>> = {
   prod: "https://api.anaf.ro/prod/FCTEL/rest",
 }
 
+/**
+ * `validare` exists only on ANAF's public production service, without OAuth:
+ * ANAF TEST answers 404 to it (with a token) and 401 (without). It only checks
+ * the XML and registers nothing in SPV, so both environments use it, and no
+ * token is ever sent to it.
+ */
+const VALIDATION_BASE = "https://webservicesp.anaf.ro/prod/FCTEL/rest"
+
 const OAUTH_BASE = "https://logincert.anaf.ro/anaf-oauth2/v1"
 
 export const ANAF_OAUTH = {
@@ -30,11 +38,11 @@ export interface ListWindow {
 
 const query = (parameters: Readonly<Record<string, string>>): string => new URLSearchParams(parameters).toString()
 
-/** The e-Factura calls of one environment. `validare` under the environment's base is confirmed on ANAF TEST in task 6. */
+/** The e-Factura calls of one environment; `validate` is the same public URL in both (see `VALIDATION_BASE`). */
 export const anafApi = (environment: AnafEnvironment) => {
   const base = ANAF_API_BASES[environment]
   return {
-    validate: (standard: "FACT1" | "FCN") => `${base}/validare/${standard}`,
+    validate: (standard: "FACT1" | "FCN") => `${VALIDATION_BASE}/validare/${standard}`,
     upload: (standard: "UBL" | "CN", cif: string) => `${base}/upload?${query({ standard, cif })}`,
     status: (uploadIndex: string) => `${base}/stareMesaj?${query({ id_incarcare: uploadIndex })}`,
     list: (window: ListWindow) => `${base}/listaMesajePaginatieFactura?${query({
