@@ -41,6 +41,8 @@ export interface EFacturaPanelView {
   /** The header button: its label, whether it submits, and the sentence that says why not. */
   readonly buttonLabel: string
   readonly canSubmit: boolean
+  /** ANAF registered the document: nothing is left to send, so the head states it instead of offering a button. */
+  readonly registered: boolean
   /** The sentence the button is described by: why it cannot send now (the connection), else where the document is. */
   readonly reason: string | undefined
   /** Where the document is, when `reason` had to say why it cannot be sent. */
@@ -104,6 +106,7 @@ export const panelView = (
     badgeClass: badgeClass(eFacturaStatusTone(status)),
     buttonLabel: BUTTON_LABELS[status],
     canSubmit: sendable && connectionReason === undefined,
+    registered: status === "accepted",
     reason: blocked ?? explanation,
     detail: blocked === undefined ? undefined : explanation,
     errors: current === null || live ? [] : current.errors,

@@ -53,9 +53,17 @@ void test("queued or processing: disabled, „Se procesează la ANAF”, and why
 
 void test("accepted: registered, with the upload index and ANAF's ZIP once stored", () => {
   const view = panelView("invoice", historyOf(submission("accepted", { archiveState: "stored" })), "disconnected")
-  assert.deepEqual([view.buttonLabel, view.canSubmit, view.responseStored], ["Înregistrată în e-Factura", false, true])
+  assert.deepEqual([view.buttonLabel, view.canSubmit, view.registered, view.responseStored], ["Înregistrată în e-Factura", false, true, true])
   assert.match(view.reason ?? "", /indexul de încărcare 5001/u)
   assert.equal(panelView("invoice", historyOf(submission("accepted", { archiveState: "pending" })), "connected").responseStored, false)
+})
+
+void test("only an accepted document is registered: every other state keeps the head button", () => {
+  assert.equal(panelView("invoice", historyOf(null), "connected").registered, false)
+  for (const state of ["queued", "validating", "uploading", "processing", "rejected", "refused", "unknown"] as const) {
+    assert.equal(panelView("invoice", historyOf(submission(state)), "connected").registered, false, state)
+  }
+  assert.equal(panelView("correction", historyOf(submission("accepted")), "connected").registered, true)
 })
 
 void test("rejected or refused: ANAF's errors and „Retrimite”, which needs the connection too", () => {
