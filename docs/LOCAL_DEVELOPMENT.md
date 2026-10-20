@@ -206,7 +206,7 @@ On a new installation:
    Compose, and the application refuses a partial or malformed setup at startup (all four
    client values or none; the redirect URI must be `https://<PUBLIC_ORIGIN host>/api/anaf/callback`;
    the token key must differ from the company-lookup key).
-6. **Connect** in Setări → Integrări → e-Factura with "Conectează cu certificatul"
+6. **Connect** in Setări → Integrări → ANAF e-Factura with "Conectează cu certificatul"
    (T-1346): the browser goes to ANAF, the certificate is chosen there, and ANAF sends it
    back to the callback. The tokens stay in the backend, encrypted with the token key.
    The flow, its codes and its residual

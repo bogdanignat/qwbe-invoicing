@@ -50,7 +50,10 @@ confirmă pe documentația oficială ANAF.
      refresh nu spune ANAF, aplicația îl consideră 365 de zile: **de verificat**.
    - Mediul se alege cu `ANAF_ENVIRONMENT` (`test` implicit, `prod` doar scris explicit);
      adresele sunt constante în `kernel/efactura/anaf/endpoints.ts`, iar validarea merge
-     în ambele medii la validatorul public ANAF.
+     în ambele medii la validatorul public ANAF. `serve` refuză să pornească dacă baza are
+     trimiteri făcute în celălalt mediu (`ANAF_ENVIRONMENT is prod, but e-Factura submissions
+     exist for test; …`), deci proba pe TEST se face pe o instalare separată sau pe o bază
+     recreată înainte de trecerea pe `prod`.
 
 ## Unde stau valorile
 
