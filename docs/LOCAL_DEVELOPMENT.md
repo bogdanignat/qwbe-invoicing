@@ -63,7 +63,9 @@ the barrier, the schema and the artifact directory all agree. Repeated
 `docker compose up -d` is safe: migration is idempotent and does not consume invoice
 or proforma numbers or create business records. While the project is in development each
 cube owns one baseline migration; a database created from an older baseline is refused
-as drift and has to be recreated (README, "Schema during development"). The API reads its kernel bearer
+as drift and has to be recreated (README, "Schema during development"). In a CHECK,
+write `>=`/`<=` instead of `BETWEEN` when another `AND` follows it; otherwise the
+constraint text differs after a restore and `doctor` reports drift. The API reads its kernel bearer
 credential from the Compose secret; the secret is never stored in the image or
 printed by the application. `ORGANIZATION_ID` selects the trusted organization for
 this initial single-organization host adapter.
