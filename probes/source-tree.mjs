@@ -33,6 +33,10 @@ export const PACKAGE_MANIFEST = "qwbe-package.json"
 export const CUBES_DIRECTORY = "cubes"
 const CUBE_PATH = /^[a-z0-9][a-z0-9-]*(?:\/[a-z0-9][a-z0-9-]*)*$/
 
+// Thrown only for a manifest or cube tree that the inventory refuses, so a caller can
+// tell "fix qwbe-package.json" apart from a bug, which keeps its own type and stack.
+export class PackageManifestError extends Error {}
+
 const realEntry = (path, isKind) => {
   const stat = lstatSync(path, { throwIfNoEntry: false })
   return stat !== undefined && !stat.isSymbolicLink() && isKind(stat)
@@ -51,13 +55,17 @@ export const loadCube = async (directory) => {
 
 export const readPackageManifest = (root) => {
   const path = join(root, PACKAGE_MANIFEST)
-  if (!realEntry(path, (stat) => stat.isFile())) throw new Error(`${PACKAGE_MANIFEST} must be a regular file at the repository root`)
-  return JSON.parse(readFileSync(path, "utf8"))
+  if (!realEntry(path, (stat) => stat.isFile())) throw new PackageManifestError(`${PACKAGE_MANIFEST} must be a regular file at the repository root`)
+  try {
+    return JSON.parse(readFileSync(path, "utf8"))
+  } catch (error) {
+    throw new PackageManifestError(`${PACKAGE_MANIFEST} is not valid JSON: ${error.message}`)
+  }
 }
 
 export const discoverCubeUnits = async (root) => {
   const declared = readPackageManifest(root)?.cubes
-  if (!Array.isArray(declared) || declared.length === 0) throw new Error(`${PACKAGE_MANIFEST} must list at least one cube`)
+  if (!Array.isArray(declared) || declared.length === 0) throw new PackageManifestError(`${PACKAGE_MANIFEST} must list at least one cube`)
 
   const problems = []
   const listed = new Set()
@@ -72,7 +80,7 @@ export const discoverCubeUnits = async (root) => {
     if (listed.has(toPosix(relative(cubesRoot, directory))) || await loadCube(directory) === undefined) continue
     problems.push(`${toPosix(relative(root, directory))} declares a cube but is not listed`)
   }
-  if (problems.length > 0) throw new Error(`${PACKAGE_MANIFEST}: ${problems.join("; ")}`)
+  if (problems.length > 0) throw new PackageManifestError(`${PACKAGE_MANIFEST}: ${problems.join("; ")}`)
 
   return declared
     .map((path) => ({ id: `${CUBES_DIRECTORY}/${path}`, directory: join(cubesRoot, ...path.split("/")) }))
