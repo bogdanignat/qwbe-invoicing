@@ -1,0 +1,13 @@
+[Unit]
+Description=Daily qwbe-invoicing backup at 03:30 Europe/Bucharest
+
+[Timer]
+# The zone is written out, whatever the host's timezone is.
+OnCalendar=*-*-* 03:30:00 Europe/Bucharest
+# A run missed while the host was down happens at the next boot, so that backup's
+# short downtime of app can then happen outside 03:30.
+Persistent=true
+Unit=qwbe-invoicing-backup.service
+
+[Install]
+WantedBy=timers.target

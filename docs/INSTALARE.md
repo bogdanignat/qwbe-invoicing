@@ -197,7 +197,8 @@ O restaurare cere același `ORGANIZATION_ID`.
 
 **Restaurarea** se face doar într-o bază nouă, goală, și într-un volum de date nou; `restore`
 fără `--apply` doar verifică arhiva. Pașii: [Data, backup and restore](../README.md#data-backup-and-restore)
-și [Backup and restore (drill)](./RELEASE.md#backup-and-restore-drill).
+și [Restore](./RELEASE.md#restore). În producție, dintr-un checkout, `scripts/production/backup.sh`,
+`restore.sh` și `deploy.sh` fac acești pași ([Production scripts](./RELEASE.md#production-scripts)).
 
 **Actualizarea** dintr-un checkout: backup întâi, păstrezi imaginea veche pentru rollback,
 apoi construiești și pornești:

@@ -1,0 +1,30 @@
+[Unit]
+Description=qwbe-invoicing backup (scripts/production/backup.sh), run by qwbe-invoicing-backup.timer
+# Install, check and logs: docs/RELEASE.md, "Backup".
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+# The installation directory, where .env and compose.prod.yaml are: adjust both paths
+# (and User) to the server before installing.
+WorkingDirectory=/opt/qwbe-invoicing
+ExecStart=/opt/qwbe-invoicing/scripts/production/backup.sh
+# A user with access to Docker (group `docker`), owner of the installation; not root.
+User=qwbe
+# The CLI bounds the dump at 10 minutes; copy, compression, verification and the
+# restart of app fit in the rest.
+TimeoutStartSec=30min
+# On that timeout systemd sends SIGTERM to the script only (KillMode=mixed). Bash runs
+# its trap once the current command ends, which can be the whole `backup` run (up to
+# the 10-minute dump plus copy and verification), then starts app again. So the stop
+# timeout covers that command: only after it does SIGKILL hit the whole group. If that
+# ever happens, the trap does not run, app stays stopped, and
+# .local/production/app-stopped makes the next backup or deploy refuse with the steps.
+TimeoutStopSec=15min
+KillMode=mixed
+NoNewPrivileges=true
+UMask=0077
+# stdout/stderr go to the journal: journalctl -u qwbe-invoicing-backup.service
+# A failure leaves the unit failed (systemctl --failed). To be alerted, add an
+# OnFailure= unit of your own.

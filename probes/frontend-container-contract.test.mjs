@@ -96,6 +96,9 @@ void test("production: no Warden, no public port, PUBLIC_ORIGIN and the image ta
   for (const secret of ["AUTH_TOKEN_PATH", "PG_PASSWORD_PATH", "COMPANY_LOOKUP_KEY_PATH"]) {
     assert.match(compose, new RegExp(`\\$\\{${secret}:\\?`, "u"))
   }
+  // The active database and artifact volume, switched together by scripts/production/restore.sh.
+  assert.match(compose, /^ {2}PGDATABASE: \$\{QWBE_PGDATABASE:\?/mu)
+  assert.match(compose, /^ {2}invoicing-data:\n {4}name: \$\{QWBE_DATA_VOLUME:\?/mu)
   const caddy = serviceBlock(compose, "caddy")
   assert.match(caddy, /profiles: \["proxy"\]/u)
   assert.match(caddy, /depends_on:\n {6}app:\n {8}condition: service_healthy\n {4}ports:/u, "Caddy waits for app, and only for app")
