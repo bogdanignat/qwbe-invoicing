@@ -16,6 +16,7 @@ import {
 } from "../storage/postgres-maintenance-lock.ts"
 import type { PostgresSettings } from "../storage/postgres-pool.ts"
 import { emptyRuntime, freshRuntime, type TestRuntime } from "../storage/postgres-rig.test-support.ts"
+import { schemaDrift } from "../storage/migrations.ts"
 import {
   type BackupContext,
   executeBackup,
@@ -153,6 +154,20 @@ void test("backup and restore round-trip the schema, the ledger and the artifact
     const restored = await executeRestore(contextFor(target, targetData), archive)
     assert.equal(restored.failed, 0)
     assert.equal(restored.restored, restored.scanned)
+    assert.deepEqual(await schemaDrift(source.pool), [], "the source must be explained by its ledger")
+    // pg_dump re-emits every definition from the catalog; a form PostgreSQL does not
+    // parse back to the same tree (BETWEEN chained into AND) would show up here.
+    assert.deepEqual(await schemaDrift(target.pool), [], "a restored database must not drift from its ledger")
+    // The clean answer is not bought by a looser comparison: on the restored
+    // database a CHECK with another bound and a missing CHECK are still drift.
+    await target.pool.query(`ALTER TABLE document_series DROP CONSTRAINT document_series_series_shape,
+      ADD CONSTRAINT document_series_series_shape CHECK(length(series)>=1 AND length(series)<=21
+        AND series ~ '^[A-Z0-9]' AND series !~ '[^A-Z0-9_-]')`)
+    await target.pool.query("ALTER TABLE invoice_drafts DROP CONSTRAINT invoice_drafts_notes_shape")
+    assert.deepEqual(await schemaDrift(target.pool), [
+      "constraint:document_series.document_series_series_shape",
+      "constraint:invoice_drafts.invoice_drafts_notes_shape",
+    ])
     const after = await counts(target.pool)
     assert.equal(after.tables, before.tables)
     assert.equal(after.triggers, before.triggers)
