@@ -34,7 +34,7 @@ const proformaWith = (id, number, overrides) => {
     VALUES('${id}',NULL,'org-1',2026,'proforma','PRO',${number},'2026-09-01',NULL,
     '2026-09-01T10:00:00.000Z','RON','Furnizor SRL','12345674','RO','Iasi','Strada 1',
     ${base.issuerCounty},${base.issuerSector},NULL,'company','Client SRL','87654329','RO','Iasi','Strada 2',
-    'RO-IS',NULL,NULL,1,'100.00','21.00','121.00',0,'srl','J22/123/2020','RO49','Banca','1000.00',
+    'RO-IS',NULL,NULL,1,10000,2100,12100,0,'srl','J22/123/2020','RO49','Banca',100000,
     'operator',1,${base.sourceApp},NULL,NULL)`
 }
 
@@ -53,8 +53,8 @@ const invoiceWith = (id, number, overrides) => {
     VALUES('${id}',${base.draftId},'org-1',2026,'invoice','INV',${number},'2026-09-01',NULL,
     '2026-09-01T10:00:00.000Z','RON','Furnizor SRL','12345674','RO','Iasi','Strada 1',
     ${base.issuerCounty},${base.issuerSector},NULL,'Client SRL','87654329','RO','Iasi','Strada 2',
-    'RO-IS',NULL,NULL,'100.00','21.00','121.00','company',1,${base.proformaId},'srl','J22/123/2020',
-    'RO49','Banca','1000.00','operator',1,${base.sourceApp},NULL,NULL)`
+    'RO-IS',NULL,NULL,10000,2100,12100,'company',1,${base.proformaId},'srl','J22/123/2020',
+    'RO49','Banca',100000,'operator',1,${base.sourceApp},NULL,NULL)`
 }
 
 const correctionWith = (id, number, overrides) => {
@@ -69,11 +69,11 @@ const correctionWith = (id, number, overrides) => {
     VALUES('${id}','org-1','invoice-1',2026,'correction','INV',${number},'2026-09-02',
     '2026-09-02T10:00:00.000Z','Eroare','RON','Furnizor SRL','12345674','RO','Iasi','Strada 1',
     ${base.issuerCounty},${base.issuerSector},NULL,'Client SRL','87654329','RO','Iasi','Strada 2',
-    'RO-IS',NULL,NULL,'-100.00','-21.00','-121.00','company',1,'srl','J22/123/2020','RO49','Banca',
-    '1000.00','operator',1,${base.sourceApp},NULL,NULL)`
+    'RO-IS',NULL,NULL,-10000,-2100,-12100,'company',1,'srl','J22/123/2020','RO49','Banca',
+    100000,'operator',1,${base.sourceApp},NULL,NULL)`
 }
 
-const LINE_TAIL = "'Servicii','1.00','100.00','RO_STANDARD','S','21.00',NULL,'100.00','21.00','121.00','C62','unitate'"
+const LINE_TAIL = "'Servicii','1.00',10000,'RO_STANDARD','S','21.00',NULL,10000,2100,12100,'C62','unitate'"
 
 /** trigger name -> a statement the trigger must refuse, and the message it raises. */
 export const triggerRejections = [
@@ -169,7 +169,7 @@ export const triggerRejections = [
   ["proforma_tax_no_late_insert",
     `INSERT INTO proforma_tax_breakdown(proforma_id,organization_id,line_position,tax_code,category,rate,
      vat_exemption_reason,taxable_amount,tax_amount)
-     VALUES('pf-1','org-1',2,'RO_STANDARD','S','21.00',NULL,'100.00','21.00')`,
+     VALUES('pf-1','org-1',2,'RO_STANDARD','S','21.00',NULL,10000,2100)`,
     "proforma tax breakdown is sealed"],
   ["proforma_tax_breakdown_no_update", "UPDATE proforma_tax_breakdown SET rate='19.00' WHERE proforma_id='pf-1'",
     "proforma tax breakdown is immutable"],
@@ -186,10 +186,10 @@ export const triggerRejections = [
     "correction tax breakdown is immutable"],
   ["invoice_payments_reversal_shape",
     `INSERT INTO invoice_payments(id,invoice_id,organization_id,amount,currency,payment_date,method,actor_id,
-     created_at,kind,reverses_payment_id) VALUES('pay-bad','invoice-1','org-1','1.00','RON','2026-09-04',
+     created_at,kind,reverses_payment_id) VALUES('pay-bad','invoice-1','org-1',100,'RON','2026-09-04',
      'bank','operator','2026-09-04T10:00:00.000Z','reversal',NULL)`,
     "a reversal references exactly one payment"],
-  ["invoice_payments_no_update", "UPDATE invoice_payments SET amount='1.00' WHERE id='pay-1'",
+  ["invoice_payments_no_update", "UPDATE invoice_payments SET amount=100 WHERE id='pay-1'",
     "payments are immutable"],
   ["invoice_payments_no_delete", "DELETE FROM invoice_payments WHERE id='pay-1'", "payments are immutable"],
   ["payment_idempotency_records_no_update",
@@ -206,6 +206,22 @@ export const triggerRejections = [
     "proforma artifacts are immutable"],
   ["proforma_artifacts_no_delete", "DELETE FROM proforma_artifacts WHERE proforma_id='pf-1'",
     "proforma artifacts are immutable"],
+  ["efactura_submissions_content_no_update", "UPDATE efactura_submissions SET cif='99' WHERE id='sub-1'",
+    "e-Factura submission content is immutable"],
+  ["efactura_submissions_no_delete", "DELETE FROM efactura_submissions WHERE id='sub-3'",
+    "e-Factura submissions are kept"],
+  ["efactura_resubmissions_no_update", "UPDATE efactura_resubmissions SET actor_id='x' WHERE previous_id='sub-2'",
+    "e-Factura resubmissions are append-only"],
+  ["efactura_resubmissions_no_delete", "DELETE FROM efactura_resubmissions WHERE previous_id='sub-2'",
+    "e-Factura resubmissions are append-only"],
+  ["efactura_submission_attempts_no_update", "UPDATE efactura_submission_attempts SET duration_ms=1 WHERE id='att-1'",
+    "e-Factura call log is append-only"],
+  ["efactura_submission_attempts_no_delete", "DELETE FROM efactura_submission_attempts WHERE id='att-1'",
+    "e-Factura call log is append-only"],
+  ["efactura_responses_no_update", "UPDATE efactura_responses SET stored_at='x' WHERE submission_id='sub-1'",
+    "e-Factura responses are immutable"],
+  ["efactura_responses_no_delete", "DELETE FROM efactura_responses WHERE submission_id='sub-1'",
+    "e-Factura responses are immutable"],
 ]
 
 /** Writes that must be accepted: the mutations the domain really performs. */
@@ -215,16 +231,20 @@ export const acceptedWrites = [
   ["draft notes cleared", "UPDATE invoice_drafts SET notes=NULL WHERE id='draft-2'"],
   ["customer soft delete", "UPDATE customers SET deleted_at='2026-09-10' WHERE id='customer-1'"],
   ["sequence advance", "UPDATE invoice_sequences SET last_number=4 WHERE organization_id='org-1'"],
+  ["e-Factura submission progress", "UPDATE efactura_submissions SET polls=1,updated_at='t' WHERE id='sub-3'"],
   ["session expiry refresh", "UPDATE browser_sessions SET expires_at=1759007200000 WHERE session_hash='s1'"],
 ]
 
-/** Constraint invariants the triggers do not cover, with the SQLSTATE expected. */
+/**
+ * Constraint invariants the triggers do not cover, with the SQLSTATE expected and,
+ * where the case needs one, the bound parameters.
+ */
 export const constraintCases = [
   ["generated column is not writable", "428C9",
     "UPDATE issued_invoices SET direct_source_proforma_id='x' WHERE id='invoice-1'"],
   ["foreign key to an absent invoice", "23503",
     `INSERT INTO invoice_payments(id,invoice_id,organization_id,amount,currency,payment_date,method,actor_id,
-     created_at) VALUES('pay-x','absent','org-1','1.00','RON','2026-09-04','bank','operator','t')`],
+     created_at) VALUES('pay-x','absent','org-1',100,'RON','2026-09-04','bank','operator','t')`],
   ["unique organization series number", "23505",
     `INSERT INTO document_series VALUES('org-1','invoice','INV')`],
   ["not null issuer legal name", "23502",
@@ -239,8 +259,15 @@ export const constraintCases = [
   ["check: tax matrix rejects a mismatched rate", "23514",
     `INSERT INTO draft_lines(id,draft_id,line_position,description,quantity,unit_price,tax_code,tax_category,
      tax_rate,vat_exemption_reason,total_excluding_tax,tax_amount,total_including_tax,unit_code,unit_name)
-     VALUES('dl-bad','draft-2',9,'Servicii','1.00','100.00','RO_STANDARD','S','5.00',NULL,'100.00','5.00',
-     '105.00','C62','unitate')`],
+     VALUES('dl-bad','draft-2',9,'Servicii','1.00',10000,'RO_STANDARD','S','5.00',NULL,10000,500,
+     10500,'C62','unitate')`],
+  ["check: product unit price is non-negative", "23514",
+    `INSERT INTO product_presets(id,organization_id,description,unit_price,unit_code,unit_name)
+     VALUES('preset-neg','org-1','X',-1,'C62','unitate')`],
+  // T-1904: money is BIGINT in bani; a decimal string bound as text never reaches the column.
+  ["a decimal unit price bound as text is refused", "22P02",
+    `INSERT INTO product_presets(id,organization_id,description,unit_price,unit_code,unit_name)
+     VALUES('preset-text','org-1','X',$1,'C62','unitate')`, ["1.00"]],
   ["check: artifact byte length must be positive", "23514",
     `INSERT INTO invoice_artifacts(invoice_id,organization_id,object_key,sha256,byte_length,media_type,
      template_version,generated_at) VALUES('invoice-3','org-1','k/9','x',0,'application/pdf','v1','t')`],
