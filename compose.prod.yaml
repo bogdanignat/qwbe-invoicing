@@ -24,7 +24,10 @@ name: qwbe-invoicing
 x-postgres-environment: &postgres-environment
   PGHOST: db
   PGPORT: "5432"
-  PGDATABASE: qwbe_invoicing
+  # The database app and migrate use: qwbe_invoicing at install, a new one after
+  # scripts/production/restore.sh, which switches it together with QWBE_DATA_VOLUME.
+  # POSTGRES_DB below only names the database the cluster is created with.
+  PGDATABASE: ${QWBE_PGDATABASE:?Set QWBE_PGDATABASE to the active database, qwbe_invoicing at install}
   PGUSER: qwbe
   # The application reads the password from this file, never from PGPASSWORD: an
   # environment variable travels into every child process and into `docker inspect`.
@@ -172,8 +175,9 @@ secrets:
     file: ${COMPANY_LOOKUP_KEY_PATH:?Set COMPANY_LOOKUP_KEY_PATH to the operator-created company lookup master key file}
 
 volumes:
+  # The artifact volume: qwbe-invoicing-data at install, a new one after a restore.
   invoicing-data:
-    name: qwbe-invoicing-data
+    name: ${QWBE_DATA_VOLUME:?Set QWBE_DATA_VOLUME to the active artifact volume, qwbe-invoicing-data at install}
   # The cluster volume, named separately and created fresh at first start. Nothing
   # here reuses or resets an older volume.
   invoicing-postgres:

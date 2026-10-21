@@ -504,8 +504,10 @@ PostgreSQL `qwbe_invoicing`, schema `public`
 /data/artifacts/          PDFs stored by SHA-256
 ```
 
-Back up with the CLI, not by copying the cluster directory, and with the application
-stopped: `backup` and `restore` take the maintenance key EXCLUSIVE as a *try*, so both
+In production `scripts/production/backup.sh` and `restore.sh` do what follows, with a
+daily systemd timer, retention and a switch to the restored pair
+([`docs/RELEASE.md`](./docs/RELEASE.md), "Production scripts"). Back up with the CLI, not
+by copying the cluster directory, and with the application stopped: `backup` and `restore` take the maintenance key EXCLUSIVE as a *try*, so both
 refuse immediately while `app` holds it SHARED.
 
 ```bash
@@ -533,6 +535,17 @@ dropped — and outside development it also requires `--confirm-production`. Run
 the cluster volume and is never a backup strategy.
 
 ## Upgrading
+
+From a checkout of `main`, `scripts/production/deploy.sh` does the upgrade with its
+backup, rollback and restore decision ([`docs/RELEASE.md`](./docs/RELEASE.md), "Upgrade").
+
+An `.env` from an earlier release needs three new keys first (see `.env.example`):
+`QWBE_PGDATABASE` (the current database, `qwbe_invoicing`) and `QWBE_DATA_VOLUME`
+(the current data volume, `qwbe-invoicing-data`), which `compose.prod.yaml` now
+requires, and `BACKUP_DIR` (an absolute directory outside the checkout), which the
+scripts require.
+
+By hand:
 
 ```bash
 cd /opt/qwbe-invoicing
