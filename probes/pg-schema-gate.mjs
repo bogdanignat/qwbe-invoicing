@@ -122,10 +122,10 @@ const countOf = (objects, kind) => objects.filter((entry) => entry.startsWith(`$
 const failed = (error) => ({ code: error?.code, message: error?.message ?? String(error) })
 
 /** Runs one statement in its own savepoint and reports how it ended. */
-const attempt = async (client, sql) => {
+const attempt = async (client, sql, values = []) => {
   await client.query("SAVEPOINT probe")
   try {
-    await client.query(sql)
+    await client.query(sql, values)
     await client.query("ROLLBACK TO SAVEPOINT probe")
     return { ok: true }
   } catch (error) {
@@ -457,7 +457,7 @@ const main = async () => {
         try {
           await behaviourClient.query(statement)
         } catch (error) {
-          throw new Error(`seed failed on ${statement.slice(0, 70)}…`, { cause: error })
+          throw new Error(`seed failed on ${statement.slice(0, 70)}…: ${error.message}`, { cause: error })
         }
       }
       await behaviourClient.query("COMMIT")
@@ -471,7 +471,7 @@ const main = async () => {
         const covered = new Set(triggerRejections.map(([name]) => name))
         assert.deepEqual([...triggerNames].filter((name) => !covered.has(name)), [], "uncovered triggers")
         assert.deepEqual([...covered].filter((name) => !triggerNames.has(name)), [], "cases without a trigger")
-        assert.equal(covered.size, 60)
+        assert.equal(covered.size, 68)
       })
 
       for (const [trigger, sql, message] of triggerRejections) {
@@ -486,8 +486,8 @@ const main = async () => {
         const outcome = await attempt(behaviourClient, sql)
         check(`accepted: ${label}`, () => { assert.equal(outcome.ok, true, outcome.message) })
       }
-      for (const [label, codes, sql] of constraintCases) {
-        const outcome = await attempt(behaviourClient, sql)
+      for (const [label, codes, sql, values] of constraintCases) {
+        const outcome = await attempt(behaviourClient, sql, values)
         check(`constraint: ${label}`, () => {
           assert.equal(outcome.ok, false, "statement was accepted")
           assert.ok(codes.split("|").includes(outcome.code), `${outcome.code} ${outcome.message}`)
@@ -540,8 +540,6 @@ const main = async () => {
       const dialect = JSON.parse(readFileSync(new URL("../kernel/parity/sqlite-dialect-behavior.json",
         import.meta.url), "utf8"))
       const vectorInsert = {
-        product_presets: (value) => ["INSERT INTO product_presets(id,organization_id,description,unit_price,"
-          + "unit_code,unit_name) VALUES('vec','org-1','X',$1,'C62','unitate')", [value]],
         document_series: (value) => ["INSERT INTO document_series VALUES('org-1','invoice',$1)", [value]],
         idempotency_records: (value) => ["INSERT INTO idempotency_records(organization_id,idempotency_key,"
           + "operation,fingerprint,result_kind,result_id,created_at) VALUES('org-1','vec','create_draft',$1,"
@@ -550,8 +548,18 @@ const main = async () => {
           + "idempotency_key,operation,fingerprint,result_id,created_at) VALUES('org-1','vec',"
           + "'record_payment',$1,'pay-1','t')", [value]],
       }
+      // T-1904 made money BIGINT in bani: the SQLite text GLOB on unit_price has no
+      // PostgreSQL counterpart, the format belongs to kernel/storage/postgres-money.ts.
       let globChecked = 0
       for (const predicate of dialect.checkPredicates) {
+        if (predicate.table === "product_presets" && predicate.column === "unit_price") {
+          const type = await behaviourClient.query("SELECT data_type FROM information_schema.columns"
+            + " WHERE table_name=$1 AND column_name=$2", [predicate.table, predicate.column])
+          check("product_presets.unit_price is BIGINT in bani, so its SQLite GLOB is retired", () => {
+            assert.equal(type.rows[0]?.data_type, "bigint")
+          })
+          continue
+        }
         for (const { value, outcomes } of predicate.results) {
           const expectAccept = outcomes.every(({ outcome }) => outcome === "satisfied")
           const [sql, values] = vectorInsert[predicate.table](value)
@@ -578,7 +586,7 @@ const main = async () => {
           await behaviourClient.query(`INSERT INTO issuers(organization_id,legal_name,tax_identifier,
             country_code,city,street,county,default_currency,default_payment_term_days,branding,legal_form,
             trade_registry_number,iban,bank_name,social_capital)
-            VALUES('org-json','X','1','RO','X','Y','RO-IS','RON',15,$1,'srl','J','I','B','1.00')`, [vector.value])
+            VALUES('org-json','X','1','RO','X','Y','RO-IS','RON',15,$1,'srl','J','I','B',100)`, [vector.value])
         } catch (error) { accepted = false; code = error.code }
         await behaviourClient.query("ROLLBACK TO SAVEPOINT js")
         jsonChecked += 1
@@ -593,7 +601,7 @@ const main = async () => {
       const nullBranding = await attempt(behaviourClient, `INSERT INTO issuers(organization_id,legal_name,
         tax_identifier,country_code,city,street,county,default_currency,default_payment_term_days,branding,
         legal_form,trade_registry_number,iban,bank_name,social_capital)
-        VALUES('org-null','X','1','RO','X','Y','RO-IS','RON',15,NULL,'srl','J','I','B','1.00')`)
+        VALUES('org-null','X','1','RO','X','Y','RO-IS','RON',15,NULL,'srl','J','I','B',100)`)
       check("NULL JSON column stays accepted", () => { assert.equal(nullBranding.ok, true, nullBranding.message) })
 
       // IS DISTINCT FROM, the NULL <-> value pair the SQLite `IS NOT` carried.
@@ -627,8 +635,8 @@ const main = async () => {
           source_proforma_id,issuer_legal_form,issuer_trade_registry_number,issuer_iban,issuer_bank_name,
           issuer_social_capital,actor_id,issuer_vat_registered)
           VALUES('inv-deferred',NULL,'org-1',2026,'invoice','INV',7,'2026-09-01','t','RON','F','1','RO','X',
-          'Y','RO-IS','C','2','RO','X','Y','RO-IS','1.00','0.00','1.00','company',1,'pf-1','srl','J','I','B',
-          '1.00','operator',1)`)
+          'Y','RO-IS','C','2','RO','X','Y','RO-IS',100,0,100,'company',1,'pf-1','srl','J','I','B',
+          100,'operator',1)`)
       } catch (error) {
         insertFailure = error.code ?? error.message
       }

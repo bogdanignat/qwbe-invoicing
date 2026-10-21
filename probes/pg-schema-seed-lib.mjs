@@ -11,7 +11,7 @@ const ISSUER = `INSERT INTO issuers(organization_id,legal_name,tax_identifier,co
   sector,postal_code,default_currency,default_payment_term_days,branding,legal_form,trade_registry_number,
   iban,bank_name,social_capital)
   VALUES('org-1','Furnizor SRL','12345674','RO','Iasi','Strada 1','RO-IS',NULL,NULL,'RON',15,
-  '{"logo":"x"}','srl','J22/123/2020','RO49AAAA1B31007593840000','Banca','1000.00')`
+  '{"logo":"x"}','srl','J22/123/2020','RO49AAAA1B31007593840000','Banca',100000)`
 
 const CUSTOMER = `INSERT INTO customers(id,organization_id,legal_name,tax_identifier,country_code,city,street,
   county,sector,postal_code,party_type,vat_registered,default_payment_term_days)
@@ -35,7 +35,7 @@ const proforma = (id, number) => `INSERT INTO proformas(id,source_draft_id,organ
   VALUES('${id}',NULL,'org-1',2026,'proforma','PRO',${number},'2026-09-01',NULL,'2026-09-01T10:00:00.000Z','RON',
   'Furnizor SRL','12345674','RO','Iasi','Strada 1','RO-IS',NULL,NULL,
   'company','Client SRL','87654329','RO','Iasi','Strada 2','RO-IS',NULL,NULL,1,
-  '100.00','21.00','121.00',0,NULL,'srl','J22/123/2020','RO49','Banca','1000.00','operator',1)`
+  10000,2100,12100,0,NULL,'srl','J22/123/2020','RO49','Banca',100000,'operator',1)`
 
 const invoice = (id, draftId, proformaId, number) => `INSERT INTO issued_invoices(id,draft_id,organization_id,
   fiscal_year,document_type,series,number,issue_date,due_date,issued_at,currency,
@@ -49,11 +49,24 @@ const invoice = (id, draftId, proformaId, number) => `INSERT INTO issued_invoice
   '2026-09-01',NULL,'2026-09-01T10:00:00.000Z','RON',
   'Furnizor SRL','12345674','RO','Iasi','Strada 1','RO-IS',NULL,NULL,
   'Client SRL','87654329','RO','Iasi','Strada 2','RO-IS',NULL,NULL,
-  '100.00','21.00','121.00','company',1,${proformaId === null ? "NULL" : `'${proformaId}'`},
-  '{"logo":"x"}','srl','J22/123/2020','RO49','Banca','1000.00','operator',1)`
+  10000,2100,12100,'company',1,${proformaId === null ? "NULL" : `'${proformaId}'`},
+  '{"logo":"x"}','srl','J22/123/2020','RO49','Banca',100000,'operator',1)`
 
-const TAX_LINE = "'Servicii','1.00','100.00','RO_STANDARD','S','21.00',NULL,'100.00','21.00','121.00','C62','unitate'"
-const TAX_BREAKDOWN = "'RO_STANDARD','S','21.00',NULL,'100.00','21.00'"
+// An e-Factura submission row: the XML and its hash are derived in SQL so the
+// sha256/size CHECKs hold by construction.
+const submission = (id, kind, documentId, state, extra) => `INSERT INTO efactura_submissions(id,organization_id,
+  environment,document_kind,document_id,standard,cif,buyer_is_individual,xml,xml_sha256,xml_size,state,
+  upload_index,download_id,archive_state,superseded,next_attempt_at,created_by,created_at,updated_at)
+  VALUES('${id}','org-1','test','${kind}','${documentId}','${kind === "invoice" ? "UBL" : "CN"}','12345674',false,
+  convert_to('<x/>','UTF8'),encode(sha256(convert_to('<x/>','UTF8')),'hex'),4,'${state}',${extra},
+  '2026-09-01T10:00:00.000Z','operator','2026-09-01T10:00:00.000Z','2026-09-01T10:00:00.000Z')`
+
+const TAX_LINE = "'Servicii','1.0000',10000,'RO_STANDARD','S','21.00',NULL,10000,2100,12100,'C62','unitate'"
+const TAX_BREAKDOWN = "'RO_STANDARD','S','21.00',NULL,10000,2100"
+// The storno of TAX_LINE as the corrections cube writes it: quantity and totals
+// negated, the unit price kept positive.
+const STORNO_LINE = "'Servicii','-1.0000',10000,'RO_STANDARD','S','21.00',NULL,-10000,-2100,-12100,'C62','unitate'"
+const STORNO_BREAKDOWN = "'RO_STANDARD','S','21.00',NULL,-10000,-2100"
 
 /** Statements that must all succeed, in order. The accept half of the matrix. */
 export const seedStatements = [
@@ -64,7 +77,7 @@ export const seedStatements = [
   "INSERT INTO invoice_sequences VALUES('org-1',2026,'invoice','INV',3)",
   CUSTOMER,
   `INSERT INTO product_presets(id,organization_id,description,unit_price,unit_code,unit_name,
-     preferred_vat_rate_code) VALUES('preset-1','org-1','Servicii','100.00','C62','unitate','RO_STANDARD')`,
+     preferred_vat_rate_code) VALUES('preset-1','org-1','Servicii',10000,'C62','unitate','RO_STANDARD')`,
   draft("draft-1", "issued"),
   draft("draft-2", "draft"),
   draft("draft-3", "draft"),
@@ -104,13 +117,13 @@ export const seedStatements = [
      issuer_bank_name,issuer_social_capital,actor_id,issuer_vat_registered)
      VALUES('corr-1','org-1','invoice-1',2026,'correction','INV',1,'2026-09-02','2026-09-02T10:00:00.000Z',
      'Eroare','RON','Furnizor SRL','12345674','RO','Iasi','Strada 1','RO-IS',NULL,NULL,
-     'Client SRL','87654329','RO','Iasi','Strada 2','RO-IS',NULL,NULL,'-100.00','-21.00','-121.00',
-     'company',1,'srl','J22/123/2020','RO49','Banca','1000.00','operator',1)`,
+     'Client SRL','87654329','RO','Iasi','Strada 2','RO-IS',NULL,NULL,-10000,-2100,-12100,
+     'company',1,'srl','J22/123/2020','RO49','Banca',100000,'operator',1)`,
   `INSERT INTO correction_lines(id,correction_id,line_position,description,quantity,unit_price,tax_code,
      tax_category,tax_rate,vat_exemption_reason,total_excluding_tax,tax_amount,total_including_tax,unit_code,
-     unit_name) VALUES('cl-1','corr-1',1,${TAX_LINE})`,
+     unit_name) VALUES('cl-1','corr-1',1,${STORNO_LINE})`,
   `INSERT INTO correction_tax_breakdown(correction_id,line_position,tax_code,category,rate,
-     vat_exemption_reason,taxable_amount,tax_amount) VALUES('corr-1',1,${TAX_BREAKDOWN})`,
+     vat_exemption_reason,taxable_amount,tax_amount) VALUES('corr-1',1,${STORNO_BREAKDOWN})`,
   `INSERT INTO audit_events(id,organization_id,actor_id,occurred_at,action,target_kind,target_id,reason)
      VALUES('ae-1','org-1','operator','2026-09-01T10:00:00.000Z','issue','invoice','invoice-1',NULL)`,
   `INSERT INTO idempotency_records(organization_id,idempotency_key,operation,fingerprint,result_kind,
@@ -118,11 +131,11 @@ export const seedStatements = [
      'sha256:${"a".repeat(64)}','invoice','invoice-1','2026-09-01T10:00:00.000Z')`,
   `INSERT INTO invoice_payments(id,invoice_id,organization_id,amount,currency,payment_date,method,
      external_reference,note,actor_id,created_at,kind,reverses_payment_id)
-     VALUES('pay-1','invoice-1','org-1','121.00','RON','2026-09-02','bank',NULL,NULL,'operator',
+     VALUES('pay-1','invoice-1','org-1',12100,'RON','2026-09-02','bank',NULL,NULL,'operator',
      '2026-09-02T10:00:00.000Z','payment',NULL)`,
   `INSERT INTO invoice_payments(id,invoice_id,organization_id,amount,currency,payment_date,method,
      external_reference,note,actor_id,created_at,kind,reverses_payment_id)
-     VALUES('pay-2','invoice-1','org-1','-121.00','RON','2026-09-03','bank',NULL,NULL,'operator',
+     VALUES('pay-2','invoice-1','org-1',12100,'RON','2026-09-03','bank',NULL,NULL,'operator',
      '2026-09-03T10:00:00.000Z','reversal','pay-1')`,
   `INSERT INTO payment_idempotency_records(organization_id,idempotency_key,operation,fingerprint,result_id,
      created_at) VALUES('org-1','pay-key-1','record_payment','sha256:${"b".repeat(64)}','pay-1',
@@ -135,6 +148,18 @@ export const seedStatements = [
      'application/pdf','v1','2026-09-01T10:00:00.000Z')`,
   `INSERT INTO browser_sessions(session_hash,credential_hash,csrf_token,created_at,expires_at)
      VALUES('s1','c1','t1',1759000000000,1759003600000)`,
+  // e-Factura: an accepted invoice with its call log and archived answer, and a
+  // correction whose unknown first submission was resubmitted.
+  submission("sub-1", "invoice", "invoice-1", "accepted", "'1','10','stored',false"),
+  submission("sub-2", "correction", "corr-1", "unknown", "NULL,NULL,'none',true"),
+  submission("sub-3", "correction", "corr-1", "queued", "NULL,NULL,'none',false"),
+  `INSERT INTO efactura_resubmissions(previous_id,next_id,organization_id,actor_id,created_at,
+     duplicate_risk_confirmed) VALUES('sub-2','sub-3','org-1','operator','2026-09-02T10:00:00.000Z',true)`,
+  `INSERT INTO efactura_submission_attempts(id,submission_id,organization_id,operation,outcome,http_status,
+     duration_ms,started_at) VALUES('att-1','sub-1','org-1','upload','answered',200,120,'2026-09-01T10:00:00.000Z')`,
+  `INSERT INTO efactura_responses(submission_id,organization_id,download_id,archive,sha256,size,stored_at)
+     VALUES('sub-1','org-1','10',convert_to('PK','UTF8'),encode(sha256(convert_to('PK','UTF8')),'hex'),2,
+     '2026-09-01T10:05:00.000Z')`,
 ]
 
 /** The statements the seed runs inside one transaction, by index range. */
