@@ -1,100 +1,57 @@
 import assert from "node:assert/strict"
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs"
-import { tmpdir } from "node:os"
-import { dirname, join } from "node:path"
-import { fileURLToPath } from "node:url"
-import { spawnSync } from "node:child_process"
+import { mkdirSync, symlinkSync } from "node:fs"
+import { join } from "node:path"
 import test from "node:test"
 
-import { listCube } from "./cube-fixture.test-support.mjs"
+import { makeUnit, runGate, withFixture, write } from "./boundary.test-support.mjs"
 
-const gate = join(dirname(fileURLToPath(import.meta.url)), "boundary-gate.mjs")
-const fixture = () => mkdtempSync(join(tmpdir(), "qwbe-boundary-gate-"))
-const write = (root, path, content) => {
-  const target = join(root, path)
-  mkdirSync(join(target, ".."), { recursive: true })
-  writeFileSync(target, content)
-}
-const makeUnit = (root, path, source = "export const value = 1\n") => {
-  listCube(root, path)
-  write(root, `${path}/index.ts`, source)
-}
-const cruise = (root) => spawnSync(process.execPath, [gate, "--root", root], { encoding: "utf8" })
+const cruise = (root) => runGate("--root", root)
+const gateOn = (build) => withFixture(build, cruise)
 const output = (result) => result.stdout + result.stderr
 
-test("accepts host composition through the public cube entry", () => {
-  const root = fixture()
-  try {
+test("accepts host composition through the public cube entry", async () => {
+  const result = await gateOn((root) => {
     makeUnit(root, "cubes/invoicing", "export const cube = {}\n")
     write(root, "kernel/main.ts", 'import { cube } from "../cubes/invoicing/index.ts"\nvoid cube\n')
-    const result = cruise(root)
-    assert.equal(result.status, 0, output(result))
-  } finally {
-    rmSync(root, { recursive: true, force: true })
-  }
+  })
+  assert.equal(result.status, 0, output(result))
 })
 
-test("rejects direct runtime infrastructure access from cube code", () => {
-  const root = fixture()
-  try {
+test("rejects direct runtime infrastructure access from cube code", async () => {
+  const result = await gateOn((root) => {
     makeUnit(root, "cubes/invoicing", 'import "node:fs"\nexport const cube = {}\n')
-    const result = cruise(root)
-    assert.notEqual(result.status, 0, output(result))
-    assert.match(output(result), /cube-does-not-touch-runtime-infrastructure/)
-  } finally {
-    rmSync(root, { recursive: true, force: true })
-  }
+  })
+  assert.notEqual(result.status, 0, output(result))
+  assert.match(output(result), /cube-does-not-touch-runtime-infrastructure/)
 })
 
-test("rejects imports between top-level cube siblings", () => {
-  const root = fixture()
-  try {
+test("rejects imports between top-level cube siblings", async () => {
+  const result = await gateOn((root) => {
     makeUnit(root, "cubes/invoicing", 'import "../reporting/index.ts"\nexport const invoice = 1\n')
     makeUnit(root, "cubes/reporting")
-    const result = cruise(root)
-    assert.notEqual(result.status, 0)
-    assert.match(output(result), /no-cube-import-cubes-invoicing-to-cubes-reporting/)
-  } finally {
-    rmSync(root, { recursive: true, force: true })
-  }
+  })
+  assert.notEqual(result.status, 0)
+  assert.match(output(result), /no-cube-import-cubes-invoicing-to-cubes-reporting/)
 })
 
-test("accepts imports between a parent cube and its child cubes", () => {
-  const root = fixture()
-  try {
+test("accepts imports between a parent cube and its child cubes", async () => {
+  const result = await gateOn((root) => {
     makeUnit(root, "cubes/invoicing", 'import "./reporting/index.ts"\nexport const invoice = 1\n')
     makeUnit(root, "cubes/invoicing/reporting", 'import "../shared.ts"\nexport const reporting = 1\n')
     write(root, "cubes/invoicing/shared.ts", "export const shared = 1\n")
-    const result = cruise(root)
-    assert.equal(result.status, 0, output(result))
-  } finally {
-    rmSync(root, { recursive: true, force: true })
-  }
+  })
+  assert.equal(result.status, 0, output(result))
 })
 
-test("rejects imports from a nested child cube into another top-level cube", () => {
-  const root = fixture()
-  try {
+test("rejects imports from a nested child cube into another top-level cube", async () => {
+  const result = await gateOn((root) => {
     makeUnit(root, "cubes/invoicing")
     makeUnit(root, "cubes/invoicing/cubes/reporting", 'import "../../../billing/index.ts"\nexport const nested = 1\n')
     makeUnit(root, "cubes/billing")
-    const result = cruise(root)
-    assert.notEqual(result.status, 0)
-    assert.match(output(result), /no-cube-import-cubes-invoicing-cubes-reporting-to-cubes-billing/)
-  } finally {
-    rmSync(root, { recursive: true, force: true })
-  }
+  })
+  assert.notEqual(result.status, 0)
+  assert.match(output(result), /no-cube-import-cubes-invoicing-cubes-reporting-to-cubes-billing/)
 })
-
-const withFixture = (build) => {
-  const root = fixture()
-  try {
-    build(root)
-    return cruise(root)
-  } finally {
-    rmSync(root, { recursive: true, force: true })
-  }
-}
 
 // The PostgreSQL driver is infrastructure, so the same rule that keeps `node:fs`
 // out of a cube keeps `pg` out. Three install shapes are asserted because the
@@ -115,25 +72,25 @@ const installThroughStore = (root, name, version) => {
   symlinkSync(`.pnpm/${name}@${version}/node_modules/${name}`, join(root, "node_modules", name))
 }
 
-test("rejects the PostgreSQL driver from cube code in every install shape", () => {
+test("rejects the PostgreSQL driver from cube code in every install shape", async () => {
   for (const specifier of ["pg", "pg-pool", "pg-native", "pg-cursor"]) {
     // In a file of its own: the gate loads index.ts to read the manifest, and an
     // unresolved driver there would stop it before the cruise could name the rule.
-    const unresolved = withFixture((root) => {
+    const unresolved = await gateOn((root) => {
       makeUnit(root, "cubes/invoicing", "export const cube = {}\n")
       write(root, "cubes/invoicing/driver.ts", `import "${specifier}"\n`)
     })
     assert.notEqual(unresolved.status, 0, specifier)
     assert.match(output(unresolved), /cube-does-not-touch-runtime-infrastructure/)
   }
-  const flat = withFixture((root) => {
+  const flat = await gateOn((root) => {
     installFlat(root, "pg")
     makeUnit(root, "cubes/invoicing", 'import "pg"\nexport const cube = {}\n')
   })
   assert.notEqual(flat.status, 0, output(flat))
   assert.match(output(flat), /cube-does-not-touch-runtime-infrastructure/)
   assert.match(output(flat), /node_modules\/pg\//)
-  const throughStore = withFixture((root) => {
+  const throughStore = await gateOn((root) => {
     installThroughStore(root, "pg", "8.23.0")
     makeUnit(root, "cubes/invoicing", 'import "pg"\nexport const cube = {}\n')
   })
@@ -141,52 +98,52 @@ test("rejects the PostgreSQL driver from cube code in every install shape", () =
   assert.match(output(throughStore), /node_modules\/[.]pnpm\/pg@8[.]23[.]0\/node_modules\/pg\//)
 })
 
-test("still lets cube code import an unrelated npm package", () => {
-  const flat = withFixture((root) => {
+test("still lets cube code import an unrelated npm package", async () => {
+  const flat = await gateOn((root) => {
     installFlat(root, "effect")
     makeUnit(root, "cubes/invoicing", 'import "effect"\nexport const cube = {}\n')
   })
   assert.equal(flat.status, 0, output(flat))
-  const throughStore = withFixture((root) => {
+  const throughStore = await gateOn((root) => {
     installThroughStore(root, "effect", "3.21.2")
     makeUnit(root, "cubes/invoicing", 'import "effect"\nexport const cube = {}\n')
   })
   assert.equal(throughStore.status, 0, output(throughStore))
 })
 
-test("lets a parent reach a child only through the child's exact index, types included", () => {
+test("lets a parent reach a child only through the child's exact index, types included", async () => {
   const base = (root, parentSource) => {
     makeUnit(root, "cubes/invoicing", parentSource)
     makeUnit(root, "cubes/invoicing/customers", 'export type { Customer } from "./domain/customer.ts"\n')
     write(root, "cubes/invoicing/customers/domain/customer.ts", "export interface Customer { readonly id: string }\n")
   }
-  const allowed = withFixture((root) => base(root, 'export type { Customer } from "./customers/index.ts"\n'))
+  const allowed = await gateOn((root) => base(root, 'export type { Customer } from "./customers/index.ts"\n'))
   assert.equal(allowed.status, 0, output(allowed))
   for (const parentSource of [
     'export type { Customer } from "./customers/domain/customer.ts"\n',
     'import type { Customer } from "./customers/domain/customer.ts"\nexport type Alias = Customer\n',
   ]) {
-    const rejected = withFixture((root) => base(root, parentSource))
+    const rejected = await gateOn((root) => base(root, parentSource))
     assert.notEqual(rejected.status, 0, parentSource)
     assert.match(output(rejected), /cube-tree-cubes-invoicing-to-cubes-invoicing-customers-only-through-index/)
   }
 })
 
-test("lets siblings meet only through their indexes", () => {
+test("lets siblings meet only through their indexes", async () => {
   const base = (root, draftsSource) => {
     makeUnit(root, "cubes/invoicing")
     makeUnit(root, "cubes/invoicing/customers", 'export { find } from "./application/find.ts"\n')
     write(root, "cubes/invoicing/customers/application/find.ts", "export const find = 1\n")
     makeUnit(root, "cubes/invoicing/drafts", draftsSource)
   }
-  const allowed = withFixture((root) => base(root, 'export { find } from "../customers/index.ts"\n'))
+  const allowed = await gateOn((root) => base(root, 'export { find } from "../customers/index.ts"\n'))
   assert.equal(allowed.status, 0, output(allowed))
-  const rejected = withFixture((root) => base(root, 'export { find } from "../customers/application/find.ts"\n'))
+  const rejected = await gateOn((root) => base(root, 'export { find } from "../customers/application/find.ts"\n'))
   assert.notEqual(rejected.status, 0)
   assert.match(output(rejected), /cube-tree-cubes-invoicing-drafts-to-cubes-invoicing-customers-only-through-index/)
 })
 
-test("lets nested children use every ancestor kernel but no one else's interior", () => {
+test("lets nested children use every ancestor kernel but no one else's interior", async () => {
   const base = (root, parentSource) => {
     write(root, "cubes/invoicing/kernel.ts", "export const kernel = 1\n")
     makeUnit(root, "cubes/invoicing", parentSource)
@@ -196,12 +153,12 @@ test("lets nested children use every ancestor kernel but no one else's interior"
       'import { kernel } from "../../kernel.ts"\nimport { shared } from "../shared.ts"\nexport const numbering = kernel + shared\n')
     write(root, "cubes/invoicing/issuance/numbering/series.ts", "export const series = 1\n")
   }
-  const allowed = withFixture((root) => base(root, 'export { numbering } from "./issuance/numbering/index.ts"\n'))
+  const allowed = await gateOn((root) => base(root, 'export { numbering } from "./issuance/numbering/index.ts"\n'))
   assert.equal(allowed.status, 0, output(allowed))
-  const rejected = withFixture((root) => base(root, 'export { series } from "./issuance/numbering/series.ts"\n'))
+  const rejected = await gateOn((root) => base(root, 'export { series } from "./issuance/numbering/series.ts"\n'))
   assert.notEqual(rejected.status, 0)
   assert.match(output(rejected), /cube-tree-cubes-invoicing-to-cubes-invoicing-issuance-numbering-only-through-index/)
-  const parentIntoChildInterior = withFixture((root) => {
+  const parentIntoChildInterior = await gateOn((root) => {
     base(root, "export const invoicing = 1\n")
     write(root, "cubes/invoicing/issuance/leak.ts", 'export { series } from "./numbering/series.ts"\n')
   })
@@ -221,30 +178,30 @@ const kernelPortFixture = (root, ports, support) => {
   write(root, "cubes/invoicing/issuance/domain/proforma.ts", "export interface Proforma { readonly id: string }\n")
 }
 
-test("refuses the kernel port and its test store reaching into a child's interior", () => {
-  const throughIndex = withFixture((root) => kernelPortFixture(root,
+test("refuses the kernel port and its test store reaching into a child's interior", async () => {
+  const throughIndex = await gateOn((root) => kernelPortFixture(root,
     "export type Ports = string\n",
     'import type { Correction } from "../corrections/index.ts"\nimport type { Proforma } from "../issuance/index.ts"\nexport type Stored = Correction | Proforma\n'))
   assert.equal(throughIndex.status, 0, output(throughIndex))
-  const portIntoCorrections = withFixture((root) => kernelPortFixture(root,
+  const portIntoCorrections = await gateOn((root) => kernelPortFixture(root,
     'import type { Correction } from "../corrections/domain/corrections.ts"\nexport type Ports = Correction\n',
     "export type Stored = string\n"))
   assert.notEqual(portIntoCorrections.status, 0)
   assert.match(output(portIntoCorrections), /cube-tree-cubes-invoicing-to-cubes-invoicing-corrections-only-through-index:/)
-  const portIntoIssuance = withFixture((root) => kernelPortFixture(root,
+  const portIntoIssuance = await gateOn((root) => kernelPortFixture(root,
     'import type { Proforma } from "../issuance/domain/proforma.ts"\nexport type Ports = Proforma\n',
     "export type Stored = string\n"))
   assert.notEqual(portIntoIssuance.status, 0)
   assert.match(output(portIntoIssuance), /cube-tree-cubes-invoicing-to-cubes-invoicing-issuance-only-through-index:/)
-  const storeIntoIssuance = withFixture((root) => kernelPortFixture(root,
+  const storeIntoIssuance = await gateOn((root) => kernelPortFixture(root,
     "export type Ports = string\n",
     'import type { Proforma } from "../issuance/domain/proforma.ts"\nexport type Stored = Proforma\n'))
   assert.notEqual(storeIntoIssuance.status, 0)
   assert.match(output(storeIntoIssuance), /cube-tree-cubes-invoicing-to-cubes-invoicing-issuance-only-through-index:/)
 })
 
-test("still refuses import cycles inside one cube tree", () => {
-  const result = withFixture((root) => {
+test("still refuses import cycles inside one cube tree", async () => {
+  const result = await gateOn((root) => {
     makeUnit(root, "cubes/invoicing", 'import { child } from "./reporting/index.ts"\nexport const parent = child\n')
     makeUnit(root, "cubes/invoicing/reporting", 'import { parent } from "../index.ts"\nexport const child = 1\nexport const read = () => parent\n')
   })
@@ -252,7 +209,7 @@ test("still refuses import cycles inside one cube tree", () => {
   assert.match(output(result), /no-circular-dependencies/)
 })
 
-test("refuses a required cube importing a plugin, and lets the plugin use its parent", () => {
+test("refuses a required cube importing a plugin, and lets the plugin use its parent", async () => {
   const cube = (name, required, imports = "") =>
     `${imports}export const cube = { manifest: { name: "${name}", required: ${String(required)} } }\n`
   const base = (root, { parent = "", sibling = "", plugin = "" }) => {
@@ -261,10 +218,10 @@ test("refuses a required cube importing a plugin, and lets the plugin use its pa
     makeUnit(root, "cubes/invoicing/payments", cube("payments", false, plugin))
     write(root, "cubes/invoicing/shared.ts", "export const shared = 1\n")
   }
-  const allowed = withFixture((root) => base(root, { plugin: 'import "../shared.ts"\nimport "../catalog/index.ts"\n' }))
+  const allowed = await gateOn((root) => base(root, { plugin: 'import "../shared.ts"\nimport "../catalog/index.ts"\n' }))
   assert.equal(allowed.status, 0, output(allowed))
   for (const imports of [{ parent: 'import "./payments/index.ts"\n' }, { sibling: 'import "../payments/index.ts"\n' }]) {
-    const rejected = withFixture((root) => base(root, imports))
+    const rejected = await gateOn((root) => base(root, imports))
     assert.notEqual(rejected.status, 0, JSON.stringify(imports))
     assert.match(output(rejected), /required-cube-does-not-import-plugin/)
   }

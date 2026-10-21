@@ -9,7 +9,7 @@ import { cubeIsolationRules, cubeTreeRules, requiredCubeRules } from "./boundary
 import { CUBES_DIRECTORY, discoverCubeUnits, loadCube } from "./source-tree.mjs"
 
 const repositoryRoot = join(dirname(fileURLToPath(import.meta.url)), "..")
-const executable = join(repositoryRoot, "node_modules", ".bin", "depcruise")
+export const depcruiseExecutable = join(repositoryRoot, "node_modules", ".bin", "depcruise")
 
 // The single description of what a boundary cruise is: which roots are cruised, which
 // cube units exist and the rule set that static configuration plus the dynamic cube
@@ -29,22 +29,30 @@ export const boundaryGateInputs = async (root) => {
 
 export const staticRuleCount = configuration.forbidden.length
 
-export const runBoundaryGate = async (root) => {
-  const { roots, generated } = await boundaryGateInputs(root)
+// Writes the generated rule set where depcruise can read it, cruises the gate's roots
+// once and removes the config again. The gate and the read-only report both call this,
+// so they can only differ in the output type they ask for, never in the graph.
+export const cruiseBoundaries = (root, { roots, generated }, args = [], options = {}) => {
   const temporary = mkdtempSync(join(tmpdir(), "qwbe-boundary-config-"))
   const configPath = join(temporary, "dependency-cruiser.config.cjs")
-
   try {
     writeFileSync(configPath, `module.exports = ${JSON.stringify(generated, null, 2)}\n`)
-    const result = spawnSync(executable, [...roots, "--config", configPath], {
+    return spawnSync(depcruiseExecutable, [...roots, "--config", configPath, ...args], {
       cwd: root,
       encoding: "utf8",
+      shell: false,
+      windowsHide: true,
+      ...options,
     })
-    return {
-      exitCode: result.status ?? 1,
-      output: result.stdout + result.stderr,
-    }
   } finally {
     rmSync(temporary, { recursive: true, force: true })
+  }
+}
+
+export const runBoundaryGate = async (root) => {
+  const result = cruiseBoundaries(root, await boundaryGateInputs(root))
+  return {
+    exitCode: result.status ?? 1,
+    output: (result.stdout ?? "") + (result.stderr ?? ""),
   }
 }

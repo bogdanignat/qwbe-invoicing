@@ -1,162 +1,78 @@
 import assert from "node:assert/strict"
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
-import { tmpdir } from "node:os"
-import { dirname, join } from "node:path"
-import { fileURLToPath } from "node:url"
-import { spawnSync } from "node:child_process"
+import { writeFileSync } from "node:fs"
+import { join } from "node:path"
 import test from "node:test"
 
-import { boundaryGateInputs } from "./boundary-gate-lib.mjs"
-import { listCube } from "./cube-fixture.test-support.mjs"
+import { makeUnit, repositoryRoot, runReport, withFixture } from "./boundary.test-support.mjs"
 
-const probes = dirname(fileURLToPath(import.meta.url))
-const repositoryRoot = join(probes, "..")
-const report = join(probes, "boundary-report.mjs")
-const gate = join(probes, "boundary-gate.mjs")
-
-const run = (...args) => spawnSync(process.execPath, [report, ...args], { encoding: "utf8", maxBuffer: 32 * 1024 * 1024 })
-const fixture = () => mkdtempSync(join(tmpdir(), "qwbe-boundary-report-test-"))
-const write = (root, path, content) => {
-  const target = join(root, path)
-  mkdirSync(join(target, ".."), { recursive: true })
-  writeFileSync(target, content)
-}
-const makeUnit = (root, path, source = "export const value = 1\n") => {
-  listCube(root, path)
-  write(root, `${path}/index.ts`, source)
-}
-const withFixture = (build, use) => {
-  const root = fixture()
-  try {
-    build(root)
-    return use(root)
-  } finally {
-    rmSync(root, { recursive: true, force: true })
-  }
+// Every refusal leaves the same way: no protocol on stdout, one prefixed line on stderr.
+const assertRefused = (result, status, message) => {
+  assert.equal(result.status, status, result.stderr)
+  assert.equal(result.stdout, "")
+  assert.equal(result.stderr.trim().split("\n").length, 1, result.stderr)
+  assert.match(result.stderr, /^boundary-report: /)
+  assert.match(result.stderr, message)
 }
 
-test("reports the real repository graph as the fixed protocol, without log contamination", () => {
-  const result = run("--json")
-  assert.equal(result.status, 0, result.stderr)
-  assert.equal(result.stderr, "")
-  const payload = JSON.parse(result.stdout)
-  assert.deepEqual(Object.keys(payload), [
-    "schemaVersion", "cruise", "rules", "depcruiseVersion", "roots", "areas", "provenance",
-  ])
-  assert.equal(payload.schemaVersion, 1)
-  assert.ok(payload.cruise.modules.length > 0)
-  assert.equal(typeof payload.cruise.summary.totalCruised, "number")
-  assert.equal(
-    payload.depcruiseVersion,
-    JSON.parse(readFileSync(join(repositoryRoot, "node_modules", "dependency-cruiser", "package.json"), "utf8")).version,
-  )
-  assert.deepEqual(payload.roots, ["cubes", "kernel", "frontend/src"])
+test("refuses an unknown argument instead of ignoring it", () => {
+  assertRefused(runReport("--jsno"), 2, /unknown argument "--jsno"; run with --help/)
+  assertRefused(runReport("--json", "cubes"), 2, /unknown argument "cubes"/)
+  assertRefused(runReport("--root=."), 2, /unknown argument "--root=\."/)
+  assertRefused(runReport("--help", "--verbose"), 2, /unknown argument "--verbose"/)
 })
 
-test("describes every cube unit and host root as an area with its family", async () => {
-  const payload = JSON.parse(run("--json").stdout)
-  const { units } = await boundaryGateInputs(repositoryRoot)
-  const expected = [...units.map((unit) => unit.id), "kernel", "frontend/src"].sort()
-  assert.deepEqual(payload.areas.map((area) => area.id), expected)
-  assert.deepEqual(payload.areas.map((area) => area.folder), expected)
-  const group = (id) => payload.areas.find((area) => area.id === id).group
-  assert.equal(group("cubes/invoicing"), "cubes/invoicing")
-  assert.equal(group("cubes/invoicing/issuance"), "cubes/invoicing", "a child cube belongs to its tree root")
-  assert.equal(group("frontend/src"), "frontend")
-  assert.equal(group("kernel"), "kernel")
+test("refuses an option given twice", () => {
+  assertRefused(runReport("--json", "--json"), 2, /--json was given more than once; pass it once/)
+  assertRefused(runReport("--timeout", "5", "--timeout", "6"), 2, /--timeout was given more than once/)
 })
 
-test("fingerprints the inputs that decide the graph, stably and without a timestamp", () => {
-  const first = JSON.parse(run("--json").stdout).provenance
-  const second = JSON.parse(run("--json").stdout).provenance
-  assert.deepEqual(first, second)
-  assert.deepEqual(first.sources.map((source) => source.path), [
-    "dependency-cruiser.config.cjs",
-    "probes/boundary-gate-lib.mjs",
-    "probes/boundary-report.mjs",
-    "probes/boundary-rules.mjs",
-    "probes/source-tree.mjs",
-    "qwbe-package.json",
-  ])
-  for (const source of first.sources) assert.match(source.sha256, /^[0-9a-f]{64}$/)
-  assert.ok(!JSON.stringify(first).includes("generatedAt"))
+test("refuses malformed option values as invalid usage", () => {
+  assertRefused(runReport("--timeout", "abc"), 2, /--timeout expects a positive integer, got "abc"/)
+  assertRefused(runReport("--max-buffer", "0"), 2, /--max-buffer expects a positive integer, got "0"/)
+  assertRefused(runReport("--root"), 2, /--root expects a value; run with --help/)
+  assertRefused(runReport("--root", "--json"), 2, /--root expects a value/)
 })
 
-test("reports exactly the rule set and roots the gate validates against", async () => {
-  const payload = JSON.parse(run("--json").stdout)
-  const { roots, generated } = await boundaryGateInputs(repositoryRoot)
-  assert.deepEqual(payload.roots, roots)
-  assert.deepEqual(payload.rules, generated.forbidden.map((rule) => ({ name: rule.name, severity: rule.severity })))
-  assert.ok(payload.provenance.generatedRuleCount > 0)
-  assert.equal(payload.provenance.generatedRuleCount, payload.rules.filter((rule) =>
-    rule.name.startsWith("no-cube-import-") || rule.name.startsWith("cube-tree-")
-    || rule.name === "required-cube-does-not-import-plugin").length)
-  assert.ok(payload.rules.some((rule) => rule.name === "required-cube-does-not-import-plugin"))
-  assert.deepEqual(payload.cruise.summary.optionsUsed.doNotFollow, generated.options.doNotFollow)
-  assert.equal(payload.cruise.summary.optionsUsed.tsPreCompilationDeps, true)
-  assert.ok(payload.cruise.modules.some((module) => /[.]test[.]ts$/.test(module.source)), "test files stay in the graph")
+test("refuses a root that is not a directory, saying which path", () => {
+  const missing = join(repositoryRoot, "no-such-checkout")
+  assertRefused(runReport("--root", missing), 2,
+    new RegExp(`--root ${missing} is not a directory; pass the path of a repository checkout`))
+  assertRefused(runReport("--root", join(repositoryRoot, "package.json")), 2, /package\.json is not a directory/)
 })
 
-test("collects a graph with violations and still exits zero, reporting raw counts", () => {
-  const result = withFixture((root) => {
-    makeUnit(root, "cubes/invoicing", 'import "../reporting/index.ts"\nexport const invoice = 1\n')
-    makeUnit(root, "cubes/reporting")
-  }, (root) => run("--json", "--root", root))
-  assert.equal(result.status, 0, result.stderr)
-  assert.equal(result.stderr, "")
-  const payload = JSON.parse(result.stdout)
-  assert.equal(payload.cruise.summary.error, 1)
-  assert.deepEqual(payload.cruise.summary.violations.map((violation) => violation.rule.name),
-    ["no-cube-import-cubes-invoicing-to-cubes-reporting"])
-  assert.equal(payload.roots.length, 1)
-  assert.deepEqual(payload.areas.map((area) => area.id), ["cubes/invoicing", "cubes/reporting"])
+test("names the cube tree, the root and the fix when the manifests cannot be read", async () => {
+  const empty = await withFixture(() => {}, (root) => ({ root, result: runReport("--json", "--root", root) }))
+  assertRefused(empty.result, 1, new RegExp(
+    `cannot read the cube tree: qwbe-package.json must be a regular file at the repository root \\(${empty.root}\\); fix qwbe-package.json`))
+
+  const broken = await withFixture((root) => {
+    makeUnit(root, "cubes/invoicing")
+    writeFileSync(join(root, "qwbe-package.json"), "{")
+  }, (root) => runReport("--json", "--root", root))
+  assertRefused(broken, 1,
+    /cannot read the cube tree: qwbe-package\.json is not valid JSON: .*; fix qwbe-package\.json or the cube it names, then rerun/)
 })
 
-test("stays a reporter where the gate is a gate, on the same fixture", async () => {
-  const root = fixture()
-  try {
-    makeUnit(root, "cubes/invoicing", 'import "../reporting/index.ts"\nexport const invoice = 1\n')
-    makeUnit(root, "cubes/reporting")
-    const gateResult = spawnSync(process.execPath, [gate, "--root", root], { encoding: "utf8" })
-    assert.notEqual(gateResult.status, 0, "the gate still fails on a violating tree")
-    const payload = JSON.parse(run("--json", "--root", root).stdout)
-    const { roots, generated } = await boundaryGateInputs(root)
-    assert.deepEqual(payload.roots, roots)
-    assert.deepEqual(payload.rules.map((rule) => rule.name), generated.forbidden.map((rule) => rule.name))
-    assert.match(gateResult.stdout + gateResult.stderr, new RegExp(payload.cruise.summary.violations[0].rule.name))
-  } finally {
-    rmSync(root, { recursive: true, force: true })
-  }
+test("leaves a failure outside the manifest unexpected, without the manifest advice", async () => {
+  const result = await withFixture((root) => {
+    makeUnit(root, "cubes/invoicing", 'throw new Error("cube index exploded")\n')
+  }, (root) => runReport("--json", "--root", root))
+  assertRefused(result, 1, /^boundary-report: unexpected failure: cube index exploded$/m)
+  assert.doesNotMatch(result.stderr, /qwbe-package\.json/)
 })
 
-test("separates usage errors from execution failures", () => {
-  const usage = run("--timeout", "abc")
-  assert.equal(usage.status, 2)
-  assert.equal(usage.stdout, "")
-  assert.match(usage.stderr, /--timeout expects a positive integer/)
-  assert.equal(run("--max-buffer", "0").status, 2)
-  assert.equal(run("--root").status, 2)
+test("names the cap that stopped depcruise and the option that raises it", () => {
+  const timedOut = runReport("--json", "--timeout", "1")
+  assertRefused(timedOut, 1,
+    new RegExp(`depcruise exceeded the 1ms timeout \\(cruising ${repositoryRoot}\\); rerun with a larger --timeout`))
+  assert.ok(!/[A-Z_]{3,}=/.test(timedOut.stderr), "no environment in the message")
 
-  const timedOut = run("--json", "--timeout", "1")
-  assert.equal(timedOut.status, 1)
-  assert.equal(timedOut.stdout, "")
-  assert.match(timedOut.stderr, /exceeded the 1ms timeout/)
-
-  const capped = run("--json", "--max-buffer", "1000")
-  assert.equal(capped.status, 1)
-  assert.equal(capped.stdout, "")
-  assert.match(capped.stderr, /output exceeded the 1000 byte cap/)
-})
-
-test("keeps failure messages short and free of the environment", () => {
-  const timedOut = run("--json", "--timeout", "1")
-  assert.equal(timedOut.stderr.trim().split("\n").length, 1)
-  assert.match(timedOut.stderr, /^boundary-report: /)
-  assert.ok(!/[A-Z_]{3,}=/.test(timedOut.stderr))
+  assertRefused(runReport("--json", "--max-buffer", "1000"), 1,
+    /depcruise output exceeded the 1000 byte cap \(cruising .+\); rerun with a larger --max-buffer/)
 })
 
 test("prints human counts without the protocol, and documents itself", () => {
-  const human = run()
+  const human = runReport()
   assert.equal(human.status, 0, human.stderr)
   assert.match(human.stdout, /^roots {12}cubes kernel frontend\/src$/m)
   assert.match(human.stdout, /^modules {10}\d+$/m)
@@ -164,10 +80,13 @@ test("prints human counts without the protocol, and documents itself", () => {
   assert.ok(!human.stdout.includes("schemaVersion"))
   assert.ok(!/no dependency violations found|✔/.test(human.stdout), "it never reports gate success")
 
-  const help = run("--help")
+  const help = runReport("--help")
   assert.equal(help.status, 0)
   assert.match(help.stdout, /read-only/)
   assert.match(help.stdout, /schemaVersion, cruise, rules, depcruiseVersion, roots, areas, provenance/)
+  assert.match(help.stdout, /plus kernel, frontend\/src\./)
   assert.match(help.stdout, /longest matching prefix/)
   assert.match(help.stdout, /0 {2}graph collected, violations included/)
+  assert.match(help.stdout, /Any other argument, or an option given twice, is refused/)
+  assert.match(help.stdout, /boundary-report: <what> \(<where>\); <next step>/)
 })
