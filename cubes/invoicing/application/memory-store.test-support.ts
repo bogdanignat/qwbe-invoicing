@@ -92,6 +92,8 @@ export const memoryStore = (state: MemoryState): InvoicingDependencies["store"] 
     const transaction: InvoicingTransaction & CustomersTransaction & CatalogTransaction & IssuerTransaction & ProformaTransaction & CorrectionsTransaction = {
       saveIssuer: (issuer) => Effect.sync(() => { working.issuers.set(issuer.organizationId, issuer) }),
       findIssuer: (organizationId) => Effect.succeed(working.issuers.get(organizationId)),
+      hasIssuedDocuments: (organizationId, from) => Effect.sync(() => [...working.issued.values(), ...working.corrections.values()]
+        .some((document) => document.organizationId === organizationId && (from === undefined || document.issueDate >= from))),
       addDocumentSeries: (documentSeries) => Effect.suspend(() => {
         const key = `${documentSeries.organizationId}:${documentSeries.documentType}:${documentSeries.series}`
         return working.documentSeries.has(key)

@@ -8,6 +8,7 @@ import { Effect } from "effect"
 import { startServer } from "./http.ts"
 import { createApiHandler } from "../api/api.ts"
 import type { RequestAuthenticator } from "../auth/auth.ts"
+import { anafRegistry } from "../company-lookup/vat-registry.test-support.ts"
 import type { AnafSettings } from "../efactura/anaf/config.ts"
 import type { Transport } from "../outbound/send.ts"
 import type { PluginSelection } from "../plugins.ts"
@@ -45,7 +46,7 @@ export interface Served {
 export interface ServeOptions {
   /** The ANAF client. */
   readonly settings?: AnafSettings
-  /** The outbound HTTP that reaches the fake ANAF. */
+  /** The outbound HTTP that reaches the fake ANAF; the VAT registry is always answered by `anafRegistry`. */
   readonly transport?: Transport
   /** Narrows what the logged-in owner may do, for the permission checks. */
   readonly grants?: (permissions: ReadonlyArray<string>) => ReadonlyArray<string>
@@ -62,9 +63,8 @@ export const serve = async (fixture: TestFixture, plugins: PluginSelection, opti
   const { transport, grants } = options
   const running = await startServer(fixture.config({ port: 0, authTokenFile: tokenFile, plugins, anaf: options.settings }), fixture.pool,
     undefined, undefined, { barrierHeld: () => true,
-      ...(transport === undefined && grants === undefined ? {} : { apiHandlerFactory: (runtime) => createApiHandler({ ...runtime,
-        ...(transport === undefined ? {} : { transport }),
-        ...(grants === undefined ? {} : { authenticate: narrowed(runtime.authenticate, grants) }) }) }) })
+      apiHandlerFactory: (runtime) => createApiHandler({ ...runtime, transport: anafRegistry(undefined, transport ?? runtime.transport),
+        ...(grants === undefined ? {} : { authenticate: narrowed(runtime.authenticate, grants) }) }) })
   try {
     const origin = `http://127.0.0.1:${String((running.server.address() as AddressInfo).port)}`
     assert.equal((await fetch(`${origin}/health/ready`)).status, 200)

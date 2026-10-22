@@ -66,6 +66,10 @@ const configurationsFor = (change: VatChange): ReadonlyArray<VatConfiguration> =
     .sort((left, right) => left.effectiveFrom.localeCompare(right.effectiveFrom))
 }
 
+/** A change moves the regime only when the day it starts is not already in it; it then rewrites every day from it on. */
+export const changesVatRegistration = (configurations: ReadonlyArray<VatConfiguration>, change: VatChange): boolean =>
+  vatRegistrationOn(configurations, change.effectiveFrom)?.registered !== change.registered
+
 export const scheduleVatRegistration = (
   configurations: ReadonlyArray<VatConfiguration>, change: VatChange,
 ): ReadonlyArray<VatConfiguration> => {
@@ -73,7 +77,7 @@ export const scheduleVatRegistration = (
   configurations.forEach(({ code, rate, vatCategoryCode, vatExemptionReason }) => {
     validateVatTreatment(code, rate, vatCategoryCode, vatExemptionReason)
   })
-  if (vatRegistrationOn(configurations, change.effectiveFrom)?.registered === change.registered) return configurations
+  if (!changesVatRegistration(configurations, change)) return configurations
   const next = configurationsFor(change)
   const kept = configurations.filter(({ effectiveFrom }) => effectiveFrom < change.effectiveFrom)
   const closed = kept.map((configuration) => activeOn(configuration, change.effectiveFrom)

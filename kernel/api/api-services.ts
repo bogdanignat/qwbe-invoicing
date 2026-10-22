@@ -3,6 +3,7 @@ import { randomUUID } from "node:crypto"
 import { Effect } from "effect"
 
 import { createInvoicingService, type RequestContext } from "../../cubes/invoicing/index.ts"
+import type { VatRegistry } from "../../cubes/invoicing/issuer/index.ts"
 import { createPaymentsService, type PaymentsService } from "../../cubes/invoicing/payments/index.ts"
 import { createKernelArtifactService } from "../documents/artifact-runtime.ts"
 import { createPostgresPaymentsStore, createPostgresStore } from "../storage/postgres-store.ts"
@@ -10,13 +11,13 @@ import { brandingNormalizer } from "./branding-normalizer.ts"
 import { CurrentRequest } from "./api-context.ts"
 import type { ApiRuntime, ApiServices, UseServices } from "./api-types.ts"
 
-const services = (runtime: ApiRuntime, context: RequestContext): ApiServices => {
+const services = (runtime: ApiRuntime, context: RequestContext, vatRegistry: VatRegistry | undefined): ApiServices => {
   const clock = { now: Effect.sync(runtime.now ?? (() => new Date())) }
   const ids = { next: Effect.sync(randomUUID) }
   const current = { current: Effect.succeed(context) }
   return {
     invoicing: createInvoicingService({ context: current, clock, ids,
-      store: createPostgresStore(runtime.pool), branding: brandingNormalizer, cubeIdentity: "invoicing" }),
+      store: createPostgresStore(runtime.pool), branding: brandingNormalizer, vatRegistry, cubeIdentity: "invoicing" }),
     ...(runtime.plugins.payments ? { payments: createPaymentsService({ context: current, clock, ids,
       store: createPostgresPaymentsStore(runtime.pool), cubeIdentity: "payments" }) } : {}),
     documents: createKernelArtifactService(runtime.dataDirectory, runtime.pool, Effect.succeed({
@@ -35,5 +36,10 @@ export const activePayments = (services: ApiServices): PaymentsService => {
   return services.payments
 }
 
-export const createUseServices = (runtime: ApiRuntime): UseServices =>
-  (operation) => Effect.flatMap(CurrentRequest, (context) => operation(services(runtime, context)))
+/**
+ * Built once, by `createApiHandler`, and handed to every group, so no service
+ * can be composed without the registry. `vatRegistry` is `undefined` exactly
+ * when the company-lookup plugin is off.
+ */
+export const createUseServices = (runtime: ApiRuntime, vatRegistry: VatRegistry | undefined): UseServices =>
+  (operation) => Effect.flatMap(CurrentRequest, (context) => operation(services(runtime, context, vatRegistry)))

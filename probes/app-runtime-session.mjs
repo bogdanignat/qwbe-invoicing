@@ -19,7 +19,8 @@ void describe("production kernel: session lifecycle and downloads", { timeout: 1
   const write = { path: "/api/document-series", method: "POST", body: { documentType: "invoice", series: "RT" } }
 
   before(async () => {
-    kernel = await startKernel("app_runtime_session", productionEnvironment)
+    // Without company-lookup: the issuer this session seeds would otherwise be checked against the live ANAF registry.
+    kernel = await startKernel("app_runtime_session", { ...productionEnvironment, QWBE_PLUGINS: "payments,efactura" })
     opened = await send({ path: "/api/session", method: "POST", body: { token: kernel.token }, headers: { ...json, origin: publicOrigin } })
     assert.equal(opened.status, 200, JSON.stringify(opened.body))
     cookie = sessionCookie(opened).split(";", 1)[0]

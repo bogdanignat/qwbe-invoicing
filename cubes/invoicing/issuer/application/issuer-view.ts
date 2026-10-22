@@ -3,6 +3,9 @@ import type { VatRate } from "../domain/vat-catalogue.ts"
 import { currentVatRegistration, type VatRegistration } from "../domain/vat-regime.ts"
 
 export type IssuerView = IssuerProfile & { readonly currentVat: VatRegistration | null }
+/** `vat_registry_not_checked`: a fiscal change saved while the company-lookup plugin, and with it the registry, is off. */
+export type IssuerWarning = "vat_registry_not_checked"
+export type ConfiguredIssuer = IssuerView & { readonly warnings: ReadonlyArray<IssuerWarning> }
 export interface VatCatalogue {
   readonly rates: ReadonlyArray<VatRate>
 }

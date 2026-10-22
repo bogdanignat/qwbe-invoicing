@@ -10,7 +10,7 @@ import { CurrentRequest } from "./api-context.ts"
 import { errors } from "./api-failures.ts"
 import { efacturaDocuments } from "./efactura-documents.ts"
 import { submitted } from "./handlers-efactura-submissions.ts"
-import type { ApiRuntime } from "./api-types.ts"
+import type { ApiRuntime, UseServices } from "./api-types.ts"
 
 type Path = { readonly path: { readonly id: string } }
 
@@ -19,12 +19,12 @@ type Path = { readonly path: { readonly id: string } }
  * the stored pair only (a request never refreshes it), and a resubmit loads
  * the document from its frozen snapshot under the invoicing grants.
  */
-export const reconciliationHandlers = (runtime: ApiRuntime) => {
+export const reconciliationHandlers = (runtime: ApiRuntime, use: UseServices) => {
   const now = runtime.now ?? (() => new Date())
   const environment = runtime.anaf?.environment ?? "test"
   const store = createPostgresReconciliationStore(runtime.pool, environment)
   const anaf = runtime.anaf === undefined ? undefined : requestAnaf(runtime.pool, runtime.anaf, runtime.transport ?? fetch, now)
-  const { load } = efacturaDocuments(runtime)
+  const { load } = efacturaDocuments(use)
   type Operation<A, E> = (service: ReconciliationService, context: Context.Tag.Service<CurrentRequest>) => Effect.Effect<A, E>
   const reconciliation = <A, E>(operation: Operation<A, E>) =>
     Effect.flatMap(CurrentRequest, (context) => operation(createReconciliationService({

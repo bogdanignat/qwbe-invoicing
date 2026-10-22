@@ -8,20 +8,21 @@ import { documentErrors } from "./api-failures.ts"
 import { failureMiddleware, finalMiddleware, methodFallbackLayer } from "./api-routing.ts"
 import { pdfResponse } from "./api-responses.ts"
 import { createUseServices } from "./api-services.ts"
+import { createAnafClient } from "../company-lookup/anaf-client.ts"
+import { anafVatRegistry } from "../company-lookup/vat-registry.ts"
 import { invoicingGroup } from "./api-invoicing-group.ts"
 import { companyLookupGroup } from "./handlers-company-lookup.ts"
 import { efacturaGroup } from "./handlers-efactura.ts"
 import { paymentsGroup } from "./handlers-payments.ts"
 import { sessionsGroup } from "./api-session-group.ts"
-import type { ApiRuntime } from "./api-types.ts"
+import type { ApiRuntime, UseServices } from "./api-types.ts"
 import { documentHandlers } from "./handlers-documents.ts"
 import { applicationHttpApi, handlerHttpApi } from "./http-api.ts"
 
 export type { ApiRuntime } from "./api-types.ts"
 export interface ApiHandler { readonly handle: (request: Request) => Promise<Response>; readonly dispose: () => Promise<void> }
 
-const documentsGroup = (runtime: ApiRuntime) => {
-  const use = createUseServices(runtime)
+const documentsGroup = (use: UseServices) => {
   const d = documentHandlers(use)
   return HttpApiBuilder.group(applicationHttpApi, "documents", (handlers) => handlers
     .handle("renderInvoicePdf", d.renderInvoicePdf)
@@ -38,13 +39,19 @@ const documentsGroup = (runtime: ApiRuntime) => {
 }
 
 export const createApiHandler = (runtime: ApiRuntime): ApiHandler => {
+  // One ANAF client per handler, so one queue for the company lookup and the issuer's VAT check.
+  const anaf = runtime.plugins["company-lookup"]
+    ? createAnafClient({ transport: runtime.transport ?? fetch, ...(runtime.now ? { now: runtime.now } : {}) })
+    : undefined
+  // One composition of the services for every group, so none can be built without the registry.
+  const use = createUseServices(runtime, anaf === undefined ? undefined : anafVatRegistry(anaf))
   // A plugin that is off has no route at all: the router answers 404 for it.
   const plugins = [
-    ...(runtime.plugins.payments ? [paymentsGroup(runtime)] : []),
-    ...(runtime.plugins.efactura ? [efacturaGroup(runtime)] : []),
-    ...(runtime.plugins["company-lookup"] ? [companyLookupGroup(runtime)] : []),
+    ...(runtime.plugins.payments ? [paymentsGroup(use)] : []),
+    ...(runtime.plugins.efactura ? [efacturaGroup(runtime, use)] : []),
+    ...(anaf === undefined ? [] : [companyLookupGroup(runtime, anaf)]),
   ]
-  const groups = Layer.mergeAll(invoicingGroup(runtime), documentsGroup(runtime), sessionsGroup(runtime), ...plugins)
+  const groups = Layer.mergeAll(invoicingGroup(runtime, use), documentsGroup(use), sessionsGroup(runtime), ...plugins)
   const routes = methodFallbackLayer.pipe(Layer.provideMerge(groups))
   const api = HttpApiBuilder.api(handlerHttpApi).pipe(
     Layer.provide(routes), Layer.provide(authenticationLayer(runtime)), Layer.provide(sessionAuthenticationLayer(runtime)),

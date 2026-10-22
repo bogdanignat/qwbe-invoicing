@@ -1,27 +1,27 @@
 import { Effect } from "effect"
 
-import { checked, copyParty, missing, recordAuditEvent, type Authorize, type OperationDependencies } from "../../application/support.ts"
-import type { InvoicingTransaction } from "../../application/ports.ts"
+import { checked, copyParty, missing, type Authorize } from "../../application/support.ts"
 import { ValidationFailure, type InvoicingFailure } from "../../contracts/failures.ts"
 import type { InvoicingPermissions } from "../../contracts/permissions.ts"
-import type { ConfigureIssuerInput, IssuerProfile } from "../domain/issuer.ts"
-import type { BrandingNormalizer, IssuerTransaction } from "./ports.ts"
+import type { VatRegistryUnavailable } from "../contracts/fiscal-guard.ts"
+import type { ConfigureIssuerInput } from "../domain/issuer.ts"
+import type { BrandingNormalizer } from "./ports.ts"
 import { validateDate } from "../../domain/validation.ts"
-import { normalizeBrandingText, validateIssuer, validateIssuerProfile } from "../domain/validation.ts"
+import { normalizeBrandingText, validateIssuerProfile } from "../domain/validation.ts"
 import { normalizeIssuerDetails } from "../domain/issuer-details.ts"
 import { decodeStrictBase64, validateCanonicalImage } from "../domain/branding.ts"
 import { romanianVatRates } from "../domain/vat-catalogue.ts"
-import { scheduleVatRegistration } from "../domain/vat-regime.ts"
-import { issuerView, type IssuerView, type VatCatalogue } from "./issuer-view.ts"
-export type { IssuerView, VatCatalogue } from "./issuer-view.ts"
+import { saveIssuerProfile, type IssuerSaveDependencies } from "./issuer-save.ts"
+import { issuerView, type ConfiguredIssuer, type IssuerView, type VatCatalogue } from "./issuer-view.ts"
+export type { ConfiguredIssuer, IssuerView, IssuerWarning, VatCatalogue } from "./issuer-view.ts"
 
 export interface IssuerOperations {
-  readonly configureIssuer: (input: ConfigureIssuerInput) => Effect.Effect<IssuerView, InvoicingFailure>
+  readonly configureIssuer: (input: ConfigureIssuerInput) => Effect.Effect<ConfiguredIssuer, InvoicingFailure | VatRegistryUnavailable>
   readonly getIssuer: () => Effect.Effect<IssuerView, InvoicingFailure>
   readonly getVatCatalogue: () => Effect.Effect<VatCatalogue, InvoicingFailure>
 }
 
-interface IssuerDependencies extends OperationDependencies<InvoicingTransaction & IssuerTransaction> {
+interface IssuerDependencies extends IssuerSaveDependencies {
   readonly branding: BrandingNormalizer
 }
 
@@ -47,19 +47,8 @@ export const createIssuerOperations = (
     }
     const image = rawImage === null ? null : yield* dependencies.branding.normalize(rawImage)
     if (image !== null) yield* checked(() => { validateCanonicalImage(image) })
-    return yield* dependencies.store.transaction((transaction) => Effect.gen(function*() {
-      const existing = yield* transaction.findIssuer(context.organization.id)
-      const vatConfigurations = yield* checked(() => scheduleVatRegistration(existing?.vatConfigurations ?? [], input.vatChange))
-      const configured: IssuerProfile = {
-        ...profile, vatConfigurations, branding: input.branding === null ? null : { text, image },
-      }
-      yield* checked(() => { validateIssuer(configured) })
-      yield* transaction.saveIssuer(configured)
-      yield* recordAuditEvent(transaction, context, dependencies.ids, now, {
-        action: "issuer.configured", targetKind: "issuer", targetId: context.organization.id,
-      })
-      return issuerView(configured, now)
-    }))
+    const branding = input.branding === null ? null : { text, image }
+    return yield* saveIssuerProfile(dependencies, context, now, { ...profile, branding }, input.vatChange)
   })
   const getIssuer = () => Effect.gen(function*() {
     const context = yield* authorize(permissions.read)

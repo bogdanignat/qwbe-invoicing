@@ -62,4 +62,13 @@ export const issuerTransactionAdapter = (client: TransactionClient): IssuerTrans
       branding: brandingFrom(value, "branding"),
     }
   }),
+  // No row lock: the business lock every store transaction takes already orders this against issuance.
+  hasIssuedDocuments: (organizationId, from) => read("find issued documents", async () => {
+    const { rows } = await client.query(
+      `SELECT EXISTS (SELECT 1 FROM issued_invoices WHERE organization_id = $1 AND ($2::text IS NULL OR issue_date >= $2))
+        OR EXISTS (SELECT 1 FROM correction_documents WHERE organization_id = $1 AND ($2::text IS NULL OR issue_date >= $2)) AS issued`,
+      [organizationId, from ?? null],
+    )
+    return firstRow(rows)?.issued === true
+  }),
 })

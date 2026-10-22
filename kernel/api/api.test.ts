@@ -19,6 +19,7 @@ const summaryOf = (document: unknown): unknown => {
 }
 import { proformaTemplateVersion } from "../documents/pdf-renderer.ts"
 import { allPlugins } from "../plugins.ts"
+import { anafRegistry } from "../company-lookup/vat-registry.test-support.ts"
 const each = { code: "C62", name: "unitate" } as const
 
 void test("requires host authentication and serves the complete invoice-core route sequence", async () => {
@@ -31,6 +32,7 @@ void test("requires host authentication and serves the complete invoice-core rou
       pool: fixture.pool,
       dataDirectory: fixture.dataDirectory,
       plugins: allPlugins,
+      transport: anafRegistry(),
       // The route sequence writes literal September 2026 dates; pin "today" so chronology,
       // future-date and correction rules judge them the same way on every run.
       now: () => new Date("2026-09-05T10:00:00.000Z"),
@@ -656,6 +658,7 @@ void test("carries document remarks through the HTTP contract and rejects invali
       pool: fixture.pool,
       dataDirectory: fixture.dataDirectory,
       plugins: allPlugins,
+      transport: anafRegistry(),
       now: () => new Date("2026-09-05T10:00:00.000Z"),
     }
     const authorization = `Bearer ${token}`

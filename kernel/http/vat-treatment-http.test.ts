@@ -9,6 +9,7 @@ import { createRequestAuthenticator } from "../auth/auth.ts"
 import { migratedFixture } from "../storage/postgres-rig.test-support.ts"
 import * as S from "../api/http-schemas.ts"
 import { allPlugins } from "../plugins.ts"
+import { anafRegistry, registeredIssuer, type RegistryAnswer } from "../company-lookup/vat-registry.test-support.ts"
 
 const reason = "Regim special de scutire conform art. 310 din Codul fiscal"
 const issuer = {
@@ -21,7 +22,7 @@ const buyer = {
   name: "Client Test", partyType: "individual", fiscalIdentifier: "", vatRegistered: false,
   address: { countryCode: "RO", city: "Iași", street: "Strada Test 2", county: "RO-IS" },
 }
-const fixture = async (label: string) => {
+const fixture = async (label: string, registry: RegistryAnswer = registeredIssuer) => {
   const rig = await migratedFixture(`vth_${label}`)
   const token = "v".repeat(64)
   const tokenFile = join(rig.dataDirectory, "api-token")
@@ -30,7 +31,7 @@ const fixture = async (label: string) => {
   const runtime = {
     pool: rig.pool,
     dataDirectory: rig.dataDirectory, now: () => new Date(`${date}T10:00:00.000Z`),
-    plugins: allPlugins,
+    plugins: allPlugins, transport: anafRegistry(registry),
     authenticate: createRequestAuthenticator(rig.config({ authTokenFile: tokenFile })),
   }
   const call = (method: string, url: string, body?: unknown, idempotencyKey?: string) => handleApiRequest({
@@ -70,7 +71,8 @@ void test("HTTP rejects incompatible VAT basis before stripping fields, without 
 })
 
 void test("HTTP preserves explicit article310 facts through query, proforma conversion, profile changes and storno", async () => {
-  const value = await fixture("history")
+  // ANAF: outside VAT until 2026-09-16, registered from 2026-09-17.
+  const value = await fixture("history", (_cui, date) => date >= "2026-09-17")
   try {
     const configured = await value.call("PUT", "/api/issuer", {
       ...issuer, vatChange: { registered: false, effectiveFrom: "2025-08-01", nonVatBasis: "article_310" },
@@ -79,7 +81,9 @@ void test("HTTP preserves explicit article310 facts through query, proforma conv
     const saved = Schema.decodeUnknownSync(S.Issuer)(configured.body)
     assert.equal(saved.currentVat?.nonVatBasis, "article_310")
     assert.equal(saved.vatConfigurations[0]?.vatExemptionReason, reason)
-    assert.deepEqual((await value.call("GET", "/api/issuer")).body, configured.body)
+    const { warnings, ...profile } = configured.body as Record<string, unknown>
+    assert.deepEqual(warnings, [])
+    assert.deepEqual((await value.call("GET", "/api/issuer")).body, profile)
     const catalogue = Schema.decodeUnknownSync(S.VatCatalogue)((await value.call("GET", "/api/vat-regimes")).body)
     assert.ok(catalogue.rates.some((vat) => vat.vatCategoryCode === "O" && vat.vatExemptionReason === reason))
     for (const [documentType, series] of [["invoice", "INV"], ["proforma", "PRO"]]) {

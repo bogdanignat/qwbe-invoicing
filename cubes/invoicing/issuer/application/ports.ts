@@ -10,6 +10,8 @@ import type { IssuerProfile } from "../domain/issuer.ts"
 export interface IssuerTransaction {
   readonly saveIssuer: (issuer: IssuerProfile) => Effect.Effect<void, TransactionFailure>
   readonly findIssuer: (organizationId: string) => Effect.Effect<IssuerProfile | undefined, PersistenceFailure>
+  // Whether the organization issued an invoice or a storno dated `from` or later; without `from`, ever.
+  readonly hasIssuedDocuments: (organizationId: string, from?: string) => Effect.Effect<boolean, PersistenceFailure>
 }
 
 export interface BrandingNormalizer {

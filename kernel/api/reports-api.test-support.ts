@@ -4,6 +4,7 @@ import { join } from "node:path"
 
 import { createRequestAuthenticator } from "../auth/auth.ts"
 import { allPlugins, type PluginSelection } from "../plugins.ts"
+import { anafRegistry } from "../company-lookup/vat-registry.test-support.ts"
 import type { TestFixture } from "../storage/postgres-rig.test-support.ts"
 import { handleApiRequest, type ApiResponse } from "./api.test-support.ts"
 import type { ApiRuntime } from "./api.ts"
@@ -21,7 +22,7 @@ export const reportsApi = (fixture: TestFixture) => {
   writeFileSync(tokenFile, token, { mode: 0o600 })
   const runtime = (organizationId = "org-1", plugins: PluginSelection = allPlugins): ApiRuntime => ({
     authenticate: createRequestAuthenticator(fixture.config({ authTokenFile: tokenFile, organizationId, plugins })),
-    pool: fixture.pool, dataDirectory: fixture.dataDirectory, now: () => reportsNow, plugins,
+    pool: fixture.pool, dataDirectory: fixture.dataDirectory, now: () => reportsNow, plugins, transport: anafRegistry(),
   })
   let keys = 0
   const call = (target: ApiRuntime, method: string, url: string, body?: unknown): Promise<ApiResponse> =>

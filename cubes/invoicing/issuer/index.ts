@@ -14,7 +14,9 @@ export const cube = {
 }
 
 export { createIssuerOperations } from "./application/issuer.ts"
-export type { IssuerOperations, IssuerView, VatCatalogue } from "./application/issuer.ts"
+export type { ConfiguredIssuer, IssuerOperations, IssuerView, IssuerWarning, VatCatalogue } from "./application/issuer.ts"
+export { issuerSaveConflicts, VatRegistryUnavailable } from "./contracts/fiscal-guard.ts"
+export type { VatRegistry, VatRegistryStatus } from "./contracts/fiscal-guard.ts"
 export type { BrandingNormalizer, IssuerTransaction } from "./application/ports.ts"
 export type { IssuerProfile, ConfigureIssuerInput, RawIssuerBrandingImage, RawIssuerBranding, VatChange } from "./domain/issuer.ts"
 export { resolveVatConfiguration, validateIssuer } from "./domain/validation.ts"

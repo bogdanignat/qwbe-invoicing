@@ -11,7 +11,7 @@ import {
 import { createCustomerOperations, type CustomerOperations, type CustomersTransaction } from "../customers/index.ts"
 import { createDraftOperations, type DraftOperations } from "../drafts/index.ts"
 import { createIssuanceOperations, type IssuanceOperations, type ProformaTransaction } from "../issuance/index.ts"
-import { createIssuerOperations, type BrandingNormalizer, type IssuerOperations, type IssuerTransaction } from "../issuer/index.ts"
+import { createIssuerOperations, type BrandingNormalizer, type IssuerOperations, type IssuerTransaction, type VatRegistry } from "../issuer/index.ts"
 import type { InvoicingTransaction } from "./ports.ts"
 
 export interface InvoicingDependencies {
@@ -22,6 +22,8 @@ export interface InvoicingDependencies {
   // operation that spans customers and drafts stays in one database transaction.
   readonly store: TransactionalStore<InvoicingTransaction & CustomersTransaction & CatalogTransaction & IssuerTransaction & ProformaTransaction & CorrectionsTransaction>
   readonly branding: BrandingNormalizer
+  // Given only with the company-lookup plugin on; without it a fiscal issuer change is saved unchecked.
+  readonly vatRegistry?: VatRegistry | undefined
   readonly cubeIdentity: string
 }
 

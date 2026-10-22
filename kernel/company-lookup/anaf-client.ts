@@ -1,6 +1,6 @@
 import { Effect, Schema } from "effect"
 
-import type { AnafCompany, CompanyLookupProviders, ProviderFailure } from "../../cubes/invoicing/company-lookup/index.ts"
+import type { AnafCompany, ProviderFailure } from "../../cubes/invoicing/company-lookup/index.ts"
 import { decoded, send, unavailable, type ProviderHttpOptions } from "./provider-http.ts"
 
 export const ANAF_URL = "https://webservicesp.anaf.ro/api/PlatitorTvaRest/v9/tva"
@@ -27,8 +27,16 @@ export interface AnafOptions extends ProviderHttpOptions {
   readonly intervalMs?: number
 }
 
-/** One queue per client, so one per process: every organization shares ANAF's limit. */
-export const createAnafClient = (options: AnafOptions): CompanyLookupProviders["anaf"] => {
+/** `date` (`YYYY-MM-DD`) is the day ANAF answers about; without it, today in Bucharest. */
+export interface AnafClient {
+  readonly lookup: (request: { readonly cui: string }, date?: string) => Effect.Effect<AnafCompany | undefined, ProviderFailure>
+}
+
+/**
+ * One queue per client, so one per process: every organization shares ANAF's
+ * limit, and the company lookup and the issuer's VAT check share this one client.
+ */
+export const createAnafClient = (options: AnafOptions): AnafClient => {
   const now = options.now ?? (() => new Date())
   const interval = options.intervalMs ?? INTERVAL_MS
   const turn = Effect.unsafeMakeSemaphore(1)
@@ -47,10 +55,10 @@ export const createAnafClient = (options: AnafOptions): CompanyLookupProviders["
   })
 
   return {
-    lookup: ({ cui }) => paced(send(options, ANAF_URL, {
+    lookup: ({ cui }, date) => paced(send(options, ANAF_URL, {
       method: "POST",
       headers: { "content-type": "application/json", accept: "application/json" },
-      body: JSON.stringify([{ cui: Number(cui), data: bucharestDay.format(now()) }]),
+      body: JSON.stringify([{ cui: Number(cui), data: date ?? bucharestDay.format(now()) }]),
     })).pipe(Effect.flatMap((reply): Effect.Effect<AnafCompany | undefined, ProviderFailure> => {
       // ANAF answers an unknown CUI with 404 and the usual body: `{found: [], notFound: [cui]}`.
       if (reply.status !== 200 && reply.status !== 404) return Effect.fail(unavailable())

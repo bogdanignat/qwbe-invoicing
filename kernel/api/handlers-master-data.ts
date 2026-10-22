@@ -1,16 +1,23 @@
 import { HttpApiBuilder } from "@effect/platform"
 import { Effect } from "effect"
 
+import { issuerSaveConflicts } from "../../cubes/invoicing/issuer/index.ts"
 import type { UseServices } from "./api-types.ts"
-import { errors } from "./api-failures.ts"
+import { errors, type ApiFailure } from "./api-failures.ts"
 import { applicationHttpApi } from "./http-api.ts"
 
 const deleted = { deleted: true } as const
+const issuerConflicts: ReadonlyArray<string> = Object.values(issuerSaveConflicts)
+// Only the issuer's own conflicts are answers: one the store raises on this write (a drifted schema) stays a logged 500.
+const issuerErrors = (failure: ApiFailure) =>
+  failure._tag === "DomainConflict" && !issuerConflicts.includes(failure.code)
+    ? errors("ValidationFailure", "vat_registry_unavailable")(failure)
+    : errors("ValidationFailure", "DomainConflict", "vat_registry_unavailable")(failure)
 export const masterDataHandlers = (use: UseServices) => ({
   getIssuer: HttpApiBuilder.handler(applicationHttpApi, "invoicing", "getIssuer", () =>
     use((s) => s.invoicing.getIssuer()).pipe(Effect.mapError(errors("ResourceNotFound")))),
   configureIssuer: HttpApiBuilder.handler(applicationHttpApi, "invoicing", "configureIssuer", ({ payload }) =>
-    use((s) => s.invoicing.configureIssuer(payload)).pipe(Effect.mapError(errors("ValidationFailure")))),
+    use((s) => s.invoicing.configureIssuer(payload)).pipe(Effect.mapError(issuerErrors))),
   listDocumentSeries: HttpApiBuilder.handler(applicationHttpApi, "invoicing", "listDocumentSeries", () =>
     use((s) => s.invoicing.listDocumentSeries()).pipe(Effect.mapError(errors()))),
   addDocumentSeries: HttpApiBuilder.handler(applicationHttpApi, "invoicing", "addDocumentSeries", ({ payload }) =>

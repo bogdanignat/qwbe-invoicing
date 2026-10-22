@@ -40,7 +40,9 @@ void test("issuer configuration normalizes all company fields exactly and accept
   assert.equal(saved.socialCapital, "900719925474099.10")
   assert.equal(saved.iban, "RO49AAAA1B31007593840000")
   assert.equal(saved.bankName, "Bancă Știință")
-  assert.deepEqual(await Effect.runPromise(service.getIssuer()), saved)
+  const { warnings, ...profile } = saved
+  assert.deepEqual(warnings, [], "same regime and CIF as the setup's: no fiscal change, nothing left unchecked")
+  assert.deepEqual(await Effect.runPromise(service.getIssuer()), profile)
   const incomplete = await Effect.runPromise(service.configureIssuer({ ...input, tradeRegistryNumber: "", socialCapital: "" }))
   assert.equal(incomplete.tradeRegistryNumber, "")
   assert.equal(incomplete.socialCapital, "")

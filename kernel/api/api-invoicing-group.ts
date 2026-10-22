@@ -1,7 +1,6 @@
 import { HttpApiBuilder } from "@effect/platform"
 
-import { createUseServices } from "./api-services.ts"
-import type { ApiRuntime } from "./api-types.ts"
+import type { ApiRuntime, UseServices } from "./api-types.ts"
 import { eFacturaStatusView } from "./efactura-status.ts"
 import { correctionHandlers } from "./handlers-corrections.ts"
 import { customerHandlers } from "./handlers-customers.ts"
@@ -13,12 +12,11 @@ import { applicationHttpApi } from "./http-api.ts"
 /**
  * The invoicing group, lifted out of `api.ts` so the composition root stays
  * readable and inside the per-file budget. It is a route table and nothing else:
- * no service is built here beyond `createUseServices`, which takes the runtime's
- * pool and builds the cube services per request. The plugins' routes are not
+ * no service is built here: `use` is `createApiHandler`'s one composition of the
+ * cube services, built per request. The plugins' routes are not
  * here: `handlers-payments.ts` and `handlers-efactura.ts` own them.
  */
-export const invoicingGroup = (runtime: ApiRuntime) => {
-  const use = createUseServices(runtime)
+export const invoicingGroup = (runtime: ApiRuntime, use: UseServices) => {
   const m = masterDataHandlers(use)
   const c = customerHandlers(use)
   const status = eFacturaStatusView(runtime.plugins.efactura)

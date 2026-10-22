@@ -10,6 +10,7 @@ import { createRequestAuthenticator } from "../auth/auth.ts"
 import { withMigrated } from "../storage/postgres-rig.test-support.ts"
 import { handleApiRequest } from "./api.test-support.ts"
 import { allPlugins } from "../plugins.ts"
+import { anafRegistry } from "../company-lookup/vat-registry.test-support.ts"
 
 const each = { code: "C62", name: "unitate" } as const
 
@@ -22,7 +23,7 @@ void test("invoice register exposes invoices and corrections without changing /a
       authenticate: createRequestAuthenticator(fixture.config({ authTokenFile: tokenFile, organizationId })),
       pool: fixture.pool,
       dataDirectory: fixture.dataDirectory, now: () => new Date("2026-09-05T10:00:00.000Z"),
-      plugins: allPlugins,
+      plugins: allPlugins, transport: anafRegistry(),
     })
     const runtime = makeRuntime("org-1")
     const authorization = `Bearer ${token}`

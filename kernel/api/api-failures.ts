@@ -1,6 +1,7 @@
 import type { CompanyLookupFailure, ProviderFailureReason } from "../../cubes/invoicing/company-lookup/index.ts"
 import type { DocumentsFailure } from "../../cubes/invoicing/documents/index.ts"
 import type { InvoicingFailure } from "../../cubes/invoicing/index.ts"
+import type { VatRegistryUnavailable } from "../../cubes/invoicing/issuer/index.ts"
 import type { PaymentsFailure } from "../../cubes/invoicing/payments/index.ts"
 import { logInternalFailure } from "../failure-log.ts"
 
@@ -10,8 +11,9 @@ type Wire =
   | { readonly error: "ResourceNotFound" | "DocumentNotFound" | "ArtifactConflict" | "PersistenceFailure"
     | "DocumentPersistenceFailure" | "DocumentRenderingFailure" | "internal_failure" }
   | { readonly error: "DomainConflict"; readonly code: string }
+  | { readonly error: "vat_registry_unavailable" }
   | { readonly error: "ProviderFailure"; readonly reason: ProviderFailureReason; readonly message: string; readonly retryAfterSeconds?: number }
-type ApiFailure = InvoicingFailure | PaymentsFailure | DocumentsFailure | CompanyLookupFailure
+export type ApiFailure = InvoicingFailure | PaymentsFailure | DocumentsFailure | CompanyLookupFailure | VatRegistryUnavailable
 type WireTag = Wire["error"]
 type Allowed<T extends WireTag> = Extract<Wire, { readonly error: T }> | { readonly error: "internal_failure" }
 
@@ -28,6 +30,7 @@ const toWire = (failure: ApiFailure): Wire => {
     case "ValidationFailure": return { error: "ValidationFailure", issues: failure.issues }
     case "DomainConflict": return { error: "DomainConflict", code: failure.code }
     case "RenderingFailure": return { error: "internal_failure" }
+    case "VatRegistryUnavailable": return { error: "vat_registry_unavailable" }
     case "ProviderFailure": return { error: "ProviderFailure", reason: failure.reason, message: providerMessages[failure.reason],
       ...(failure.retryAfterSeconds === undefined ? {} : { retryAfterSeconds: failure.retryAfterSeconds }) }
     case "AuthenticationRequired":

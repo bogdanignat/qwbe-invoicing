@@ -1,3 +1,5 @@
+import { issuerSaveFailureMessages } from "./issuer-save-failures.ts"
+
 export class ApiFailure extends Error {
   readonly status: number | undefined
   readonly code: string | undefined
@@ -82,6 +84,7 @@ const failureMessages: Readonly<Record<string, string>> = {
   company_lookup_not_configured: "Completarea datelor firmelor nu este pornită. Pornește un furnizor din Integrări.",
   company_search_unavailable: "Furnizorul ales nu caută firme după nume; caută după CUI.",
   company_lookup_key_storage_unavailable: "Cheia openapi.ro nu poate fi salvată: serverul nu are configurată cheia de criptare (COMPANY_LOOKUP_KEY_FILE). ANAF funcționează și fără cheie.",
+  ...issuerSaveFailureMessages,
 }
 
 /**

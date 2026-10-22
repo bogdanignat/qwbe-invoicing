@@ -5,11 +5,12 @@ import * as C from "./schema-customers-catalog.ts"
 import * as I from "./schema-issuer.ts"
 import { PageQuery, UnitOfMeasure } from "./schema-primitives.ts"
 import { body, conflict, id, invoicingBase, notFound, validation } from "./http-api-shared.ts"
-import { Deleted } from "./schema-errors-session.ts"
+import { Deleted, VatRegistryUnavailableError } from "./schema-errors-session.ts"
 
 export const masterDataEndpoints = {
   getIssuer: invoicingBase(notFound(HttpApiEndpoint.get("getIssuer", "/issuer").addSuccess(I.Issuer))),
-  configureIssuer: invoicingBase(validation(body(HttpApiEndpoint.put("configureIssuer", "/issuer").setPayload(I.IssuerInput).addSuccess(I.Issuer)))),
+  configureIssuer: invoicingBase(conflict(validation(body(HttpApiEndpoint.put("configureIssuer", "/issuer").setPayload(I.IssuerInput)
+    .addSuccess(I.ConfiguredIssuer).addError(VatRegistryUnavailableError))))),
   listDocumentSeries: invoicingBase(HttpApiEndpoint.get("listDocumentSeries", "/document-series").addSuccess(Schema.Array(I.DocumentSeries))),
   addDocumentSeries: invoicingBase(conflict(validation(body(HttpApiEndpoint.post("addDocumentSeries", "/document-series").setPayload(I.DocumentSeriesInput).addSuccess(I.DocumentSeries))))),
   listUnitOfMeasures: invoicingBase(HttpApiEndpoint.get("listUnitOfMeasures", "/unit-of-measures").addSuccess(Schema.Array(UnitOfMeasure))),

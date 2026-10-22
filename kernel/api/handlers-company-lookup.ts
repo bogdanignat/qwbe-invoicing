@@ -5,6 +5,7 @@ import { invoicingPermissions } from "../../cubes/invoicing/index.ts"
 import {
   companyLookupPermission, createCompanyLookupService, cube, type CompanyLookupService,
 } from "../../cubes/invoicing/company-lookup/index.ts"
+import type { AnafClient } from "../company-lookup/anaf-client.ts"
 import { createCompanyLookupProviders } from "../company-lookup/providers.ts"
 import { createPostgresCompanyLookupStore } from "../storage/postgres-company-lookup.ts"
 import { CurrentRequest } from "./api-context.ts"
@@ -14,11 +15,11 @@ import { companyLookupHttpApi } from "./http-api.ts"
 
 /**
  * The company-lookup plugin's routes, mounted by `createApiHandler` only with the
- * plugin on. The providers, their cache and ANAF's queue are built here, once
- * per handler; only the service around them is per request, for its context.
+ * plugin on. The providers and their cache are built here, once per handler,
+ * around the handler's one ANAF client; only the service is per request, for its context.
  */
-export const companyLookupGroup = (runtime: ApiRuntime) => {
-  const providers = createCompanyLookupProviders({ transport: runtime.transport ?? fetch, ...(runtime.now ? { now: runtime.now } : {}) })
+export const companyLookupGroup = (runtime: ApiRuntime, anaf: AnafClient) => {
+  const providers = createCompanyLookupProviders({ transport: runtime.transport ?? fetch }, anaf)
   const settings = createPostgresCompanyLookupStore(runtime.pool, runtime.companyLookupKey)
   const permissions = { lookup: companyLookupPermission(cube.manifest.name), manageSettings: invoicingPermissions("invoicing").manageSettings }
   const clock = { now: Effect.sync(runtime.now ?? (() => new Date())) }
