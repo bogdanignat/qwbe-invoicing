@@ -286,7 +286,7 @@ void test("renders a deterministic storno with negated totals, the reversed invo
   const first = await Effect.runPromise(renderer.renderCorrection(correction))
   const second = await Effect.runPromise(renderer.renderCorrection(correction))
   assert.equal(first.templateVersion, correctionTemplateVersion)
-  assert.equal(first.templateVersion, "storno-v2")
+  assert.equal(first.templateVersion, "storno-v3")
   assert.equal(Buffer.from(first.bytes.subarray(0, 5)).toString("ascii"), "%PDF-")
   assert.deepEqual(first.bytes, second.bytes)
   const parsed = await PDFDocument.load(first.bytes, { updateMetadata: false })

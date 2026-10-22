@@ -4,7 +4,7 @@ import test from "node:test"
 import * as cubeMoney from "../cubes/invoicing/contracts/money.ts"
 import { negateDecimal } from "../cubes/invoicing/corrections/index.ts"
 import { characterCount, normalizeSpace } from "../cubes/invoicing/efactura/decimals.ts"
-import { ROMANIAN_COUNTIES } from "../cubes/invoicing/index.ts"
+import { ROMANIAN_COUNTIES, addressCountyName } from "../cubes/invoicing/index.ts"
 import { CIUS_TEXT_LIMITS, ciusTextLength, validateVatTreatment } from "../cubes/invoicing/domain/validation.ts"
 import { normalizeIssuerDetails, validateIssuerForIssuance } from "../cubes/invoicing/issuer/index.ts"
 import { romanianVatRates } from "../cubes/invoicing/issuer/domain/vat-catalogue.ts"
@@ -14,7 +14,7 @@ import * as pdfFormat from "../kernel/documents/pdf-format.ts"
 import { issuerIssuanceWarning } from "../frontend/src/lib/invoice-authoring-workflow.ts"
 import { socialCapitalValue } from "../frontend/src/lib/issuer-legal.ts"
 import * as frontendMoney from "../frontend/src/lib/money.ts"
-import { ROMANIAN_COUNTIES as FRONTEND_COUNTIES } from "../frontend/src/lib/romanian-counties.ts"
+import { ROMANIAN_COUNTIES as FRONTEND_COUNTIES, addressCountyName as frontendAddressCountyName } from "../frontend/src/lib/romanian-counties.ts"
 import { vatTreatmentLabel } from "../frontend/src/lib/vat-snapshots.ts"
 
 // The frontend mirrors these rules instead of importing the cube. Nothing else
@@ -22,6 +22,21 @@ import { vatTreatmentLabel } from "../frontend/src/lib/vat-snapshots.ts"
 
 void test("the frontend county list is the cube's, code and name, in the same order", () => {
   assert.deepEqual(FRONTEND_COUNTIES, ROMANIAN_COUNTIES)
+})
+
+void test("the browser leaves the county out of an address exactly when the PDF does", () => {
+  const cities = [...ROMANIAN_COUNTIES.map((county) => county.name), "Bucuresti", "BISTRITA NASAUD", "Satu  Mare", "Cluj-Napoca", "RO-XX", ""]
+  for (const code of ROMANIAN_COUNTIES.map((county) => county.code)) {
+    for (const city of cities) {
+      assert.equal(frontendAddressCountyName(city, code), addressCountyName(city, code), `${city} @ ${code}`)
+    }
+  }
+  // The one difference, kept on purpose: an unknown code (never valid in a party)
+  // is left off the PDF, while the document view shows it as stored (T-1400).
+  for (const city of cities) {
+    assert.equal(addressCountyName(city, "RO-XX"), undefined, city)
+    assert.equal(frontendAddressCountyName(city, "RO-XX"), city === "RO-XX" ? undefined : "RO-XX", city)
+  }
 })
 
 void test("the frontend text limits are the cube's CIUS-RO limits", () => {

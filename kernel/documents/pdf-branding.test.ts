@@ -37,7 +37,7 @@ void test("renders none, custom text, image and both deterministically in invoic
   for (const branding of [null, { text, image: null }, { text: null, image }, { text, image }]) {
     const source = { ...invoice, issuer: { ...invoice.issuer, branding } }
     const proforma: RenderableProforma = { ...source, sourceDraftId: null, convertedDraftId: null, convertedInvoiceId: null }
-    for (const [render, version] of [[() => renderer.render(source), "invoice-v10"], [() => renderer.renderProforma(proforma), "proforma-v9"]] as const) {
+    for (const [render, version] of [[() => renderer.render(source), "invoice-v11"], [() => renderer.renderProforma(proforma), "proforma-v10"]] as const) {
       const first = await Effect.runPromise(render())
       assert.equal(first.templateVersion, version)
       assert.deepEqual(first.bytes, (await Effect.runPromise(render())).bytes)
