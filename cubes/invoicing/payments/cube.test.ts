@@ -114,8 +114,12 @@ void test("rolls payment and idempotency back when the audit append fails", asyn
   assert.equal(persistedRecords.size, 0)
 })
 void test("preserves validation, permission, and tenant isolation failures", async () => {
-  await assert.rejects(() => Effect.runPromise(service().recordPayment(idempotent({ invoiceId: invoice.id, amount: "0", currency: "RON", paymentDate: "2026-09-10", method: "cash" }))),
-    /ValidationFailure/)
+  const written = [payments.size, records.size]
+  const invalid = await Effect.runPromise(Effect.flip(service().recordPayment(idempotent({ invoiceId: invoice.id, amount: "0", currency: "RON", paymentDate: "2026-09-10", method: "cash" }))))
+  assert.deepEqual(invalid._tag === "ValidationFailure" ? invalid.issues : invalid, ["amount must be greater than zero"])
+  const invalidReversal = await Effect.runPromise(Effect.flip(service().reversePayment(idempotent({ invoiceId: invoice.id, paymentId: "payment-1", reason: "   " }))))
+  assert.deepEqual(invalidReversal._tag === "ValidationFailure" ? invalidReversal.issues : invalidReversal, ["reason must not be empty when provided"])
+  assert.deepEqual([payments.size, records.size], written)
   assert.equal(await Effect.runPromise(Effect.flip(service("org-2").listPayments(invoice.id))) instanceof ResourceNotFound, true)
   assert.equal(await Effect.runPromise(Effect.flip(service("org-1", []).listPayments(invoice.id))) instanceof PermissionDenied, true)
 })

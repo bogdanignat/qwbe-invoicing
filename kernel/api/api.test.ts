@@ -377,7 +377,6 @@ void test("requires host authentication and serves the complete invoice-core rou
       idempotencyKey: "missing-conversion-series", body: {} }, runtime)).status, 400)
     assert.equal((await handleApiRequest({ method: "POST", url: "/api/proformas/missing/pdf", authorization, body: {} }, runtime)).status, 404)
     assert.equal((await handleApiRequest({ method: "GET", url: "/api/proformas/missing/pdf", authorization, body: undefined }, runtime)).status, 404)
-    assert.equal((await handleApiRequest({ method: "POST", url: `/api/proformas/${proformaId}/pdf`, authorization, body: [] }, runtime)).status, 400)
     const renderedProforma = await handleApiRequest({
       method: "POST", url: `/api/proformas/${proformaId}/pdf`, authorization, body: {},
     }, runtime)

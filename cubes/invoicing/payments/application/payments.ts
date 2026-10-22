@@ -1,5 +1,6 @@
 import { Effect } from "effect"
 
+import { checked } from "../../application/support.ts"
 import { ValidationFailure, type PaymentsFailure } from "../contracts/failures.ts"
 import { legacyPaymentsPermissions, paymentsPermissions } from "../contracts/permissions.ts"
 import { formatMinor, moneyMinor, validateRecordPaymentInput, type Idempotent, type Payment, type RecordPaymentInput } from "../domain/payments.ts"
@@ -12,7 +13,7 @@ export const createPaymentsService = (dependencies: PaymentsDependencies) => {
   const permissions = paymentsPermissions(dependencies.cubeIdentity)
   const authorized = createAuthorize(dependencies)
   const recordPayment = ({ request: input, idempotency }: Idempotent<RecordPaymentInput>): Effect.Effect<RecordPaymentResult, PaymentsFailure> => Effect.gen(function*() {
-    validateRecordPaymentInput(input)
+    yield* checked(() => { validateRecordPaymentInput(input) })
     yield* validateAttempt(idempotency)
     const context = yield* authorized(permissions.record, legacyPaymentsPermissions.record); const id = yield* dependencies.ids.next; const now = yield* dependencies.clock.now
     return yield* dependencies.store.transaction((transaction) => Effect.gen(function*() {
