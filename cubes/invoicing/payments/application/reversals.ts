@@ -1,5 +1,6 @@
 import { Effect } from "effect"
 
+import { checked } from "../../application/support.ts"
 import { DomainConflict, type PaymentsFailure } from "../contracts/failures.ts"
 import { legacyPaymentsPermissions, paymentsPermissions } from "../contracts/permissions.ts"
 import { calendarDate, validateReversePaymentInput, type Idempotent, type Payment, type ReversePaymentInput } from "../domain/payments.ts"
@@ -10,7 +11,7 @@ import { missingInvoice, missingPayment, recordAuditEvent, replayed, summarize, 
 export const createReversePayment = (dependencies: PaymentsDependencies, authorized: Authorize) => {
   const permissions = paymentsPermissions(dependencies.cubeIdentity)
   return ({ request: input, idempotency }: Idempotent<ReversePaymentInput>): Effect.Effect<RecordPaymentResult, PaymentsFailure> => Effect.gen(function*() {
-    validateReversePaymentInput(input)
+    yield* checked(() => { validateReversePaymentInput(input) })
     yield* validateAttempt(idempotency)
     const context = yield* authorized(permissions.record, legacyPaymentsPermissions.record); const id = yield* dependencies.ids.next; const now = yield* dependencies.clock.now
     return yield* dependencies.store.transaction((transaction) => Effect.gen(function*() {

@@ -54,7 +54,6 @@ const inputs: ReadonlyArray<InputCase> = [
   { name: "issue proforma", schema: S.IssueProformaInput, decode: (value) => A.issueProformaInput("draft-1", value), value: { series: "PRO" }, ids: { draftId: "draft-1" } },
   { name: "author invoice", schema: S.AuthoringDocumentInput, decode: A.authoringInvoiceInput, value: authoring },
   { name: "author proforma", schema: S.AuthoringProformaInput, decode: A.authoringProformaInput, value: { ...authoring, proformaSeries: "PRO" } },
-  { name: "empty", schema: S.EmptyInput, decode: A.emptyInput, value: {} },
 ]
 
 void test("issuer transport requires the raw branding shape", () => {

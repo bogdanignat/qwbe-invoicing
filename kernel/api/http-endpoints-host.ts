@@ -11,8 +11,8 @@ export const documentEndpoints = {
     .addError(E.DocumentNotFoundError).addError(E.ArtifactConflictError))),
   downloadInvoicePdf: documentsBase(HttpApiEndpoint.get("downloadInvoicePdf")`/invoices/${invoiceId}/pdf`.addSuccess(D.Pdf)
     .addError(E.DocumentNotFoundError)),
-  renderProformaPdf: documentsBase(body(HttpApiEndpoint.post("renderProformaPdf")`/proformas/${proformaId}/pdf`.setPayload(D.EmptyInput)
-    .addSuccess(D.ProformaArtifact).addError(E.DocumentNotFoundError).addError(E.ArtifactConflictError))),
+  renderProformaPdf: documentsBase(body(HttpApiEndpoint.post("renderProformaPdf")`/proformas/${proformaId}/pdf`.addSuccess(D.ProformaArtifact)
+    .addError(E.DocumentNotFoundError).addError(E.ArtifactConflictError))),
   downloadProformaPdf: documentsBase(HttpApiEndpoint.get("downloadProformaPdf")`/proformas/${proformaId}/pdf`.addSuccess(D.Pdf)
     .addError(E.DocumentNotFoundError)),
   downloadCorrectionPdf: documentsBase(HttpApiEndpoint.get("downloadCorrectionPdf")`/corrections/${id}/pdf`.addSuccess(D.Pdf)

@@ -49,7 +49,6 @@ export const correctionInput = (originalInvoiceId: string, value: unknown) => ({
 export const issueProformaInput = (draftId: string, value: unknown) => ({ ...decode(S.IssueProformaInput, value), draftId })
 export const authoringInvoiceInput = (value: unknown): AuthoringDocumentInput => decode(S.AuthoringDocumentInput, value)
 export const authoringProformaInput = (value: unknown): AuthoringProformaInput => decode(S.AuthoringProformaInput, value)
-export const emptyInput = (value: unknown): Record<string, never> => decode(S.EmptyInput, value)
 
 export const pageRequest = (params: URLSearchParams): PageRequest | undefined => {
   // URLSearchParams multiplicity is transport-level; value rules belong to Schema.
