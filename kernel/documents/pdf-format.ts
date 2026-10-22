@@ -1,5 +1,5 @@
 import { formatDecimal, parseDecimal } from "../../cubes/invoicing/contracts/money.ts"
-import { romanianCountyName } from "../../cubes/invoicing/index.ts"
+import { addressCountyName } from "../../cubes/invoicing/index.ts"
 import type {
   RenderableCorrection, RenderableInvoice, RenderableParty, RenderableProforma,
 } from "../../cubes/invoicing/documents/index.ts"
@@ -36,7 +36,7 @@ export const documentDateLine = (document: Pick<RenderableDocument, "issueDate" 
 
 export const partyAddressLines = (party: RenderableParty): ReadonlyArray<string> => {
   const region = [
-    romanianCountyName(party.address.county),
+    addressCountyName(party.address.city, party.address.county),
     party.address.sector === undefined ? undefined : `Sector ${String(party.address.sector)}`,
     party.address.postalCode,
   ].filter((part) => part !== undefined && part !== "")

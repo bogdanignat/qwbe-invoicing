@@ -62,6 +62,18 @@ export const ROMANIAN_COUNTIES: ReadonlyArray<RomanianCounty> = [
 export const romanianCountyName = (code: string): string =>
   ROMANIAN_COUNTIES.find((county) => county.code === code)?.name ?? code
 
+const comparable = (name: string): string => name.normalize("NFD").replace(/\p{M}/gu, "").replace(/[\s-]+/gu, "").toLowerCase()
+
+/**
+ * The county's name for an address line, absent when the city already says it
+ * (`București`, `RO-B`). Unlike the PDF, an unknown code is shown as stored
+ * rather than dropped: the document view has always shown it (T-1400).
+ */
+export const addressCountyName = (city: string, county: string): string | undefined => {
+  const name = romanianCountyName(county)
+  return comparable(name) === comparable(city) ? undefined : name
+}
+
 export const isRomanianCountyCode = (code: string): boolean =>
   ROMANIAN_COUNTIES.some((county) => county.code === code)
 

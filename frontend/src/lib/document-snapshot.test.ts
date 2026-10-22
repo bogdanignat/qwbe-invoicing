@@ -187,7 +187,7 @@ void test("an invoice projects its facts, parties and totals as strings", () => 
 void test("an address resolves its ISO county code to the county name", () => {
   const view = projectIssuedInvoice(decodeIssuedInvoice(invoiceJson))
   assert.equal(
-    view.parties[0]?.details.includes("Str. Lungă 1, București, București, Sector 3, 030123, RO"),
+    view.parties[0]?.details.includes("Str. Lungă 1, București, Sector 3, 030123, RO"),
     true,
   )
   assert.equal(view.parties[1]?.details.includes("Str. Scurtă 2, Cluj-Napoca, Cluj, RO"), true)

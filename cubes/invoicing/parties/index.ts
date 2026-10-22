@@ -14,5 +14,5 @@ export const cube = {
 }
 
 export { isValidRomanianCnp, isValidRomanianCui, validateBuyer, validateParty } from "./domain/party-validation.ts"
-export { ROMANIAN_COUNTIES, isRomanianCountyCode, romanianCountyName } from "./domain/romanian-counties.ts"
+export { ROMANIAN_COUNTIES, addressCountyName, isRomanianCountyCode, romanianCountyName } from "./domain/romanian-counties.ts"
 export type { RomanianCounty } from "./domain/romanian-counties.ts"

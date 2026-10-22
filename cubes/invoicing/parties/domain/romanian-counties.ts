@@ -52,3 +52,16 @@ const countyNames = new Map(ROMANIAN_COUNTIES.map((county) => [county.code, coun
 
 export const isRomanianCountyCode = (value: string): boolean => countyNames.has(value)
 export const romanianCountyName = (code: string): string | undefined => countyNames.get(code)
+
+const comparable = (name: string): string => name.normalize("NFD").replace(/\p{M}/gu, "").replace(/[\s-]+/gu, "").toLowerCase()
+
+/**
+ * The county's name for an address line, absent when the city already says it:
+ * `București` in `RO-B` or `Suceava` in `RO-SV` would otherwise print twice.
+ * Case, diacritics, spaces and hyphens do not count, so `Bucuresti` matches
+ * `București` and `Bistrita Nasaud` matches `Bistrița-Năsăud`.
+ */
+export const addressCountyName = (city: string, county: string): string | undefined => {
+  const name = romanianCountyName(county)
+  return name === undefined || comparable(name) === comparable(city) ? undefined : name
+}

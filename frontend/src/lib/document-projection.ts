@@ -1,7 +1,7 @@
 import { orDash } from "./format.ts"
 import { formatAmount, money } from "./money.ts"
 import { eFacturaStatusLabel, invoiceDetailHref } from "./invoice-register-projection.ts"
-import { romanianCountyName } from "./romanian-counties.ts"
+import { addressCountyName } from "./romanian-counties.ts"
 import { vatTreatmentLabel } from "./vat-snapshots.ts"
 import type {
   Address, BuyerSnapshot, CorrectionDocument, DocumentBody, DocumentLine, IssuedInvoice,
@@ -53,7 +53,8 @@ export interface DocumentSnapshotView {
  * The address as the legacy document prints it: names, not codes.
  *
  * `county` is stored as an ISO 3166-2 code (`RO-B`, `RO-BT`) because that is
- * what `validateParty` accepts, so it is resolved to its name here. The order
+ * what `validateParty` accepts, so it is resolved to its name here, and left
+ * out when the city already says it (`București`, `RO-B`). The order
  * follows the legacy `formattedRomanianAddress` — street, city, county, sector,
  * postal code, country — and parts the snapshot does not carry are dropped
  * rather than printed as empty separators.
@@ -61,7 +62,7 @@ export interface DocumentSnapshotView {
 const addressLine = (address: Address): string => [
   address.street,
   address.city,
-  romanianCountyName(address.county),
+  addressCountyName(address.city, address.county),
   address.sector === undefined ? undefined : `Sector ${String(address.sector)}`,
   address.postalCode,
   address.countryCode,
