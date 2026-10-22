@@ -7,6 +7,7 @@ import { handleApiRequest } from "./api.test-support.ts"
 import { createRequestAuthenticator } from "../auth/auth.ts"
 import { withMigrated } from "../storage/postgres-rig.test-support.ts"
 import { allPlugins } from "../plugins.ts"
+import { anafRegistry } from "../company-lookup/vat-registry.test-support.ts"
 
 void test("direct proforma authoring needs only a proforma series configuration", async () => {
   await withMigrated("proforma_api", async (fixture) => {
@@ -19,6 +20,7 @@ void test("direct proforma authoring needs only a proforma series configuration"
       pool: fixture.pool,
       dataDirectory: fixture.dataDirectory,
       plugins: allPlugins,
+      transport: anafRegistry(),
       now: () => new Date("2026-09-05T10:00:00.000Z"),
     }
     const issuer = await handleApiRequest({ method: "PUT", url: "/api/issuer", authorization, body: {

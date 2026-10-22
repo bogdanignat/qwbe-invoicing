@@ -623,6 +623,8 @@ when `registered` is true. These commands are accepted instead
 of a caller-authored `vatConfigurations` history. The server builds that history
 and returns it with `currentVat` (null when no registration is currently active).
 The catalogue supplies date-effective line rates separately from issuer registration.
+A change of regime or CIF is checked against ANAF's VAT registry and refused over
+issued documents in the period it rewrites (`docs/VAT_TREATMENT.md`, T-1977).
 CUI is stored as canonical digits without `RO`; VAT registration is explicit, never
 inferred from a prefix. The UI may strip a typed `RO` prefix without changing the
 registration checkbox. Company buyers also carry an explicit `vatRegistered` flag;

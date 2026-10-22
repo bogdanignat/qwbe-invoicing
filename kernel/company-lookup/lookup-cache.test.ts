@@ -5,6 +5,7 @@ import { Deferred, Effect, Redacted } from "effect"
 
 import { ProviderFailure } from "../../cubes/invoicing/company-lookup/index.ts"
 import { CAPACITY, TTL_MS, createLookupCache } from "./lookup-cache.ts"
+import { createAnafClient } from "./anaf-client.ts"
 import { createCompanyLookupProviders } from "./providers.ts"
 import { fakeTransport, json } from "./transport.test-support.ts"
 
@@ -70,7 +71,7 @@ void test("past 500 answers the least recently used one goes first", async () =>
 void test("the providers' cache is keyed by organization and settings version, never by the key", async () => {
   const { transport, sent } = fakeTransport((request) => request.url.includes("anaf")
     ? json({ found: [], notFound: [12345674] }) : json({ data: [] }))
-  const providers = createCompanyLookupProviders({ transport, intervalMs: 0 })
+  const providers = createCompanyLookupProviders({ transport }, createAnafClient({ transport, intervalMs: 0 }))
   const ask = (organizationId: string, settingsVersion: string) =>
     Effect.runPromise(providers.anaf.lookup({ organizationId, settingsVersion, cui: "12345674" }))
   await ask("org-1", "v1")

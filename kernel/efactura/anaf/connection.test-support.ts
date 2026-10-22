@@ -10,6 +10,7 @@ import { createApiHandler } from "../../api/api.ts"
 import type { RequestAuthenticator } from "../../auth/auth.ts"
 import type { Transport } from "../../outbound/send.ts"
 import { allPlugins } from "../../plugins.ts"
+import { anafRegistry } from "../../company-lookup/vat-registry.test-support.ts"
 import type { AnafSettings } from "./config.ts"
 import { connectionHost } from "./connection-host.ts"
 import { startFakeAnaf, type FakeAnaf } from "./fake-anaf.test-support.ts"
@@ -87,7 +88,8 @@ export const connectionRig = async (pool: Pool, dataDirectory: string, settings:
   const token = gated(fake.transport, "/token")
   const clock = { now: Date.parse("2026-10-19T12:00:00.000Z") }
   const now = () => new Date(clock.now)
-  const handler = createApiHandler({ authenticate, pool, dataDirectory, plugins: allPlugins, transport: token.transport, anaf: settings, now })
+  const handler = createApiHandler({ authenticate, pool, dataDirectory, plugins: allPlugins,
+    transport: anafRegistry(() => true, token.transport), anaf: settings, now })
   const logs: Array<string> = []
   const capture = async <T>(run: () => Promise<T>): Promise<T> => {
     const [out, err] = [process.stdout.write.bind(process.stdout), process.stderr.write.bind(process.stderr)]

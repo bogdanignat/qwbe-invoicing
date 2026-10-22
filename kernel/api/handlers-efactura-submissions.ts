@@ -14,7 +14,7 @@ import { errors } from "./api-failures.ts"
 import { attachment, safeFilename } from "./api-responses.ts"
 import { efacturaDocuments } from "./efactura-documents.ts"
 import { EFacturaSubmission } from "./http-endpoints-efactura-submissions.ts"
-import type { ApiRuntime } from "./api-types.ts"
+import type { ApiRuntime, UseServices } from "./api-types.ts"
 
 /** Encoded through the API schema, so only its fields leave (never the organization). */
 export const submitted = ({ submission, created }: Submitted) =>
@@ -25,8 +25,8 @@ export const submitted = ({ submission, created }: Submitted) =>
  * the invoicing grants (a proforma, or anything else that is not an issued
  * document, is a 404 here), and the submissions service decides the rest.
  */
-export const submissionHandlers = (runtime: ApiRuntime) => {
-  const { invoice, correction } = efacturaDocuments(runtime)
+export const submissionHandlers = (runtime: ApiRuntime, use: UseServices) => {
+  const { invoice, correction } = efacturaDocuments(use)
   const anaf = runtime.anaf
   const environment = anaf?.environment ?? "test"
   const store = createPostgresSubmissionsStore(runtime.pool, environment)

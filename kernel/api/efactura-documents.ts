@@ -5,8 +5,7 @@ import type { IssuedInvoice } from "../../cubes/invoicing/index.ts"
 import type { SubmissionDocument, SubmittedKind } from "../../cubes/invoicing/efactura/submissions/index.ts"
 import { mapCorrection, mapIssuedInvoice } from "../efactura/efactura-mapper.ts"
 import { renderEFactura } from "./api-responses.ts"
-import { createUseServices } from "./api-services.ts"
-import type { ApiRuntime } from "./api-types.ts"
+import type { UseServices } from "./api-types.ts"
 
 const xmlOf = (build: Parameters<typeof renderEFactura>[0]) => Effect.map(renderEFactura(build), ({ bytes }) => bytes)
 
@@ -25,8 +24,7 @@ const correctionDocument = (correction: CorrectionDocument, original: IssuedInvo
  * frozen snapshot under the invoicing grants: a proforma, or anything that is
  * not an issued document, is not found. The XML is generated only when asked.
  */
-export const efacturaDocuments = (runtime: ApiRuntime) => {
-  const use = createUseServices(runtime)
+export const efacturaDocuments = (use: UseServices) => {
   const invoice = (id: string) => use((s) => Effect.map(s.invoicing.getIssuedInvoice(id), invoiceDocument))
   const correction = (id: string) => use((s) => Effect.flatMap(s.invoicing.getCorrection(id),
     (found) => Effect.map(s.invoicing.getIssuedInvoice(found.originalInvoiceId), (original) => correctionDocument(found, original))))

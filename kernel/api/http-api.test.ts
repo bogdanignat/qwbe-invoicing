@@ -250,9 +250,11 @@ void test("OpenAPI 3.1 mirrors paths, PDF encoding, and authentication metadata"
     "/api/invoices/{id}/efactura.xml", "/api/corrections/{id}/efactura.xml", "/api/corrections/{id}/pdf"]) {
     expectStatuses("get", path, ["404"])
   }
-  for (const [method, path] of [["put", "/api/issuer"], ["post", "/api/customers"], ["post", "/api/product-presets"]] as const) {
+  for (const [method, path] of [["post", "/api/customers"], ["post", "/api/product-presets"]] as const) {
     expectStatuses(method, path, ["413"])
   }
+  // A fiscal issuer change is refused over issued documents or a concurrent change (409), or while ANAF is down (503).
+  expectStatuses("put", "/api/issuer", ["409", "413"])
   expectStatuses("post", "/api/document-series", ["409", "413"])
   for (const [method, path] of [["put", "/api/customers/{id}"], ["put", "/api/product-presets/{id}"],
     ["delete", "/api/product-presets/{id}"]] as const) expectStatuses(method, path, ["404", "413"])
@@ -305,7 +307,7 @@ void test("OpenAPI 3.1 mirrors paths, PDF encoding, and authentication metadata"
     for (const operation of Object.values(item)) {
       for (const [status, response] of Object.entries(operation.responses)) {
         const json = JSON.stringify(response)
-        for (const tag of ["ValidationFailure", "invalid_json", "invalid_credentials", "AuthenticationRequired", "PermissionDenied", "DocumentsPermissionDenied", "csrf_validation_failed", "origin_not_allowed", "ResourceNotFound", "DocumentNotFound", "DomainConflict", "ArtifactConflict", "request_body_too_large", "too_many_attempts", "PersistenceFailure", "DocumentPersistenceFailure", "DocumentRenderingFailure", "internal_failure", "OrganizationContextMissing", "not_ready", "ProviderFailure"]) {
+        for (const tag of ["ValidationFailure", "invalid_json", "invalid_credentials", "AuthenticationRequired", "PermissionDenied", "DocumentsPermissionDenied", "csrf_validation_failed", "origin_not_allowed", "ResourceNotFound", "DocumentNotFound", "DomainConflict", "ArtifactConflict", "request_body_too_large", "too_many_attempts", "PersistenceFailure", "DocumentPersistenceFailure", "DocumentRenderingFailure", "internal_failure", "OrganizationContextMissing", "not_ready", "ProviderFailure", "vat_registry_unavailable"]) {
           if (!json.includes(tag)) continue
           const statuses = tagStatuses.get(tag) ?? new Set<string>()
           statuses.add(status)
@@ -321,7 +323,7 @@ void test("OpenAPI 3.1 mirrors paths, PDF encoding, and authentication metadata"
     DocumentNotFound: ["404"], DomainConflict: ["409"], ArtifactConflict: ["409"],
     request_body_too_large: ["413"], too_many_attempts: ["429"], PersistenceFailure: ["500"], DocumentPersistenceFailure: ["500"],
     DocumentRenderingFailure: ["500"], internal_failure: ["500"], OrganizationContextMissing: ["503"],
-    not_ready: ["503"], ProviderFailure: ["429", "502", "503"],
+    not_ready: ["503"], ProviderFailure: ["429", "502", "503"], vat_registry_unavailable: ["503"],
   }
   for (const [tag, statuses] of Object.entries(expectedTagStatuses)) {
     assert.deepEqual([...tagStatuses.get(tag) ?? []].sort(), [...statuses].sort(), tag)

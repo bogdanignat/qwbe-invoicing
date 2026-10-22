@@ -3,7 +3,7 @@ export {
 } from "./schema-primitives.ts"
 export {
   IssuerCompany, IssuerCompanySnapshot, IssuerParty, VatConfiguration, VatChange, VatRegistration,
-  VatRate, VatCatalogue, IssuerInput, Issuer, DocumentSeriesInput, DocumentSeries,
+  VatRate, VatCatalogue, IssuerInput, Issuer, ConfiguredIssuer, DocumentSeriesInput, DocumentSeries,
 } from "./schema-issuer.ts"
 export {
   CustomerInput, Customer, CustomerPage, ProductPresetInput, ProductPreset, ProductPresetPage,
@@ -24,5 +24,5 @@ export {
   InvalidCredentialsRequestError, AuthenticationRequiredError, InvalidCredentialsError, PermissionDeniedError,
   DocumentsPermissionDeniedError, CsrfError, OriginForbiddenError, ResourceNotFoundError, DocumentNotFoundError,
   DomainConflictError, ArtifactConflictError, PayloadTooLargeError, TooManyAttemptsError, InvoicingInternalError,
-  DocumentsInternalError, SessionInternalError, BusinessUnavailableError, ReadinessError,
+  DocumentsInternalError, SessionInternalError, BusinessUnavailableError, ReadinessError, VatRegistryUnavailableError,
 } from "./schema-errors-session.ts"

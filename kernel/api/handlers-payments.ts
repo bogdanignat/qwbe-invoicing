@@ -3,13 +3,12 @@ import { Effect } from "effect"
 
 import { errors } from "./api-failures.ts"
 import { idempotent } from "./api-operation-inputs.ts"
-import { activePayments, createUseServices } from "./api-services.ts"
-import type { ApiRuntime } from "./api-types.ts"
+import { activePayments } from "./api-services.ts"
+import type { UseServices } from "./api-types.ts"
 import { paymentsHttpApi } from "./http-api.ts"
 
 /** The payments plugin's routes. `createApiHandler` mounts them only when the plugin is on. */
-export const paymentsGroup = (runtime: ApiRuntime) => {
-  const use = createUseServices(runtime)
+export const paymentsGroup = (use: UseServices) => {
   return HttpApiBuilder.group(paymentsHttpApi, "invoicing", (handlers) => handlers
     .handle("listPayments", ({ path }) => use((s) => activePayments(s).listPayments(path.invoiceId)).pipe(
       Effect.mapError(errors("ResourceNotFound"))))

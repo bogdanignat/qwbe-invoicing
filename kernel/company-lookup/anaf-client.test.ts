@@ -39,6 +39,15 @@ void test("ANAF is asked by POST with the CUI as a number and today's date in Bu
     [[ANAF_URL, "POST", JSON.stringify([{ cui: 13548146, data: "2026-10-19" }]), "manual", "application/json"]])
 })
 
+void test("the day asked is sent as data; without one it is today in Bucharest", async () => {
+  const { anaf, sent } = client(() => json({ found: [company(13548146)], notFound: [] }))
+  await Effect.runPromise(anaf.lookup({ cui: "13548146" }, "2025-08-01"))
+  await Effect.runPromise(anaf.lookup({ cui: "13548146" }))
+  assert.deepEqual(sent.map(({ body }) => body), [
+    JSON.stringify([{ cui: 13548146, data: "2025-08-01" }]), JSON.stringify([{ cui: 13548146, data: "2026-10-19" }]),
+  ])
+})
+
 void test("notFound is no company; an answer about another CUI or neither list is a failure", async () => {
   assert.equal(await Effect.runPromise(client(() => json({ found: [], notFound: [12345674] })).anaf.lookup({ ...request, cui: "12345674" })), undefined)
   assert.equal(await reason(client(() => json({ found: [company(1)], notFound: [] })).anaf.lookup({ ...request, cui: "12345674" })), "unavailable")

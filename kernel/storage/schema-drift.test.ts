@@ -15,6 +15,7 @@ import { introspectSchema } from "./postgres-schema-introspection.ts"
 import { resetFingerprintCache } from "./postgres-schema-fingerprint.ts"
 import { withEmpty, withMigrated, type RawSql, type TestFixture } from "./postgres-rig.test-support.ts"
 import { allPlugins } from "../plugins.ts"
+import { anafRegistry } from "../company-lookup/vat-registry.test-support.ts"
 
 /**
  * Drift, on the real PostgreSQL catalogue. The answer is no longer a table name
@@ -142,6 +143,7 @@ const apiRuntime = (fixture: TestFixture, tokenFile: string) => ({
   pool: fixture.pool,
   dataDirectory: fixture.dataDirectory,
   plugins: allPlugins,
+  transport: anafRegistry(() => false),
   now: () => new Date("2026-09-17T10:00:00.000Z"),
 })
 

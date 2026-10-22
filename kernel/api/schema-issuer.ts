@@ -50,6 +50,8 @@ export const Issuer = Schema.Struct({
   defaultCurrency: Schema.String, defaultPaymentTermDays: Schema.Int,
   vatConfigurations: Schema.Array(VatConfiguration), currentVat: Schema.NullOr(VatRegistration), branding: IssuerBranding,
 })
+/** The answer to `PUT /api/issuer`; `vat_registry_not_checked`: a fiscal change saved with the company-lookup plugin off. */
+export const ConfiguredIssuer = Schema.Struct({ ...Issuer.fields, warnings: Schema.Array(Schema.Literal("vat_registry_not_checked")) })
 export const DocumentSeriesInput = Schema.Struct({
   documentType: Schema.Literal("invoice", "proforma"), series: Schema.String,
 }).annotations(bodyObject)

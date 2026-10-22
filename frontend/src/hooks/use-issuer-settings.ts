@@ -49,6 +49,7 @@ export interface IssuerSettingsModel {
   readonly pending: boolean
   readonly error: unknown
   readonly notice: string | undefined
+  readonly warning: string | undefined
   readonly change: (patch: Partial<IssuerSettingsForm>) => void
   readonly changeIdentifier: (value: string) => void
   readonly changeCounty: (county: string) => void
@@ -148,6 +149,7 @@ export const useIssuerSettings = (): IssuerSettingsModel => {
     pending: save.pending,
     error: save.error,
     notice: save.notice,
+    warning: save.warning,
     change: (patch) => { edit((current) => ({ ...current, ...patch })) },
     changeIdentifier: (value) => { edit((current) => changeIssuerIdentifier(current, value)) },
     changeCounty: (county) => { edit((current) => chooseIssuerCounty(current, county)) },

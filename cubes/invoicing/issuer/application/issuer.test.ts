@@ -102,7 +102,8 @@ void test("rolls issuer configuration back when its audit append fails", async (
   const baseStore = memoryStore(state)
   const service = createInvoicingService({ context: contextProvider({ identity, organization: { id: "org-1" } }),
     clock: fixedClock, ids: sequentialIds(), store: baseStore, branding: brandingNormalizer, cubeIdentity: "invoicing" })
-  const initial = await Effect.runPromise(service.configureIssuer(issuerInput(null)))
+  const { warnings, ...initial } = await Effect.runPromise(service.configureIssuer(issuerInput(null)))
+  assert.deepEqual(warnings, ["vat_registry_not_checked"], "no registry: the first configuration is saved unchecked")
   const auditBaseline = state.auditEvents.length
   const failing = createInvoicingService({ context: contextProvider({ identity, organization: { id: "org-1" } }),
     clock: fixedClock, ids: sequentialIds(), branding: brandingNormalizer, cubeIdentity: "invoicing", store: {

@@ -9,6 +9,7 @@ import { createRequestAuthenticator } from "../auth/auth.ts"
 import { migratedFixture } from "../storage/postgres-rig.test-support.ts"
 import * as S from "../api/http-schemas.ts"
 import { allPlugins } from "../plugins.ts"
+import { anafRegistry } from "../company-lookup/vat-registry.test-support.ts"
 
 const issuer = {
   name: "Firma Test SRL", fiscalIdentifier: "12345674", legalForm: "srl",
@@ -24,7 +25,8 @@ const each = { code: "C62", name: "unitate" }
 const book = { description: "Carte", unitPrice: "100", unitOfMeasure: each }
 const reducedLine = { description: "Carte", quantity: "1", unitPrice: "100", unitOfMeasure: each, vatRateCode: "RO_REDUCED" }
 const issueDate = "2026-09-16"
-const fixture = async (label: string) => {
+/** `registered`: what the fake ANAF registry says of the issuer on every day. */
+const fixture = async (label: string, registered = true) => {
   const rig = await migratedFixture(`pvp_${label}`)
   const token = "p".repeat(64)
   const tokenFile = join(rig.dataDirectory, "api-token")
@@ -32,7 +34,7 @@ const fixture = async (label: string) => {
   const runtime = {
     pool: rig.pool,
     dataDirectory: rig.dataDirectory, now: () => new Date("2026-09-16T10:00:00.000Z"),
-    plugins: allPlugins,
+    plugins: allPlugins, transport: anafRegistry(() => registered),
     authenticate: createRequestAuthenticator(rig.config({ authTokenFile: tokenFile })),
   }
   const call = (method: string, url: string, body?: unknown, idempotencyKey?: string) => handleApiRequest({
@@ -84,7 +86,7 @@ void test("a reduced-rate line on a registered issuer yields an invoice at the r
 // The server knows nothing of product preferences: a line's code is checked against the
 // issuer on the document date, and an Article 310 issuer cannot charge a taxable rate.
 void test("an Article 310 issuer: the exemption is accepted, a reduced code sent directly is refused", async () => {
-  const value = await fixture("issue")
+  const value = await fixture("issue", false)
   try {
     const configured = await value.call("PUT", "/api/issuer", {
       ...issuer, vatChange: { registered: false, effectiveFrom: "2025-08-01", nonVatBasis: "article_310" },

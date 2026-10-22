@@ -27,6 +27,9 @@ export const ResourceNotFoundError = tagged(404, "ResourceNotFound")
 export const DocumentNotFoundError = tagged(404, "DocumentNotFound")
 export const DomainConflictError = withStatus(409, Schema.Struct({ error: Schema.Literal("DomainConflict"), code: Schema.String }))
 export const ArtifactConflictError = tagged(409, "ArtifactConflict")
+export const VatRegistryUnavailableError = Schema.Struct({ error: Schema.Literal("vat_registry_unavailable") }).annotations(
+  HttpApiSchema.annotations({ status: 503, description: "The ANAF VAT registry did not answer; the fiscal change was not saved. Retry later." }),
+)
 export const PayloadTooLargeError = tagged(413, "request_body_too_large")
 export const TooManyAttemptsError = Schema.Struct({ error: Schema.Literal("too_many_attempts") }).annotations(
   HttpApiSchema.annotations({ status: 429, description: "Authentication cooldown is active. Retry-After is an integer delay of 1-30 seconds." }),

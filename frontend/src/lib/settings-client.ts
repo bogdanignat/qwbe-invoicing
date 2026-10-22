@@ -1,6 +1,8 @@
-import { decodeDocumentSeries, decodeIssuer } from "./authoring-reference-decoders.ts"
+import { decodeDocumentSeries } from "./authoring-reference-decoders.ts"
 import type { BrowserTransport } from "./browser-transport.ts"
-import type { Address, DocumentSeries, DocumentType, Issuer, NonVatBasis } from "./draft-models.ts"
+import type { Address, DocumentSeries, DocumentType, NonVatBasis } from "./draft-models.ts"
+import { decodeIssuerSaveResult, type IssuerSaveResult } from "./issuer-save-result.ts"
+import { readableWrite } from "./unreadable-answer.ts"
 
 /**
  * The two settings writes: the issuer profile and one new document series.
@@ -18,6 +20,11 @@ import type { Address, DocumentSeries, DocumentType, Issuer, NonVatBasis } from 
  * The issuer `PUT` replaces the profile, so every field is always sent. What
  * cannot be sent is history: `vatConfigurations` and `currentVat` are answers,
  * and `vatChange` is the only way to move the regime.
+ *
+ * The issuer save passes through `readableWrite`: a `2xx` that cannot be read
+ * (not JSON, or `warnings` missing or unknown) may still be a saved profile, so
+ * it is an `UnreadableAnswer` the screen answers by reading the issuer again,
+ * not a refusal that invites the same save twice.
  */
 export type VatChange =
   | { readonly registered: true; readonly effectiveFrom: string; readonly nonVatBasis?: never }
@@ -50,13 +57,14 @@ export interface DocumentSeriesInput {
 }
 
 export interface SettingsClient {
-  readonly saveIssuer: (csrfToken: string, body: IssuerInput) => Promise<Issuer>
+  /** The saved profile and the save's `warnings` (`issuer-save-result.ts`). */
+  readonly saveIssuer: (csrfToken: string, body: IssuerInput) => Promise<IssuerSaveResult>
   readonly createDocumentSeries: (csrfToken: string, body: DocumentSeriesInput) => Promise<DocumentSeries>
 }
 
 export const createSettingsClient = (transport: BrowserTransport): SettingsClient => ({
-  saveIssuer: async (csrfToken, body) =>
-    decodeIssuer(await transport.json("/api/issuer", { csrfToken, method: "PUT", body })),
+  saveIssuer: (csrfToken, body) =>
+    readableWrite(transport.json("/api/issuer", { csrfToken, method: "PUT", body }).then(decodeIssuerSaveResult)),
   createDocumentSeries: async (csrfToken, body) =>
     decodeDocumentSeries(await transport.json("/api/document-series", { csrfToken, method: "POST", body })),
 })

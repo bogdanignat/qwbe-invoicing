@@ -36,7 +36,7 @@ const expectedInvoicingKeys = [
   "addDocumentSeries", "aggregateRevenue", "allocateDocumentNumber", "appendAuditEvent", "deleteDraft", "deleteProductPreset",
   "findCorrection", "findCustomer", "findDocumentSeries", "findDraft", "findIdempotencyRecord",
   "findIssuedInvoice", "findIssuer", "findLatestIssueDate", "findProductPreset", "findProforma",
-  "findProformaConversion", "findProformaInvoiceConversion", "hasOpenDraftsForCustomer", "listCorrections",
+  "findProformaConversion", "findProformaInvoiceConversion", "hasIssuedDocuments", "hasOpenDraftsForCustomer", "listCorrections",
   "listCustomers", "listDocumentSeries", "listDrafts", "listInvoiceRegister", "listIssuedInvoices", "listProductPresets",
   "listProformas", "saveCorrection", "saveCustomer", "saveDraft", "saveIdempotencyRecord",
   "saveIssuedInvoice", "saveIssuer", "saveProductPreset", "saveProforma", "saveProformaConversion",

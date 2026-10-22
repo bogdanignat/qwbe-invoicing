@@ -10,8 +10,7 @@ import { mapCorrection, mapIssuedInvoice } from "../efactura/efactura-mapper.ts"
 import { CurrentRequest } from "./api-context.ts"
 import { errors } from "./api-failures.ts"
 import { efacturaXml } from "./api-responses.ts"
-import { createUseServices } from "./api-services.ts"
-import type { ApiRuntime } from "./api-types.ts"
+import type { ApiRuntime, UseServices } from "./api-types.ts"
 import { reconciliationHandlers } from "./handlers-efactura-reconciliation.ts"
 import { submissionHandlers } from "./handlers-efactura-submissions.ts"
 import { efacturaHttpApi } from "./http-api.ts"
@@ -22,15 +21,14 @@ import { efacturaHttpApi } from "./http-api.ts"
  * the reconciliation of unknown ones. `createApiHandler` mounts them only when
  * the plugin is on, so with it off neither the mapper nor ANAF is ever reached.
  */
-export const efacturaGroup = (runtime: ApiRuntime) => {
-  const use = createUseServices(runtime)
+export const efacturaGroup = (runtime: ApiRuntime, use: UseServices) => {
   const host = connectionHost(runtime.pool, runtime.anaf ?? ANAF_NOT_CONFIGURED, runtime.transport ?? fetch, runtime.now)
   const permissions = efacturaPermissions("efactura")
   const connection = <A, E>(operation: (service: ConnectionService) => Effect.Effect<A, E>) => Effect.flatMap(CurrentRequest,
     (context) => operation(createConnectionService({ ...host, context: { current: Effect.succeed(context) }, permissions })))
   const callback = completeCallback(host)
-  const submissions = submissionHandlers(runtime)
-  const reconciliation = reconciliationHandlers(runtime)
+  const submissions = submissionHandlers(runtime, use)
+  const reconciliation = reconciliationHandlers(runtime, use)
   return HttpApiBuilder.group(efacturaHttpApi, "invoicing", (handlers) => handlers
     .handleRaw("downloadInvoiceEFactura", ({ path }) => use((s) => s.invoicing.getIssuedInvoice(path.id)).pipe(
       Effect.flatMap((invoice) => efacturaXml(() => mapIssuedInvoice(invoice))),

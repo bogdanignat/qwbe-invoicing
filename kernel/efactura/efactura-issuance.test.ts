@@ -9,6 +9,7 @@ import { handleApiRequest } from "../api/api.test-support.ts"
 import { createRequestAuthenticator } from "../auth/auth.ts"
 import { migratedFixture, type RawSql, type TestFixture } from "../storage/postgres-rig.test-support.ts"
 import { allPlugins } from "../plugins.ts"
+import { anafRegistry } from "../company-lookup/vat-registry.test-support.ts"
 
 /**
  * The e-Factura routes over PostgreSQL. The API fixture now carries the pool,
@@ -45,6 +46,7 @@ const fixture = async (label: string) => {
     pool: rig.pool,
     dataDirectory: rig.dataDirectory,
     plugins: allPlugins,
+    transport: anafRegistry(),
     now: () => new Date("2026-09-05T10:00:00.000Z"),
   }
   const call = (method: string, url: string, body: unknown, idempotencyKey?: string) =>

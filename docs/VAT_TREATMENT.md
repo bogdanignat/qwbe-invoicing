@@ -93,6 +93,57 @@ needs no product edit. Absent means the issuer's default.
   rather than correcting it. A preference therefore cannot produce an invoice with the wrong
   VAT treatment; at worst it proposes a code the line must change.
 
+## Guard on the issuer's VAT regime (T-1977)
+
+`PUT /api/issuer` treats two changes as fiscal: a **new regime** (the `vatChange` does not
+match the regime already in force on its `effectiveFrom`, so every day from it on is
+rewritten) and a **new CIF** of an issuer already configured. Anything else — name,
+address, IBAN, branding, a `vatChange` that repeats the current regime — is not fiscal:
+it never asks ANAF and saves even while ANAF is down.
+
+**What is checked.** With the `company-lookup` plugin on, the kernel asks ANAF's public
+registry (`PlatitorTvaRest/v9/tva`, the client the company lookup uses, sharing its
+one-request-a-second queue but not its cache) and reads `scpTVA` only; `perioade_TVA`
+and its dates are not used, their semantics being unverified.
+
+- A new regime is checked on `effectiveFrom` and on today (Europe/Bucharest), one request
+  when the two are the same day. Both answers must match the regime chosen: registered for
+  a VAT payer, not registered for Article 310.
+- A new CIF alone is checked today against the regime in force today (or, when none is in
+  force yet, the first one scheduled).
+
+**Refusals.**
+
+| Answer | When |
+| --- | --- |
+| `400 ValidationFailure`, issue in Romanian | ANAF contradicts the regime chosen on either day, or does not know the CIF (`notFound`) |
+| `409 DomainConflict` `vat_change_affects_issued_documents` | an invoice or storno of the organization is dated on or after `effectiveFrom` |
+| `409 DomainConflict` `fiscal_identifier_change_has_issued_documents` | the CIF changes and the organization has issued any invoice or storno, whatever its date |
+| `409 DomainConflict` `issuer_changed_concurrently` | the CIF or the VAT history changed between the read and the save |
+| `503 vat_registry_unavailable` | ANAF failed, timed out or its queue is full: try again later |
+
+The registry is asked outside any transaction. The final transaction reads the CIF and
+the VAT history again and compares them with what the decision was taken on, then runs
+the issued-documents `EXISTS` (`issued_invoices`, `correction_documents`) under the
+business lock every issuance takes too. An invoice issued concurrently is therefore
+either seen by that check, or issued after the new regime is saved and validated
+against it; the two cannot both succeed. Proformas are not fiscal documents and do not
+block a change; converting one revalidates the regime on the conversion date.
+
+**Plugin off.** Without `company-lookup` there is no registry: a fiscal change is saved
+unchecked and the answer says so in `warnings: ["vat_registry_not_checked"]`, which the
+settings screen shows. `warnings` is always present on the `PUT` answer, empty when
+there is nothing to report; `GET /api/issuer` does not carry it. A failure with the
+plugin on — a missing key, an error, a timeout — is never "plugin off": it is a 503.
+
+**Audit.** `issuer.configured` records the check in `reason`: `vat_registry:checked`,
+`vat_registry:not_checked` (plugin off) or `vat_registry:not_needed` (no fiscal change).
+
+**Future dates.** For a future `data` ANAF answers with the current status, so a
+registration that starts later cannot be confirmed in advance: save it once it appears
+in the registry. The same holds for a future Article 310 regime of a company still
+registered today.
+
 ## Inspected evidence
 
 Existing extracted official package: **ro16931-ubl-1.0.9**, a local copy kept
