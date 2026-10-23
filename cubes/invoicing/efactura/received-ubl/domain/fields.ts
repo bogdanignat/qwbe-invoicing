@@ -33,6 +33,9 @@ export const requiredText = (node: UblNode, path: string): string => optionalTex
 export const texts = (node: UblNode, path: string): ReadonlyArray<string> =>
   all(node, path).flatMap((found) => textOf(found) ?? [])
 
+/** An `xs:decimal` as money.ts reads it: no `+`, no bare `.5` or `5.`. */
+export const computable = (value: string): string => value.replace(/^\+/u, "").replace(/^(-?)\./u, "$10.").replace(/\.$/u, "")
+
 export const optionalDecimal = (node: UblNode, path: string): string | undefined => {
   const value = optionalText(node, path)
   return value === undefined || DECIMAL.test(value) ? value : refuseField("invalid", path)

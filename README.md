@@ -470,10 +470,11 @@ the registration itself, step by step, in
    `compose.yaml:compose.anaf.yaml`. `ANAF_REDIRECT_URI` is `<PUBLIC_ORIGIN>/api/anaf/callback`,
    exactly as registered at ANAF; the application refuses any other spelling at startup.
    `ANAF_ENVIRONMENT` is `test` unless `prod` is written out, and `prod` belongs only on
-   the production host. `serve` refuses to start while the database holds submissions made
-   in the other environment (`ANAF_ENVIRONMENT is prod, but e-Factura submissions exist for
-   test; set it back or start from a database without them`), so the trial on TEST runs on a
-   separate installation or on a database recreated before switching to `prod`.
+   the production host. `serve` refuses to start while the database holds submissions or
+   received invoices from the other environment (`ANAF_ENVIRONMENT is prod, but e-Factura data
+   (submissions or received invoices) exists for test; set it back or start from a database
+   without it`), so the trial on TEST runs on a separate installation or on a database
+   recreated before switching to `prod`.
 
    ```bash
    COMPOSE_FILE=compose.prod.yaml:compose.anaf.yaml

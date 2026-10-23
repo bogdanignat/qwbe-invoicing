@@ -20,11 +20,16 @@ import type { Transport } from "../../outbound/send.ts"
  * then listed all the same), a redirect, a body past the limit, an XML answer
  * carrying a DOCTYPE, a refused token, a 500, a body cut short, and (for
  * `stareMesaj`) ANAF's `nok`.
+ *
+ * Received invoices are given with `receive`: the list answers them as
+ * `FACTURA PRIMITA` (alone under `filtru=P`, alongside the uploads without a
+ * filter, never under `filtru=T`), and `descarcare` of their id answers their
+ * ZIP. A filtered list with nothing in it answers ANAF's "Nu exista mesaje".
  */
 export type FakeOperation = "token" | "revoke" | "validare" | "upload" | "stareMesaj" | "lista" | "descarcare"
 export type FakeScenario =
   | "normal" | "error_in_200" | "rate_limited" | "timeout_after_send" | "redirect" | "oversized" | "dtd"
-  | "unauthorized" | "server_error" | "malformed" | "rejected"
+  | "unauthorized" | "server_error" | "malformed" | "rejected" | "too_old"
 
 export interface FakeCall {
   readonly operation: FakeOperation | "unknown"
@@ -37,12 +42,22 @@ export interface FakeCall {
   readonly body: Buffer
 }
 
+/** A received invoice as the fake lists it: its message id and the ZIP `descarcare` gives for it. */
+export interface FakeReceived {
+  readonly id: string
+  readonly zip: Buffer
+  /** `data_creare`, `YYYYMMDDHHmm`. */
+  readonly createdAt?: string
+}
+
 export interface FakeAnaf {
   readonly transport: Transport
   readonly calls: ReadonlyArray<FakeCall>
   readonly answer: (operation: FakeOperation, scenario: FakeScenario) => void
   /** Pages `listaMesajePaginatieFactura`: `perPage` uploads a page, and `totalPages` as ANAF's count when given. */
   readonly paginate: (perPage: number, totalPages?: number) => void
+  /** Adds received invoices to the list, in this order. */
+  readonly receive: (messages: ReadonlyArray<FakeReceived>) => void
   /** Holds every answer to `operation` for `ms`: a slow ANAF, for races against it. */
   readonly delay: (operation: FakeOperation, ms: number) => void
   readonly close: () => Promise<void>
@@ -50,6 +65,8 @@ export interface FakeAnaf {
 
 export const FAKE_ZIP = Buffer.from([0x50, 0x4b, 0x03, 0x04, 0x14, 0x00, 0x00, 0x00, 0x08, 0x00, 0x61, 0x6e, 0x61, 0x66])
 export const FAKE_RETRY_AFTER = "7"
+/** ANAF TEST's own refusal of a `startTime` past 60 days (`docs/EFACTURA.md`), the list's answer under `too_old`. */
+export const FAKE_TOO_OLD = "startTime = 14-08-2026 14:32:33 nu poate fi mai vechi de 60 de zile fata de momentul requestului = 23-10-2026 14:32:34"
 const OVERSIZED_BYTES = 12 * 1024 * 1024
 const PUBLIC_ORIGIN = "https://webservicesp.anaf.ro"
 const ANAF_ORIGINS = new Set(["https://api.anaf.ro", "https://logincert.anaf.ro", PUBLIC_ORIGIN])
@@ -80,6 +97,7 @@ export const startFakeAnaf = async (): Promise<FakeAnaf> => {
   const scenarios = new Map<FakeOperation, FakeScenario>()
   const delays = new Map<FakeOperation | "unknown", number>()
   let uploads = 0
+  const received: Array<FakeReceived> = []
   let grants = 0
   /** One page holds every upload unless a test pages the list; `totalPages` overrides the count ANAF reports. */
   let paging: { perPage: number; totalPages: number | undefined } = { perPage: 500, totalPages: undefined }
@@ -101,17 +119,26 @@ export const startFakeAnaf = async (): Promise<FakeAnaf> => {
       case "stareMesaj": return text(xml(`stare="ok" id_descarcare="${String(3_000_000_000 + Number(url.searchParams.get("id_incarcare") ?? 0) % 1000)}"`))
       case "lista": {
         const page = Number(url.searchParams.get("pagina") ?? 1)
-        const all = Array.from({ length: uploads }, (_, index) => ({
-          data_creare: "202610191215", cif: url.searchParams.get("cif") ?? "", id_solicitare: String(5_000_000_001 + index),
+        const cif = url.searchParams.get("cif") ?? ""
+        const filter = url.searchParams.get("filtru")
+        const sent = filter === "P" ? [] : Array.from({ length: uploads }, (_, index) => ({
+          data_creare: "202610191215", cif, id_solicitare: String(5_000_000_001 + index),
           detalii: `Factura cu id_incarcare=${String(5_000_000_001 + index)}`, tip: "FACTURA TRIMISA", id: String(3_000_000_001 + index),
         }))
+        const got = filter === "T" ? [] : received.map((entry, index) => ({
+          data_creare: entry.createdAt ?? "202610231015", cif, id_solicitare: String(5_100_000_001 + index),
+          detalii: `Factura cu id_incarcare=${String(5_100_000_001 + index)} emisa de cif_emitent=19999927 pentru cif_beneficiar=${cif}`,
+          tip: "FACTURA PRIMITA", id: entry.id,
+        }))
+        const all = [...sent, ...got]
+        if (filter !== null && all.length === 0) return json({ eroare: "Nu exista mesaje in intervalul selectat", titlu: "Lista Mesaje" })
         const pages = paging.totalPages ?? Math.max(1, Math.ceil(all.length / paging.perPage))
         return json({
           mesaje: all.slice((page - 1) * paging.perPage, page * paging.perPage),
           serial: "fake", cui: url.searchParams.get("cif") ?? "", titlu: "Lista Mesaje", numar_total_pagini: pages, index_pagina_curenta: page,
         })
       }
-      case "descarcare": return [200, "application/zip", FAKE_ZIP]
+      case "descarcare": return [200, "application/zip", received.find(({ id }) => id === url.searchParams.get("id"))?.zip ?? FAKE_ZIP]
     }
   }
 
@@ -150,6 +177,9 @@ export const startFakeAnaf = async (): Promise<FakeAnaf> => {
     if (scenario === "rejected" && operation === "stareMesaj") {
       return response.writeHead(200, { "content-type": "application/xml" }).end(xml(`stare="nok" id_descarcare="3000000999"`))
     }
+    if (scenario === "too_old") {
+      return response.writeHead(200, { "content-type": "application/json" }).end(JSON.stringify({ eroare: FAKE_TOO_OLD, titlu: "Lista Mesaje" }))
+    }
     if (scenario === "oversized") {
       response.writeHead(200, { "content-type": "application/zip" })
       const chunk = Buffer.alloc(256 * 1024, 0x41)
@@ -182,6 +212,7 @@ export const startFakeAnaf = async (): Promise<FakeAnaf> => {
     calls,
     answer: (operation, scenario) => { scenarios.set(operation, scenario) },
     paginate: (perPage, totalPages) => { paging = { perPage, totalPages } },
+    receive: (messages) => { received.push(...messages) },
     delay: (operation, ms) => { delays.set(operation, ms) },
     close: async () => {
       server.closeAllConnections()

@@ -222,6 +222,10 @@ export const triggerRejections = [
     "e-Factura responses are immutable"],
   ["efactura_responses_no_delete", "DELETE FROM efactura_responses WHERE submission_id='sub-1'",
     "e-Factura responses are immutable"],
+  ["efactura_received_archives_no_update", "UPDATE efactura_received_archives SET stored_at='x' WHERE anaf_message_id='40'",
+    "received e-Factura archives are immutable"],
+  ["efactura_received_archives_no_delete", "DELETE FROM efactura_received_archives WHERE anaf_message_id='40'",
+    "received e-Factura archives are immutable"],
 ]
 
 /** Writes that must be accepted: the mutations the domain really performs. */
@@ -232,6 +236,7 @@ export const acceptedWrites = [
   ["customer soft delete", "UPDATE customers SET deleted_at='2026-09-10' WHERE id='customer-1'"],
   ["sequence advance", "UPDATE invoice_sequences SET last_number=4 WHERE organization_id='org-1'"],
   ["e-Factura submission progress", "UPDATE efactura_submissions SET polls=1,updated_at='t' WHERE id='sub-3'"],
+  ["received-invoice fetch progress", "UPDATE efactura_received_fetches SET downloaded=1,updated_at='t' WHERE id='fetch-1'"],
   ["session expiry refresh", "UPDATE browser_sessions SET expires_at=1759007200000 WHERE session_hash='s1'"],
 ]
 

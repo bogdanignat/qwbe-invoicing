@@ -53,7 +53,7 @@ void test("with the plugin off the guard still refuses another environment, and 
     const runtime = startEFacturaRuntime(off)
     try {
       while (refusals.length === 0) await pause(20)
-      assert.match(refusals[0] ?? "", /ANAF_ENVIRONMENT is test, but e-Factura submissions exist for prod/u)
+      assert.match(refusals[0] ?? "", /ANAF_ENVIRONMENT is test, but e-Factura data \(submissions or received invoices\) exists for prod/u)
       assert.equal(runtime.environmentChecked(), false, "a refused guard never lets traffic in")
       await pause(200)
       assert.equal(await leaders(fixture.pool), 0)
@@ -114,7 +114,7 @@ void test("serve exits 1 when ANAF_ENVIRONMENT is not the stored submissions', e
       assert.equal(await exited, 1, output)
       await watched
       assert.equal(answers.has(200), false, `answers: ${[...answers].join(",")}`)
-      assert.match(output, /serve refused to start: ANAF_ENVIRONMENT is test, but e-Factura submissions exist for prod/u)
+      assert.match(output, /serve refused to start: ANAF_ENVIRONMENT is test, but e-Factura data \(submissions or received invoices\) exists for prod/u)
     } finally {
       clearTimeout(timer)
       if (child.exitCode === null) child.kill("SIGKILL")

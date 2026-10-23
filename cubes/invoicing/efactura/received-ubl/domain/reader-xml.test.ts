@@ -3,7 +3,7 @@ import test from "node:test"
 
 import type { ReadFailure, ReceivedDocument } from "./document.ts"
 import { readReceivedUbl } from "./reader.ts"
-import { BUYER_CIF, UBL, sampleXml } from "./samples.test-support.ts"
+import { BUYER_CIF, UBL, sampleXml } from "../../received-samples.test-support.ts"
 
 const document = (xml: string): ReceivedDocument => {
   const result = readReceivedUbl(xml, BUYER_CIF)

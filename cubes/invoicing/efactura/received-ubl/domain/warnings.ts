@@ -1,6 +1,7 @@
 import { compareDecimal, formatDecimal, parseDecimal } from "../../../contracts/money.ts"
 import { spvCif } from "../../connection/index.ts"
 import type { ReceivedDocument, ReceivedWarning } from "./document.ts"
+import { computable } from "./fields.ts"
 
 /**
  * What is wrong in a received document without making it unreadable: lines
@@ -9,9 +10,6 @@ import type { ReceivedDocument, ReceivedWarning } from "./document.ts"
  * that is not the organization the invoice was fetched for. Sums are exact, at
  * the precision the XML wrote; nothing goes through `number`.
  */
-
-/** `xs:decimal` as money.ts reads it: no `+`, no bare `.5` or `5.`. */
-const computable = (value: string): string => value.replace(/^\+/u, "").replace(/^(-?)\./u, "$10.").replace(/\.$/u, "")
 
 const fractionDigits = (value: string): number => value.split(".")[1]?.length ?? 0
 

@@ -34,7 +34,8 @@ export interface Dispatcher {
 
 /**
  * The one executor of e-Factura submissions. It never starts anything: it
- * moves the submissions users queued, polls, downloads and refreshes tokens.
+ * moves the submissions users queued, polls, downloads, refreshes tokens, and
+ * carries out the received-invoice fetches users asked for.
  * Exclusivity is the session lock on its own connection; every write is fenced
  * by the epoch it bumped on taking the lock. The lock, the connection or the
  * barrier lost, or any of its transactions failing: the step in flight is

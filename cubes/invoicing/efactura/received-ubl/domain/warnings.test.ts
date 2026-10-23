@@ -3,7 +3,7 @@ import test from "node:test"
 
 import type { ReceivedWarning } from "./document.ts"
 import { readReceivedUbl } from "./reader.ts"
-import { BUYER_CIF, sampleXml, totals, vatScheme } from "./samples.test-support.ts"
+import { BUYER_CIF, sampleXml, totals, vatScheme } from "../../received-samples.test-support.ts"
 
 const warnings = (xml: string, expectedCif = BUYER_CIF): ReadonlyArray<ReceivedWarning> => {
   const result = readReceivedUbl(xml, expectedCif)

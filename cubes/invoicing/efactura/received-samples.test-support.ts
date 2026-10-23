@@ -1,5 +1,5 @@
 /**
- * Received UBL documents for the reader's tests, with the usual `cac`/`cbc`
+ * Received UBL documents for the tests of `received-ubl` and `received`, with the usual `cac`/`cbc`
  * prefixes. The default is a consistent RON invoice: two lines (90.00 after a
  * 10.00 line allowance, and 110.00), a 20.00 document allowance, 21% VAT on
  * 180.00. Each part can be replaced to build the other cases.

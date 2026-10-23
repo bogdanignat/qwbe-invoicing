@@ -4,6 +4,7 @@ import { cube as catalogCube, catalogMigrations } from "../../cubes/invoicing/ca
 import { cube as customersCube, customersMigrations } from "../../cubes/invoicing/customers/index.ts"
 import { cube as documentsCube, documentsMigrations } from "../../cubes/invoicing/documents/index.ts"
 import { cube as connectionCube, connectionMigrations } from "../../cubes/invoicing/efactura/connection/index.ts"
+import { cube as receivedCube, receivedMigrations } from "../../cubes/invoicing/efactura/received/index.ts"
 import { cube as submissionsCube, submissionsMigrations } from "../../cubes/invoicing/efactura/submissions/index.ts"
 import { cube as issuerCube, issuerMigrations } from "../../cubes/invoicing/issuer/index.ts"
 import { cube as paymentsCube, paymentsMigrations } from "../../cubes/invoicing/payments/index.ts"
@@ -52,6 +53,7 @@ export const migrationScopes: ReadonlyArray<MigrationScope> = [
   // environment guard read them regardless of QWBE_PLUGINS.
   { scope: connectionCube.manifest.name, migrations: connectionMigrations, tables: connectionCube.manifest.tables },
   { scope: submissionsCube.manifest.name, migrations: submissionsMigrations, tables: submissionsCube.manifest.tables },
+  { scope: receivedCube.manifest.name, migrations: receivedMigrations, tables: receivedCube.manifest.tables },
   // The host's own scope: no cube declares these, so the list is stated here.
   { scope: "kernel", migrations: [browserSessionsMigration], tables: ["browser_sessions"] },
 ]

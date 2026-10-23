@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import { readFileSync } from "node:fs"
 import test from "node:test"
 
-import { readReceivedUbl } from "../../../cubes/invoicing/efactura/received/index.ts"
+import { readReceivedUbl } from "../../../cubes/invoicing/efactura/received-ubl/index.ts"
 import { RECEIVED_ZIP_LIMITS, readReceivedZip, type ZipRefusal } from "./zip-reader.ts"
 import { buildZip, centralOffset, centralRecord, endOffset, endRecord, localRecord, type ZipFile } from "./zip.test-support.ts"
 

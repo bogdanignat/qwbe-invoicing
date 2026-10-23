@@ -8,6 +8,7 @@ export interface EFacturaPermissions {
   readonly manageConnection: string
   readonly submit: string
   readonly reconcile: string
+  readonly receive: string
 }
 
 export const efacturaPermissions = (identity: string): EFacturaPermissions => ({
@@ -15,4 +16,5 @@ export const efacturaPermissions = (identity: string): EFacturaPermissions => ({
   manageConnection: `${identity}:connection.manage`,
   submit: `${identity}:submit`,
   reconcile: `${identity}:reconcile`,
+  receive: `${identity}:receive`,
 })

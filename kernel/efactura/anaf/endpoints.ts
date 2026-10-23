@@ -34,6 +34,8 @@ export interface ListWindow {
   readonly endTime: number
   /** 1-based. */
   readonly page: number
+  /** ANAF's `filtru`: `P` lists only received invoices. Absent, every type comes back. */
+  readonly filter?: "E" | "T" | "P" | "R"
 }
 
 const query = (parameters: Readonly<Record<string, string>>): string => new URLSearchParams(parameters).toString()
@@ -49,6 +51,7 @@ export const anafApi = (environment: AnafEnvironment) => {
     status: (uploadIndex: string) => `${base}/stareMesaj?${query({ id_incarcare: uploadIndex })}`,
     list: (window: ListWindow) => `${base}/listaMesajePaginatieFactura?${query({
       startTime: String(window.startTime), endTime: String(window.endTime), cif: window.cif, pagina: String(window.page),
+      ...window.filter === undefined ? {} : { filtru: window.filter },
     })}`,
     download: (downloadId: string) => `${base}/descarcare?${query({ id: downloadId })}`,
   }

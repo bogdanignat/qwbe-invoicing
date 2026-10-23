@@ -188,10 +188,13 @@ const main = async () => {
       "efactura_connections", "efactura_oauth_attempts",
       "efactura_submissions", "efactura_resubmissions", "efactura_submission_attempts", "efactura_responses",
       "efactura_dispatcher_epoch", "efactura_message_budgets", "efactura_rate_limits",
+      "efactura_received_fetches", "efactura_received_messages", "efactura_received_archives", "efactura_received_invoices",
+      "efactura_received_unreadable", "efactura_received_coverage",
     ]
     const postCaptureIndexes = [
       "efactura_submissions_current", "efactura_submissions_upload_index", "efactura_submissions_document",
       "efactura_submissions_due", "efactura_submission_attempts_submission",
+      "efactura_received_fetches_active", "efactura_received_messages_fetch",
     ]
     const goldenTables = [...golden.plans.flatMap((plan) => plan.tables.map(({ name }) => name)), ...postCaptureTables].sort()
     const goldenIndexes = [...golden.plans.flatMap((plan) => plan.explicitIndexes.map(({ name }) => name)), ...postCaptureIndexes].sort()
@@ -200,19 +203,19 @@ const main = async () => {
     const liveIndexes = inventoryA.filter((entry) => entry.startsWith("index "))
       .map((entry) => entry.split(" ")[1]).sort()
 
-    check("36 domain tables: the SQLite baseline's 26, company_lookup_settings and e-Factura's 9", () => {
+    check("42 domain tables: the SQLite baseline's 26, company_lookup_settings and e-Factura's 15", () => {
       assert.deepEqual(liveTables, goldenTables)
-      assert.equal(liveTables.length, 36)
+      assert.equal(liveTables.length, 42)
     })
-    check("35 explicit indexes: the SQLite baseline's 30 and e-Factura's 5", () => {
+    check("37 explicit indexes: the SQLite baseline's 30 and e-Factura's 7", () => {
       assert.deepEqual(liveIndexes, goldenIndexes)
-      assert.equal(liveIndexes.length, 35)
+      assert.equal(liveIndexes.length, 37)
     })
-    // 129 checks before e-Factura, plus 10 of its connection, 33 of its submissions
-    // and the e-Factura status of a correction.
-    check("68 triggers, 173 named checks, 7 functions", () => {
-      assert.equal(countOf(inventoryA, "trigger"), 68)
-      assert.equal(countOf(inventoryA, "check"), 173)
+    // 129 checks before e-Factura, plus 10 of its connection, 33 of its submissions,
+    // 33 of its received invoices and the e-Factura status of a correction.
+    check("70 triggers, 206 named checks, 7 functions", () => {
+      assert.equal(countOf(inventoryA, "trigger"), 70)
+      assert.equal(countOf(inventoryA, "check"), 206)
       assert.equal(countOf(inventoryA, "function"), 7)
     })
     check("every check constraint is named and within 63 characters", () => {
@@ -275,6 +278,8 @@ const main = async () => {
       efactura_submission_attempts_no_delete: ["efactura_submission_attempts", "DELETE", "e-Factura call log is append-only", []],
       efactura_responses_no_update: ["efactura_responses", "UPDATE", "e-Factura responses are immutable", []],
       efactura_responses_no_delete: ["efactura_responses", "DELETE", "e-Factura responses are immutable", []],
+      efactura_received_archives_no_update: ["efactura_received_archives", "UPDATE", "received e-Factura archives are immutable", []],
+      efactura_received_archives_no_delete: ["efactura_received_archives", "DELETE", "received e-Factura archives are immutable", []],
     }
     const allTriggers = (await first.query(TRIGGER_ROWS)).rows
     const liveTriggers = allTriggers.filter(({ name }) => !(name in postCaptureTriggers))
@@ -471,7 +476,7 @@ const main = async () => {
         const covered = new Set(triggerRejections.map(([name]) => name))
         assert.deepEqual([...triggerNames].filter((name) => !covered.has(name)), [], "uncovered triggers")
         assert.deepEqual([...covered].filter((name) => !triggerNames.has(name)), [], "cases without a trigger")
-        assert.equal(covered.size, 68)
+        assert.equal(covered.size, 70)
       })
 
       for (const [trigger, sql, message] of triggerRejections) {

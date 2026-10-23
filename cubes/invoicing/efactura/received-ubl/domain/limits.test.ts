@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import { RECEIVED_XML_LIMITS, readReceivedUbl } from "./reader.ts"
-import { BUYER_CIF, largeInvoiceXml, sampleXml } from "./samples.test-support.ts"
+import { BUYER_CIF, largeInvoiceXml, sampleXml } from "../../received-samples.test-support.ts"
 
 void test("a realistic invoice at the 10 MB limit is read whole", () => {
   const result = readReceivedUbl(largeInvoiceXml(RECEIVED_XML_LIMITS.maxChars - 64 * 1024), BUYER_CIF)
