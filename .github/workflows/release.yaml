@@ -20,8 +20,8 @@ env:
 
 jobs:
   # `pnpm verify` needs a PostgreSQL 16 cluster, so it runs in the repository's own
-  # Docker harness (compose.verify.yaml): the pinned Node/pnpm image plus a throwaway
-  # cluster on tmpfs, exactly as on a developer machine. No host runtime is used.
+  # Docker harness (compose.verify.yaml): the pinned Node/pnpm image on the project's
+  # `db` (compose.yaml), exactly as on a developer machine. No host runtime is used.
   verify:
     runs-on: ubuntu-24.04
     # The harness pushes nothing.
@@ -29,6 +29,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v4
+      # The project's `db` reads its password from .local/, which a fresh checkout lacks.
+      - run: cp .env.example .env && scripts/init-secrets.sh
       - run: scripts/verify-docker.sh build
       - run: scripts/verify-docker.sh install
       - run: scripts/verify-docker.sh verify

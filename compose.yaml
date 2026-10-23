@@ -21,6 +21,10 @@ services:
       # binary and only C reproduces that, so every index and keyset agrees.
       POSTGRES_INITDB_ARGS: --locale=C --encoding=UTF8
       PGDATA: /var/lib/postgresql/data/pgdata
+    # The test suite (scripts/verify-docker.sh) runs on this cluster too: ~40
+    # connections per run at the peak, and two worktrees may run at once next to
+    # the application. The default 100 would leave almost no headroom.
+    command: ["postgres", "-c", "max_connections=200"]
     secrets:
       - pg_password
     volumes:

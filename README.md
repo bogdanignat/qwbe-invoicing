@@ -867,8 +867,9 @@ TanStack Query, Tailwind CSS 4; pnpm.
 ## Development
 
 Every storage, API, HTTP, auth, ops and probe test talks to a live PostgreSQL 16 server,
-so the suite does not run on the host. It runs in the pinned verifier container, against a
-throwaway cluster on tmpfs that publishes no port and references no application volume:
+so the suite does not run on the host. It runs in the pinned verifier container, on the
+project's own `db` (started when it is down, never stopped), in throwaway databases named
+`qwbe_t_<run>_…` that are dropped again; `qwbe_invoicing` is never used:
 
 ```bash
 scripts/verify-docker.sh install                 # dependencies into the named volumes, frozen

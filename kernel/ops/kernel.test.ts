@@ -260,7 +260,7 @@ void test("CLI distinguishes invalid input, guard refusal, and execution failure
     // Execution failure, PostgreSQL flavoured: the target database does not
     // exist, so the command cannot connect. `DATA_DIR` is no longer involved —
     // `migrate` does not touch the filesystem.
-    const failed = cli(fixture, ["migrate", "--apply"], { PGDATABASE: "t_absent_database" })
+    const failed = cli(fixture, ["migrate", "--apply"], { PGDATABASE: "qwbe_t_absent_database" })
     assert.equal(failed.status, 1)
     return Promise.resolve()
   })

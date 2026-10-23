@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto"
 import { mkdtempSync, readFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { after } from "node:test"
 
 import type { Pool } from "pg"
 
@@ -19,8 +20,8 @@ import { parseTrustedProxies } from "../http/trusted-proxy.ts"
 
 /**
  * The one PostgreSQL test rig: a fresh, empty database per test file (and per
- * case where a case has to see an empty one) on the throwaway PostgreSQL 16
- * cluster of `compose.test.yaml`.
+ * case where a case has to see an empty one) on the project's PostgreSQL 16
+ * cluster (`compose.test.yaml`, `compose.verify.yaml`).
  *
  * Deliberately not a mock. Every suite that used to open `node:sqlite` directly
  * is judged on the real schema — the triggers, the CHECKs, the folded index and
@@ -30,15 +31,25 @@ import { parseTrustedProxies } from "../http/trusted-proxy.ts"
  * more.
  *
  * Nothing existing is removed or reset. Every database this rig touches it
- * created itself, with a name it validates first, and a fixture gives its own
- * database back on `close` (`dropTestDatabase`) so a full run does not keep
- * ninety databases' worth of tmpfs pages alive. The `freshRuntime` /
- * `emptyRuntime` helpers below do not drop — their callers measure pool
- * lifecycle, not storage — so their databases live until the container dies,
- * which is also the only cleanup anything here relies on.
+ * created itself, named `qwbe_t_<run>_…`, and only such a name can be dropped
+ * here. A fixture gives its database back on `close`; the `freshRuntime` /
+ * `emptyRuntime` databases, whose callers may still probe them after closing
+ * the runtime, are dropped when the file's tests are done (`after` below).
+ * `scripts/verify-docker.sh` drops whatever a crashed run left behind.
  */
 
-const identifier = /^[a-z][a-z0-9_]{0,48}$/u
+const identifier = /^[a-z][a-z0-9_]{0,62}$/u
+
+/** `QWBE_TEST_RUN` is set by `scripts/verify-docker.sh`; a standalone rig on its own cluster gets `rig`. */
+const testPrefix = "qwbe_t_"
+const runPrefix = (): string => {
+  const run = process.env.QWBE_TEST_RUN ?? "rig"
+  if (!/^[a-z0-9]{1,16}$/u.test(run)) throw new Error(`invalid QWBE_TEST_RUN: ${run}`)
+  return `${testPrefix}${run}_`
+}
+
+/** The databases this process created and has not dropped yet. */
+const undropped = new Set<string>()
 
 /**
  * The password is read from `PGPASSWORD_FILE` when the rig sets one, exactly as
@@ -67,8 +78,8 @@ const settings = (database: string): PostgresSettings => ({
 export const testSettings = settings
 
 /**
- * The cluster's own database: where `CREATE DATABASE` is issued from, and the
- * only database in the rig that no test owns. Exported because a test that
+ * The maintenance database (`postgres` in both rigs): where `CREATE DATABASE`
+ * is issued from, and no test writes to it. Exported because a test that
  * terminates advisory-lock holders has to prove it did not reach across
  * databases, and the peer it keeps alive lives here.
  */
@@ -127,9 +138,8 @@ let created = 0
  */
 export const createTestDatabase = async (label: string): Promise<string> => {
   created += 1
-  // Random, not the pid: the rig's `db` container outlives a `run --rm`, so a
-  // second run in the same container would collide on a pid-derived name.
-  const name = `t_${label}_${randomBytes(4).toString("hex")}_${String(created)}`.toLowerCase()
+  // Random, not the pid: the files of one run are separate processes on one cluster.
+  const name = `${runPrefix()}${label}_${randomBytes(4).toString("hex")}_${String(created)}`.toLowerCase()
   if (!identifier.test(name)) throw new Error(`invalid test database name: ${name}`)
   const pool = rigPool(maintenanceDatabase(), maintenancePoolSettings)
   const client = await pool.connect()
@@ -140,6 +150,7 @@ export const createTestDatabase = async (label: string): Promise<string> => {
       await client.query(
         `CREATE DATABASE ${name} TEMPLATE template0 LC_COLLATE 'C' LC_CTYPE 'C' ENCODING 'UTF8'`,
       )
+      undropped.add(name)
     } finally {
       await client.query("SELECT pg_advisory_unlock(1480, 9001)")
     }
@@ -152,18 +163,17 @@ export const createTestDatabase = async (label: string): Promise<string> => {
 
 /**
  * Gives a test database back to the cluster, and only one this rig created: the
- * name is validated against the same pattern `createTestDatabase` built it with,
- * so nothing else can be named here. `WITH (FORCE)` because a case that leaked a
- * connection must not keep the database — and therefore its tmpfs pages — alive
- * for the rest of the run.
+ * name must carry the test prefix and the pattern `createTestDatabase` built it
+ * with, so `qwbe_invoicing`, `postgres` or a template can never be named here.
+ * `WITH (FORCE)` because a case that leaked a connection must not keep the
+ * database alive for the rest of the run.
  *
- * A failure is swallowed deliberately. The cluster is a throwaway on tmpfs and
- * dies with its container, so an undropped database is at worst wasted space;
- * failing `close` here would turn that into a failing test for a reason that has
- * nothing to do with what the test asserted.
+ * A failure is swallowed deliberately: `scripts/verify-docker.sh` drops what is
+ * left once the run's container is gone, and failing `close` here would turn that
+ * into a failing test for a reason that has nothing to do with what it asserted.
  */
 const dropTestDatabase = async (name: string): Promise<void> => {
-  if (!identifier.test(name)) throw new Error(`invalid test database name: ${name}`)
+  if (!identifier.test(name) || !name.startsWith(testPrefix)) throw new Error(`invalid test database name: ${name}`)
   const pool = rigPool(maintenanceDatabase(), maintenancePoolSettings)
   try {
     const client = await pool.connect()
@@ -171,6 +181,7 @@ const dropTestDatabase = async (name: string): Promise<void> => {
       await client.query("SELECT pg_advisory_lock(1480, 9001)")
       try {
         await client.query(`DROP DATABASE IF EXISTS ${name} WITH (FORCE)`)
+        undropped.delete(name)
       } finally {
         await client.query("SELECT pg_advisory_unlock(1480, 9001)")
       }
@@ -183,6 +194,11 @@ const dropTestDatabase = async (name: string): Promise<void> => {
     await pool.end()
   }
 }
+
+// Once every test of the file is done: what no fixture gave back, `freshRuntime` and `emptyRuntime` included.
+after(async () => {
+  for (const name of [...undropped]) await dropTestDatabase(name)
+})
 
 /**
  * `pool.end()` never resolves while a case still holds a checked-out client, and
@@ -522,8 +538,7 @@ const fixtureOn = (database: string): TestFixture => {
     close: () => closing ??= (async () => {
       // Order: the borrowed connections first, then the directory, then the
       // database itself. A pool still holding a client would keep the database
-      // busy, and an undropped database keeps its tmpfs pages for the whole run —
-      // a full suite is about ninety of them.
+      // busy, and a full suite creates about ninety of them.
       await closeWithin(`${database} raw sql`, 10_000, () => sql.close())
       await closeWithin(`${database} pool`, 10_000, () => runtime.close())
       rmSync(dataDirectory, { recursive: true, force: true })
