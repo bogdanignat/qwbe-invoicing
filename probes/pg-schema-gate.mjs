@@ -194,7 +194,7 @@ const main = async () => {
     const postCaptureIndexes = [
       "efactura_submissions_current", "efactura_submissions_upload_index", "efactura_submissions_document",
       "efactura_submissions_due", "efactura_submission_attempts_submission",
-      "efactura_received_fetches_active", "efactura_received_messages_fetch",
+      "efactura_received_fetches_active", "efactura_received_messages_fetch", "efactura_received_messages_newest",
     ]
     const goldenTables = [...golden.plans.flatMap((plan) => plan.tables.map(({ name }) => name)), ...postCaptureTables].sort()
     const goldenIndexes = [...golden.plans.flatMap((plan) => plan.explicitIndexes.map(({ name }) => name)), ...postCaptureIndexes].sort()
@@ -207,9 +207,9 @@ const main = async () => {
       assert.deepEqual(liveTables, goldenTables)
       assert.equal(liveTables.length, 42)
     })
-    check("37 explicit indexes: the SQLite baseline's 30 and e-Factura's 7", () => {
+    check("38 explicit indexes: the SQLite baseline's 30 and e-Factura's 8", () => {
       assert.deepEqual(liveIndexes, goldenIndexes)
-      assert.equal(liveIndexes.length, 37)
+      assert.equal(liveIndexes.length, 38)
     })
     // 129 checks before e-Factura, plus 10 of its connection, 33 of its submissions,
     // 33 of its received invoices and the e-Factura status of a correction.

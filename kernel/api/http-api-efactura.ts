@@ -1,6 +1,7 @@
 import type { HttpApiEndpoint, HttpApiGroup } from "@effect/platform"
 
 import { efacturaConnectionEndpoints as e } from "./http-endpoints-efactura.ts"
+import { withReceived } from "./http-endpoints-efactura-received.ts"
 import { withReconciliation } from "./http-endpoints-efactura-reconciliation.ts"
 import { withSubmissions } from "./http-endpoints-efactura-submissions.ts"
 import { fiscalEndpoints as f } from "./http-endpoints-fiscal.ts"
@@ -12,10 +13,11 @@ export const efacturaOperationNames = [
   "submitInvoiceEFactura", "submitCorrectionEFactura", "listInvoiceEFacturaSubmissions", "listCorrectionEFacturaSubmissions",
   "downloadEFacturaResponse", "downloadEFacturaSubmissionXml",
   "listEFacturaCandidates", "linkEFacturaSubmission", "resubmitEFacturaSubmission",
+  "requestEFacturaReceivedFetch", "getEFacturaReceivedStatus", "listEFacturaReceived", "getEFacturaReceived", "downloadEFacturaReceivedArchive",
 ] as const
 
-/** Adds every e-Factura route to the invoicing group: the XML, the connection, the submissions and their reconciliation. */
+/** Adds every e-Factura route to the invoicing group: the XML, the connection, the submissions and their reconciliation, the received invoices. */
 export const withEFactura = <E extends HttpApiEndpoint.HttpApiEndpoint.Any, R>(
   group: HttpApiGroup.HttpApiGroup<"invoicing", E, never, R, boolean>,
-) => withReconciliation(withSubmissions(group.add(f.downloadInvoiceEFactura).add(f.downloadCorrectionEFactura)
-  .add(e.getEFacturaConnection).add(e.startEFacturaConnection).add(e.disconnectEFactura).add(e.completeAnafCallback)))
+) => withReceived(withReconciliation(withSubmissions(group.add(f.downloadInvoiceEFactura).add(f.downloadCorrectionEFactura)
+  .add(e.getEFacturaConnection).add(e.startEFacturaConnection).add(e.disconnectEFactura).add(e.completeAnafCallback))))

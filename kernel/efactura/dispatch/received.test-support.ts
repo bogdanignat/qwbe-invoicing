@@ -34,15 +34,15 @@ export const RECEIVE = efacturaPermissions("efactura").receive
 export type FetchRow = Readonly<Record<string, unknown>>
 
 /**
- * The dispatcher rig plus the service a user's click goes through (HTTP comes
- * in its own task), and the received tables as the dispatcher leaves them.
+ * The dispatcher rig plus the service a user's click goes through, and the
+ * received tables as the dispatcher leaves them.
  */
-export const receivedRig = async (fixture: TestFixture) => {
-  const rig = await dispatchRig(fixture)
+export const receivedRig = async (fixture: TestFixture, grants?: Parameters<typeof dispatchRig>[1]) => {
+  const rig = await dispatchRig(fixture, grants)
   const service = (options: { readonly configured?: boolean; readonly permissions?: ReadonlyArray<string> } = {}) => createReceivedService({
     context: { current: Effect.succeed({ identity: { id: "user-1", username: "admin", roles: ["admin"], permissions: options.permissions ?? [RECEIVE] },
       organization: { id: ORG } }) },
-    permission: RECEIVE, clock: { now: Effect.sync(rig.now) }, ids: { next: Effect.sync(randomUUID) },
+    permissions: efacturaPermissions("efactura"), clock: { now: Effect.sync(rig.now) }, ids: { next: Effect.sync(randomUUID) },
     store: createPostgresReceivedStore(fixture.pool, "test"), configured: options.configured ?? true, environment: "test",
   })
   const request = () => Effect.runPromise(service().requestFetch())

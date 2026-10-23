@@ -701,6 +701,21 @@ recompressed in exactly ANAF's layout (rebuilt unchanged, the writer gives back
 ANAF's bytes). The signature entry is ANAF's, untouched, so its `DigestValue` no
 longer matches the anonymised XML.
 
+### The received-invoice routes (T-2027)
+
+Mounted only with the `efactura` plugin (404 when it is off). Every read is of the
+request's organization in the current ANAF environment: another organization's id, or
+one fetched in the other environment, is a 404. No route calls ANAF; the dispatcher does,
+in the background.
+
+| Route | Grant | What it does |
+| --- | --- | --- |
+| `POST /api/efactura/received/fetches` | `efactura:receive`, session + CSRF | records a fetch: `202` with it, or with the one already active; `409 efactura_not_configured`, `efactura_not_connected`, `efactura_cif_mismatch` |
+| `GET /api/efactura/received/status` | `efactura:read` | the latest fetch (state, pages, counts, window and gap, why it failed) and `coveredUntil`, `null` before the first complete fetch; the page polls it |
+| `GET /api/efactura/received?limit=&cursor=` | `efactura:read` | newest first in the SPV (`data_creare`, then the id): the list columns of a read invoice and how many warnings it has, or why it is unreadable |
+| `GET /api/efactura/received/{id}` | `efactura:read` | the whole normalized document (`content`) and its `warnings`, or the reason; with ANAF's id and `data_creare` |
+| `GET /api/efactura/received/{id}/archive` | `efactura:read` | ANAF's ZIP byte for byte, read or not, as `efactura-primita-<id>.zip`; `no-store` like every API answer |
+
 ## What is still unverified
 
 - The official `ro16931-ubl-1.0.9` package is **not** reachable over HTTP from

@@ -29,5 +29,9 @@ export {
   advancesCoverage, fetchWindow, isReceivedInvoice, listable, listableFrom, retriable, type FetchWindow,
 } from "./domain/fetching.ts"
 export { interpretArchive, type Interpretation, type OpenedArchive, type ReceivedListing, type UnreadableReason } from "./domain/interpretation.ts"
-export { createReceivedService, type ReceivedFailure, type ReceivedService, type Requested } from "./application/fetches.ts"
-export type { FetchRecord, FetchState, NewFetch, ReceivedDependencies, ReceivedTransaction } from "./application/ports.ts"
+export { createReceivedService, type ReceivedService, type Requested } from "./application/fetches.ts"
+export type { ReceivedStatus } from "./application/reads.ts"
+export type {
+  FetchRecord, FetchState, NewFetch, ReceivedCursor, ReceivedFailure, ReceivedDependencies, ReceivedDetail, ReceivedMessage, ReceivedReads, ReceivedScope, ReceivedSummary,
+  ReceivedTransaction,
+} from "./application/ports.ts"

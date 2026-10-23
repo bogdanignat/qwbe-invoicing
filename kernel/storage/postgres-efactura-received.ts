@@ -3,6 +3,7 @@ import type { Pool } from "pg"
 import type { TransactionalStore } from "../../cubes/invoicing/index.ts"
 import type { AnafEnvironment } from "../../cubes/invoicing/efactura/connection/index.ts"
 import type { ReceivedTransaction } from "../../cubes/invoicing/efactura/received/index.ts"
+import { receivedReads } from "./postgres-efactura-received-reads.ts"
 import { ACTIVE_FETCH, FETCH_COLUMNS, fetchFrom, gapValues } from "./postgres-efactura-received-rows.ts"
 import { efacturaSubmissionsLockKey } from "./postgres-efactura-submission-rows.ts"
 import { submissionsAdapter } from "./postgres-efactura-submissions.ts"
@@ -11,6 +12,7 @@ import { firstRow, text } from "./postgres-rows.ts"
 import { transactionWith, type TransactionClient } from "./postgres-transaction.ts"
 
 const adapter = (client: TransactionClient, environment: AnafEnvironment): ReceivedTransaction => ({
+  ...receivedReads(client),
   findConnection: submissionsAdapter(client, environment).findConnection,
   findIssuerFiscalIdentifier: (organizationId) => read("find issuer fiscal identifier", async () => {
     const row = firstRow((await client.query("SELECT tax_identifier FROM issuers WHERE organization_id=$1", [organizationId])).rows)
@@ -40,7 +42,8 @@ const adapter = (client: TransactionClient, environment: AnafEnvironment): Recei
 /**
  * A fetch is asked for under the submissions key, the dispatcher's own: the
  * check for an active fetch and the insert cannot be split by another request
- * or by the dispatcher finishing one.
+ * or by the dispatcher finishing one. Reads take the same key, as the
+ * submissions' do: the dispatcher's transactions are short.
  */
 export const createPostgresReceivedStore = (pool: Pool, environment: AnafEnvironment): TransactionalStore<ReceivedTransaction> => ({
   transaction: transactionWith(pool, {

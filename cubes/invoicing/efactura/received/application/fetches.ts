@@ -1,14 +1,11 @@
 import { Effect } from "effect"
 
-import {
-  DomainConflict, PermissionDenied, type AuthenticationRequired, type OrganizationContextMissing, type PersistenceFailure,
-} from "../../../contracts/failures.ts"
+import { DomainConflict, PermissionDenied } from "../../../contracts/failures.ts"
 import type { RequestContext } from "../../../contracts/host.ts"
 import { connectionStatus, spvCif } from "../../connection/index.ts"
 import { fetchWindow } from "../domain/fetching.ts"
-import type { FetchRecord, ReceivedDependencies, ReceivedTransaction } from "./ports.ts"
-
-export type ReceivedFailure = AuthenticationRequired | OrganizationContextMissing | PermissionDenied | DomainConflict | PersistenceFailure
+import type { FetchRecord, ReceivedDependencies, ReceivedFailure, ReceivedTransaction } from "./ports.ts"
+import { receivedReads } from "./reads.ts"
 
 export interface Requested {
   readonly fetch: FetchRecord
@@ -36,16 +33,16 @@ const fetchableCif = (transaction: ReceivedTransaction, organizationId: string, 
  * request, and the dispatcher carries it out in the background. One fetch is
  * active per organization and environment; asking again while it runs answers
  * that one. All of it happens in one transaction, so two clicks at once make
- * one fetch.
+ * one fetch. What was fetched is read through `receivedReads`.
  */
 export const createReceivedService = (dependencies: ReceivedDependencies) => {
-  const { clock, environment, ids, permission, store } = dependencies
+  const { clock, environment, ids, permissions, store } = dependencies
 
-  const authorized: Effect.Effect<RequestContext, ReceivedFailure> = Effect.flatMap(dependencies.context.current, (context) =>
-    context.identity.permissions.includes(permission) ? Effect.succeed(context) : Effect.fail(new PermissionDenied({ permission })))
+  const authorized = (permission: string): Effect.Effect<RequestContext, ReceivedFailure> => Effect.flatMap(dependencies.context.current,
+    (context) => context.identity.permissions.includes(permission) ? Effect.succeed(context) : Effect.fail(new PermissionDenied({ permission })))
 
   const requestFetch = (): Effect.Effect<Requested, ReceivedFailure> => Effect.gen(function*() {
-    const context = yield* authorized
+    const context = yield* authorized(permissions.receive)
     if (!dependencies.configured) return yield* conflict("efactura_not_configured", "ANAF e-Factura is not configured")
     const organizationId = context.organization.id
     const [id, now] = yield* Effect.all([ids.next, clock.now])
@@ -60,7 +57,7 @@ export const createReceivedService = (dependencies: ReceivedDependencies) => {
     }))
   })
 
-  return { requestFetch }
+  return { requestFetch, ...receivedReads(dependencies, authorized) }
 }
 
 export type ReceivedService = ReturnType<typeof createReceivedService>

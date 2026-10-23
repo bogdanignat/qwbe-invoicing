@@ -50,6 +50,8 @@ export interface ServeOptions {
   readonly transport?: Transport
   /** Narrows what the logged-in owner may do, for the permission checks. */
   readonly grants?: (permissions: ReadonlyArray<string>) => ReadonlyArray<string>
+  /** Another organization than the fixture's, for the isolation checks. */
+  readonly organizationId?: string
 }
 
 const narrowed = (authenticate: RequestAuthenticator, grants: NonNullable<ServeOptions["grants"]>): RequestAuthenticator =>
@@ -60,8 +62,9 @@ const narrowed = (authenticate: RequestAuthenticator, grants: NonNullable<ServeO
 export const serve = async (fixture: TestFixture, plugins: PluginSelection, options: ServeOptions = {}): Promise<Served> => {
   const tokenFile = join(fixture.dataDirectory, "api-token")
   writeFileSync(tokenFile, token, { mode: 0o600 })
-  const { transport, grants } = options
-  const running = await startServer(fixture.config({ port: 0, authTokenFile: tokenFile, plugins, anaf: options.settings }), fixture.pool,
+  const { transport, grants, organizationId } = options
+  const config = fixture.config({ port: 0, authTokenFile: tokenFile, plugins, anaf: options.settings, ...(organizationId === undefined ? {} : { organizationId }) })
+  const running = await startServer(config, fixture.pool,
     undefined, undefined, { barrierHeld: () => true,
       apiHandlerFactory: (runtime) => createApiHandler({ ...runtime, transport: anafRegistry(undefined, transport ?? runtime.transport),
         ...(grants === undefined ? {} : { authenticate: narrowed(runtime.authenticate, grants) }) }) })
