@@ -51,6 +51,27 @@ void test("comments, CDATA and processing instructions are not part of an ANAF a
   assert.equal(refusal(`<?xml-stylesheet href="x"?><header/>`), "processing_instruction")
 })
 
+void test("with commentsAndCdata a comment is skipped and CDATA is plain text; DOCTYPE, entities and instructions stay refused", () => {
+  const lenient = { commentsAndCdata: true }
+  const parsed = parseStrictXml(`<!-- top --><a>x<!-- <b>not</b> -->y<![CDATA[ <c> & ]]>z<d/></a><!-- tail -->`, undefined, lenient)
+  assert.ok(parsed.ok)
+  assert.equal(parsed.root.text, "xy <c> & z")
+  assert.deepEqual(parsed.root.children.map((child) => child.name), ["d"])
+  const lenientRefusal = (source: string): XmlRefusal | undefined => {
+    const result = parseStrictXml(source, undefined, lenient)
+    return result.ok ? undefined : result.refusal
+  }
+  assert.equal(lenientRefusal(`<!DOCTYPE a [<!ENTITY x SYSTEM "file:///etc/passwd">]><a>&x;</a>`), "doctype")
+  assert.equal(lenientRefusal(`<a><!-- <!DOCTYPE a> --><!DOCTYPE a></a>`), "doctype")
+  assert.equal(lenientRefusal(`<a><![CDATA[x]]>&x;</a>`), "entity")
+  assert.equal(lenientRefusal(`<a><?php ?></a>`), "processing_instruction")
+  assert.equal(lenientRefusal(`<a><!ELEMENT a ANY></a>`), "declaration")
+  assert.equal(lenientRefusal(`<a><!-- open</a>`), "malformed")
+  assert.equal(lenientRefusal(`<a><![CDATA[open</a>`), "malformed")
+  assert.equal(lenientRefusal(`<![CDATA[x]]><a/>`), "malformed")
+  assert.equal(refusal(`<a><!-- x --></a>`), "declaration")
+})
+
 void test("size, depth, element and attribute counts are bounded", () => {
   const limits: XmlLimits = { maxChars: 200, maxDepth: 3, maxElements: 5, maxAttributes: 2 }
   assert.equal(refusal(`<a>${"x".repeat(200)}</a>`, limits), "too_large")

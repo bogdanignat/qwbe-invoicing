@@ -17,6 +17,7 @@
     "invoicing/efactura/connection",
     "invoicing/efactura/submissions",
     "invoicing/efactura/reconciliation",
+    "invoicing/efactura/received",
     "invoicing/company-lookup"
   ]
 }
