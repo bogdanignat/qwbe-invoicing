@@ -93,9 +93,11 @@ ensure_project_db() {
 # databases survive; this run's own are dropped once its container has exited.
 reclaim_test_databases() {
   local live names name run
-  live=" $(docker ps --filter label=qwbe.test-run --format '{{.Label "qwbe.test-run"}}' | tr '\n' ' ') " || return
   # The pattern is the whole guard: only `[a-z0-9_]` names, so each is safe to splice.
   names="$(project_psql "SELECT datname FROM pg_database WHERE datname ~ '^qwbe_t_[a-z0-9]+_[a-z0-9_]+\$'")" || return
+  # Read after the names: a run creates databases only once its container runs, so
+  # every name listed above whose run started meanwhile is still found live here.
+  live=" $(docker ps --filter label=qwbe.test-run --format '{{.Label "qwbe.test-run"}}' | tr '\n' ' ') " || return
   for name in ${names}; do
     run="${name#qwbe_t_}"
     run="${run%%_*}"
@@ -177,12 +179,11 @@ case "${command_name}" in
     log_wrap docker compose --file "${compose_file}" build "$@"
     ;;
   install)
-    if [[ "${1:-}" == "--no-frozen" ]]; then
-      # Only ever for adding a dependency on purpose; every other run is frozen.
-      log_wrap compose_run "pnpm install --no-frozen-lockfile"
-    else
-      log_wrap compose_run "pnpm install --frozen-lockfile"
-    fi
+    # No database: the network-free `install` service, and the project's db is left alone.
+    lockfile="--frozen-lockfile"
+    # Only ever for adding a dependency on purpose; every other run is frozen.
+    [[ "${1:-}" != "--no-frozen" ]] || lockfile="--no-frozen-lockfile"
+    log_wrap docker compose --file "${compose_file}" run --rm install "pnpm install ${lockfile}"
     ;;
   verify)
     log_wrap compose_run "pnpm verify"
