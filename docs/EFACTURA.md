@@ -626,6 +626,81 @@ gets an `efactura_submission.restored_unknown` audit row, and the OAuth attempts
 deleted. If that step fails, the whole restore rolls back with it and the database
 stays empty. After a restore, reconnecting with the certificate uploads nothing.
 
+## Facturi primite: ce a raspuns ANAF TEST (2026-10-23)
+
+Read-only probe for the received invoices (T-2024), with the application's own
+gateway and stored token (`requestAnaf`, `send`), from a throwaway script in the
+`app` container; nothing was refreshed. About thirty calls in all, one `descarcare`.
+
+**The list.** `listaMesajePaginatieFactura` answers HTTP 200, `application/json`,
+in both cases below; an error is a body with `eroare`, never a status:
+
+- with messages: `mesaje[]` plus `numar_inregistrari_in_pagina`,
+  `numar_total_inregistrari_per_pagina` (500), `numar_total_inregistrari`,
+  `numar_total_pagini`, `index_pagina_curenta`, `serial` (the token's
+  certificate), `cui` (every CIF/CNP the certificate has a right on,
+  comma-separated, not only the one asked) and `titlu` ("Lista Mesaje disponibile
+  din intervalul DD-MM-YYYY HH:mm:ss - …", Bucharest time);
+- with none: only `{"eroare":"Nu exista mesaje in intervalul selectat","titlu":"Lista Mesaje"}`.
+
+A page is **not** filled up to the 500 it announces: 24 messages over 60 days came
+as page 1 with 11 and page 2 with 13 (`numar_total_pagini: 2`), apparently split by
+ANAF's id range (`3059…` on one page, `3057…` on the other), not by date. A reader walks `pagina` up to `numar_total_pagini` and never
+infers the number of pages from the count.
+
+A message is `{ data_creare, cif, id_solicitare, detalii, tip, id }`, all strings;
+`data_creare` is `YYYYMMDDHHmm`, Bucharest time.
+
+**`filtru`.** Without it every type comes back. `T` gave only `FACTURA TRIMISA`,
+`P` only `FACTURA PRIMITA`; `E` and `R` were accepted and answered "Nu exista
+mesaje": this CIF has no errors and no buyer messages, so what they hold was not seen.
+
+**A received invoice.** There was none, so an invoice was issued in the application
+to a customer with the issuer's own CIF and sent to ANAF TEST (`upload`, `UBL`).
+It was `accepted` at the first `stareMesaj`; about 17 minutes later the list held
+two messages for it, with the same `data_creare` (the moment they were listed, not
+the upload):
+
+| `tip` | `id` | `id_solicitare` | `cif` |
+| --- | --- | --- | --- |
+| `FACTURA TRIMISA` | the `id_descarcare` `stareMesaj` gave | the upload index | the CIF asked |
+| `FACTURA PRIMITA` | another id, its own | **the same upload index** (the supplier's) | the CIF asked |
+
+`detalii` of both: `Factura cu id_incarcare=<index> emisa de cif_emitent=<CIF>
+pentru cif_beneficiar=<CIF>`. So a received invoice is `tip: "FACTURA PRIMITA"`,
+its `id` is what `descarcare` takes and is unique, and `id_solicitare` is the
+supplier's upload index, not ours: it does not identify the message. Since issuer and
+buyer were the same CIF here, the probe cannot tell whether `cif` on a received
+message from a third party is the buyer (us) or the supplier; the supplier's CIF is
+read from `detalii` or from the XML. For a B2C upload `detalii` is a different
+sentence ("… nu poate fi comunicata catre destinatar (BT-47 lipsa identificator
+sau factura raportata in relatia B2C) …").
+
+**The window.** `startTime` older than 60 days **before the moment of the request**
+is refused, whatever the window's length: 70→0, 70→10 and 61→0 days all answered
+`{"eroare":"startTime = 14-08-2026 14:32:33 nu poate fi mai vechi de 60 de zile fata de momentul requestului = 23-10-2026 14:32:34","titlu":"Lista Mesaje"}`,
+60→0 is accepted. ANAF does not cut the window: through this list, a message older
+than 60 days can no longer be found.
+
+**The ZIP** of `descarcare` for the `FACTURA PRIMITA` id is byte for byte the ZIP of
+the `FACTURA TRIMISA` id (same SHA-256): two entries, in this order,
+`semnatura_<index>.xml` (XMLDSig by `CN=ANAF TEST`, `DigestValue` = SHA-256 of the
+invoice XML) and `<index>.xml` (the uploaded XML, byte for byte). Both deflate,
+general flags `0x0808` (data descriptor + UTF-8 names): the local headers carry CRC
+and sizes **0**, the real values follow the data in a `PK\x07\x08` descriptor and
+in the central directory. Version 20, no extra fields, no comments, one disk, no
+ZIP64. The invoice XML: UTF-8 without BOM, root `Invoice`, default namespace
+`urn:oasis:names:specification:ubl:schema:xsd:Invoice-2` with prefixes `cac`/`cbc`
+on the standard UBL URIs, no comment, no CDATA, no DOCTYPE. It is this
+application's own XML; another program's XML may differ.
+
+**Fixture.** `cubes/invoicing/efactura/fixtures/anaf-test-received-invoice.zip` is
+that ZIP with the parties anonymised: names, address, CIF (`19999927`), trade
+registry number and document number replaced in the invoice XML, which was
+recompressed in exactly ANAF's layout (rebuilt unchanged, the writer gives back
+ANAF's bytes). The signature entry is ANAF's, untouched, so its `DigestValue` no
+longer matches the anonymised XML.
+
 ## What is still unverified
 
 - The official `ro16931-ubl-1.0.9` package is **not** reachable over HTTP from
@@ -682,10 +757,8 @@ stays empty. After a restore, reconnecting with the certificate uploads nothing.
 - Still unconfirmed on ANAF TEST, followed separately: PKCE (it needs a new
   connection with the certificate); the refresh token's lifetime (still taken as 365
   days); the exact text of "no right on the CIF". The reconciliation of an `unknown`
-  submission runs only against the fake ANAF: the shape of a
-  `listaMesajePaginatieFactura` list that holds messages, the message types of an
-  upload (`FACTURA TRIMISA`, `ERORI FACTURA`), the page size and whether a window
-  older than 60 days is accepted show only when such a submission is reconciled.
+  submission runs only against the fake ANAF. The list itself was read live on
+  2026-10-23 (see "Facturi primite" above); `ERORI FACTURA` was not seen there.
 
 ## Validating the fixtures
 
