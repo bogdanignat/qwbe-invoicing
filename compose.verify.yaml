@@ -40,6 +40,18 @@ services:
     volumes: *verify-volumes
     restart: "no"
 
+  # Dependencies only: no database, so not on the project's network, which may not
+  # exist yet (a fresh checkout, CI before the first `verify`).
+  install:
+    <<: *verify-image
+    user: "${HOST_UID}:${HOST_GID}"
+    depends_on:
+      verify-init:
+        condition: service_completed_successfully
+    volumes: *verify-volumes
+    init: true
+    restart: "no"
+
   verify:
     <<: *verify-image
     user: "${HOST_UID}:${HOST_GID}"

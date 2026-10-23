@@ -3,7 +3,7 @@ import test from "node:test"
 
 import type { Pool } from "pg"
 
-import { migratedFixture, openRigMaintenancePool } from "./postgres-rig.test-support.ts"
+import { emptyFixture, migratedFixture, openRigMaintenancePool } from "./postgres-rig.test-support.ts"
 
 /**
  * The rig's own bounds, measured on the server rather than read off the settings
@@ -113,6 +113,24 @@ void test("every rig pool runs with bounded statement, lock and idle-transaction
     )
   } finally {
     await fixture.close()
+  }
+})
+
+// The prefix is what scripts/verify-docker.sh reclaims by, and the only name the rig will drop.
+void test("a test database is named qwbe_t_<run>_ and an invalid run id is refused", async () => {
+  const fixture = await emptyFixture("rig_name")
+  try {
+    assert.ok(fixture.database.startsWith(`qwbe_t_${process.env.QWBE_TEST_RUN ?? "rig"}_`), fixture.database)
+  } finally {
+    await fixture.close()
+  }
+  const run = process.env.QWBE_TEST_RUN
+  process.env.QWBE_TEST_RUN = "Not-Valid"
+  try {
+    await assert.rejects(() => emptyFixture("rig_bad_run"), /invalid QWBE_TEST_RUN/u)
+  } finally {
+    if (run === undefined) delete process.env.QWBE_TEST_RUN
+    else process.env.QWBE_TEST_RUN = run
   }
 })
 
