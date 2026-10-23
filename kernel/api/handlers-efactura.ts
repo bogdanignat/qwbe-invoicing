@@ -11,14 +11,15 @@ import { CurrentRequest } from "./api-context.ts"
 import { errors } from "./api-failures.ts"
 import { efacturaXml } from "./api-responses.ts"
 import type { ApiRuntime, UseServices } from "./api-types.ts"
+import { receivedHandlers } from "./handlers-efactura-received.ts"
 import { reconciliationHandlers } from "./handlers-efactura-reconciliation.ts"
 import { submissionHandlers } from "./handlers-efactura-submissions.ts"
 import { efacturaHttpApi } from "./http-api.ts"
 
 /**
  * The e-Factura plugin's routes: the UBL XML of an invoice and of a correction,
- * the ANAF connection, the submissions with their history, XML and answer, and
- * the reconciliation of unknown ones. `createApiHandler` mounts them only when
+ * the ANAF connection, the submissions with their history, XML and answer, the
+ * reconciliation of unknown ones, and the invoices received through the SPV. `createApiHandler` mounts them only when
  * the plugin is on, so with it off neither the mapper nor ANAF is ever reached.
  */
 export const efacturaGroup = (runtime: ApiRuntime, use: UseServices) => {
@@ -29,6 +30,7 @@ export const efacturaGroup = (runtime: ApiRuntime, use: UseServices) => {
   const callback = completeCallback(host)
   const submissions = submissionHandlers(runtime, use)
   const reconciliation = reconciliationHandlers(runtime, use)
+  const received = receivedHandlers(runtime)
   return HttpApiBuilder.group(efacturaHttpApi, "invoicing", (handlers) => handlers
     .handleRaw("downloadInvoiceEFactura", ({ path }) => use((s) => s.invoicing.getIssuedInvoice(path.id)).pipe(
       Effect.flatMap((invoice) => efacturaXml(() => mapIssuedInvoice(invoice))),
@@ -52,5 +54,10 @@ export const efacturaGroup = (runtime: ApiRuntime, use: UseServices) => {
     .handleRaw("downloadEFacturaSubmissionXml", submissions.xml)
     .handle("listEFacturaCandidates", reconciliation.candidates)
     .handle("linkEFacturaSubmission", reconciliation.link)
-    .handle("resubmitEFacturaSubmission", reconciliation.resubmit))
+    .handle("resubmitEFacturaSubmission", reconciliation.resubmit)
+    .handle("requestEFacturaReceivedFetch", received.requestFetch)
+    .handle("getEFacturaReceivedStatus", received.status)
+    .handle("listEFacturaReceived", received.list)
+    .handle("getEFacturaReceived", received.detail)
+    .handleRaw("downloadEFacturaReceivedArchive", received.archive))
 }

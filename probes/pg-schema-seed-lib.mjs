@@ -160,6 +160,17 @@ export const seedStatements = [
   `INSERT INTO efactura_responses(submission_id,organization_id,download_id,archive,sha256,size,stored_at)
      VALUES('sub-1','org-1','10',convert_to('PK','UTF8'),encode(sha256(convert_to('PK','UTF8')),'hex'),2,
      '2026-09-01T10:05:00.000Z')`,
+  // A fetch of received invoices that listed one message and stored its archive.
+  `INSERT INTO efactura_received_fetches(id,organization_id,environment,cif,window_start,window_end,gap_start,gap_end,
+     state,next_attempt_at,created_by,created_at,updated_at) VALUES('fetch-1','org-1','test','12345674',
+     '2026-07-04T10:00:00.000Z','2026-09-01T10:00:00.000Z','2026-07-04T10:00:00.000Z','2026-07-04T10:00:00.000Z',
+     'downloading','2026-09-01T10:00:00.000Z','operator','2026-09-01T10:00:00.000Z','2026-09-01T10:00:00.000Z')`,
+  `INSERT INTO efactura_received_messages(organization_id,environment,anaf_message_id,upload_index,cif,details,
+     anaf_created,fetch_id,state,next_attempt_at,listed_at,updated_at) VALUES('org-1','test','40','50','12345674','',
+     '202609011000','fetch-1','stored','2026-09-01T10:00:00.000Z','2026-09-01T10:00:00.000Z','2026-09-01T10:00:00.000Z')`,
+  `INSERT INTO efactura_received_archives(organization_id,environment,anaf_message_id,archive,sha256,size,stored_at)
+     VALUES('org-1','test','40',convert_to('PK','UTF8'),encode(sha256(convert_to('PK','UTF8')),'hex'),2,
+     '2026-09-01T10:05:00.000Z')`,
 ]
 
 /** The statements the seed runs inside one transaction, by index range. */

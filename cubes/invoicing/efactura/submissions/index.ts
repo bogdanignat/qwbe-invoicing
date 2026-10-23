@@ -30,7 +30,7 @@ export {
 } from "./domain/states.ts"
 export type { ArchiveState, FiscalEvent, FiscalState } from "./domain/states.ts"
 export { ANAF_XML_LIMITS, childrenNamed, localName, parseStrictXml } from "./domain/xml.ts"
-export type { XmlElement, XmlLimits, XmlParse, XmlRefusal } from "./domain/xml.ts"
+export type { XmlElement, XmlLimits, XmlOptions, XmlParse, XmlRefusal } from "./domain/xml.ts"
 export { CALL_OUTCOMES, anafId, sanitizedMessages, type AnafReply, type CallOutcome, type Interrupted } from "./domain/replies.ts"
 export { UPLOAD_EVENTS, classifyStatus, classifyUpload, statusEvent, type StatusResult, type UploadResult } from "./domain/xml-replies.ts"
 export { classifyDownload, classifyList, classifyValidation, validationEvent } from "./domain/json-replies.ts"

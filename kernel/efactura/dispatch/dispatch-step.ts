@@ -10,6 +10,7 @@ import {
   ARCHIVE_WAIT_MS, DISCONNECTED_WAIT_MS, afterRefusal, kindOf, later, reserved, settle, timed, type StepContext,
 } from "./dispatch-calls.ts"
 import { upload } from "./dispatch-upload.ts"
+import { fetchOne } from "./received-step.ts"
 import type { AccessToken } from "./credentials.ts"
 
 export type { StepContext } from "./dispatch-calls.ts"
@@ -47,8 +48,9 @@ const download = (ctx: StepContext, submission: SubmissionRecord, downloadId: st
 
 /**
  * One turn: a token refresh a request asked for, else the submission due
- * first, one step of it. `idle` when nothing is due. Every write runs in a
- * fenced transaction; no HTTP call runs inside one.
+ * first, one step of it, else one step of the received-invoice fetch due
+ * first. `idle` when nothing is due. Every write runs in a fenced
+ * transaction; no HTTP call runs inside one.
  */
 export const dispatchOne = (ctx: StepContext): Effect.Effect<"idle" | "worked", LeadershipLost> => Effect.gen(function*() {
   const asked = yield* ctx.lease.run((client) => takeRefreshRequest(client, ctx.environment))
@@ -57,7 +59,7 @@ export const dispatchOne = (ctx: StepContext): Effect.Effect<"idle" | "worked", 
     return "worked"
   }
   const due = yield* ctx.lease.run((client) => dispatchStore(client, ctx.now()).due(ctx.environment))
-  if (due === undefined) return "idle"
+  if (due === undefined) return yield* fetchOne(ctx)
   const { submission } = due
   const token = yield* ctx.credentials.token(submission.organizationId)
   // Not connected, or connected for another CIF: no ANAF call at all, the submission waits as it is.

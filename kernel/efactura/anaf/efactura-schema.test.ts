@@ -157,8 +157,8 @@ void test("serve's environment guard: submissions of another environment refuse 
     await sql.query(...submission({ id: "t-1" }))
     await assertAnafEnvironment(pool, "test")
     await assert.rejects(assertAnafEnvironment(pool, "prod"), (error: Error) =>
-      error instanceof AnafEnvironmentMismatch && /ANAF_ENVIRONMENT is prod, but e-Factura submissions exist for test/u.test(error.message))
+      error instanceof AnafEnvironmentMismatch && /ANAF_ENVIRONMENT is prod, but e-Factura data \(submissions or received invoices\) exists for test/u.test(error.message))
     await sql.query(...submission({ id: "p-1", environment: "prod" }))
-    await assert.rejects(assertAnafEnvironment(pool, "test"), /submissions exist for prod/u)
+    await assert.rejects(assertAnafEnvironment(pool, "test"), /received invoices\) exists for prod/u)
   })
 })

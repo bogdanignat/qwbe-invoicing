@@ -62,7 +62,12 @@ for (const plugins of combinations) {
         await plugin(plugins.efactura, "GET", "/api/efactura/connection")
         await plugin(plugins.efactura, "GET", `/api/invoices/${id}/efactura/submissions`)
         await plugin(plugins.efactura, "GET", `/api/corrections/${String(correction.id)}/efactura/submissions`)
+        await plugin(plugins.efactura, "GET", "/api/efactura/received")
+        await plugin(plugins.efactura, "GET", "/api/efactura/received/status")
         if (!plugins.efactura) {
+          await plugin(false, "POST", "/api/efactura/received/fetches", {})
+          await plugin(false, "GET", "/api/efactura/received/4000000001")
+          await plugin(false, "GET", "/api/efactura/received/4000000001/archive")
           await plugin(false, "POST", `/api/invoices/${id}/efactura/submission`, {})
           await plugin(false, "GET", "/api/efactura/submissions/any/candidates")
           await plugin(false, "POST", "/api/efactura/submissions/any/link", { uploadIndex: "5000000001", confirmed: true })
@@ -85,6 +90,9 @@ for (const plugins of combinations) {
         assert.equal(paths.includes("/api/efactura/connection"), plugins.efactura)
         assert.equal(paths.includes("/api/anaf/callback"), plugins.efactura)
         assert.equal(paths.includes("/api/efactura/submissions/{id}/resubmit"), plugins.efactura, "reconciliation in OpenAPI")
+        for (const path of ["/api/efactura/received/fetches", "/api/efactura/received", "/api/efactura/received/{id}/archive"]) {
+          assert.equal(paths.includes(path), plugins.efactura, `${path} in OpenAPI`)
+        }
         assert.equal(paths.includes("/api/company-lookup/lookup"), lookup, "company lookup in OpenAPI")
       } finally {
         await served.close()
