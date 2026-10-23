@@ -118,7 +118,9 @@ void test("an issuance that waits for the regime change's commit is judged under
     const issuance = Effect.runPromise(Effect.either(issuing.issueInvoice(invoice(today))))
     // The issuance is parked on the business lock the change holds, not finished before it.
     for (let tries = 0; ; tries += 1) {
-      if (await sql.scalar("SELECT count(*)::int FROM pg_locks WHERE locktype = 'advisory' AND NOT granted") === 1) break
+      // In this database only: the cluster is shared with the application and other runs.
+      if (await sql.scalar("SELECT count(*)::int FROM pg_locks WHERE locktype = 'advisory' AND NOT granted"
+        + " AND database = (SELECT oid FROM pg_database WHERE datname = current_database())") === 1) break
       assert.ok(tries < 100, "the issuance never waited on the business lock")
       await new Promise((resolve) => setTimeout(resolve, 20))
     }

@@ -23,7 +23,7 @@ and `IMAGE_TAG=local`. Every step below is the same for both.
 ## Source verification before building a release
 
 Caddy and Traefik route the public traffic to `app`, the one image. Run
-`scripts/verify-docker.sh verify` (the full `pnpm verify`, on a throwaway PostgreSQL 16)
+`scripts/verify-docker.sh verify` (the full `pnpm verify`, in throwaway databases on the project's PostgreSQL 16)
 before building the image; the release workflow runs the same harness. The size gate keeps the existing
 6,000-character file cap and the 40,000-character / 15-file cube caps; it also checks
 production source files under `kernel/` and `frontend/src/` without treating these

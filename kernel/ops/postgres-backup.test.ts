@@ -15,7 +15,7 @@ import {
   tryAcquireMaintenanceLock,
 } from "../storage/postgres-maintenance-lock.ts"
 import type { PostgresSettings } from "../storage/postgres-pool.ts"
-import { emptyRuntime, freshRuntime, type TestRuntime } from "../storage/postgres-rig.test-support.ts"
+import { emptyRuntime, freshRuntime, testSettings, type TestRuntime } from "../storage/postgres-rig.test-support.ts"
 import { schemaDrift } from "../storage/migrations.ts"
 import {
   type BackupContext,
@@ -35,13 +35,9 @@ import { stageSource } from "./postgres-backup-source.ts"
 import { writeArchive } from "./postgres-backup-writer.ts"
 
 /**
- * Backup and restore against a real PostgreSQL 16 server.
- *
- * The rig is `compose.pg-backup.yaml`: a throwaway cluster on tmpfs, a database per
- * case, and `postgresql16-client` installed into the test container at start so the
- * dump really is produced by a 16 client. Nothing existing is reset, no volume is
- * referenced and no database is dropped at runtime — the cluster dies with its
- * container.
+ * Backup and restore against a real PostgreSQL 16 server, a database per case.
+ * Every dump source and every restore target is a rig database
+ * (`freshRuntime`/`emptyRuntime`, `qwbe_t_<run>_…`), never the application's.
  */
 
 const settingsFor = (database: string): PostgresSettings => ({
@@ -49,7 +45,8 @@ const settingsFor = (database: string): PostgresSettings => ({
   port: Number(process.env["PGPORT"] ?? "5432"),
   database,
   user: process.env["PGUSER"] ?? "backup",
-  password: process.env["PGPASSWORD"] ?? "",
+  // The rig's credential, read from PGPASSWORD_FILE as the rig reads it.
+  password: testSettings(database).password,
   statementTimeoutMillis: 10_000,
   connectTimeoutMillis: 3_000,
 })
