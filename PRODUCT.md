@@ -88,8 +88,15 @@ without a CNP the XML carries `0000000000000` as the buyer identifier (BT-47).
 ### 3.3 Numbering sequences
 
 - separately configured invoice and proforma series;
-- sequential and unique numbers within an explicit scope;
-- recommended scope: issuer, fiscal year, document type, and series;
+- sequential and unique numbers within an explicit scope: organization, numbering type
+  (`invoice` or `proforma`) and series;
+- numbering is continuous across years: a series never restarts at 1 on 1 January, so
+  series + number identifies the document for its whole life (Codul fiscal art. 319
+  alin. (20) lit. b); counting again from 1 means configuring a new series (for example
+  `FCT2027`), which starts at 1;
+- stornos are numbered from the invoice counter of the original invoice's series;
+- the fiscal year is still recorded on every document, as information only: it plays no
+  part in numbering, chronology or uniqueness;
 - atomic allocation from the applicable document-type sequence when an invoice or
   proforma is issued;
 - drafts do not consume invoice or proforma numbers;
@@ -99,7 +106,10 @@ without a CNP the XML carries `0000000000000` as the buyer identifier (BT-47).
 - gaps, abandoned allocations, and voided numbers remain explainable in the audit
   trail.
 
-The database must enforce uniqueness. UI validation alone is insufficient.
+The database must enforce uniqueness. UI validation alone is insufficient. Each document
+table carries a unique key on its scope and number; invoices and stornos live in two
+tables, and uniqueness between them comes from the shared `invoice` counter, allocated in
+the same serialized transaction that saves the document, not from a constraint.
 
 ### 3.4 Invoice drafts
 

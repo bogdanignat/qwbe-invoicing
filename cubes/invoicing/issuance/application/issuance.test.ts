@@ -308,7 +308,7 @@ void test("issues authored documents without drafts and invoices a proforma snap
   const missingDueDate = await Effect.runPromise(Effect.flip(service.issueInvoice(idempotent({ ...input, dueDate: null }))))
   assert.equal(missingDueDate instanceof ValidationFailure
     && missingDueDate.issues.includes("dueDate is required for an invoice with a positive amount due"), true)
-  assert.equal(state.sequences.get("org-1:2026:invoice:INV"), undefined)
+  assert.equal(state.sequences.get("org-1:invoice:INV"), undefined)
   const zero = await Effect.runPromise(service.issueInvoice(idempotent({ ...input, dueDate: null,
     lines: [{ description: "Avans", quantity: "2", unitPrice: "0", unitOfMeasure: each, vatRateCode: "RO_STANDARD" }] })))
   assert.equal(zero.totalIncludingVat, "0.00")
@@ -319,13 +319,13 @@ void test("issues authored documents without drafts and invoices a proforma snap
   assert.equal(state.drafts.size, 0)
   const { series: invoiceSeries, ...proformaInput } = input
   const undatedProforma = await Effect.runPromise(service.issueProforma(idempotent({ ...proformaInput, dueDate: null, proformaSeries: "PRO" })))
-  const beforeUndatedConversion = state.sequences.get("org-1:2026:invoice:INV")
+  const beforeUndatedConversion = state.sequences.get("org-1:invoice:INV")
   const undatedFailure = await Effect.runPromise(Effect.flip(service.issueInvoiceFromProforma(idempotent({
     proformaId: undatedProforma.id, invoiceSeries,
   }))))
   assert.equal(undatedFailure instanceof ValidationFailure
     && undatedFailure.issues.includes("dueDate is required for an invoice with a positive amount due"), true)
-  assert.equal(state.sequences.get("org-1:2026:invoice:INV"), beforeUndatedConversion)
+  assert.equal(state.sequences.get("org-1:invoice:INV"), beforeUndatedConversion)
   assert.equal((await Effect.runPromise(service.getProforma(undatedProforma.id))).convertedInvoiceId, null)
   const proforma = await Effect.runPromise(service.issueProforma(idempotent({ ...proformaInput, proformaSeries: "PRO" })))
   assert.equal(proforma.sourceDraftId, null)
@@ -359,7 +359,7 @@ void test("issues authored documents without drafts and invoices a proforma snap
   await expectConflict(service.issueInvoiceFromProforma(idempotent({ proformaId: proforma.id, invoiceSeries })), "proforma_already_converted")
   const rollbackSource = await Effect.runPromise(service.issueProforma(idempotent({ ...proformaInput, proformaSeries: "PRO" })))
   const invoiceCount = state.issued.size
-  const invoiceSequence = state.sequences.get("org-1:2026:invoice:INV")
+  const invoiceSequence = state.sequences.get("org-1:invoice:INV")
   const failing = createInvoicingService({ context: contextProvider({ identity, organization: { id: "org-1" } }),
     clock: fixedClock, ids: sequentialIds(), branding: brandingNormalizer, cubeIdentity: "invoicing", store: {
       transaction: (use) => memoryStore(state).transaction((transaction) => use({ ...transaction,
@@ -367,7 +367,7 @@ void test("issues authored documents without drafts and invoices a proforma snap
     } })
   await expectConflict(failing.issueInvoiceFromProforma(idempotent({ proformaId: rollbackSource.id, invoiceSeries })), "forced_failure")
   assert.equal(state.issued.size, invoiceCount)
-  assert.equal(state.sequences.get("org-1:2026:invoice:INV"), invoiceSequence)
+  assert.equal(state.sequences.get("org-1:invoice:INV"), invoiceSequence)
   const other = createInvoicingService({ context: contextProvider({ identity, organization: { id: "org-2" } }),
     clock: fixedClock, ids: sequentialIds(), store: memoryStore(state), branding: brandingNormalizer, cubeIdentity: "invoicing" })
   assert.equal(await Effect.runPromise(Effect.flip(other.issueInvoiceFromProforma(idempotent({ proformaId: proforma.id, invoiceSeries })))) instanceof ResourceNotFound, true)
@@ -397,7 +397,7 @@ void test("numbers documents chronologically per series and dates proforma conve
   const future = await Effect.runPromise(Effect.flip(service.issueInvoice(idempotent(document("2026-09-02")))))
   assert.equal(future instanceof ValidationFailure && future.issues.includes("issueDate cannot be in the future"), true)
   assert.equal((await Effect.runPromise(service.issueInvoice(idempotent(document("2026-08-30"))))).number, 2)
-  assert.equal(state.sequences.get("org-1:2026:invoice:INV"), 2)
+  assert.equal(state.sequences.get("org-1:invoice:INV"), 2)
 
   const proforma = await Effect.runPromise(service.issueProforma(idempotent({ ...proformaDocument("2026-08-20", "2026-09-04"), proformaSeries: "PRO" })))
   const converted = await Effect.runPromise(service.issueInvoiceFromProforma(idempotent({ proformaId: proforma.id, invoiceSeries: "INV" })))

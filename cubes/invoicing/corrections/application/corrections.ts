@@ -49,7 +49,7 @@ export const createCorrectionOperations = (d: OperationDependencies<CorrectionWo
       if (dateIssues.length > 0) return yield* Effect.fail(new ValidationFailure({ issues: dateIssues }))
       // A storno is a new invoice with negative values (Codul fiscal art. 330): it takes the next number of the invoice series.
       yield* ensureChronology(tx, ctx.organization.id, "invoice", orig.series, issueDate, today)
-      const number = yield* tx.allocateDocumentNumber(ctx.organization.id, fy(issueDate), "invoice", orig.series)
+      const number = yield* tx.allocateDocumentNumber(ctx.organization.id, "invoice", orig.series)
       const issuedAt = now.toISOString()
       const source = input.source ?? orig.source
       // Storno RO: the quantity carries the minus, the unit price stays positive (ANAF code guide; EN 16931 BR-27).

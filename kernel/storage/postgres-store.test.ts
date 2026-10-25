@@ -371,8 +371,8 @@ void test("rolls sequence allocation back with the surrounding transaction", asy
       organizationId: "org-1", documentType: "proforma", series: "QWBE",
     })))
     const failure = await Effect.runPromise(Effect.flip(store.transaction((transaction) => Effect.gen(function*() {
-       yield* transaction.allocateDocumentNumber("org-1", 2026, "invoice", "QWBE")
-       yield* transaction.allocateDocumentNumber("org-1", 2026, "proforma", "QWBE")
+       yield* transaction.allocateDocumentNumber("org-1", "invoice", "QWBE")
+       yield* transaction.allocateDocumentNumber("org-1", "proforma", "QWBE")
       return yield* Effect.fail(new DomainConflict({ code: "forced", message: "rollback" }))
     }))))
     assert.equal(failure instanceof DomainConflict, true)
@@ -380,13 +380,13 @@ void test("rolls sequence allocation back with the surrounding transaction", asy
     // The allocation is a table row inside the transaction, not a sequence
     // object: a rollback leaves no gap, which is what fiscal numbering needs.
     const allocated = await Effect.runPromise(store.transaction((transaction) =>
-      transaction.allocateDocumentNumber("org-1", 2026, "invoice", "QWBE")))
+      transaction.allocateDocumentNumber("org-1", "invoice", "QWBE")))
     assert.equal(allocated, 1)
     const alternate = await Effect.runPromise(store.transaction((transaction) =>
-      transaction.allocateDocumentNumber("org-1", 2026, "invoice", "ALT")))
+      transaction.allocateDocumentNumber("org-1", "invoice", "ALT")))
     assert.equal(alternate, 1)
     const proforma = await Effect.runPromise(store.transaction((transaction) =>
-      transaction.allocateDocumentNumber("org-1", 2026, "proforma", "QWBE")))
+      transaction.allocateDocumentNumber("org-1", "proforma", "QWBE")))
     assert.equal(proforma, 1)
   })
 })

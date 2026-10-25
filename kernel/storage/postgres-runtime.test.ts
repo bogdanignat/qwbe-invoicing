@@ -186,7 +186,7 @@ void test("concurrent number allocations serialise on the exclusive lock, with n
       organizationId: "org-1", documentType: "invoice", series: "QWBE",
     })))
     const allocate = store.transaction((transaction) =>
-      transaction.allocateDocumentNumber("org-1", 2026, "invoice", "QWBE"))
+      transaction.allocateDocumentNumber("org-1", "invoice", "QWBE"))
     const numbers = await Effect.runPromise(
       Effect.all([allocate, allocate, allocate, allocate], { concurrency: 4 }),
     )
