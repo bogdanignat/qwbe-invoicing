@@ -1,4 +1,5 @@
 import type { EditableDocumentLine } from "./document-authoring-form-model.ts"
+import { barcodeIssue, itemCodeIssue } from "./item-identifiers.ts"
 
 /**
  * What any document needs before it can be issued, independent of what issuing
@@ -18,7 +19,10 @@ export interface DocumentTaxReadiness {
 
 export const STALE_TAX_WARNING = "Configurația TVA s-a schimbat. Actualizează și salvează configurația TVA a liniilor afectate înainte de emitere."
 
-/** Every line filled in: a blank description, quantity, price, unit or VAT code is not a line yet. */
+/**
+ * Every line filled in: a blank description, quantity, price, unit or VAT code is
+ * not a line yet, and a code or an EAN the server would refuse holds the document back here.
+ */
 export const documentLinesReady = (lines: ReadonlyArray<EditableDocumentLine>): boolean =>
   lines.length > 0 && lines.every((line) =>
     line.description.trim() !== ""
@@ -26,7 +30,9 @@ export const documentLinesReady = (lines: ReadonlyArray<EditableDocumentLine>): 
     && line.unitPrice.trim() !== ""
     && line.unitOfMeasure.code.trim() !== ""
     && line.unitOfMeasure.name.trim() !== ""
-    && line.vatRateCode.trim() !== "")
+    && line.vatRateCode.trim() !== ""
+    && itemCodeIssue(line.itemCode ?? "") === null
+    && barcodeIssue(line.barcode ?? "") === null)
 
 /** A stale tax configuration withdraws the right to issue and says why, whatever the rest of the screen thinks. */
 export const documentTaxReadiness = (

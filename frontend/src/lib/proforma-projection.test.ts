@@ -120,6 +120,7 @@ void test("the document is projected through the shared body with a head of its 
   assert.deepEqual(view.parties.map((party) => party.heading), ["Furnizor", "Cumpărător"])
   assert.equal(view.lines.length, 1)
   assert.equal(view.lines[0]?.vat, "TVA 21%")
+  assert.deepEqual(view.lines.map((row) => row.identifiers), [""])
   assert.equal(view.vatRows.length, 1)
   assert.deepEqual(view.totals.map((total) => total.value), ["1,000.00 RON", "210.00 RON", "1,210.00 RON"])
   assert.equal(view.notes, "Plata în 14 zile")
@@ -133,4 +134,13 @@ void test("the document head reports the conversion, never an e-Factura status",
   assert.deepEqual(view.facts.at(-1), { label: "Status", value: "Facturată" })
   assert.equal(view.facts.some((fact) => fact.label === "e-Factura"), false)
   assert.equal(view.notes, null)
+})
+
+void test("a line shows the article code and the EAN it was issued with, each only when present", () => {
+  const [line] = proforma.lines
+  assert.ok(line !== undefined)
+  const view = projectProforma({ ...proforma, lines: [
+    { ...line, itemCode: "SRB-M6", barcode: "00012345600012" }, { ...line, id: "line-2", itemCode: "SRV" }, { ...line, id: "line-3", barcode: "96385074" },
+  ] })
+  assert.deepEqual(view.lines.map((row) => row.identifiers), ["Cod: SRB-M6 · EAN: 00012345600012", "Cod: SRV", "EAN: 96385074"])
 })

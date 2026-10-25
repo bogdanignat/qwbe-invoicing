@@ -39,14 +39,14 @@ const customer = {
   fiscalIdentifier: "12345674", vatRegistered: true, address, defaultPaymentTermDays: 15,
 }
 const preset = {
-  id: "prs-1", organizationId: "org-1", description: "Carte", unitPrice: "40.00",
+  id: "prs-1", organizationId: "org-1", code: "CRT-1", kind: "goods", description: "Carte", unitPrice: "40.00",
   unitOfMeasure: each, preferredVatRateCode: "RO_REDUCED",
 }
 
 const customerInput: CustomerInput = {
   partyType: "company", name: "Alfa", fiscalIdentifier: "12345674", vatRegistered: true, address,
 }
-const presetInput: ProductPresetInput = { description: "Carte", unitPrice: "40.00", unitOfMeasure: each }
+const presetInput: ProductPresetInput = { code: "CRT-1", kind: "goods", description: "Carte", unitPrice: "40.00", unitOfMeasure: each }
 
 const answerFor = (call: Call): unknown => {
   if (call.options?.method === "DELETE") return { deleted: true }

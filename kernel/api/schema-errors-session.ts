@@ -1,6 +1,8 @@
 import { HttpApiSchema } from "@effect/platform"
 import { Schema } from "effect"
 
+import { optionalString } from "./schema-primitives.ts"
+
 export const Deleted = Schema.Struct({ deleted: Schema.Literal(true) })
 export const LoginInput = Schema.Struct({ token: Schema.String })
 /** `plugins`: the optional plugins this installation runs, so the browser asks nothing of one that is off. */
@@ -25,7 +27,10 @@ export const CsrfError = tagged(403, "csrf_validation_failed")
 export const OriginForbiddenError = tagged(403, "origin_not_allowed")
 export const ResourceNotFoundError = tagged(404, "ResourceNotFound")
 export const DocumentNotFoundError = tagged(404, "DocumentNotFound")
-export const DomainConflictError = withStatus(409, Schema.Struct({ error: Schema.Literal("DomainConflict"), code: Schema.String }))
+// `message` only where it is written for a person (a taken article code); every other conflict is named by its code.
+export const DomainConflictError = withStatus(409, Schema.Struct({
+  error: Schema.Literal("DomainConflict"), code: Schema.String, message: optionalString,
+}))
 export const ArtifactConflictError = tagged(409, "ArtifactConflict")
 export const VatRegistryUnavailableError = Schema.Struct({ error: Schema.Literal("vat_registry_unavailable") }).annotations(
   HttpApiSchema.annotations({ status: 503, description: "The ANAF VAT registry did not answer; the fiscal change was not saved. Retry later." }),

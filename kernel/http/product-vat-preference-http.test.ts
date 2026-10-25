@@ -22,7 +22,7 @@ const buyer = {
   address: { countryCode: "RO", city: "Iași", street: "Strada Test 2", county: "RO-IS" },
 }
 const each = { code: "C62", name: "unitate" }
-const book = { description: "Carte", unitPrice: "100", unitOfMeasure: each }
+const book = { code: "CARTE", kind: "goods", description: "Carte", unitPrice: "100", unitOfMeasure: each }
 const reducedLine = { description: "Carte", quantity: "1", unitPrice: "100", unitOfMeasure: each, vatRateCode: "RO_REDUCED" }
 const issueDate = "2026-09-16"
 /** `registered`: what the fake ANAF registry says of the issuer on every day. */

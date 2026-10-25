@@ -168,9 +168,16 @@ void test("customer payment terms and monetary product presets have explicit wir
   assert.equal(Schema.decodeUnknownSync(S.CustomerInput)({ ...customer, defaultPaymentTermDays: 0 }).defaultPaymentTermDays, 0)
   assert.throws(() => Schema.decodeUnknownSync(S.CustomerInput)({ ...customer, defaultPaymentTermDays: 1.5 }))
   const unitOfMeasure = { code: "HUR", name: "oră" }
-  assert.deepEqual(Schema.decodeUnknownSync(S.ProductPresetInput)({ description: "Servicii", unitPrice: "10.00", unitOfMeasure }),
-    { description: "Servicii", unitPrice: "10.00", unitOfMeasure })
-  assert.throws(() => Schema.decodeUnknownSync(S.ProductPresetInput)({ description: "Servicii", unitPrice: 10, unitOfMeasure }))
+  const product = { code: "SRV-1", kind: "service", description: "Servicii", unitPrice: "10.00", unitOfMeasure }
+  assert.deepEqual(Schema.decodeUnknownSync(S.ProductPresetInput)(product), product)
+  assert.deepEqual(Schema.decodeUnknownSync(S.ProductPresetInput)({ ...product, barcode: "00012345600012" }), { ...product, barcode: "00012345600012" })
+  assert.throws(() => Schema.decodeUnknownSync(S.ProductPresetInput)({ ...product, unitPrice: 10 }))
+  for (const missing of ["code", "kind"]) {
+    assert.throws(() => Schema.decodeUnknownSync(S.ProductPresetInput)(Object.fromEntries(Object.entries(product).filter(([key]) => key !== missing))), missing)
+  }
+  assert.throws(() => Schema.decodeUnknownSync(S.ProductPresetInput)({ ...product, kind: "other" }))
+  // A GTIN is text on the wire, so its leading zeros cannot be lost to a number.
+  assert.throws(() => Schema.decodeUnknownSync(S.ProductPresetInput)({ ...product, barcode: 12345600012 }))
 })
 
 void test("OpenAPI 3.1 mirrors paths, PDF encoding, and authentication metadata", () => {
@@ -252,13 +259,14 @@ void test("OpenAPI 3.1 mirrors paths, PDF encoding, and authentication metadata"
     "/api/invoices/{id}/efactura.xml", "/api/corrections/{id}/efactura.xml", "/api/corrections/{id}/pdf"]) {
     expectStatuses("get", path, ["404"])
   }
-  for (const [method, path] of [["post", "/api/customers"], ["post", "/api/product-presets"]] as const) {
-    expectStatuses(method, path, ["413"])
-  }
+  expectStatuses("post", "/api/customers", ["413"])
+  // A product's article code is unique in the organization: a taken one answers 409 with a message naming it.
+  expectStatuses("post", "/api/product-presets", ["409", "413"])
+  expectStatuses("put", "/api/product-presets/{id}", ["404", "409", "413"])
   // A fiscal issuer change is refused over issued documents or a concurrent change (409), or while ANAF is down (503).
   expectStatuses("put", "/api/issuer", ["409", "413"])
   expectStatuses("post", "/api/document-series", ["409", "413"])
-  for (const [method, path] of [["put", "/api/customers/{id}"], ["put", "/api/product-presets/{id}"],
+  for (const [method, path] of [["put", "/api/customers/{id}"],
     ["delete", "/api/product-presets/{id}"]] as const) expectStatuses(method, path, ["404", "413"])
   // Creating a draft is idempotent like issuing one, so it answers 409 too:
   // a reused key, or a key whose draft was deleted.

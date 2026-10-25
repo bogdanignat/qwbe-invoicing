@@ -11,6 +11,7 @@
     "invoicing/drafts",
     "invoicing/issuance",
     "invoicing/issuer",
+    "invoicing/items",
     "invoicing/parties",
     "invoicing/payments",
     "invoicing/efactura",

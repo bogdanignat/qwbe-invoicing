@@ -47,10 +47,9 @@ export const createDraftDocumentOperations = (
       const buyer = yield* buyerFrom(input, context.organization.id, transaction)
       const header = yield* dates(input.issueDate, input.dueDate)
       const source = input.source === undefined ? current.source : yield* documentSource(input.source ?? undefined)
+      // The line keeps what it was given (description, quantity, item identifiers); only the VAT follows the new date.
       const lines = yield* Effect.forEach(current.lines, (line) => checked(() => calculateLine({
-        id: line.id, description: line.description, quantity: line.quantity, unitPrice: line.unitPrice,
-        unitOfMeasure: line.unitOfMeasure,
-        vat: resolveVatConfiguration(issuer, line.vatRateCode, input.issueDate),
+        ...line, vat: resolveVatConfiguration(issuer, line.vatRateCode, input.issueDate),
       })))
       const base = { ...current }
       delete base.customerId

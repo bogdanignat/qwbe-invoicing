@@ -101,3 +101,9 @@ void test("a second storno reads as a conflict with the existing storno", () => 
   }, 409)
   assert.equal(failure.message, "Factura are deja un document storno integral.")
 })
+
+void test("a taken article code shows the server's sentence, which names the code", () => {
+  const failure = parseApiFailure({ error: "DomainConflict", code: "product_preset_code_taken", message: "Codul SRB-M6 e deja folosit." }, 409)
+  assert.equal(failure.message, "Codul SRB-M6 e deja folosit.")
+  assert.equal(failure.code, "product_preset_code_taken")
+})

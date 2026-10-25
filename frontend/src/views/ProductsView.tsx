@@ -20,7 +20,7 @@ export const ProductsView = () => {
   const catalogue = useProductPresets()
   const { load } = catalogue
   return <PrivateScreen shell={shell}>
-    <Page title="Produse" eyebrow="Catalog"
+    <Page title="Nomenclator produse" eyebrow="Catalog"
       actions={load.kind === "ready"
         ? <Button onClick={catalogue.startCreate} disabled={catalogue.pending}>Produs nou</Button>
         : undefined}>

@@ -46,6 +46,8 @@ export interface RenderableIssuer extends RenderableParty {
 
 export interface RenderableLine {
   readonly description: string
+  readonly itemCode?: string
+  readonly barcode?: string
   readonly quantity: string
   readonly unitPrice: string
   readonly unitOfMeasure: { readonly code: string; readonly name: string }

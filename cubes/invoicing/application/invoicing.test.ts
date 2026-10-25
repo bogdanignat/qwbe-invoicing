@@ -33,7 +33,7 @@ void test("refuses missing permissions and cross-organization reads", async () =
   assert.equal(failure instanceof PermissionDenied, true)
   assert.equal(await Effect.runPromise(Effect.flip(denied.listProductPresets())) instanceof PermissionDenied, true)
   assert.equal(await Effect.runPromise(Effect.flip(denied.createProductPreset({
-    description: "Servicii", unitPrice: "1.00", unitOfMeasure: each,
+    code: "SRV", kind: "service", description: "Servicii", unitPrice: "1.00", unitOfMeasure: each,
   }))) instanceof PermissionDenied, true)
   assert.equal(await Effect.runPromise(Effect.flip(denied.updateCustomer({
     id: "missing", partyType: "individual", name: "Ion", fiscalIdentifier: "", vatRegistered: false,

@@ -154,7 +154,8 @@ internal clients run inside the Compose network (`docker compose exec app …`).
   organization, a clock, an id generator, a transactional store and a renderer.
 - **The component cubes** under `cubes/invoicing/` each own one piece of the logic and share
   the parent's domain: `parties` (the Romanian fiscal rules for every party: CUI, CNP,
-  counties and sectors), `customers` (saved customers, with their own table and baseline),
+  counties and sectors), `items` (the article code and GTIN rules shared by the product
+  nomenclature and every document line), `customers` (saved customers, with their own table and baseline),
   `catalog` (saved products and services and the unit-of-measure list they are chosen from,
   with their own table and baseline), `issuer` (issuer profile, branding and VAT
   configurations and their own tables and baseline), `drafts`
@@ -829,6 +830,7 @@ The rest of the model:
 qwbe-package.json            plugin pack manifest: invoicing and its eleven child cubes
 cubes/invoicing/             core: domain model, VAT arithmetic, ports, contracts, migrations, service composition
 cubes/invoicing/parties/     component: CUI, CNP, counties and sectors shared by issuer and buyers
+cubes/invoicing/items/       component: article code and GTIN rules shared by products and document lines
 cubes/invoicing/customers/   component: saved customers, their table and baseline migration
 cubes/invoicing/catalog/     component: saved products and services, their table and baseline migration
 cubes/invoicing/issuer/      component: issuer profile, branding, VAT configurations and baseline

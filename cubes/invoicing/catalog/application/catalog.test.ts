@@ -5,7 +5,7 @@ import { Effect } from "effect"
 
 import { createInvoicingService } from "../../application/invoicing.ts"
 import { brandingNormalizer, contextProvider, each, emptyState, fixedClock, identity, memoryStore, sequentialIds } from "../../application/memory-store.test-support.ts"
-import { PermissionDenied, ResourceNotFound, ValidationFailure } from "../../contracts/index.ts"
+import { DomainConflict, PermissionDenied, ResourceNotFound, ValidationFailure } from "../../contracts/index.ts"
 import { unitOfMeasures } from "../../domain/unit-of-measures.ts"
 
 void test("manages tenant product presets with hard deletion", async () => {
@@ -19,15 +19,15 @@ void test("manages tenant product presets with hard deletion", async () => {
     context: contextProvider({ identity, organization: { id: "org-2" } }),
     clock: fixedClock, ids: generator, store: memoryStore(state), branding: brandingNormalizer, cubeIdentity: "invoicing",
   })
-  const preset = await Effect.runPromise(service.createProductPreset({ description: "  Consultanță  ", unitPrice: "12.5", unitOfMeasure: each }))
-  assert.deepEqual(preset, { id: "id-1", organizationId: "org-1", description: "Consultanță", unitPrice: "12.50", unitOfMeasure: each })
+  const preset = await Effect.runPromise(service.createProductPreset({ code: " CONS-1 ", kind: "service", description: "  Consultanță  ", unitPrice: "12.5", unitOfMeasure: each }))
+  assert.deepEqual(preset, { id: "id-1", organizationId: "org-1", code: "CONS-1", kind: "service", description: "Consultanță", unitPrice: "12.50", unitOfMeasure: each })
   assert.deepEqual(await Effect.runPromise(service.listProductPresets()), { items: [preset], nextCursor: null })
   assert.deepEqual(await Effect.runPromise(other.listProductPresets()), { items: [], nextCursor: null })
-  assert.equal(await Effect.runPromise(Effect.flip(other.updateProductPreset({ id: preset.id, description: "X", unitPrice: "1", unitOfMeasure: each }))) instanceof ResourceNotFound, true)
-  const changed = await Effect.runPromise(service.updateProductPreset({ id: preset.id, description: "Audit", unitPrice: "20", unitOfMeasure: each }))
+  assert.equal(await Effect.runPromise(Effect.flip(other.updateProductPreset({ id: preset.id, code: "X", kind: "goods", description: "X", unitPrice: "1", unitOfMeasure: each }))) instanceof ResourceNotFound, true)
+  const changed = await Effect.runPromise(service.updateProductPreset({ id: preset.id, code: "AUD-1", kind: "service", description: "Audit", unitPrice: "20", unitOfMeasure: each }))
   assert.equal(changed.unitPrice, "20.00")
-  assert.equal(await Effect.runPromise(Effect.flip(service.createProductPreset({ description: " ", unitPrice: "1", unitOfMeasure: each }))) instanceof ValidationFailure, true)
-  assert.equal(await Effect.runPromise(Effect.flip(service.createProductPreset({ description: "Invalid", unitPrice: "1.001", unitOfMeasure: each }))) instanceof ValidationFailure, true)
+  assert.equal(await Effect.runPromise(Effect.flip(service.createProductPreset({ code: "X", kind: "goods", description: " ", unitPrice: "1", unitOfMeasure: each }))) instanceof ValidationFailure, true)
+  assert.equal(await Effect.runPromise(Effect.flip(service.createProductPreset({ code: "X", kind: "goods", description: "Invalid", unitPrice: "1.001", unitOfMeasure: each }))) instanceof ValidationFailure, true)
   await Effect.runPromise(service.deleteProductPreset(preset.id))
   assert.deepEqual(await Effect.runPromise(service.listProductPresets()), { items: [], nextCursor: null })
   assert.equal(await Effect.runPromise(Effect.flip(service.deleteProductPreset(preset.id))) instanceof ResourceNotFound, true)
@@ -48,7 +48,7 @@ const serviceAt = (clock: () => Date, state = emptyState()) => createInvoicingSe
   context: contextProvider({ identity, organization: { id: "org-1" } }),
   clock: { now: Effect.sync(clock) }, ids: sequentialIds(), store: memoryStore(state), branding: brandingNormalizer, cubeIdentity: "invoicing",
 })
-const book = { description: "Carte", unitPrice: "40", unitOfMeasure: each }
+const book = { code: "CARTE", kind: "goods" as const, description: "Carte", unitPrice: "40", unitOfMeasure: each }
 
 void test("stores a preferred VAT rate code with the preset and drops it when an update omits it", async () => {
   const service = serviceAt(() => new Date("2026-09-01T10:00:00.000Z"))
@@ -86,4 +86,25 @@ void test("checks a preference on the calendar date in Bucharest, not in UTC", a
   const nextDay = serviceAt(() => new Date("2025-07-31T21:00:00.000Z"))
   const refused = await Effect.runPromise(Effect.flip(nextDay.createProductPreset({ ...book, preferredVatRateCode: "RO_REDUCED_5" })))
   assert.equal(refused instanceof ValidationFailure, true)
+})
+
+void test("an article code is unique in the organization whatever its case, free in another and again after deletion", async () => {
+  const state = emptyState()
+  const ids = sequentialIds()
+  const [service, other] = ["org-1", "org-2"].map((id) => createInvoicingService({
+    context: contextProvider({ identity, organization: { id } }),
+    clock: fixedClock, ids, store: memoryStore(state), branding: brandingNormalizer, cubeIdentity: "invoicing",
+  }))
+  if (service === undefined || other === undefined) throw new Error("two services expected")
+  const first = await Effect.runPromise(service.createProductPreset({ ...book, code: "Carte-1" }))
+  const taken = await Effect.runPromise(Effect.flip(service.createProductPreset({ ...book, code: " CARTE-1 " })))
+  assert.equal(taken instanceof DomainConflict && taken.code === "product_preset_code_taken", true)
+  assert.equal(taken instanceof DomainConflict && taken.message, "Codul CARTE-1 e deja folosit.")
+  assert.equal((await Effect.runPromise(other.createProductPreset({ ...book, code: "carte-1" }))).code, "carte-1")
+  assert.equal((await Effect.runPromise(service.updateProductPreset({ ...book, id: first.id, code: "CARTE-1", unitPrice: "41" }))).code, "CARTE-1")
+  const second = await Effect.runPromise(service.createProductPreset({ ...book, code: "CARTE-2" }))
+  const renamed = await Effect.runPromise(Effect.flip(service.updateProductPreset({ ...book, id: second.id, code: "carte-1" })))
+  assert.equal(renamed instanceof DomainConflict, true)
+  await Effect.runPromise(service.deleteProductPreset(first.id))
+  assert.equal((await Effect.runPromise(service.updateProductPreset({ ...book, id: second.id, code: "carte-1" }))).code, "carte-1")
 })

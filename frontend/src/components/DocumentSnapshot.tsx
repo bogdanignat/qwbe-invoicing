@@ -26,7 +26,10 @@ export const DocumentSnapshot = ({ view }: { readonly view: DocumentSnapshotView
       </thead>
       <tbody>
         {view.lines.map((line) => <tr key={line.key}>
-          <td data-label="Descriere">{line.description}</td>
+          <td data-label="Descriere">
+            {line.description}
+            {line.identifiers === "" ? null : <small className="block text-xs text-invoice-muted">{line.identifiers}</small>}
+          </td>
           <td data-label="Cantitate">{line.quantity}</td>
           <td data-label="Preț unitar" className="numeric">{line.unitPrice}</td>
           <td data-label="Cotă TVA">{line.vat}</td>

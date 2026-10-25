@@ -1,3 +1,4 @@
+import { productPresetCodeTaken } from "../../cubes/invoicing/catalog/index.ts"
 import type { CompanyLookupFailure, ProviderFailureReason } from "../../cubes/invoicing/company-lookup/index.ts"
 import type { DocumentsFailure } from "../../cubes/invoicing/documents/index.ts"
 import type { InvoicingFailure } from "../../cubes/invoicing/index.ts"
@@ -10,7 +11,7 @@ type Wire =
   | { readonly error: "ValidationFailure"; readonly issues: ReadonlyArray<string> }
   | { readonly error: "ResourceNotFound" | "DocumentNotFound" | "ArtifactConflict" | "PersistenceFailure"
     | "DocumentPersistenceFailure" | "DocumentRenderingFailure" | "internal_failure" }
-  | { readonly error: "DomainConflict"; readonly code: string }
+  | { readonly error: "DomainConflict"; readonly code: string; readonly message?: string }
   | { readonly error: "vat_registry_unavailable" }
   | { readonly error: "ProviderFailure"; readonly reason: ProviderFailureReason; readonly message: string; readonly retryAfterSeconds?: number }
 export type ApiFailure = InvoicingFailure | PaymentsFailure | DocumentsFailure | CompanyLookupFailure | VatRegistryUnavailable
@@ -25,10 +26,15 @@ const providerMessages: Readonly<Record<ProviderFailureReason, string>> = {
   unavailable: "Furnizorul de date despre firme nu răspunde acum.",
 }
 
+/** The conflicts whose message is written for a person (and names only what they typed): sent as is.
+ * Every other conflict message may name an operation or a table, so it stays in the log. */
+const publicConflictMessages: ReadonlySet<string> = new Set([productPresetCodeTaken])
+
 const toWire = (failure: ApiFailure): Wire => {
   switch (failure._tag) {
     case "ValidationFailure": return { error: "ValidationFailure", issues: failure.issues }
-    case "DomainConflict": return { error: "DomainConflict", code: failure.code }
+    case "DomainConflict": return { error: "DomainConflict", code: failure.code,
+      ...(publicConflictMessages.has(failure.code) ? { message: failure.message } : {}) }
     case "RenderingFailure": return { error: "internal_failure" }
     case "VatRegistryUnavailable": return { error: "vat_registry_unavailable" }
     case "ProviderFailure": return { error: "ProviderFailure", reason: failure.reason, message: providerMessages[failure.reason],

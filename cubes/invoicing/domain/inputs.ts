@@ -1,11 +1,11 @@
-import type { BuyerSnapshot, DocumentSeries, DocumentSource } from "./invoice.ts"
+import type { BuyerSnapshot, DocumentSeries, DocumentSource, ItemIdentifiers } from "./invoice.ts"
 import type { UnitOfMeasure } from "./unit-of-measures.ts"
 
 export type ConfigureDocumentSeriesInput = Pick<DocumentSeries, "documentType" | "series">
 
 export type BuyerSource = { readonly customerId: string; readonly customer?: never } | { readonly customer: BuyerSnapshot; readonly customerId?: never }
 
-export interface RawDocumentLine {
+export interface RawDocumentLine extends ItemIdentifiers {
   readonly description: string
   readonly quantity: string
   readonly unitPrice: string
@@ -43,7 +43,7 @@ export type UpdateDraftInput = BuyerSource & {
   readonly notes?: string | null
 }
 
-export interface AddDraftLineInput {
+export interface AddDraftLineInput extends ItemIdentifiers {
   readonly draftId: string
   readonly description: string
   readonly quantity: string

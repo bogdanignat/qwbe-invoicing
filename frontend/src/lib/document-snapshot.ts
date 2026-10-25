@@ -50,7 +50,13 @@ export interface UnitOfMeasure {
   readonly name: string
 }
 
-export interface DocumentLine {
+/** The article code and the GTIN a line copied from a product; both absent on a line typed by hand. */
+export interface ItemIdentifiers {
+  readonly itemCode?: string
+  readonly barcode?: string
+}
+
+export interface DocumentLine extends ItemIdentifiers {
   readonly id: string
   readonly description: string
   readonly quantity: string

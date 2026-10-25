@@ -4,7 +4,7 @@ import test from "node:test"
 import { Effect } from "effect"
 import { PDFDocument } from "pdf-lib"
 
-import type { RenderableCorrection, RenderableInvoice, RenderableProforma } from "../../cubes/invoicing/documents/index.ts"
+import type { RenderableCorrection, RenderableInvoice, RenderableProforma, RenderedDocument } from "../../cubes/invoicing/documents/index.ts"
 import {
   correctionTemplateVersion, createPdfRenderer, documentDateLine, formatAmount, formatRate, invoiceTemplateVersion,
   issuerLegalLines, partyIdentifierLine, proformaTemplateVersion,
@@ -286,7 +286,7 @@ void test("renders a deterministic storno with negated totals, the reversed invo
   const first = await Effect.runPromise(renderer.renderCorrection(correction))
   const second = await Effect.runPromise(renderer.renderCorrection(correction))
   assert.equal(first.templateVersion, correctionTemplateVersion)
-  assert.equal(first.templateVersion, "storno-v3")
+  assert.equal(first.templateVersion, "storno-v4")
   assert.equal(Buffer.from(first.bytes.subarray(0, 5)).toString("ascii"), "%PDF-")
   assert.deepEqual(first.bytes, second.bytes)
   const parsed = await PDFDocument.load(first.bytes, { updateMetadata: false })
@@ -298,4 +298,36 @@ void test("renders a deterministic storno with negated totals, the reversed invo
   // The reason block is the only content a storno adds beyond the reversed lines.
   const withoutReason = await Effect.runPromise(renderer.renderCorrection({ ...correction, reason: "" }))
   assert.ok(first.bytes.length > withoutReason.bytes.length)
+})
+
+void test("draws a line's article code and EAN under its name, in the invoice, the proforma and the storno alike", async () => {
+  const base = invoice.lines[0]
+  assert.ok(base !== undefined)
+  const coded = { ...base, description: `Cablu ${"ȚarăȘtiință ".repeat(8)}`.trim().slice(0, 100), itemCode: "W".repeat(50), barcode: "00012345600012" }
+  const renderer = createPdfRenderer()
+  const documents: ReadonlyArray<(lines: RenderableInvoice["lines"]) => Effect.Effect<RenderedDocument, unknown>> = [
+    (lines) => renderer.render({ ...invoice, lines }),
+    (lines) => renderer.renderProforma({ ...invoice, lines, id: "proforma-1", sourceDraftId: null,
+      convertedDraftId: null, convertedInvoiceId: null }),
+    (lines) => renderer.renderCorrection({ ...invoice, lines, id: "correction-1", dueDate: null, notes: null,
+      reason: "Retur", original: { series: invoice.series, number: invoice.number, issueDate: invoice.issueDate } }),
+  ]
+  for (const render of documents) {
+    const first: RenderedDocument = await Effect.runPromise(render([coded, { ...base, itemCode: "SRV" }, { ...base, barcode: "96385074" }]))
+    const second: RenderedDocument = await Effect.runPromise(render([coded, { ...base, itemCode: "SRV" }, { ...base, barcode: "96385074" }]))
+    assert.deepEqual(first.bytes, second.bytes)
+    const plain = await Effect.runPromise(render([{ ...base, description: coded.description }, base, base]))
+    assert.notDeepEqual(first.bytes, plain.bytes, first.templateVersion)
+  }
+})
+
+void test("measures a row with its identifier lines before deciding the page break", async () => {
+  const base = invoice.lines[0]
+  assert.ok(base !== undefined)
+  const pages = async (lines: RenderableInvoice["lines"]): Promise<number> => (await PDFDocument.load(
+    (await Effect.runPromise(createPdfRenderer().render({ ...invoice, lines }))).bytes, { updateMetadata: false })).getPageCount()
+  const rows = (identifiers: object) => Array.from({ length: 80 }, (_, index) => ({ ...base, ...identifiers, description: `Poziția ${String(index + 1)}` }))
+  const plain = await pages(rows({}))
+  const coded = await pages(rows({ itemCode: "SRB-M6", barcode: "00012345600012" }))
+  assert.ok(coded > plain, `${String(coded)} pages with codes, ${String(plain)} without`)
 })

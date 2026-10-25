@@ -8,10 +8,10 @@
  * issued document — so they are imported, not redefined.
  */
 import type {
-  Address, BuyerSnapshot, DocumentLine, UnitOfMeasure, VatBreakdownEntry, VatCategoryCode,
+  Address, BuyerSnapshot, DocumentLine, ItemIdentifiers, UnitOfMeasure, VatBreakdownEntry, VatCategoryCode,
 } from "./document-snapshot.ts"
 
-export type { Address, BuyerSnapshot, UnitOfMeasure, VatCategoryCode }
+export type { Address, BuyerSnapshot, ItemIdentifiers, UnitOfMeasure, VatCategoryCode }
 export type DraftLine = DocumentLine
 export type VatBreakdown = VatBreakdownEntry
 
@@ -136,9 +136,16 @@ export interface Issuer {
   readonly branding: IssuerBranding | null
 }
 
+export type ProductKind = "goods" | "service"
+
 export interface ProductPreset {
   readonly id: string
   readonly organizationId: string
+  /** The article code: printable ASCII, unique in the organization whatever its case. */
+  readonly code: string
+  readonly kind: ProductKind
+  /** A GTIN (EAN) as text, leading zeros kept; absent when the product has none. */
+  readonly barcode?: string
   readonly description: string
   readonly unitPrice: string
   readonly unitOfMeasure: UnitOfMeasure
@@ -172,7 +179,7 @@ export type UpdateDraftInput = BuyerSource & {
   readonly notes?: string | null
 }
 
-export interface DraftLineInput {
+export interface DraftLineInput extends ItemIdentifiers {
   readonly description: string
   readonly quantity: string
   readonly unitPrice: string

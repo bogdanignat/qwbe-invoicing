@@ -63,7 +63,7 @@ void test("a preset price and the issuer capital are stored in bani, an absent c
   withMigrated("money_settings", async ({ pool, sql }) => {
     const invoicing = service(pool)
     const preset = await Effect.runPromise(invoicing.createProductPreset({
-      description: "Audit", unitPrice: "90071992547409.93", unitOfMeasure: { code: "HUR", name: "oră" },
+      code: "AUD", kind: "service", description: "Audit", unitPrice: "90071992547409.93", unitOfMeasure: { code: "HUR", name: "oră" },
     }))
     assert.equal(preset.unitPrice, "90071992547409.93")
     assert.equal(await sql.scalar("SELECT unit_price FROM product_presets WHERE id=$1", [preset.id]), "9007199254740993")
@@ -93,16 +93,16 @@ void test("a preset price and the issuer capital are stored in bani, an absent c
 void test("an amount past int8 is refused by PostgreSQL as a conflict and rolls the transaction back", () =>
   withMigrated("money_overflow", async ({ pool, sql }) => {
     const store = createPostgresStore(pool)
-    const preset = { id: "kept", organizationId: "org-1", description: "Audit", unitPrice: "10.00", unitOfMeasure: { code: "C62", name: "unitate" } }
+    const preset = { id: "kept", organizationId: "org-1", code: "AUD", kind: "service" as const, description: "Audit", unitPrice: "10.00", unitOfMeasure: { code: "C62", name: "unitate" } }
     const failure = await Effect.runPromise(Effect.flip(store.transaction((transaction) => Effect.gen(function*() {
       yield* transaction.saveProductPreset(preset)
-      yield* transaction.saveProductPreset({ ...preset, id: "huge", unitPrice: "92233720368547758.08" })
+      yield* transaction.saveProductPreset({ ...preset, id: "huge", code: "HUGE", unitPrice: "92233720368547758.08" })
     }))))
     assert.ok(failure instanceof DomainConflict && failure.code === "persistence_conflict", String(failure))
     assert.equal(await sql.scalar("SELECT count(*) FROM product_presets"), "0")
     // The refusal is the engine's own: 22003, one past the int8 maximum.
-    const raw = await sql.rejects(`INSERT INTO product_presets(id,organization_id,description,unit_price,unit_code,unit_name)
-      VALUES('raw','org-1','Audit',$1,'C62','unitate')`, ["9223372036854775808"])
+    const raw = await sql.rejects(`INSERT INTO product_presets(id,organization_id,code,kind,description,unit_price,unit_code,unit_name)
+      VALUES('raw','org-1','RAW','service','Audit',$1,'C62','unitate')`, ["9223372036854775808"])
     assert.equal(raw.code, "22003")
     // The largest value does fit, and comes back exactly.
     await Effect.runPromise(store.transaction((transaction) =>

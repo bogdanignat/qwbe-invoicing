@@ -176,18 +176,27 @@ void test("requires host authentication and serves the complete invoice-core rou
       body: customer.body }, runtime)).status, 404)
 
     const invalidPreset = await handleApiRequest({ method: "POST", url: "/api/product-presets", authorization,
-      body: { description: " ", unitPrice: "1.00", unitOfMeasure: each } }, runtime)
+      body: { code: "CONS", kind: "service", description: " ", unitPrice: "1.00", unitOfMeasure: each } }, runtime)
     assert.equal(invalidPreset.status, 400)
+    // A code with diacritics is refused as input, before the store is reached.
+    const accentedCode = await handleApiRequest({ method: "POST", url: "/api/product-presets", authorization,
+      body: { code: "ȘURUB", kind: "goods", description: "Șurub", unitPrice: "1.00", unitOfMeasure: each } }, runtime)
+    assert.deepEqual([accentedCode.status, (accentedCode.body as { issues?: unknown }).issues], [400, ["code must be 1-50 printable ASCII characters"]])
     const preset = await handleApiRequest({ method: "POST", url: "/api/product-presets", authorization,
-      body: { description: "  Consultanță  ", unitPrice: "10.5", unitOfMeasure: each } }, runtime)
+      body: { code: "CONS", kind: "service", description: "  Consultanță  ", unitPrice: "10.5", unitOfMeasure: each } }, runtime)
     assert.equal(preset.status, 200)
+    // A taken code, in another case, is a 409 whose message names it; nothing about the store leaks.
+    assert.deepEqual(await handleApiRequest({ method: "POST", url: "/api/product-presets", authorization,
+      body: { code: "cons", kind: "goods", description: "Altceva", unitPrice: "1", unitOfMeasure: each } }, runtime),
+    { status: 409, body: { error: "DomainConflict", code: "product_preset_code_taken", message: "Codul cons e deja folosit." } })
     assert.equal((preset.body as { description: string }).description, "Consultanță")
     assert.equal((preset.body as { unitPrice: string }).unitPrice, "10.50")
     const presetId = (preset.body as { id: string }).id
     assert.equal((await handleApiRequest({ method: "PUT", url: `/api/product-presets/${presetId}`, authorization,
-      body: { description: "Audit", unitPrice: "1.001", unitOfMeasure: each } }, runtime)).status, 400)
+      body: { code: "CONS", kind: "service", description: "Audit", unitPrice: "1.001", unitOfMeasure: each } }, runtime)).status, 400)
     const updatedPreset = await handleApiRequest({ method: "PUT", url: `/api/product-presets/${presetId}`, authorization,
-      body: { description: "Audit", unitPrice: "20", unitOfMeasure: each } }, runtime)
+      body: { code: "AUD", kind: "service", description: "Audit", unitPrice: "20", unitOfMeasure: each, barcode: "00012345600012" } }, runtime)
+    assert.equal((updatedPreset.body as { barcode: string }).barcode, "00012345600012")
     assert.equal((updatedPreset.body as { unitPrice: string }).unitPrice, "20.00")
     assert.deepEqual((await handleApiRequest({ method: "GET", url: "/api/product-presets", authorization,
       body: undefined }, runtime)).body, { items: [updatedPreset.body], nextCursor: null })
@@ -255,7 +264,8 @@ void test("requires host authentication and serves the complete invoice-core rou
     assert.equal((cleared.body as { totalIncludingVat: string }).totalIncludingVat, "0.00")
     await handleApiRequest({
       method: "POST", url: `/api/drafts/${draftId}/lines`, authorization,
-      body: { description: "Servicii", quantity: "1", unitPrice: "100", unitOfMeasure: each, vatRateCode: "RO_STANDARD" },
+      body: { description: "Servicii", quantity: "1", unitPrice: "100", unitOfMeasure: each, vatRateCode: "RO_STANDARD",
+        itemCode: "AUD", barcode: "00012345600012" },
     }, runtime)
     const issued = await handleApiRequest({
       method: "POST",
@@ -276,6 +286,9 @@ void test("requires host authentication and serves the complete invoice-core rou
       body: undefined,
     }, runtime)
     assert.deepEqual(fetched.body, issued.body)
+    // The line carries the product's code and GTIN as copied values, not as a link to the product deleted above.
+    const [issuedLine] = (fetched.body as { lines: ReadonlyArray<{ itemCode?: string; barcode?: string }> }).lines
+    assert.deepEqual([issuedLine?.itemCode, issuedLine?.barcode], ["AUD", "00012345600012"])
     assert.equal(typeof (fetched.body as { issuer: { branding: { image: { pngBase64: string } } } }).issuer.branding.image.pngBase64, "string")
     const invoices = await handleApiRequest({
       method: "GET",

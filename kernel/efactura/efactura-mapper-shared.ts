@@ -43,6 +43,8 @@ export const buyer = (customer: BuyerSnapshot, notSubject: boolean): EFacturaPar
 export const mapLine = (line: DraftLine, position: number): EFacturaLine => ({
   id: String(position + 1),
   name: line.description,
+  sellersItemIdentifier: line.itemCode ?? null,
+  standardItemIdentifier: line.barcode ?? null,
   quantity: line.quantity,
   unitCode: line.unitOfMeasure.code,
   netAmount: line.totalExcludingVat,

@@ -8,9 +8,9 @@ import { renderPdf } from "./pdf-document.ts"
 
 export { documentDateLine, formatAmount, formatRate, issuerLegalLines, partyAddressLines, partyIdentifierLine } from "./pdf-format.ts"
 
-export const invoiceTemplateVersion = "invoice-v11"
-export const proformaTemplateVersion = "proforma-v10"
-export const correctionTemplateVersion = "storno-v3"
+export const invoiceTemplateVersion = "invoice-v12"
+export const proformaTemplateVersion = "proforma-v11"
+export const correctionTemplateVersion = "storno-v4"
 
 const regularFontPath = fileURLToPath(new URL("./assets/fonts/DejaVuSans.ttf", import.meta.url))
 const boldFontPath = fileURLToPath(new URL("./assets/fonts/DejaVuSans-Bold.ttf", import.meta.url))

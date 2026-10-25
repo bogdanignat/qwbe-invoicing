@@ -9,7 +9,7 @@ import { validateEFacturaDocument } from "./validation.ts"
 
 const ARTICLE_310 = "Regim special de scutire conform art. 310 din Codul fiscal"
 
-const standardLine: EFacturaLine = { id: "1", name: "Consultanță", quantity: "1.0000", unitCode: "HUR", netAmount: "100.00", unitPrice: "100.00", vatCategory: "S", vatRate: "21.00" }
+const standardLine: EFacturaLine = { id: "1", name: "Consultanță", sellersItemIdentifier: null, standardItemIdentifier: null, quantity: "1.0000", unitCode: "HUR", netAmount: "100.00", unitPrice: "100.00", vatCategory: "S", vatRate: "21.00" }
 
 const seller: EFacturaParty = {
   registrationName: "Acme Software SRL",
@@ -50,7 +50,7 @@ const invoice = (overrides: Partial<EFacturaDocument> = {}): EFacturaDocument =>
 /** An Article 310 exempt invoice: zero-rated, reason carried as BT-120 text. */
 const exemptInvoice = (overrides: Partial<EFacturaDocument> = {}): EFacturaDocument => invoice({
   seller: { ...seller, vatIdentifier: null, taxRegistrationIdentifier: "12345678" },
-  lines: [{ id: "1", name: "Consultanță", quantity: "1.0000", unitCode: "HUR", netAmount: "100.00", unitPrice: "100.00", vatCategory: "E", vatRate: "0.00" }],
+  lines: [{ id: "1", name: "Consultanță", sellersItemIdentifier: null, standardItemIdentifier: null, quantity: "1.0000", unitCode: "HUR", netAmount: "100.00", unitPrice: "100.00", vatCategory: "E", vatRate: "0.00" }],
   taxSubtotals: [{ taxableAmount: "100.00", taxAmount: "0.00", category: "E", percent: "0.00", exemptionReason: ARTICLE_310, exemptionReasonCode: null }],
   taxAmount: "0.00",
   taxInclusiveAmount: "100.00",
@@ -84,8 +84,8 @@ void test("accepts the supported document shapes", () => {
 void test("accepts several standard rates side by side, including historical ones", () => {
   validateEFacturaDocument(invoice({
     lines: [
-      { id: "1", name: "Consultanță", quantity: "1.0000", unitCode: "HUR", netAmount: "100.00", unitPrice: "100.00", vatCategory: "S", vatRate: "21.00" },
-      { id: "2", name: "Manual tipărit", quantity: "2.0000", unitCode: "H87", netAmount: "50.00", unitPrice: "25.00", vatCategory: "S", vatRate: "11.00" },
+      { id: "1", name: "Consultanță", sellersItemIdentifier: null, standardItemIdentifier: null, quantity: "1.0000", unitCode: "HUR", netAmount: "100.00", unitPrice: "100.00", vatCategory: "S", vatRate: "21.00" },
+      { id: "2", name: "Manual tipărit", sellersItemIdentifier: null, standardItemIdentifier: null, quantity: "2.0000", unitCode: "H87", netAmount: "50.00", unitPrice: "25.00", vatCategory: "S", vatRate: "11.00" },
     ],
     taxSubtotals: [
       { taxableAmount: "100.00", taxAmount: "21.00", category: "S", percent: "21.00", exemptionReason: null, exemptionReasonCode: null },
@@ -104,7 +104,7 @@ void test("refuses an exempt breakdown without a reason, and a standard one carr
 
 void test("refuses a zero-rated standard category and a non-zero exempt one", () => {
   rejects(invoice({
-    lines: [{ id: "1", name: "x", quantity: "1.0000", unitCode: "H87", netAmount: "100.00", unitPrice: "100.00", vatCategory: "S", vatRate: "0.00" }],
+    lines: [{ id: "1", name: "x", sellersItemIdentifier: null, standardItemIdentifier: null, quantity: "1.0000", unitCode: "H87", netAmount: "100.00", unitPrice: "100.00", vatCategory: "S", vatRate: "0.00" }],
     taxSubtotals: [{ taxableAmount: "100.00", taxAmount: "0.00", category: "S", percent: "0.00", exemptionReason: null, exemptionReasonCode: null }],
     taxAmount: "0.00", taxInclusiveAmount: "100.00", payableAmount: "100.00",
   }), /BR-S-05/u)
@@ -153,8 +153,8 @@ void test("refuses a line whose VAT group is missing from the breakdown", () => 
   // what is missing is a group for the second line's rate.
   rejects(invoice({
     lines: [
-      { id: "1", name: "a", quantity: "1.0000", unitCode: "H87", netAmount: "50.00", unitPrice: "50.00", vatCategory: "S", vatRate: "21.00" },
-      { id: "2", name: "b", quantity: "1.0000", unitCode: "H87", netAmount: "50.00", unitPrice: "50.00", vatCategory: "S", vatRate: "11.00" },
+      { id: "1", name: "a", sellersItemIdentifier: null, standardItemIdentifier: null, quantity: "1.0000", unitCode: "H87", netAmount: "50.00", unitPrice: "50.00", vatCategory: "S", vatRate: "21.00" },
+      { id: "2", name: "b", sellersItemIdentifier: null, standardItemIdentifier: null, quantity: "1.0000", unitCode: "H87", netAmount: "50.00", unitPrice: "50.00", vatCategory: "S", vatRate: "11.00" },
     ],
     taxSubtotals: [{ taxableAmount: "100.00", taxAmount: "21.00", category: "S", percent: "21.00", exemptionReason: null, exemptionReasonCode: null }],
   }), /covers category S at another rate/u)
@@ -372,7 +372,7 @@ const notSubjectInvoice = (overrides: Partial<EFacturaDocument> = {}): EFacturaD
   // identified by BT-47 alone.
   buyer: { ...buyer, vatIdentifier: null, legalRegistrationIdentifier: "87654321" },
   notes: [ARTICLE_310],
-  lines: [{ id: "1", name: "Consultanță", quantity: "1.0000", unitCode: "HUR", netAmount: "100.00", unitPrice: "100.00", vatCategory: "O", vatRate: null }],
+  lines: [{ id: "1", name: "Consultanță", sellersItemIdentifier: null, standardItemIdentifier: null, quantity: "1.0000", unitCode: "HUR", netAmount: "100.00", unitPrice: "100.00", vatCategory: "O", vatRate: null }],
   taxSubtotals: [{ taxableAmount: "100.00", taxAmount: "0.00", category: "O", percent: null, exemptionReason: null, exemptionReasonCode: VATEX_NOT_SUBJECT }],
   taxAmount: "0.00",
   taxInclusiveAmount: "100.00",
@@ -399,7 +399,7 @@ void test("refuses category O that carries a VAT rate, zero included", () => {
     taxSubtotals: [{ taxableAmount: "100.00", taxAmount: "0.00", category: "O", percent: "0.00", exemptionReason: null, exemptionReasonCode: VATEX_NOT_SUBJECT }],
   }), /no VAT rate at all.*\(product rule, not BR-48/u)
   rejects(notSubjectInvoice({
-    lines: [{ id: "1", name: "x", quantity: "1.0000", unitCode: "HUR", netAmount: "100.00", unitPrice: "100.00", vatCategory: "O", vatRate: "0.00" }],
+    lines: [{ id: "1", name: "x", sellersItemIdentifier: null, standardItemIdentifier: null, quantity: "1.0000", unitCode: "HUR", netAmount: "100.00", unitPrice: "100.00", vatCategory: "O", vatRate: "0.00" }],
   }), /BR-O-05/u)
 })
 
@@ -418,8 +418,8 @@ void test("requires VATEX-EU-O on an out-of-scope breakdown, beyond what BR-O-10
 void test("refuses a document that is out of scope and taxed at the same time", () => {
   rejects(notSubjectInvoice({
     lines: [
-      { id: "1", name: "a", quantity: "1.0000", unitCode: "HUR", netAmount: "100.00", unitPrice: "100.00", vatCategory: "O", vatRate: null },
-      { id: "2", name: "b", quantity: "1.0000", unitCode: "HUR", netAmount: "100.00", unitPrice: "100.00", vatCategory: "S", vatRate: "21.00" },
+      { id: "1", name: "a", sellersItemIdentifier: null, standardItemIdentifier: null, quantity: "1.0000", unitCode: "HUR", netAmount: "100.00", unitPrice: "100.00", vatCategory: "O", vatRate: null },
+      { id: "2", name: "b", sellersItemIdentifier: null, standardItemIdentifier: null, quantity: "1.0000", unitCode: "HUR", netAmount: "100.00", unitPrice: "100.00", vatCategory: "S", vatRate: "21.00" },
     ],
     taxSubtotals: [
       { taxableAmount: "100.00", taxAmount: "0.00", category: "O", percent: null, exemptionReason: null, exemptionReasonCode: VATEX_NOT_SUBJECT },
@@ -432,7 +432,7 @@ void test("refuses a document that is out of scope and taxed at the same time", 
 
 void test("requires a rate on the categories that are defined by one", () => {
   rejects(invoice({
-    lines: [{ id: "1", name: "x", quantity: "1.0000", unitCode: "HUR", netAmount: "100.00", unitPrice: "100.00", vatCategory: "S", vatRate: null }],
+    lines: [{ id: "1", name: "x", sellersItemIdentifier: null, standardItemIdentifier: null, quantity: "1.0000", unitCode: "HUR", netAmount: "100.00", unitPrice: "100.00", vatCategory: "S", vatRate: null }],
   }), /lines\[0\] is category S and needs a VAT rate/u)
   rejects(exemptInvoice({
     taxSubtotals: [{ taxableAmount: "100.00", taxAmount: "0.00", category: "E", percent: null, exemptionReason: ARTICLE_310, exemptionReasonCode: null }],
@@ -446,13 +446,13 @@ void test("requires a due date when there is money to pay, and checks the VAT ar
     taxAmount: "21.01", taxInclusiveAmount: "121.01", payableAmount: "121.01",
   }), /BR-CO-17/u)
   rejects(exemptInvoice({
-    lines: [{ id: "1", name: "x", quantity: "1.0000", unitCode: "HUR", netAmount: "100.00", unitPrice: "100.00", vatCategory: "E", vatRate: "0.00" }],
+    lines: [{ id: "1", name: "x", sellersItemIdentifier: null, standardItemIdentifier: null, quantity: "1.0000", unitCode: "HUR", netAmount: "100.00", unitPrice: "100.00", vatCategory: "E", vatRate: "0.00" }],
     taxSubtotals: [{ taxableAmount: "100.00", taxAmount: "5.00", category: "E", percent: "0.00", exemptionReason: ARTICLE_310, exemptionReasonCode: null }],
     taxAmount: "5.00", taxInclusiveAmount: "105.00", payableAmount: "105.00",
   }), /BR-E-09/u)
   // 99.00 at 21% is 20.79 exactly; the half-up rounding must not drift a cent.
   validateEFacturaDocument(invoice({
-    lines: [{ id: "1", name: "x", quantity: "1.0000", unitCode: "HUR", netAmount: "99.00", unitPrice: "99.00", vatCategory: "S", vatRate: "21.00" }],
+    lines: [{ id: "1", name: "x", sellersItemIdentifier: null, standardItemIdentifier: null, quantity: "1.0000", unitCode: "HUR", netAmount: "99.00", unitPrice: "99.00", vatCategory: "S", vatRate: "21.00" }],
     taxSubtotals: [{ taxableAmount: "99.00", taxAmount: "20.79", category: "S", percent: "21.00", exemptionReason: null, exemptionReasonCode: null }],
     lineExtensionAmount: "99.00", taxExclusiveAmount: "99.00", taxAmount: "20.79",
     taxInclusiveAmount: "119.79", payableAmount: "119.79",
@@ -462,8 +462,8 @@ void test("requires a due date when there is money to pay, and checks the VAT ar
 void test("holds each VAT breakdown to the lines that belong to it", () => {
   rejects(invoice({
     lines: [
-      { id: "1", name: "a", quantity: "1.0000", unitCode: "H87", netAmount: "40.00", unitPrice: "40.00", vatCategory: "S", vatRate: "21.00" },
-      { id: "2", name: "b", quantity: "1.0000", unitCode: "H87", netAmount: "60.00", unitPrice: "60.00", vatCategory: "S", vatRate: "11.00" },
+      { id: "1", name: "a", sellersItemIdentifier: null, standardItemIdentifier: null, quantity: "1.0000", unitCode: "H87", netAmount: "40.00", unitPrice: "40.00", vatCategory: "S", vatRate: "21.00" },
+      { id: "2", name: "b", sellersItemIdentifier: null, standardItemIdentifier: null, quantity: "1.0000", unitCode: "H87", netAmount: "60.00", unitPrice: "60.00", vatCategory: "S", vatRate: "11.00" },
     ],
     taxSubtotals: [
       { taxableAmount: "50.00", taxAmount: "10.50", category: "S", percent: "21.00", exemptionReason: null, exemptionReasonCode: null },
@@ -533,4 +533,21 @@ void test("refuses a document number that names no number, before ANAF does", ()
   // BR-RO-010 runs ahead of every fiscal rule in the official validator.
   rejects(invoice({ id: "QWBE-FARA-NUMAR" }), /id must contain at least one digit \(BR-RO-010\)/u)
   rejects(invoice({ id: `QWBE ${"9".repeat(200)}` }), /id exceeds 200 characters/u)
+})
+
+void test("refuses a stated but blank article code and a GTIN that is not 8, 12, 13 or 14 digits", () => {
+  const refused = (line: EFacturaLine): string => {
+    try {
+      validateEFacturaDocument(invoice({ lines: [line] }))
+      return ""
+    } catch (error) {
+      return error instanceof EFacturaContractViolation ? error.issues.join("; ") : String(error)
+    }
+  }
+  assert.equal(refused({ ...standardLine, sellersItemIdentifier: "P-1", standardItemIdentifier: "4006381333931" }), "")
+  assert.equal(refused({ ...standardLine, standardItemIdentifier: "00012345600012" }), "")
+  assert.match(refused({ ...standardLine, sellersItemIdentifier: "  " }), /lines\[0\]\.sellersItemIdentifier is stated but empty; omit it instead \(BT-155\)/u)
+  for (const gtin of ["", "1234567", "123456789", "400638133393a", "123456789012345"]) {
+    assert.match(refused({ ...standardLine, standardItemIdentifier: gtin }), /lines\[0\]\.standardItemIdentifier must be a GTIN of 8, 12, 13 or 14 digits \(BT-157\)/u, gtin)
+  }
 })

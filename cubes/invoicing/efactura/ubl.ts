@@ -62,6 +62,14 @@ const legalMonetaryTotal = (document: EFacturaDocument): XmlElement =>
     amount("cbc:PayableAmount", document.payableAmount, document.currencyCode),
   ])
 
+/** cac:ItemIdentificationType, reduced to its ID; the element is absent when there is nothing to identify. */
+const itemIdentification = (name: string, id: string | null,
+  attributes?: ReadonlyArray<readonly [string, string]>): ReadonlyArray<XmlElement> =>
+  optional("cbc:ID", id, attributes).map((child) => element(name, [child]))
+
+/** GS1 in ISO 6523: the scheme of a GTIN in BT-157. */
+const GTIN_SCHEME = "0160"
+
 /** cac:InvoiceLineType / cac:CreditNoteLineType. The two differ in the
  * quantity element name only — `InvoicedQuantity` against `CreditedQuantity`
  * — which is exactly the kind of detail a shared builder must not blur. */
@@ -71,7 +79,11 @@ const documentLine = (line: EFacturaLine, currency: string, quantityName: string
     text(quantityName, line.quantity, [["unitCode", line.unitCode]]),
     amount("cbc:LineExtensionAmount", line.netAmount, currency),
     element("cac:Item", [
+      // cac:ItemType sequence: Name, SellersItemIdentification (BT-155),
+      // StandardItemIdentification (BT-157), ClassifiedTaxCategory.
       text("cbc:Name", line.name),
+      ...itemIdentification("cac:SellersItemIdentification", line.sellersItemIdentifier),
+      ...itemIdentification("cac:StandardItemIdentification", line.standardItemIdentifier, [["schemeID", GTIN_SCHEME]]),
       taxCategory("cac:ClassifiedTaxCategory", { category: line.vatCategory, percent: line.vatRate }),
     ]),
     element("cac:Price", [amount("cbc:PriceAmount", line.unitPrice, currency)]),

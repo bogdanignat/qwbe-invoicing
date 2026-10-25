@@ -44,10 +44,10 @@ const fiscalFingerprint = (document: {
   readonly vatTotal: string
   readonly totalIncludingVat: string
 }): string => JSON.stringify([
-  document.lines.map(({ description, quantity, unitPrice, unitOfMeasure, vatRateCode, vatRate, vatCategoryCode,
-    vatExemptionReason, totalExcludingVat, vatAmount, totalIncludingVat }) => [description, quantity, unitPrice,
-    unitOfMeasure.code, unitOfMeasure.name, vatRateCode, vatRate, vatCategoryCode, vatExemptionReason,
-    totalExcludingVat, vatAmount, totalIncludingVat]),
+  document.lines.map(({ description, itemCode, barcode, quantity, unitPrice, unitOfMeasure, vatRateCode, vatRate,
+    vatCategoryCode, vatExemptionReason, totalExcludingVat, vatAmount, totalIncludingVat }) => [description,
+    itemCode ?? null, barcode ?? null, quantity, unitPrice, unitOfMeasure.code, unitOfMeasure.name, vatRateCode, vatRate,
+    vatCategoryCode, vatExemptionReason, totalExcludingVat, vatAmount, totalIncludingVat]),
   document.vatBreakdown.map(({ code, rate, vatCategoryCode, vatExemptionReason, vatBaseAmount, vatAmount }) =>
     [code, rate, vatCategoryCode, vatExemptionReason, vatBaseAmount, vatAmount]).toSorted(),
   document.totalExcludingVat, document.vatTotal, document.totalIncludingVat,

@@ -27,7 +27,7 @@ export const SHELL_LINKS: ReadonlyArray<ShellLink> = [
   { href: "/received", section: "received", label: "Facturi primite", icon: "⇩" },
   { href: "/proformas", section: "proformas", label: "Proforme", icon: "▧" },
   { href: "/customers", section: "customers", label: "Clienți", icon: "♙" },
-  { href: "/products", section: "products", label: "Catalog", icon: "◇" },
+  { href: "/products", section: "products", label: "Nomenclator produse", icon: "◇" },
   { href: "/settings", section: "settings", label: "Setări", icon: "⚙" },
   { href: "/integrations", section: "integrations", label: "Integrări", icon: "⇄" },
 ]

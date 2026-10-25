@@ -228,6 +228,7 @@ void test("a line carries its unit by name, its VAT treatment and its three amou
   assert.deepEqual(view.lines[0], {
     key: "line-1",
     description: "Abonament lunar",
+    identifiers: "",
     quantity: "2 bucată",
     unitPrice: "500.00 RON",
     vat: "TVA 21%",
@@ -235,6 +236,16 @@ void test("a line carries its unit by name, its VAT treatment and its three amou
     vatAmount: "210.00 RON",
     totalIncludingVat: "1,210.00 RON",
   })
+})
+
+void test("an issued invoice and a storno show the article code and the EAN the line was issued with", () => {
+  const coded = { ...line, itemCode: "SRB-M6", barcode: "00012345600012" }
+  const invoice = decodeIssuedInvoice({ ...invoiceJson, lines: [coded] })
+  assert.deepEqual([invoice.lines[0]?.itemCode, invoice.lines[0]?.barcode], ["SRB-M6", "00012345600012"])
+  assert.equal(projectIssuedInvoice(invoice).lines[0]?.identifiers, "Cod: SRB-M6 · EAN: 00012345600012")
+  const correction = decodeCorrectionDocument({ ...correctionJson, lines: [{ ...coded, barcode: undefined }] })
+  assert.equal(projectCorrectionDocument(correction).lines[0]?.identifiers, "Cod: SRB-M6")
+  assert.throws(() => decodeIssuedInvoice({ ...invoiceJson, lines: [{ ...line, barcode: 12345678 }] }))
 })
 
 void test("a quantity and the social capital read grouped, at the scale the snapshot froze", () => {

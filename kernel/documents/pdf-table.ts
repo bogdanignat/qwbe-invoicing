@@ -23,10 +23,18 @@ export const drawTableHeader = (sheet: Sheet): void => {
 const unitLabel = (sheet: Sheet, unit: RenderableLine["unitOfMeasure"]): string =>
   sheet.fonts.regular.widthOfTextAtSize(unit.name, 8) <= (columns[3]?.width ?? 42) - 6 ? unit.name : unit.code
 
+/** The article code and the barcode, only those the line has: small and muted under the name, never a column. */
+const identifiers = (line: RenderableLine): string => [
+  ...line.itemCode === undefined ? [] : [`Cod: ${line.itemCode}`], ...line.barcode === undefined ? [] : [`EAN: ${line.barcode}`],
+].join(" · ")
+
 export const drawTableRow = (sheet: Sheet, line: RenderableLine, index: number): void => {
   const descriptionColumn = columns[1]?.width ?? 187
   const description = wrapText(sheet.fonts.bold, 8, descriptionColumn, line.description)
-  const height = Math.max(description.length * 10, 10) + 8
+  const label = identifiers(line)
+  const codes = label === "" ? [] : wrapText(sheet.fonts.regular, 6.5, descriptionColumn, label)
+  // The whole row, name and identifier lines, is measured before the page break is decided.
+  const height = Math.max(description.length * 10, 10) + codes.length * 8 + 8
   if (sheet.y - height < bottomLimit) {
     addPage(sheet)
     drawTableHeader(sheet)
@@ -44,8 +52,10 @@ export const drawTableRow = (sheet: Sheet, line: RenderableLine, index: number):
     putText(sheet.page, value, { x: columnOffsets[cellIndex] ?? margin, y: top, size: 8,
       font: sheet.fonts.regular, color: cellIndex === 0 ? muted : ink, align: column.align, width: column.width })
   })
-  putLines(sheet.page, description, { x: columnOffsets[1] ?? margin, width: descriptionColumn,
+  const below = putLines(sheet.page, description, { x: columnOffsets[1] ?? margin, width: descriptionColumn,
     top, size: 8, font: sheet.fonts.bold, leading: 10 })
+  putLines(sheet.page, codes, { x: columnOffsets[1] ?? margin, width: descriptionColumn,
+    top: below + 1.5, size: 6.5, font: sheet.fonts.regular, color: muted, leading: 8 })
   horizontalRule(sheet.page, top - height + 6)
   sheet.y = top - height
 }

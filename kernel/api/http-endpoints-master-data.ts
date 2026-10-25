@@ -21,8 +21,9 @@ export const masterDataEndpoints = {
   updateCustomer: invoicingBase(notFound(validation(body(HttpApiEndpoint.put("updateCustomer")`/customers/${id}`.setPayload(C.CustomerInput).addSuccess(C.Customer))))),
   deleteCustomer: invoicingBase(conflict(notFound(body(HttpApiEndpoint.del("deleteCustomer")`/customers/${id}`.addSuccess(Deleted))))),
   listProductPresets: invoicingBase(validation(HttpApiEndpoint.get("listProductPresets", "/product-presets").setUrlParams(PageQuery).addSuccess(C.ProductPresetPage))),
-  createProductPreset: invoicingBase(validation(body(HttpApiEndpoint.post("createProductPreset", "/product-presets").setPayload(C.ProductPresetInput).addSuccess(C.ProductPreset)))),
-  updateProductPreset: invoicingBase(notFound(validation(body(HttpApiEndpoint.put("updateProductPreset")`/product-presets/${id}`
+  createProductPreset: invoicingBase(conflict(validation(body(HttpApiEndpoint.post("createProductPreset", "/product-presets")
     .setPayload(C.ProductPresetInput).addSuccess(C.ProductPreset))))),
+  updateProductPreset: invoicingBase(conflict(notFound(validation(body(HttpApiEndpoint.put("updateProductPreset")`/product-presets/${id}`
+    .setPayload(C.ProductPresetInput).addSuccess(C.ProductPreset)))))),
   deleteProductPreset: invoicingBase(notFound(body(HttpApiEndpoint.del("deleteProductPreset")`/product-presets/${id}`.addSuccess(Deleted)))),
 } as const

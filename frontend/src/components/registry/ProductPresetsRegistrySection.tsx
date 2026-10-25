@@ -2,6 +2,7 @@ import { Button } from "../Button.tsx"
 import { EmptyState } from "../AsyncState.tsx"
 import { LoadMore } from "../LoadMore.tsx"
 import { money } from "../../lib/money.ts"
+import { productKindLabels } from "../../lib/product-preset-form.ts"
 import type { ProductPresetRow } from "../../hooks/use-product-presets.ts"
 
 interface ProductPresetsRegistrySectionProps {
@@ -16,8 +17,8 @@ interface ProductPresetsRegistrySectionProps {
 }
 
 /**
- * The saved products, as they are reused on a document: description, unit,
- * price and the VAT rate the product prefers.
+ * The saved products, as they are reused on a document: article code, kind,
+ * description, EAN, unit, price and the VAT rate the product prefers.
  *
  * The rate is a label the model already resolved — an expired preference reads
  * as such instead of as the issuer's default — so the table decides nothing.
@@ -35,13 +36,17 @@ export const ProductPresetsRegistrySection = (props: ProductPresetsRegistrySecti
       ? <EmptyState>Nu există încă produse salvate.</EmptyState>
       : <div className="table-wrap"><table>
         <thead><tr>
-          <th scope="col">Descriere</th><th scope="col">UM</th>
+          <th scope="col">Cod</th><th scope="col">Tip</th><th scope="col">Descriere</th>
+          <th scope="col">EAN</th><th scope="col">UM</th>
           <th scope="col" className="numeric">Preț unitar</th><th scope="col">TVA</th>
           <th scope="col"><span className="sr-only">Acțiuni</span></th>
         </tr></thead>
         <tbody>
           {props.rows.map((row) => <tr key={row.preset.id}>
+            <td>{row.preset.code}</td>
+            <td>{productKindLabels[row.preset.kind]}</td>
             <td>{row.preset.description}</td>
+            <td>{row.preset.barcode ?? "—"}</td>
             <td>{row.preset.unitOfMeasure.name}</td>
             <td className="numeric">{money(row.preset.unitPrice, "RON")}</td>
             <td>{row.vatLabel}</td>
@@ -49,10 +54,10 @@ export const ProductPresetsRegistrySection = (props: ProductPresetsRegistrySecti
               <Button className="secondary" disabled={props.disabled}
                 aria-current={props.editingId === row.preset.id ? "true" : undefined}
                 onClick={() => { props.onEdit(row) }}>
-                Editează<span className="sr-only"> {row.preset.description}</span>
+                Editează<span className="sr-only"> {row.preset.code} {row.preset.description}</span>
               </Button>
               <Button className="danger" disabled={props.disabled} onClick={() => { props.onDelete(row) }}>
-                Șterge<span className="sr-only"> {row.preset.description}</span>
+                Șterge<span className="sr-only"> {row.preset.code} {row.preset.description}</span>
               </Button>
             </div></td>
           </tr>)}

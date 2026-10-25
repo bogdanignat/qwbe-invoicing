@@ -187,3 +187,17 @@ void test("reads a configured rate by its grammar and range, not by its number",
     assert.deepEqual(issuesOf(() => { validateVatTreatment("RO_NON_VAT", rate, "O", article310VatExemptionReason) }), ["Invalid VAT tuple"], rate)
   }
 })
+
+void test("a calculated line carries the item identifiers it is given, checked, and nothing when it is given none", () => {
+  const base = { id: "l-1", description: "Șurub", quantity: "1", unitPrice: "10", unitOfMeasure: { code: "C62", name: "unitate" },
+    vat: { code: "RO_STANDARD", rate: "21.00", vatCategoryCode: "S" as const, vatExemptionReason: null, effectiveFrom: "2025-08-01" } }
+  const line = calculateLine({ ...base, itemCode: "  SRB-1  ", barcode: "0012345678905" })
+  assert.equal(line.itemCode, "SRB-1")
+  assert.equal(line.barcode, "0012345678905")
+  const plain = calculateLine(base)
+  assert.equal(Object.hasOwn(plain, "itemCode") || Object.hasOwn(plain, "barcode"), false)
+  assert.throws(() => calculateLine({ ...base, barcode: "0012345678906" }), ValidationFailure)
+  assert.throws(() => calculateLine({ ...base, itemCode: "\u0000" }), ValidationFailure)
+  // Totals do not depend on them: the same line with or without identifiers adds up the same.
+  assert.deepEqual(calculateTotals([line]), calculateTotals([plain]))
+})
