@@ -5,6 +5,8 @@ import type { BuyerSnapshot } from "./document-snapshot.ts"
 import { normalizeRomanianCui } from "./vat-defaults.ts"
 import type { EditableInvoiceLine, InvoiceAuthoringForm } from "./invoice-authoring-model.ts"
 import { selectedTaxIdentifier } from "./document-authoring-transitions.ts"
+import { presentIdentifiers } from "./item-identifiers.ts"
+import { lineInputMatches } from "./document-authoring-options.ts"
 
 const buyerPayload = (
   form: InvoiceAuthoringForm,
@@ -54,6 +56,7 @@ export const draftLinePayload = (line: EditableInvoiceLine): DraftLineInput => (
   unitPrice: line.unitPrice,
   unitOfMeasure: line.unitOfMeasure,
   vatRateCode: line.vatRateCode,
+  ...presentIdentifiers(line),
 })
 
 export const authoringDocumentPayload = (
@@ -70,16 +73,6 @@ const sameBuyerSnapshot = (left: BuyerSnapshot, right: BuyerSnapshot): boolean =
     .every((key) => left[key] === right[key])
   && (["countryCode", "city", "street", "county", "sector", "postalCode"] as const)
     .every((key) => left.address[key] === right.address[key])
-
-const linePayloadMatches = (
-  expected: DraftLineInput,
-  line: DraftInvoice["lines"][number],
-): boolean => expected.description === line.description
-  && expected.quantity === line.quantity
-  && expected.unitPrice === line.unitPrice
-  && expected.unitOfMeasure.code === line.unitOfMeasure.code
-  && expected.unitOfMeasure.name === line.unitOfMeasure.name
-  && expected.vatRateCode === line.vatRateCode
 
 /**
  * Whether the server's draft is exactly the document this session intends.
@@ -103,6 +96,6 @@ export const authoringPayloadMatchesDraft = (
     && draft.lines.length === payload.lines.length
     && draft.lines.every((line, index) => {
       const expected = payload.lines[index]
-      return expected !== undefined && linePayloadMatches(expected, line)
+      return expected !== undefined && lineInputMatches(expected, line)
     })
 }

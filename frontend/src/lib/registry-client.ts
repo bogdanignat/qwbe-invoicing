@@ -2,7 +2,7 @@ import { decodeDeleted } from "./draft-decoders.ts"
 import { decodeCustomer, decodeProductPreset } from "./registry-decoders.ts"
 import { encoded } from "./client-paths.ts"
 import type { BrowserTransport } from "./browser-transport.ts"
-import type { BuyerSnapshot, Customer, ProductPreset, UnitOfMeasure } from "./draft-models.ts"
+import type { BuyerSnapshot, Customer, ProductKind, ProductPreset, UnitOfMeasure } from "./draft-models.ts"
 
 /**
  * The master-data writes: customers and product presets, created, updated and
@@ -26,6 +26,10 @@ export interface CustomerInput extends BuyerSnapshot {
 }
 
 export interface ProductPresetInput {
+  readonly code: string
+  readonly kind: ProductKind
+  /** Absent when the product has no barcode, never an empty string. */
+  readonly barcode?: string
   readonly description: string
   readonly unitPrice: string
   readonly unitOfMeasure: UnitOfMeasure

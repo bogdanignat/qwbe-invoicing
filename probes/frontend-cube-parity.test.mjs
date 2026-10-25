@@ -16,6 +16,8 @@ import { socialCapitalValue } from "../frontend/src/lib/issuer-legal.ts"
 import * as frontendMoney from "../frontend/src/lib/money.ts"
 import { ROMANIAN_COUNTIES as FRONTEND_COUNTIES, addressCountyName as frontendAddressCountyName } from "../frontend/src/lib/romanian-counties.ts"
 import { vatTreatmentLabel } from "../frontend/src/lib/vat-snapshots.ts"
+import { normalizeItemCode, validateBarcode } from "../cubes/invoicing/items/index.ts"
+import { barcodeIssue, itemCodeIssue } from "../frontend/src/lib/item-identifiers.ts"
 
 // The frontend mirrors these rules instead of importing the cube. Nothing else
 // notices when one side changes alone (T-1651), so this probe holds them equal.
@@ -148,5 +150,20 @@ void test("the browser normalizes a social capital to what the cube stores", () 
     try { cube = { kind: "ready", value: normalizeIssuerDetails({ ...issuer, socialCapital: raw }).socialCapital } } catch { cube = { kind: "issue" } }
     const browser = socialCapitalValue(raw)
     assert.deepEqual(browser.kind === "ready" ? browser : { kind: "issue" }, cube, JSON.stringify(raw))
+  }
+})
+
+const accepts = (check) => { try { check(); return true } catch { return false } }
+
+void test("the browser refuses an article code or an EAN exactly when the cube would", () => {
+  // A blank code is left out: on a line it means "no code", and the product form requires one before asking.
+  const char = (point) => String.fromCodePoint(point)
+  const codes = ["A", " A ", "SRB-M6", "SRB/M6 #1 (v2.0)", "~!@{}", "a b", "x".repeat(50), "x".repeat(51), "A\tB", `A${char(0x7f)}`,
+    `A${char(0x85)}B`, `A${char(0xa0)}B`, `A${char(0x2028)}B`, "ȘURUB", "café", `Cafe${char(0x301)}`, "😀"]
+  for (const code of codes) {
+    assert.equal(itemCodeIssue(code) === null, accepts(() => normalizeItemCode(code, "code")), JSON.stringify(code))
+  }
+  for (const barcode of ["96385074", "036000291452", "4006381333931", "00012345600012", "4006381333932", "1234567", "400638133393a", "123456789012345"]) {
+    assert.equal(barcodeIssue(barcode) === null, accepts(() => { validateBarcode(barcode) }), barcode)
   }
 })

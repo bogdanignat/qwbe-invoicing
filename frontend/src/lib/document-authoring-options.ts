@@ -5,8 +5,9 @@
  * the same catalogue, applies the same product presets and compares a line to
  * the stored one by the same fields.
  */
-import type { DraftInvoice, ProductPreset, UnitOfMeasure } from "./draft-models.ts"
+import type { DraftInvoice, DraftLineInput, ProductPreset } from "./draft-models.ts"
 import type { EditableDocumentLine } from "./document-authoring-form-model.ts"
+import { sameIdentifiers } from "./item-identifiers.ts"
 
 /**
  * The series a screen may author under, which is a property of the document it
@@ -21,18 +22,23 @@ export const authoringSeriesOptions = (
 
 // `vatRateCode` is resolved by the caller on the document date at the moment of
 // the choice. A later change of that date leaves filled lines alone; choosing
-// the product again resolves it anew.
+// the product again resolves it anew. The line copies the product's code and
+// EAN and keeps no link to it; a product without an EAN clears the one an
+// earlier choice left on the line.
 export const applyProductPreset = (
   line: EditableDocumentLine,
   preset: ProductPreset,
   vatRateCode: string,
 ): EditableDocumentLine => ({
-  ...line,
+  key: line.key,
+  ...(line.lineId === undefined ? {} : { lineId: line.lineId }),
   description: preset.description,
   quantity: "1",
   unitPrice: preset.unitPrice,
   unitOfMeasure: preset.unitOfMeasure,
   vatRateCode,
+  itemCode: preset.code,
+  ...(preset.barcode === undefined ? {} : { barcode: preset.barcode }),
 })
 
 export const choosePresetForLine = (
@@ -53,14 +59,16 @@ export const draftLinesForEditing = (
   unitPrice: line.unitPrice,
   unitOfMeasure: line.unitOfMeasure,
   vatRateCode: line.vatRateCode,
+  ...(line.itemCode === undefined ? {} : { itemCode: line.itemCode }),
+  ...(line.barcode === undefined ? {} : { barcode: line.barcode }),
 }))
 
-export const lineInputMatches = (
-  input: { readonly description: string; readonly quantity: string; readonly unitPrice: string; readonly unitOfMeasure: UnitOfMeasure; readonly vatRateCode: string },
-  line: { readonly description: string; readonly quantity: string; readonly unitPrice: string; readonly unitOfMeasure: UnitOfMeasure; readonly vatRateCode: string },
-): boolean => input.description === line.description
+// The identifiers count too: an edit of the code alone is a change to save.
+export const lineInputMatches = (input: DraftLineInput, line: DraftLineInput): boolean =>
+  input.description === line.description
   && input.quantity === line.quantity
   && input.unitPrice === line.unitPrice
   && input.unitOfMeasure.code === line.unitOfMeasure.code
   && input.unitOfMeasure.name === line.unitOfMeasure.name
   && input.vatRateCode === line.vatRateCode
+  && sameIdentifiers(input, line)

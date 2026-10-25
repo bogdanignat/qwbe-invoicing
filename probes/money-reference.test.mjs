@@ -19,6 +19,10 @@ import { createPdfRenderer } from "../kernel/documents/pdf-renderer.ts"
 // changed and nothing else; the PDF text differs only in its separators. T-1985
 // prints a county only when the city does not name it (invoice-v11, storno-v3):
 // the issuer's `Botoșani, Botoșani` reads `Botoșani`, so the PDF digests changed.
+// T-2074 prints a line's article code and EAN under its name (invoice-v12,
+// storno-v4). These lines have neither, so their pages are drawn as before: the
+// PDF digests changed only through the version in the producer string, checked by
+// rendering them once more under invoice-v11/storno-v3 against the old digests.
 
 const sha256 = (value) => createHash("sha256").update(value).digest("hex")
 const article310 = "Regim special de scutire conform art. 310 din Codul fiscal"
@@ -114,13 +118,13 @@ void test("calculated snapshots, their XML and their PDFs are the ones from befo
     "taxed.snapshot": "9854fd4902bbaaf5c3068ac8d76ec75040a7c59af528bace2794d923dba50c4a",
     "taxed.invoice.xml": "59d57dbee2dd79fd489b0a371c963a9e04952f12fdff0ae49740cd0810685557",
     "taxed.credit-note.xml": "f56b46ccc7182074f4f4e40f483b411210ed75f91d18fe926c27bdf4a0bc5fec",
-    "taxed.invoice.pdf": "d8563e8eac8a67e199bde889e927e6a48bdb404d97085b56f20fb7c9a43fbce0",
-    "taxed.storno.pdf": "944ccdc4d4f9b05e2a9e11cbc194b417d0af8b731133838997eb57dfc47c8e7a",
+    "taxed.invoice.pdf": "a1a0a78973f2b20c278396a758f73707a8e0655d2e28756cf703aeff6e01ab3a",
+    "taxed.storno.pdf": "76e6cf7f51de9b90822f5c0770f8932bd116baaec8f470e43c7f59f77e8cf04b",
     "article310.snapshot": "3a0af2fe5dd56bbe49cf15ca0e758de63b81e0ed997fb1e7c69283ae3105b3c2",
     "article310.invoice.xml": "776e53bf51eff0e0c6f680ecb32921fc9b4a9012c8e53ca238febd8ff06c7fd3",
     "article310.credit-note.xml": "f340d8b1e3e425695d37cc6be115f64e9b69a4354828113881e7a4cb9154d42e",
-    "article310.invoice.pdf": "d091885410f59c3c09e90a63a22ad21492f5e17a0be7d5fb530ab252b5bbe7e9",
-    "article310.storno.pdf": "414a34a9bc5da0df228edd5f8964da675c9073513ad1d7591d53d31f770d54e4",
+    "article310.invoice.pdf": "79fbfdaa16d00dc2fb3ca9861118a2ac374aa81b84d0137996eb9e8879522e3a",
+    "article310.storno.pdf": "636784826e8525136a48603c96abe5d90c9dc629a9f8ba18df494f8615bd5e68",
   })
 })
 

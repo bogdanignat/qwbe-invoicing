@@ -1,7 +1,7 @@
 import {
   array, boolean, decodePage, nullableText, object, optionalText, text, type Decoder,
 } from "./model-decoder.ts"
-import { decodeBuyer, decodeUnitOfMeasure, decodeVatCategoryCode } from "./document-snapshot-decoders.ts"
+import { decodeBuyer, decodeItemIdentifiers, decodeUnitOfMeasure, decodeVatCategoryCode } from "./document-snapshot-decoders.ts"
 import type { Deleted, DraftInvoice, VatCategoryCode } from "./draft-models.ts"
 import { parseDecimal } from "./money.ts"
 
@@ -47,6 +47,7 @@ const decodeDocumentSource: Decoder<DraftInvoice["source"]> = (input) => {
 const decodeLine: Decoder<DraftInvoice["lines"][number]> = (input) => {
   const value = object(input)
   const line = {
+    ...decodeItemIdentifiers(value),
     id: text(value.id, "line.id"),
     description: text(value.description, "description"),
     quantity: text(value.quantity, "quantity"),

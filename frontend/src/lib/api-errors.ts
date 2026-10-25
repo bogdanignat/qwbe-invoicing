@@ -73,6 +73,8 @@ const failureMessages: Readonly<Record<string, string>> = {
   customer_has_open_drafts: "Clientul este folosit de un draft deschis. Șterge sau finalizează draftul, apoi încearcă din nou.",
   customer_not_found: "Clientul nu mai există în registru. Reîncarcă lista de clienți.",
   customer_id_taken: "Clientul nu a putut fi salvat: identificatorul este deja folosit. Reîncarcă lista de clienți și încearcă din nou.",
+  // `product_preset_code_taken` has no entry on purpose: the server writes its
+  // `message` in Romanian and names the code, which a fixed sentence would hide.
   product_preset_id_taken: "Produsul nu a putut fi salvat: identificatorul este deja folosit. Reîncarcă lista de produse și încearcă din nou.",
   persistence_conflict: "Datele s-au schimbat în paralel. Reîncarcă pagina și încearcă din nou.",
   payment_already_reversed: "Plata a fost deja anulată.",

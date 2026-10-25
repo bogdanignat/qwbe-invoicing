@@ -4,7 +4,7 @@ import {
 } from "./model-decoder.ts"
 import { decodeEFacturaStatus } from "./invoice-register.ts"
 import type {
-  Address, BuyerSnapshot, CorrectionDocument, DocumentLine, IssuedInvoice, IssuerSnapshot,
+  Address, BuyerSnapshot, CorrectionDocument, DocumentLine, IssuedInvoice, IssuerSnapshot, ItemIdentifiers,
   UnitOfMeasure, VatBreakdownEntry, VatCategoryCode,
 } from "./document-snapshot.ts"
 
@@ -83,9 +83,17 @@ export const decodeVatCategoryCode = (input: unknown): VatCategoryCode => {
   return value
 }
 
+/** Shared with the draft decoder: an absent identifier stays absent, never an empty string. */
+export const decodeItemIdentifiers = (value: JsonObject): ItemIdentifiers => {
+  const itemCode = optionalText(value.itemCode, "itemCode")
+  const barcode = optionalText(value.barcode, "barcode")
+  return { ...(itemCode === undefined ? {} : { itemCode }), ...(barcode === undefined ? {} : { barcode }) }
+}
+
 const decodeLine: Decoder<DocumentLine> = (input) => {
   const value = object(input)
   return {
+    ...decodeItemIdentifiers(value),
     id: text(value.id, "line.id"),
     description: text(value.description, "description"),
     quantity: text(value.quantity, "quantity"),

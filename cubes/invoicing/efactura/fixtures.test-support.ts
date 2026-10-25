@@ -116,7 +116,7 @@ const individualBuyer: EFacturaParty = {
 
 const line = (id: string, name: string, quantity: string, unitCode: string, unitPrice: string,
   netAmount: string, vatCategory: EFacturaLine["vatCategory"], vatRate: string | null): EFacturaLine =>
-  ({ id, name, quantity, unitCode, netAmount, unitPrice, vatCategory, vatRate })
+  ({ id, name, sellersItemIdentifier: null, standardItemIdentifier: null, quantity, unitCode, netAmount, unitPrice, vatCategory, vatRate })
 
 const subtotal = (taxableAmount: string, taxAmount: string, category: EFacturaTaxSubtotal["category"],
   percent: string | null, exemptionReason: string | null,

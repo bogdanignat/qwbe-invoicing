@@ -34,7 +34,11 @@ export interface DocumentAuthoringForm {
 export type PartyType = BuyerSnapshot["partyType"]
 export type BuyerMode = "saved" | "one-time"
 
-/** A line being edited. `lineId` is present only once the server holds it. */
+/**
+ * A line being edited. `lineId` is present only once the server holds it. The
+ * article code and the EAN are typed text here, so a cleared field is the empty
+ * string until `presentIdentifiers` (item-identifiers.ts) drops it.
+ */
 export interface EditableDocumentLine extends DraftLineInput {
   readonly key: string
   readonly lineId?: string

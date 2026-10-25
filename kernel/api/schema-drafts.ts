@@ -6,8 +6,10 @@ import {
 } from "./schema-primitives.ts"
 
 export const VatTreatmentFields = { vatCategoryCode: Schema.Literal("S", "O"), vatExemptionReason: nullableString }
+// Copied from the product when one is chosen and absent on a line typed by hand; never a link to the product.
+const ItemIdentifierFields = { itemCode: optionalString, barcode: optionalString }
 export const DraftLine = Schema.Struct({
-  ...VatTreatmentFields, id: Schema.String, description: Schema.String, quantity: Schema.String,
+  ...VatTreatmentFields, ...ItemIdentifierFields, id: Schema.String, description: Schema.String, quantity: Schema.String,
   unitPrice: Schema.String, unitOfMeasure: UnitOfMeasure, vatRateCode: Schema.String,
   vatRate: Schema.String, totalExcludingVat: Schema.String, vatAmount: Schema.String, totalIncludingVat: Schema.String,
 })
@@ -24,7 +26,7 @@ export const DraftInvoice = Schema.Struct({
 })
 export const DraftInvoicePage = pageOf(DraftInvoice)
 export const DraftLineInput = Schema.Struct({
-  description: Schema.String, quantity: Schema.String, unitPrice: Schema.String,
+  ...ItemIdentifierFields, description: Schema.String, quantity: Schema.String, unitPrice: Schema.String,
   unitOfMeasure: UnitOfMeasure, vatRateCode: Schema.String,
 }).annotations(bodyObject)
 // Lines are optional on creation: a draft may be saved empty, or arrive complete

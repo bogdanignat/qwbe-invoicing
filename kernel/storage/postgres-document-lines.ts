@@ -1,6 +1,6 @@
 import { validateVatTreatment, type DraftLine, type VatBreakdown } from "../../cubes/invoicing/index.ts"
 import { money, moneyValue } from "./postgres-money.ts"
-import { nullableText, text, type Row } from "./postgres-rows.ts"
+import { nullableText, optionalText, text, type Row } from "./postgres-rows.ts"
 import { insertStatement, pairs, type QueryValue } from "./postgres-sql.ts"
 import type { TransactionClient } from "./postgres-transaction.ts"
 
@@ -32,12 +32,15 @@ export const vatTreatmentFrom = (value: Row, codeField: string, rateField: strin
 
 export const lineFrom = (value: Row): DraftLine => {
   const treatment = vatTreatmentFrom(value, "tax_code", "tax_rate", "tax_category")
+  const itemCode = optionalText(value, "item_code")
+  const barcode = optionalText(value, "barcode")
   return {
     id: text(value, "id"), description: text(value, "description"), quantity: text(value, "quantity"),
     unitPrice: money(value, "unit_price"), unitOfMeasure: { code: text(value, "unit_code"), name: text(value, "unit_name") },
     vatRateCode: treatment.code, vatRate: treatment.rate, vatCategoryCode: treatment.vatCategoryCode,
     vatExemptionReason: treatment.vatExemptionReason, totalExcludingVat: money(value, "total_excluding_tax"),
     vatAmount: money(value, "tax_amount"), totalIncludingVat: money(value, "total_including_tax"),
+    ...(itemCode === undefined ? {} : { itemCode }), ...(barcode === undefined ? {} : { barcode }),
   }
 }
 
@@ -51,13 +54,14 @@ const lineParent = (table: LineTable) =>
 export const lineColumns = [
   "line_position", "description", "quantity", "unit_price", "unit_code", "unit_name",
   "tax_code", "tax_category", "tax_rate", "vat_exemption_reason",
-  "total_excluding_tax", "tax_amount", "total_including_tax",
+  "total_excluding_tax", "tax_amount", "total_including_tax", "item_code", "barcode",
 ] as const
 
 export const lineValues = (position: number, line: DraftLine): ReadonlyArray<QueryValue> => [
   position, line.description, line.quantity, moneyValue(line.unitPrice), line.unitOfMeasure.code, line.unitOfMeasure.name,
   line.vatRateCode, line.vatCategoryCode, line.vatRate, line.vatExemptionReason,
   moneyValue(line.totalExcludingVat), moneyValue(line.vatAmount), moneyValue(line.totalIncludingVat),
+  line.itemCode ?? null, line.barcode ?? null,
 ]
 
 export const saveLines = async (

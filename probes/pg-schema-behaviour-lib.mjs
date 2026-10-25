@@ -267,12 +267,12 @@ export const constraintCases = [
      VALUES('dl-bad','draft-2',9,'Servicii','1.00',10000,'RO_STANDARD','S','5.00',NULL,10000,500,
      10500,'C62','unitate')`],
   ["check: product unit price is non-negative", "23514",
-    `INSERT INTO product_presets(id,organization_id,description,unit_price,unit_code,unit_name)
-     VALUES('preset-neg','org-1','X',-1,'C62','unitate')`],
+    `INSERT INTO product_presets(id,organization_id,code,kind,description,unit_price,unit_code,unit_name)
+     VALUES('preset-neg','org-1','NEG','goods','X',-1,'C62','unitate')`],
   // T-1904: money is BIGINT in bani; a decimal string bound as text never reaches the column.
   ["a decimal unit price bound as text is refused", "22P02",
-    `INSERT INTO product_presets(id,organization_id,description,unit_price,unit_code,unit_name)
-     VALUES('preset-text','org-1','X',$1,'C62','unitate')`, ["1.00"]],
+    `INSERT INTO product_presets(id,organization_id,code,kind,description,unit_price,unit_code,unit_name)
+     VALUES('preset-text','org-1','TEXT','goods','X',$1,'C62','unitate')`, ["1.00"]],
   ["check: artifact byte length must be positive", "23514",
     `INSERT INTO invoice_artifacts(invoice_id,organization_id,object_key,sha256,byte_length,media_type,
      template_version,generated_at) VALUES('invoice-3','org-1','k/9','x',0,'application/pdf','v1','t')`],

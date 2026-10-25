@@ -62,6 +62,10 @@ export interface EFacturaLine {
   readonly id: string
   /** BT-153 — item name. */
   readonly name: string
+  /** BT-155 — the seller's article code; `null` on a line typed by hand. */
+  readonly sellersItemIdentifier: string | null
+  /** BT-157 — the item's GTIN (EAN), rendered under scheme `0160`; `null` when it has none. */
+  readonly standardItemIdentifier: string | null
   /** BT-129 — invoiced/credited quantity, always positive. */
   readonly quantity: string
   /** BT-130 — UN/ECE Recommendation 20/21 unit code. */

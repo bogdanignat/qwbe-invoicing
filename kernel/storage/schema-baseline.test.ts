@@ -187,8 +187,8 @@ void test("refuses negative payment terms and invalid preset prices, and lets an
       INSERT INTO document_series VALUES('org-1','invoice','INV');
       INSERT INTO customers(id,organization_id,legal_name,tax_identifier,country_code,city,street,county,sector,postal_code,party_type,vat_registered,default_payment_term_days)
         VALUES('customer-1','org-1','Client SRL','87654329','RO','Iași','Strada 2','RO-IS',NULL,NULL,'company',1,30);
-      INSERT INTO product_presets(id,organization_id,description,unit_price,unit_code,unit_name)
-        VALUES('preset-1','org-1','Servicii',10000,'C62','unitate');
+      INSERT INTO product_presets(id,organization_id,code,kind,description,unit_price,unit_code,unit_name)
+        VALUES('preset-1','org-1','SRV','service','Servicii',10000,'C62','unitate');
       INSERT INTO invoice_drafts(id,organization_id,customer_id,customer_party_type,customer_legal_name,customer_tax_identifier,
         customer_country_code,customer_city,customer_street,customer_county,customer_sector,customer_postal_code,customer_vat_registered,
         series,issue_date,due_date,currency,status)
@@ -208,8 +208,8 @@ void test("refuses negative payment terms and invalid preset prices, and lets an
     assert.equal(negativeTerm.code, "23514")
     assert.equal(negativeTerm.constraint, "customers_payment_term_non_negative")
     assert.equal(await sql.scalar("SELECT default_payment_term_days FROM customers WHERE id='customer-1'"), 30)
-    const badPrice = (price: string) => sql.rejects(`INSERT INTO product_presets(id,organization_id,description,unit_price,unit_code,unit_name)
-      VALUES('bad','org-1','Bad',$1,'C62','unitate')`, [price])
+    const badPrice = (price: string) => sql.rejects(`INSERT INTO product_presets(id,organization_id,code,kind,description,unit_price,unit_code,unit_name)
+      VALUES('bad','org-1','BAD','goods','Bad',$1,'C62','unitate')`, [price])
     const negative = await badPrice("-1")
     assert.equal(negative.code, "23514")
     assert.equal(negative.constraint, "product_presets_unit_price_nonnegative")
@@ -237,5 +237,15 @@ void test("refuses negative payment terms and invalid preset prices, and lets an
     assert.deepEqual(await sql.one(`SELECT issuer_county,customer_legal_name,total_including_tax,notes,e_factura_status
       FROM issued_invoices WHERE id='invoice-1'`),
       { issuer_county: "RO-IS", customer_legal_name: "Client SRL", total_including_tax: "12100", notes: null, e_factura_status: "queued" })
+  })
+})
+
+// T-1987: the register and the reports read issued documents by organization and issue date.
+void test("indexes issued invoices and storno documents by organization and issue date", async () => {
+  await withMigrated("baseline_issue_date", async ({ sql }) => {
+    for (const [index, table] of [["issued_invoices_issue_date", "issued_invoices"], ["correction_documents_issue_date", "correction_documents"]]) {
+      assert.equal(await sql.scalar("SELECT indexdef FROM pg_indexes WHERE indexname=$1", [index]),
+        `CREATE INDEX ${String(index)} ON public.${String(table)} USING btree (organization_id, issue_date)`)
+    }
   })
 })

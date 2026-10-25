@@ -12,7 +12,7 @@ import {
 } from "../contracts/index.ts"
 import { formatDecimal, parseDecimal } from "../contracts/money.ts"
 import type { BrandingNormalizer, IssuerTransaction } from "../issuer/index.ts"
-import type { CatalogTransaction, ProductPreset } from "../catalog/index.ts"
+import { codeTakenConflict, type CatalogTransaction, type ProductPreset } from "../catalog/index.ts"
 import type { Customer, CustomersTransaction } from "../customers/index.ts"
 import type { AuditEvent, IdempotencyRecord } from "../domain/invoice.ts"
 import type { CorrectionsTransaction, InvoiceRegisterCursor, InvoiceRegisterRow } from "../corrections/index.ts"
@@ -78,6 +78,7 @@ export interface MemoryState {
 const cloneState = (state: MemoryState): MemoryState => structuredClone(state)
 
 // Typed as the store the composition root takes, so a child port it forgets is a type error here.
+
 export const memoryStore = (state: MemoryState): InvoicingDependencies["store"] => ({
   transaction: (use) => Effect.suspend(() => {
     const working = cloneState(state)
@@ -128,7 +129,11 @@ export const memoryStore = (state: MemoryState): InvoicingDependencies["store"] 
         [...working.drafts.values()].some((draft) =>
           draft.organizationId === organizationId && draft.customerId === customerId && draft.status === "draft"),
       ),
-      saveProductPreset: (preset) => Effect.sync(() => { working.productPresets.set(preset.id, preset) }),
+      // The unique index on (organization_id, lower(code)); a code is ASCII, so lower() folds it whole.
+      saveProductPreset: (preset) => [...working.productPresets.values()].some((other) => other.id !== preset.id
+        && other.organizationId === preset.organizationId && other.code.toLowerCase() === preset.code.toLowerCase())
+        ? Effect.fail(codeTakenConflict(preset.code))
+        : Effect.sync(() => { working.productPresets.set(preset.id, preset) }),
       findProductPreset: (organizationId, id) => Effect.succeed(
         working.productPresets.get(id)?.organizationId === organizationId ? working.productPresets.get(id) : undefined,
       ),

@@ -362,3 +362,25 @@ void test("reads the sign of a correction amount from its text and refuses a for
   assert.equal(mapCorrection(unsignedZeroOf("0.00"), article310Invoice).taxAmount, "0.00")
   assert.equal(mapCorrection(article310Correction, article310Invoice).taxAmount, "0.00")
 })
+
+const withIdentifiers = <Document extends IssuedInvoice | CorrectionDocument>(document: Document,
+  identifiers: Pick<DraftLine, "itemCode" | "barcode">): Document =>
+  ({ ...document, lines: document.lines.map((value) => ({ ...value, ...identifiers })) })
+
+void test("sends the line's article code as BT-155 and its GTIN as BT-157, and neither when the line has none", () => {
+  const coded = { itemCode: "CONS-1", barcode: "00012345600012" }
+  for (const mapped of [mapIssuedInvoice(withIdentifiers(invoice, coded)),
+    mapCorrection(withIdentifiers(correction, coded), withIdentifiers(invoice, coded))]) {
+    assert.deepEqual([mapped.lines[0]?.sellersItemIdentifier, mapped.lines[0]?.standardItemIdentifier], ["CONS-1", "00012345600012"])
+    assert.match(renderEFacturaXml(mapped), /<cbc:ID schemeID="0160">00012345600012<\/cbc:ID>/u)
+  }
+  const plain = mapIssuedInvoice(invoice).lines[0]
+  assert.deepEqual([plain?.sellersItemIdentifier, plain?.standardItemIdentifier], [null, null])
+})
+
+void test("refuses a credit note whose article code or GTIN differs from the invoice it reverses", () => {
+  const original = withIdentifiers(invoice, { itemCode: "CONS-1", barcode: "00012345600012" })
+  for (const identifiers of [{ itemCode: "CONS-2", barcode: "00012345600012" }, { itemCode: "CONS-1" }, { barcode: "00012345600012" }]) {
+    refuses(() => mapCorrection(withIdentifiers(correction, identifiers), original), /does not reverse the original invoice exactly/u)
+  }
+})

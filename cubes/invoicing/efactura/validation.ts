@@ -113,12 +113,31 @@ const checkParties = (document: EFacturaDocument, issues: Array<string>): void =
   }
 }
 
+/**
+ * BT-155 and BT-157 are rendered as given. A blank one would leave an empty
+ * `cbc:ID`, and a GTIN that is not 8, 12, 13 or 14 digits is not one under
+ * scheme 0160, so both are refused rather than sent; the check digit is the
+ * snapshot's, already checked when the line was written.
+ */
+const checkItemIdentifiers = (document: EFacturaDocument, issues: Array<string>): void => {
+  for (const [index, line] of document.lines.entries()) {
+    const where = `lines[${String(index)}]`
+    if (line.sellersItemIdentifier !== null && !stated(line.sellersItemIdentifier)) {
+      issues.push(`${where}.sellersItemIdentifier is stated but empty; omit it instead (BT-155)`)
+    }
+    if (line.standardItemIdentifier !== null && !/^(?:\d{8}|\d{12,14})$/u.test(line.standardItemIdentifier)) {
+      issues.push(`${where}.standardItemIdentifier must be a GTIN of 8, 12, 13 or 14 digits (BT-157)`)
+    }
+  }
+}
+
 export const validateEFacturaDocument = (document: EFacturaDocument): void => {
   const issues: Array<string> = []
   checkIdentity(document, issues)
   checkParties(document, issues)
   checkCiusLimits(document, issues)
   checkCodelists(document, issues)
+  checkItemIdentifiers(document, issues)
   let lineSum: bigint | null = 0n
   for (const [index, line] of document.lines.entries()) {
     const net = checkLine(line, index, issues)

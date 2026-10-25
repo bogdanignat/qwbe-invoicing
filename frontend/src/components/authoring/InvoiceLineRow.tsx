@@ -8,6 +8,8 @@ import { Button } from "../Button.tsx"
 import { UnitOfMeasureOptions } from "../UnitOfMeasureOptions.tsx"
 import { money } from "../../lib/money.ts"
 import { vatTreatmentLabel } from "../../lib/vat-snapshots.ts"
+import { barcodeIssue, itemCodeIssue } from "../../lib/item-identifiers.ts"
+import { LineIdentifierField } from "./LineIdentifierField.tsx"
 
 interface InvoiceLineRowProps {
   readonly line: EditableInvoiceLine
@@ -21,7 +23,7 @@ interface InvoiceLineRowProps {
   readonly onDelete: (line: EditableInvoiceLine) => void
 }
 
-/** One line of the document: preset prefill, amounts, unit and the VAT code resolved on the document date. */
+/** One line of the document: preset prefill, the copied code and EAN (editable, may be cleared), amounts, unit and the VAT code resolved on the document date. */
 export const InvoiceLineRow = (props: InvoiceLineRowProps) => {
   const { line, index, productPresets, vatRates, unitOfMeasures, pending } = props
   return <fieldset className="line-editor">
@@ -29,13 +31,19 @@ export const InvoiceLineRow = (props: InvoiceLineRowProps) => {
     {productPresets.length === 0 ? null : <Field label="Produs predefinit">
       <Select disabled={pending} value="" onChange={(event) => { props.onApplyPreset(line.key, event.currentTarget.value) }}>
         <option value="">Alege pentru precompletare</option>
-        {productPresets.map((preset) => <option key={preset.id} value={preset.id}>{preset.description} — {money(preset.unitPrice, "RON")}</option>)}
+        {productPresets.map((preset) => <option key={preset.id} value={preset.id}>{preset.code} — {preset.description} — {money(preset.unitPrice, "RON")}</option>)}
       </Select>
     </Field>}
     <div className="line-fields">
       <Field label="Descriere" required>
         <Input required disabled={pending} value={line.description} maxLength={CIUS_TEXT_LIMITS.lineDescription} onChange={(event) => { props.onChange(line.key, { description: event.currentTarget.value }) }} />
       </Field>
+      <LineIdentifierField label="Cod articol" id={`line-${line.key}-code`} value={line.itemCode ?? ""} maxLength={50}
+        issue={itemCodeIssue(line.itemCode ?? "")} disabled={pending}
+        onChange={(itemCode) => { props.onChange(line.key, { itemCode }) }} />
+      <LineIdentifierField label="EAN" id={`line-${line.key}-ean`} value={line.barcode ?? ""} maxLength={14} numeric
+        issue={barcodeIssue(line.barcode ?? "")} disabled={pending}
+        onChange={(barcode) => { props.onChange(line.key, { barcode }) }} />
       <Field label="Cantitate" required>
         <Input required disabled={pending} inputMode="decimal" value={line.quantity} onChange={(event) => { props.onChange(line.key, { quantity: event.currentTarget.value }) }} />
       </Field>

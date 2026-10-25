@@ -30,9 +30,15 @@ export const decodeCustomer: Decoder<Customer> = (input) => {
 export const decodeProductPreset: Decoder<ProductPreset> = (input) => {
   const value = object(input)
   const preferredVatRateCode = optionalText(value.preferredVatRateCode, "preferredVatRateCode")
+  const barcode = optionalText(value.barcode, "barcode")
+  const kind = text(value.kind, "kind")
+  if (kind !== "goods" && kind !== "service") throw new Error("invalid kind")
   return {
     id: text(value.id, "id"),
     organizationId: text(value.organizationId, "organizationId"),
+    code: text(value.code, "code"),
+    kind,
+    ...(barcode === undefined ? {} : { barcode }),
     description: text(value.description, "description"),
     unitPrice: text(value.unitPrice, "unitPrice"),
     unitOfMeasure: decodeUnitOfMeasure(value.unitOfMeasure),

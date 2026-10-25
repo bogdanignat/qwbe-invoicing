@@ -125,7 +125,7 @@ void test("persists an issued snapshot across store recreation and isolates orga
       address: { countryCode: "RO", city: "București", street: "Strada Nouă 3", county: "RO-B", sector: 4 }, defaultPaymentTermDays: 30,
     }))
     assert.equal(updatedCustomer.defaultPaymentTermDays, 30)
-    const preset = await Effect.runPromise(service.createProductPreset({ description: "  Servicii software  ", unitPrice: "125.5", unitOfMeasure: each }))
+    const preset = await Effect.runPromise(service.createProductPreset({ code: "SW-1", kind: "service", description: "  Servicii software  ", unitPrice: "125.5", unitOfMeasure: each }))
     assert.equal(preset.unitPrice, "125.50")
     assert.deepEqual(await Effect.runPromise(service.listProductPresets()), { items: [preset], nextCursor: null })
     const draft = await Effect.runPromise(service.createDraft(idempotent({
@@ -349,7 +349,7 @@ void test("persists an issued snapshot across store recreation and isolates orga
     assert.equal(await Effect.runPromise(Effect.flip(otherOrganization.getProforma(proforma.id))) instanceof ResourceNotFound, true)
     assert.deepEqual(await Effect.runPromise(otherOrganization.listProductPresets()), { items: [], nextCursor: null })
     assert.equal(await Effect.runPromise(Effect.flip(otherOrganization.updateProductPreset({
-      id: preset.id, description: "Intrus", unitPrice: "1.00", unitOfMeasure: each,
+      id: preset.id, code: "X", kind: "goods", description: "Intrus", unitPrice: "1.00", unitOfMeasure: each,
     }))) instanceof ResourceNotFound, true)
     assert.equal(await Effect.runPromise(Effect.flip(otherOrganization.deleteProductPreset(preset.id))) instanceof ResourceNotFound, true)
     await Effect.runPromise(restarted.deleteProductPreset(preset.id))

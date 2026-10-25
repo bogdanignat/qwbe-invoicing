@@ -100,7 +100,13 @@ export interface DocumentSeries {
   readonly series: string
 }
 
-export interface DraftLine extends VatTreatment {
+/** BT-155 and BT-157: copied from the product when one is chosen, absent on a line typed by hand. */
+export interface ItemIdentifiers {
+  readonly itemCode?: string
+  readonly barcode?: string
+}
+
+export interface DraftLine extends VatTreatment, ItemIdentifiers {
   readonly id: string
   readonly description: string
   readonly quantity: string

@@ -84,7 +84,7 @@ void test("public store rolls changes in different domain adapters back together
         address: { countryCode: "RO", city: "Iași", street: "Strada Mică 2", county: "RO-IS" },
       })
       yield* transaction.saveProductPreset({
-        id: "preset-1", organizationId: "org-1", description: "Servicii", unitPrice: "100.00",
+        id: "preset-1", organizationId: "org-1", code: "SRV", kind: "service", description: "Servicii", unitPrice: "100.00",
         unitOfMeasure: { code: "C62", name: "unitate" },
       })
       return yield* Effect.fail(new DomainConflict({ code: "forced", message: "rollback" }))

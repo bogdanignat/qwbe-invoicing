@@ -154,3 +154,43 @@ void test("renders each note as its own BT-22, in the order it was given", () =>
   ])
   assert.equal(element(renderEFacturaXml(standardB2B), "cbc:Note").length, 0)
 })
+
+/** The `cac:Item` blocks of a rendered document, each as the exact text it was written as. */
+const items = (xml: string): ReadonlyArray<string> => [...xml.matchAll(/ *<cac:Item>[\s\S]*?<\/cac:Item>/gu)].map((match) => match[0])
+
+void test("renders the article code (BT-155) and the GTIN (BT-157, scheme 0160) between the name and the tax category", () => {
+  for (const [document, quantity] of [[standardB2B, "Invoiced"], [fullCreditNote, "Credited"]] as const) {
+    const [first, second] = document.lines
+    if (first === undefined || second === undefined) throw new Error("fixture needs two lines")
+    const xml = renderEFacturaXml({ ...document, lines: [
+      { ...first, sellersItemIdentifier: "A&B<1>", standardItemIdentifier: "00012345600012" }, second,
+    ] })
+    const expected = [
+      "    <cac:Item>",
+      `      <cbc:Name>${first.name}</cbc:Name>`,
+      "      <cac:SellersItemIdentification>",
+      "        <cbc:ID>A&amp;B&lt;1&gt;</cbc:ID>",
+      "      </cac:SellersItemIdentification>",
+      "      <cac:StandardItemIdentification>",
+      "        <cbc:ID schemeID=\"0160\">00012345600012</cbc:ID>",
+      "      </cac:StandardItemIdentification>",
+      "      <cac:ClassifiedTaxCategory>",
+    ].join("\n")
+    assert.equal(items(xml)[0]?.slice(0, expected.length), expected, quantity)
+    // The line without identifiers renders neither element.
+    assert.equal(items(xml)[1]?.includes("ItemIdentification"), false, quantity)
+    assert.equal(xml.includes(`<cbc:${quantity}Quantity`), true)
+  }
+})
+
+void test("renders each identifier on its own when the other is absent", () => {
+  const [first, ...rest] = standardB2B.lines
+  if (first === undefined) throw new Error("fixture needs a line")
+  const onlyCode = renderEFacturaXml({ ...standardB2B, lines: [{ ...first, sellersItemIdentifier: "P-7" }, ...rest] })
+  assert.deepEqual(element(onlyCode, "cbc:ID").includes("P-7"), true)
+  assert.equal(onlyCode.includes("StandardItemIdentification"), false)
+  const onlyGtin = renderEFacturaXml({ ...standardB2B, lines: [{ ...first, standardItemIdentifier: "96385074" }, ...rest] })
+  assert.equal(onlyGtin.includes("SellersItemIdentification"), false)
+  assert.match(onlyGtin, /<cac:StandardItemIdentification>\s*<cbc:ID schemeID="0160">96385074<\/cbc:ID>/u)
+  assert.equal(renderEFacturaXml(standardB2B).includes("ItemIdentification"), false)
+})

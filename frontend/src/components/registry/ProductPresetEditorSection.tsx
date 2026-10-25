@@ -9,10 +9,12 @@ import { FieldIssue } from "./FieldIssue.tsx"
 import { useEditorHeadingFocus } from "../../hooks/use-editor-heading-focus.ts"
 import { useRefusedFieldFocus } from "../../hooks/use-refused-field-focus.ts"
 import { PRODUCT_FORM, registryFieldAria } from "../../lib/registry-fields.ts"
-import { PRODUCT_PRICE_PATTERN, type ProductPresetField, type ProductPresetForm } from "../../lib/product-preset-form.ts"
+import {
+  PRODUCT_PRICE_PATTERN, productKindLabels, type ProductPresetField, type ProductPresetForm,
+} from "../../lib/product-preset-form.ts"
 import type { PresetVatOption } from "../../lib/product-preset-vat.ts"
 import type { RegistryEditorIssue } from "../../hooks/use-registry-editor.ts"
-import type { UnitOfMeasure } from "../../lib/draft-models.ts"
+import type { ProductKind, UnitOfMeasure } from "../../lib/draft-models.ts"
 
 interface ProductPresetEditorSectionProps {
   readonly form: ProductPresetForm
@@ -43,6 +45,17 @@ export const ProductPresetEditorSection = (props: ProductPresetEditorSectionProp
     {props.error === null || props.error === undefined ? null : <ErrorAlert error={props.error} />}
     <form className="authoring-section" onSubmit={(event) => { event.preventDefault(); props.onSubmit() }}>
       <div className="form-grid">
+        <Field label="Cod articol" required>
+          <Input required disabled={pending} value={form.code} maxLength={50} {...aria("code")}
+            onChange={(event) => { props.onChange({ code: event.currentTarget.value }) }} />
+          {refusal("code")}
+        </Field>
+        <Field label="Tip" required>
+          <Select required disabled={pending} value={form.kind}
+            onChange={(event) => { props.onChange({ kind: event.currentTarget.value as ProductKind }) }}>
+            {Object.entries(productKindLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+          </Select>
+        </Field>
         <Field label="Descriere" required className="span-two">
           <Input required disabled={pending} value={form.description} maxLength={CIUS_TEXT_LIMITS.lineDescription} {...aria("description")}
             onChange={(event) => { props.onChange({ description: event.currentTarget.value }) }} />
@@ -62,6 +75,12 @@ export const ProductPresetEditorSection = (props: ProductPresetEditorSectionProp
             title="Număr nenegativ cu maximum două zecimale"
             onChange={(event) => { props.onChange({ unitPrice: event.currentTarget.value }) }} />
           {refusal("unitPrice")}
+        </Field>
+        <Field label="EAN">
+          <Input disabled={pending} value={form.barcode} inputMode="numeric" maxLength={14} {...aria("barcode")}
+            title="GTIN de 8, 12, 13 sau 14 cifre"
+            onChange={(event) => { props.onChange({ barcode: event.currentTarget.value }) }} />
+          {refusal("barcode")}
         </Field>
         <Field label="Cotă TVA preferată" className="span-two">
           <Select disabled={pending} value={form.preferredVatRateCode} {...aria("preferredVatRateCode")}
