@@ -17,7 +17,7 @@ export interface EditorActionsInput {
   readonly productPresets: ReadonlyArray<ProductPreset>
   readonly customers: ReadonlyArray<Customer>
   readonly issueDate: string
-  /** A saved draft owns its due date; an unsaved document still derives it from the payment terms. */
+  /** A draft saved with a due date owns it; anything else still derives it from the payment terms. */
   readonly deriveDueDate: boolean
   readonly setForm: Dispatch<SetStateAction<InvoiceAuthoringForm>>
   readonly setLines: Dispatch<SetStateAction<ReadonlyArray<EditableInvoiceLine>>>

@@ -2,7 +2,7 @@ import { AppLink } from "../components/ui/AppLink.tsx"
 import { ErrorAlert, Loading } from "../components/AsyncState.tsx"
 import { Page } from "../components/Page.tsx"
 import { PrivateScreen } from "../components/PrivateScreen.tsx"
-import { InvoiceAuthoringSession } from "../components/authoring/InvoiceAuthoringSession.tsx"
+import { InvoiceAuthoringOpening } from "../components/authoring/InvoiceAuthoringOpening.tsx"
 import { LockedDraftReadonly } from "../components/authoring/LockedDraftReadonly.tsx"
 import { useAuthenticatedShell } from "../hooks/use-authenticated-shell.ts"
 import { useInvoiceAuthoringPage } from "../hooks/use-invoice-authoring-page.ts"
@@ -39,7 +39,7 @@ export const InvoiceAuthoringView = ({ id }: InvoiceAuthoringViewProps) => {
           title={page.title} notice={page.notice}
           registryHref={page.registryHref} registryLabel={page.registryLabel}
         />
-        : <InvoiceAuthoringSession
+        : <InvoiceAuthoringOpening
           key={page.sessionKey}
           initialDraft={page.initialDraft}
           issuer={page.issuer}

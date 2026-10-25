@@ -2,7 +2,8 @@ import {
   decodeCustomerPage, decodeDocumentSeriesList, decodeIssuer, decodeProductPresetPage,
   decodeUnitOfMeasures, decodeVatCatalogue,
 } from "./authoring-reference-decoders.ts"
-import { paged } from "./client-paths.ts"
+import { decodeCustomer } from "./registry-decoders.ts"
+import { encoded, paged } from "./client-paths.ts"
 import { ApiFailure } from "./api-errors.ts"
 import type { BrowserTransport } from "./browser-transport.ts"
 import type {
@@ -25,6 +26,7 @@ export interface AuthoringReferenceClient {
   readonly listUnitOfMeasures: (signal: AbortSignal) => Promise<ReadonlyArray<UnitOfMeasure>>
   readonly getVatCatalogue: (signal: AbortSignal) => Promise<VatCatalogue>
   readonly listCustomers: (page: PageRequest | undefined, signal: AbortSignal) => Promise<Page<Customer>>
+  readonly getCustomer: (id: string, signal: AbortSignal) => Promise<Customer>
   readonly listProductPresets: (page: PageRequest | undefined, signal: AbortSignal) => Promise<Page<ProductPreset>>
 }
 
@@ -45,6 +47,8 @@ export const createAuthoringReferenceClient = (transport: BrowserTransport): Aut
     decodeVatCatalogue(await transport.json("/api/vat-regimes", { signal })),
   listCustomers: async (page, signal) =>
     decodeCustomerPage(await transport.json(paged("/api/customers", page), { signal })),
+  getCustomer: async (id, signal) =>
+    decodeCustomer(await transport.json(`/api/customers/${encoded(id)}`, { signal })),
   listProductPresets: async (page, signal) =>
     decodeProductPresetPage(await transport.json(paged("/api/product-presets", page), { signal })),
 })

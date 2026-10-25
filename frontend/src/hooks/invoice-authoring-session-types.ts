@@ -20,6 +20,8 @@ export interface BackgroundError {
 
 export interface InvoiceAuthoringSessionInput {
   readonly initialDraft: DraftInvoice | undefined
+  /** The draft's saved buyer, read when the draft opened without a due date (its payment term is proposed). */
+  readonly draftBuyer: Customer | undefined
   readonly issuer: Issuer
   readonly vatCatalogue: VatCatalogue
   readonly customers: ReadonlyArray<Customer>
@@ -69,6 +71,8 @@ export interface InvoiceAuthoringSession {
     readonly notesIssue: string | null
     readonly notesMaxLength: number
     readonly dueDateIssue: string | null
+    /** Why issuing is closed right now, shown next to the button. */
+    readonly issueBlockReasons: ReadonlyArray<string>
     readonly notice: string | null
     /** An unresolved write from this tab, described well enough to be recognised in the registry. */
     readonly recoveryNotice: RecoveryNoticeModel | undefined

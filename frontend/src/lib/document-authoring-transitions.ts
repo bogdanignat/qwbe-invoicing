@@ -167,6 +167,24 @@ export const formFromDraft = (draft: DraftInvoice): DocumentAuthoringForm => ({
   notes: draft.notes ?? "",
 })
 
+/**
+ * An open draft saved without a due date gets the one a new document starts
+ * with — the issue date plus the saved buyer's payment term, else the
+ * issuer's — and, not being edited, it keeps following the date and the buyer.
+ */
+export const proposeMissingDueDate = (
+  form: DocumentAuthoringForm,
+  draft: DraftInvoice,
+  savedBuyer: Customer | undefined,
+  issuer: Issuer,
+): DocumentAuthoringForm => draft.status !== "draft" || draft.dueDate !== null ? form : {
+  ...form,
+  dueDate: addCalendarDays(form.issueDate, paymentTermFor(
+    selectedSavedCustomer(form, savedBuyer === undefined ? [] : [savedBuyer]), issuer,
+  )),
+  dueDateEdited: false,
+}
+
 export const identifierLabel = (partyType: PartyType): string =>
   partyType === "company" ? "CUI / CIF" : "CNP"
 
