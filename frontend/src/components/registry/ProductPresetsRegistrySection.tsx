@@ -43,13 +43,13 @@ export const ProductPresetsRegistrySection = (props: ProductPresetsRegistrySecti
         </tr></thead>
         <tbody>
           {props.rows.map((row) => <tr key={row.preset.id}>
-            <td>{row.preset.code}</td>
-            <td>{productKindLabels[row.preset.kind]}</td>
-            <td>{row.preset.description}</td>
-            <td>{row.preset.barcode ?? "—"}</td>
-            <td>{row.preset.unitOfMeasure.name}</td>
-            <td className="numeric">{money(row.preset.unitPrice, "RON")}</td>
-            <td>{row.vatLabel}</td>
+            <td data-label="Cod">{row.preset.code}</td>
+            <td data-label="Tip">{productKindLabels[row.preset.kind]}</td>
+            <td data-label="Descriere">{row.preset.description}</td>
+            <td data-label="EAN">{row.preset.barcode ?? "—"}</td>
+            <td data-label="UM">{row.preset.unitOfMeasure.name}</td>
+            <td data-label="Preț unitar" className="numeric">{money(row.preset.unitPrice, "RON")}</td>
+            <td data-label="TVA">{row.vatLabel}</td>
             <td><div className="draft-item-actions">
               <Button className="secondary" disabled={props.disabled}
                 aria-current={props.editingId === row.preset.id ? "true" : undefined}

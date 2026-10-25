@@ -42,13 +42,13 @@ export const CustomersRegistrySection = (props: CustomersRegistrySectionProps) =
         </tr></thead>
         <tbody>
           {props.customers.map((customer) => <tr key={customer.id}>
-            <td>
+            <td data-label="Client">
               <span className="party-name">{customer.name}</span>
               <small>{customer.partyType === "company" ? "Persoană juridică" : "Persoană fizică"}{customer.vatRegistered ? " · plătitor de TVA" : ""}</small>
             </td>
-            <td>{orDash(customer.fiscalIdentifier)}<small>{identifierLabel(customer.partyType)}</small></td>
-            <td>{addressLine(customer)}<small>{customer.address.county}{customer.address.postalCode === undefined ? "" : ` · ${customer.address.postalCode}`}</small></td>
-            <td className="numeric">{customer.defaultPaymentTermDays === undefined ? "—" : `${String(customer.defaultPaymentTermDays)} zile`}</td>
+            <td data-label="Identificator fiscal">{orDash(customer.fiscalIdentifier)}<small>{identifierLabel(customer.partyType)}</small></td>
+            <td data-label="Adresă">{addressLine(customer)}<small>{customer.address.county}{customer.address.postalCode === undefined ? "" : ` · ${customer.address.postalCode}`}</small></td>
+            <td data-label="Termen" className="numeric">{customer.defaultPaymentTermDays === undefined ? "—" : `${String(customer.defaultPaymentTermDays)} zile`}</td>
             <td><div className="draft-item-actions">
               <Button className="secondary" disabled={props.disabled}
                 aria-current={props.editingId === customer.id ? "true" : undefined}
