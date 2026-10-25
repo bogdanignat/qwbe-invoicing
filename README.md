@@ -87,11 +87,15 @@ a rewrite.
   the document date; otherwise, and always for an Article 310 issuer, it gets the issuer's default
   (see `docs/VAT_TREATMENT.md`, "Preferred VAT rate on a product").
 - **Document series**: separate series for invoices and proformas. Numbers are allocated
-  atomically at issue time, are unique within their scope and are never reused. Uniqueness
-  is enforced by the database, not only by the UI.
+  atomically at issue time, are unique per organization, numbering type and series, continue
+  across years (a new series starts again at 1) and are never reused. Uniqueness is enforced
+  by the database, not only by the UI. A series is never deleted: archiving it (Settings →
+  Series) removes it from new documents and issuing in it is refused, while its documents,
+  stornos and counter stay; reactivating continues the counter.
 - **Drafts**: editable, with manual lines (name, quantity, unit, unit price, VAT category and
   rate, allowances and charges), references (contract, order, delivery, preceding document),
-  notes and payment terms. Drafts do not consume numbers. Product presets are never required.
+  notes and payment terms. Drafts do not consume numbers. An open draft can move to another
+  active series. Product presets are never required.
 - **Issuing**: one atomic operation that validates the authored document, allocates the next number,
   freezes the totals and snapshots issuer, buyer, lines and tax breakdown. From then on the
   invoice is an immutable fiscal document. Later changes to the customer or issuer never
@@ -101,7 +105,9 @@ a rewrite.
   diacritics.
 - **Proformas**: immutable, numbered, conspicuously marked `DOCUMENT NEFISCAL`, and invoiceable
   exactly once into an immutable fiscal snapshot. A proforma never consumes an invoice number;
-  the resulting invoice receives its number atomically when issued.
+  the resulting invoice receives its number atomically when issued. A proforma keeps the id of
+  the saved customer it was issued to; converting it into a draft relinks the customer while it
+  still exists.
 - **Payments**: separate records allocated to invoices, with derived states `unpaid`,
   `partially_paid`, `paid`, `overpaid` and `overdue`. Payments never mutate the invoice.
 - **Corrections (storno)**: an issued invoice is corrected by a new immutable document that
@@ -611,7 +617,7 @@ handler on shutdown.
 | Reports | `GET /api/reports/revenue?from&to`; `GET /api/reports/collections?from&to&status` (payments plugin) |
 | Payments | `GET`, `POST /api/invoices/:id/payments`, `POST /api/invoices/:id/payments/:paymentId/reversal` |
 | Corrections | `GET`, `POST /api/invoices/:id/corrections`, `GET /api/corrections/:id` |
-| Proformas | `POST /api/proformas`, `POST /api/drafts/:id/proformas`, `GET /api/proformas`, `GET /api/proformas/:id`, `POST /api/proformas/:id/invoice`, `POST`, `GET /api/proformas/:id/pdf` |
+| Proformas | `POST /api/proformas`, `POST /api/drafts/:id/proformas`, `GET /api/proformas`, `GET /api/proformas/:id`, `POST /api/proformas/:id/invoice`, `POST /api/proformas/:id/draft-invoice`, `POST`, `GET /api/proformas/:id/pdf` |
 | Company lookup | `GET`, `PUT /api/settings/company-lookup` (`settings.manage`; the openapi.ro key is write-only, answered only as `openapiKeyLast4`), `GET /api/company-lookup/availability`, `POST /api/company-lookup/lookup` `{cui}`, `POST /api/company-lookup/search` `{q}` (`company-lookup:company.lookup`) |
 | Health | `GET /health/live`, `GET /health/ready` (no auth; the only paths exempt from `PUBLIC_ORIGIN` pinning, for the container healthcheck) |
 | UI | every other `GET`/`HEAD`: a file of the `QWBE_UI_DIR` build, else `index.html` (deep links); a missing `/assets/*` file is 404, other methods 405, no build 503 |
@@ -636,7 +642,9 @@ party's VAT identifier as `RO` + CUI without consulting the current registry.
 Addresses require one of the 42 Romanian ISO 3166-2 county codes. `RO-B` requires
 an integer sector from 1 to 6; other counties prohibit a sector.
 Positive invoices require `dueDate` before a number is allocated, including draft
-issuance and proforma conversion. Drafts, proformas and zero invoices may omit it.
+issuance and proforma conversion. Drafts, proformas and zero invoices may omit it. In the editor, an open draft saved without
+one is opened with the issue date plus the saved customer's payment term (else the issuer's);
+the API itself adds no date.
 Draft issuance rejects stale VAT without consuming a document number; saving a
 stale draft refreshes affected lines even when their VAT code is unchanged. Issued
 documents, external snapshots and proforma conversions retain their frozen values.
