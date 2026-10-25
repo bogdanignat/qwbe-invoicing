@@ -2,12 +2,12 @@ import { Effect } from "effect"
 
 import { findIdempotencyReplay, idempotencyRecord, missingIdempotencyResult } from "../../application/idempotency.ts"
 import { checked, missing, recordAuditEvent, type Authorize, type OperationDependencies } from "../../application/support.ts"
-import type { InvoicingTransaction } from "../../application/ports.ts"
 import { ValidationFailure, type InvoicingFailure } from "../../contracts/failures.ts"
 import type { InvoicingPermissions } from "../../contracts/permissions.ts"
 import type { DraftInvoice, Idempotent, IssuedInvoice } from "../../domain/invoice.ts"
 import { validateFiscalDocument } from "../../domain/calculation.ts"
-import { currentVatRegistration, validateIssuerForIssuance, validateVatForIssuance, type IssuerTransaction } from "../../issuer/index.ts"
+import type { AuthoringTransaction } from "../../drafts/index.ts"
+import { currentVatRegistration, validateIssuerForIssuance, validateVatForIssuance } from "../../issuer/index.ts"
 import type { ConvertProformaInput } from "../domain/proforma.ts"
 import { numberedSnapshot } from "./snapshot.ts"
 import { ensureChronology } from "./chronology.ts"
@@ -21,7 +21,7 @@ export interface ProformaConversionOperations {
   readonly createDraftInvoiceFromProforma: (input: Idempotent<ConvertProformaInput>) => Effect.Effect<DraftInvoice, InvoicingFailure>
 }
 
-type ConversionTransaction = InvoicingTransaction & ProformaTransaction & Pick<IssuerTransaction, "findIssuer">
+type ConversionTransaction = AuthoringTransaction & ProformaTransaction
 
 export const createProformaConversionOperations = (
   dependencies: OperationDependencies<ConversionTransaction>,

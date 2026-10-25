@@ -173,6 +173,7 @@ void test("persists an issued snapshot across store recreation and isolates orga
     }))
     const proforma = await Effect.runPromise(service.issueProforma(idempotent({ draftId: proformaSource.id, series: "PRO" })))
     assert.equal(proforma.actorId, "user-1")
+    assert.equal(proforma.customerId, customer.id)
     assert.equal(proforma.convertedDraftId, null)
     assert.equal((await Effect.runPromise(service.getProforma(proforma.id))).convertedDraftId, null)
     assert.equal((await Effect.runPromise(service.listProformas())).items[0]?.convertedDraftId, null)
@@ -231,6 +232,7 @@ void test("persists an issued snapshot across store recreation and isolates orga
       { organizationId: "org-1", documentType: "proforma", series: "PRO", archived: false },
     ])
 
+    // Its proformas keep referencing the customer by key; a soft delete is not blocked by them.
     await Effect.runPromise(restarted.deleteCustomer(customer.id))
     assert.deepEqual(await Effect.runPromise(restarted.listCustomers()), { items: [], nextCursor: null })
     const deletedCustomer = await Effect.runPromise(Effect.flip(restarted.getCustomer(customer.id)))
@@ -281,6 +283,7 @@ void test("persists an issued snapshot across store recreation and isolates orga
       ["UPDATE proformas SET issuer_sector=1 WHERE id=$1", [proforma.id]],
       ["UPDATE proformas SET customer_sector=1 WHERE id=$1", [proforma.id]],
       ["UPDATE proformas SET customer_vat_registered=0 WHERE id=$1", [proforma.id]],
+      ["UPDATE proformas SET customer_id=NULL WHERE id=$1", [proforma.id]],
       ["UPDATE correction_documents SET issuer_sector=1 WHERE id=$1", [correction.id]],
       ["UPDATE correction_documents SET customer_sector=1 WHERE id=$1", [correction.id]],
       ["UPDATE correction_documents SET customer_vat_registered=0 WHERE id=$1", [correction.id]],

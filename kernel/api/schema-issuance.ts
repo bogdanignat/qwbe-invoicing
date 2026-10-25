@@ -5,7 +5,7 @@ import { EFacturaStatus } from "./schema-invoice-register.ts"
 import { IssuerCompanySnapshot, IssuerParty } from "./schema-issuer.ts"
 import {
   bodyObject, Buyer, BuyerSelection, DocumentNotes, DocumentSource, nullableString, optional,
-  optionalNullableNotes, optionalNullableString, pageOf, requireBuyer,
+  optionalNullableNotes, optionalNullableString, optionalString, pageOf, requireBuyer,
 } from "./schema-primitives.ts"
 
 export const IssuedInvoice = Schema.Struct({
@@ -42,7 +42,7 @@ export const Correction = Schema.Struct({
 })
 export const Proforma = Schema.Struct({
   actorId: Schema.String, id: Schema.String, sourceDraftId: nullableString, convertedDraftId: nullableString,
-  convertedInvoiceId: nullableString, organizationId: Schema.String, source: optional(DocumentSource),
+  convertedInvoiceId: nullableString, organizationId: Schema.String, customerId: optionalString, source: optional(DocumentSource),
   series: Schema.String, number: Schema.Int, issueDate: Schema.String, dueDate: nullableString,
   issuedAt: Schema.String, currency: Schema.String, notes: DocumentNotes, issuer: IssuerParty,
   customer: Buyer, lines: Schema.Array(DraftLine), vatBreakdown: Schema.Array(VatBreakdown),

@@ -42,6 +42,7 @@ export const createProformaOperations = (
       yield* ensureChronology(transaction, context.organization.id, "proforma", series.series, document.issueDate, calendarDate(issuedAt))
       const proforma: Proforma = {
         sourceDraftId: draft?.id ?? null, convertedDraftId: null, convertedInvoiceId: null,
+        ...(document.customerId === undefined ? {} : { customerId: document.customerId }),
         ...numberedSnapshot(document, issuer, { id, series: series.series,
           number: yield* transaction.allocateDocumentNumber(context.organization.id, "proforma", series.series),
           issuedAt, actorId: context.identity.id }),

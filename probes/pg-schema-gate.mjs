@@ -195,6 +195,16 @@ const main = async () => {
       "efactura_submissions_current", "efactura_submissions_upload_index", "efactura_submissions_document",
       "efactura_submissions_due", "efactura_submission_attempts_submission",
       "efactura_received_fetches_active", "efactura_received_messages_fetch", "efactura_received_messages_newest",
+      // T-1987 (shipped with T-2074): the register and reports read documents by issue date.
+      "issued_invoices_issue_date", "correction_documents_issue_date",
+      // T-2074: a product code is unique per organization, case-insensitively.
+      "product_presets_code",
+    ]
+    // T-2074: the item code and EAN copied on every kind of line, and the product kind.
+    const postCaptureChecks = [
+      "draft_lines_item_code_shape", "draft_lines_barcode_gtin", "issued_lines_item_code_shape", "issued_lines_barcode_gtin",
+      "proforma_lines_item_code_shape", "proforma_lines_barcode_gtin", "correction_lines_item_code_shape",
+      "correction_lines_barcode_gtin", "product_presets_code_shape", "product_presets_barcode_gtin", "product_presets_kind_valid",
     ]
     const goldenTables = [...golden.plans.flatMap((plan) => plan.tables.map(({ name }) => name)), ...postCaptureTables].sort()
     const goldenIndexes = [...golden.plans.flatMap((plan) => plan.explicitIndexes.map(({ name }) => name)), ...postCaptureIndexes].sort()
@@ -207,16 +217,18 @@ const main = async () => {
       assert.deepEqual(liveTables, goldenTables)
       assert.equal(liveTables.length, 42)
     })
-    check("38 explicit indexes: the SQLite baseline's 30 and e-Factura's 8", () => {
+    check("41 explicit indexes: the SQLite baseline's 30, e-Factura's 8 and T-2074's 3", () => {
       assert.deepEqual(liveIndexes, goldenIndexes)
-      assert.equal(liveIndexes.length, 38)
+      assert.equal(liveIndexes.length, 41)
     })
     // 129 checks before e-Factura, plus 10 of its connection, 33 of its submissions,
     // 33 of its received invoices, the e-Factura status of a correction and the
-    // archived flag of a series (T-2082), whose draft trigger gained a function.
-    check("70 triggers, 207 named checks, 8 functions", () => {
+    // archived flag of a series (T-2082), whose draft trigger gained a function, plus
+    // the 11 item-code, EAN and product-kind checks of T-2074, each present by name.
+    check("70 triggers, 218 named checks, 8 functions", () => {
       assert.equal(countOf(inventoryA, "trigger"), 70)
-      assert.equal(countOf(inventoryA, "check"), 207)
+      for (const name of postCaptureChecks) assert.ok(inventoryA.some((entry) => entry.startsWith(`check ${name} `)), name)
+      assert.equal(countOf(inventoryA, "check"), 207 + postCaptureChecks.length)
       assert.equal(countOf(inventoryA, "function"), 8)
     })
     check("every check constraint is named and within 63 characters", () => {
@@ -266,12 +278,23 @@ const main = async () => {
         whenUsesSubquery: true,
         raiseMessages: ["invoice draft keeps its organization and a configured invoice series"],
       },
+      // T-2088: a proforma keeps the saved customer it was issued for, as immutable as the rest of it.
+      proformas_no_content_update: {
+        updateOf: ["id", "source_draft_id", "organization_id", "fiscal_year", "document_type", "series", "number", "issue_date",
+          "due_date", "issued_at", "currency", "issuer_legal_name", "issuer_tax_identifier", "issuer_country_code", "issuer_city",
+          "issuer_street", "issuer_county", "issuer_sector", "issuer_postal_code", "issuer_legal_form", "issuer_trade_registry_number",
+          "issuer_iban", "issuer_bank_name", "issuer_social_capital", "issuer_vat_registered", "issuer_branding",
+          "customer_party_type", "customer_legal_name", "customer_tax_identifier", "customer_country_code", "customer_city",
+          "customer_street", "customer_county", "customer_sector", "customer_postal_code", "customer_vat_registered",
+          "total_excluding_tax", "tax_total", "total_including_tax", "notes", "customer_id"],
+      },
     }
     const changedWith = (property) => Object.entries(changedAfterCapture)
       .filter(([, change]) => change[property] !== undefined && change[property] !== false).map(([name]) => name)
     const goldenTriggers = {
       ...capturedTriggers,
-      withUpdateOf: [...capturedTriggers.withUpdateOf, ...changedWith("updateOf")],
+      // A trigger that already had a column list (proformas_no_content_update) is counted once.
+      withUpdateOf: [...new Set([...capturedTriggers.withUpdateOf, ...changedWith("updateOf")])],
       withSubqueryInWhen: [...capturedTriggers.withSubqueryInWhen, ...changedWith("whenUsesSubquery")],
       triggers: capturedTriggers.triggers.map((trigger) => ({ ...trigger, ...changedAfterCapture[trigger.name] })),
     }

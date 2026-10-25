@@ -7,7 +7,7 @@ import type { IdGenerator } from "../../contracts/host.ts"
 import { calculateLine, calculateTotals } from "../../domain/calculation.ts"
 import type { BuyerSnapshot, DocumentSource, DocumentType, DraftInvoice } from "../../domain/invoice.ts"
 import type { AuthoringDocumentInput, CreateDraftInput, UpdateDraftInput } from "../../domain/inputs.ts"
-import type { CustomersTransaction } from "../../customers/index.ts"
+import { isActiveCustomer, type CustomersTransaction } from "../../customers/index.ts"
 import { validateDate, validateDocumentNotes, validateDocumentSeries, validateDocumentSource, validateLineDescription } from "../../domain/validation.ts"
 import { validateBuyer } from "../../parties/index.ts"
 import { resolveVatConfiguration, type IssuerTransaction } from "../../issuer/index.ts"
@@ -51,7 +51,7 @@ export const buyerFrom = (
   })
   if (customerId !== undefined) {
     const customer = yield* transaction.findCustomer(organizationId, customerId)
-    if (customer === undefined || customer.deletedAt !== undefined) return yield* Effect.fail(missing("customer", customerId))
+    if (!isActiveCustomer(customer)) return yield* Effect.fail(missing("customer", customerId))
     return { customer: copyBuyer(customer), customerId: customer.id }
   }
   const customer = copyBuyer(inline as BuyerSnapshot)

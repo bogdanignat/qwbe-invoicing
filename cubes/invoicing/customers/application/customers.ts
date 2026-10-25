@@ -3,7 +3,7 @@ import { Effect } from "effect"
 import { checked, copyBuyer, missing, namePageQuery, pageOf, type Authorize, type OperationDependencies, type Page, type PageRequest } from "../../application/support.ts"
 import { DomainConflict, type InvoicingFailure } from "../../contracts/failures.ts"
 import type { InvoicingPermissions } from "../../contracts/permissions.ts"
-import { validateCustomer, type CreateCustomerInput, type Customer, type UpdateCustomerInput } from "../domain/customer.ts"
+import { isActiveCustomer, validateCustomer, type CreateCustomerInput, type Customer, type UpdateCustomerInput } from "../domain/customer.ts"
 import type { CustomersTransaction } from "./ports.ts"
 
 export interface CustomerOperations {
@@ -31,7 +31,7 @@ export const createCustomerOperations = (
     const context = yield* authorize(permissions.manageCustomers)
     return yield* dependencies.store.transaction((transaction) => Effect.gen(function*() {
       const existing = yield* transaction.findCustomer(context.organization.id, input.id)
-      if (existing === undefined || existing.deletedAt !== undefined) return yield* Effect.fail(missing("customer", input.id))
+      if (!isActiveCustomer(existing)) return yield* Effect.fail(missing("customer", input.id))
       const customer: Customer = { ...copyBuyer(input), id: input.id, organizationId: context.organization.id,
         ...(input.defaultPaymentTermDays === undefined ? {} : { defaultPaymentTermDays: input.defaultPaymentTermDays }) }
       yield* checked(() => { validateCustomer(customer) })
@@ -42,9 +42,7 @@ export const createCustomerOperations = (
   const getCustomer = (id: string) => Effect.gen(function*() {
     const context = yield* authorize(permissions.read)
     const customer = yield* dependencies.store.transaction((transaction) => transaction.findCustomer(context.organization.id, id))
-    return customer === undefined || customer.deletedAt !== undefined
-      ? yield* Effect.fail(missing("customer", id))
-      : structuredClone(customer)
+    return isActiveCustomer(customer) ? structuredClone(customer) : yield* Effect.fail(missing("customer", id))
   })
   const listCustomers = (page?: PageRequest) => Effect.gen(function*() {
     const query = yield* checked(() => namePageQuery(page))

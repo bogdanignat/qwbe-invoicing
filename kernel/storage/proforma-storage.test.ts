@@ -26,15 +26,18 @@ const insertDraft = (sql: RawSql, id: string, organizationId = "org-1") => sql.q
   id, organizationId, "company", "Client SRL", "87654329", "RO", "Iași", "Strada 1", "RO-IS", 1, "INV", "2026-09-01", "RON", "draft",
 ])
 
-const insertProforma = (sql: RawSql, id: string, organizationId = "org-1", number = 1) => sql.query(`INSERT INTO proformas(
-  id,source_draft_id,organization_id,fiscal_year,document_type,series,number,issue_date,issued_at,currency,
+const proformaStatement = `INSERT INTO proformas(
+  id,source_draft_id,organization_id,customer_id,fiscal_year,document_type,series,number,issue_date,issued_at,currency,
   issuer_legal_name,issuer_tax_identifier,issuer_country_code,issuer_city,issuer_street,issuer_county,customer_party_type,
   customer_legal_name,customer_tax_identifier,customer_country_code,customer_city,customer_street,customer_county,customer_vat_registered,
   total_excluding_tax,tax_total,total_including_tax,sealed,issuer_legal_form,issuer_trade_registry_number,
   issuer_iban,issuer_bank_name,issuer_social_capital,actor_id,issuer_vat_registered)
-  VALUES($1,NULL,$2,2026,'proforma','PRO',$3,'2026-09-01','2026-09-01T10:00:00.000Z','RON',
+  VALUES($1,NULL,$2,$4,2026,'proforma','PRO',$3,'2026-09-01','2026-09-01T10:00:00.000Z','RON',
   'Furnizor SRL','12345674','RO','Iași','Strada 2','RO-IS','company','Client SRL','87654329','RO','Iași','Strada 1','RO-IS',1,
-  0,0,0,1,'srl','J22/123/2020','','',100000,'user-1',1)`, [id, organizationId, number])
+  0,0,0,1,'srl','J22/123/2020','','',100000,'user-1',1)`
+
+const insertProforma = (sql: RawSql, id: string, organizationId = "org-1", number = 1, customerId: string | null = null) =>
+  sql.query(proformaStatement, [id, organizationId, number, customerId])
 
 const invoiceStatement = `INSERT INTO issued_invoices(
   id,draft_id,source_proforma_id,organization_id,fiscal_year,document_type,series,number,issue_date,issued_at,currency,
@@ -167,5 +170,29 @@ void test("saveProformaConversion persists once inside the existing transaction"
     assert.deepEqual(await Effect.runPromise(store.transaction((transaction) => transaction.findProformaConversion("org-1", "proforma"))), conversion)
     const duplicate = await Effect.runPromise(Effect.flip(store.transaction((transaction) => transaction.saveProformaConversion(conversion))))
     assert.equal(duplicate instanceof DomainConflict && duplicate.code === "proforma_already_converted", true)
+  })
+})
+
+void test("a proforma keeps a saved customer of its own organization, immutably", async () => {
+  await withMigrated("proforma_customer", async ({ pool, sql }) => {
+    await sql.exec(`INSERT INTO document_series VALUES('org-1','proforma','PRO');
+      INSERT INTO customers(id,organization_id,legal_name,tax_identifier,country_code,city,street,county,party_type,vat_registered)
+        VALUES('customer-1','org-1','Client SRL','87654329','RO','Iași','Strada 1','RO-IS','company',1),
+        ('customer-2','org-2','Alt Client SRL','87654329','RO','Iași','Strada 1','RO-IS','company',1)`)
+    await insertProforma(sql, "linked", "org-1", 1, "customer-1")
+    await insertProforma(sql, "occasional", "org-1", 2)
+    // The key is composite: a customer of another organization does not exist for this proforma.
+    assert.equal((await sql.rejects(proformaStatement, ["foreign", "org-1", 3, "customer-2"])).code, "23503")
+    assert.equal((await sql.rejects("UPDATE proformas SET customer_id=NULL WHERE id='linked'")).code, "23514")
+    assert.equal((await sql.rejects("UPDATE proformas SET customer_id='customer-1' WHERE id='occasional'")).code, "23514")
+    const store = createPostgresStore(pool)
+    const read = await Effect.runPromise(store.transaction((transaction) => Effect.all({
+      linked: transaction.findProforma("org-1", "linked"),
+      occasional: transaction.findProforma("org-1", "occasional"),
+      listed: transaction.listProformas("org-1", { limit: 20 }),
+    })))
+    assert.equal(read.linked?.customerId, "customer-1")
+    assert.equal(read.occasional === undefined ? undefined : "customerId" in read.occasional, false)
+    assert.deepEqual(read.listed.map(({ id, customerId }) => [id, customerId]), [["occasional", undefined], ["linked", "customer-1"]])
   })
 })

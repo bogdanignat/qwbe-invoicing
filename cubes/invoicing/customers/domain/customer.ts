@@ -10,6 +10,10 @@ export interface Customer extends BuyerSnapshot {
   readonly deletedAt?: string
 }
 
+// A saved customer that can still be used: found in the organization and not soft-deleted.
+export const isActiveCustomer = (customer: Customer | undefined): customer is Customer =>
+  customer !== undefined && customer.deletedAt === undefined
+
 export type CustomerInput = BuyerSnapshot & { readonly defaultPaymentTermDays?: number }
 export type CreateCustomerInput = CustomerInput
 export type UpdateCustomerInput = CustomerInput & { readonly id: string }

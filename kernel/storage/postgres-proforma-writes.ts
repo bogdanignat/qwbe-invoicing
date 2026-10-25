@@ -14,7 +14,7 @@ import type { TransactionClient } from "./postgres-transaction.ts"
  * table's, so it is written out rather than shared.
  */
 export const proformaColumns = [
-  "id", "source_draft_id", "organization_id", ...sourceColumns(),
+  "id", "source_draft_id", "organization_id", "customer_id", ...sourceColumns(),
   "fiscal_year", "document_type", "series", "number", "issue_date", "due_date", "issued_at", "currency",
   "issuer_legal_name", "issuer_tax_identifier", ...addressColumns("issuer_"), ...issuerColumns(),
   "issuer_vat_registered", "issuer_branding",
@@ -25,7 +25,7 @@ export const proformaColumns = [
 export const saveProforma = (client: TransactionClient, proforma: Proforma) =>
   write("save proforma", async () => {
     const statement = insertStatement("proformas", pairs(proformaColumns, [
-      proforma.id, proforma.sourceDraftId, proforma.organizationId, ...sourceValues(proforma.source),
+      proforma.id, proforma.sourceDraftId, proforma.organizationId, proforma.customerId ?? null, ...sourceValues(proforma.source),
       Number(proforma.issueDate.slice(0, 4)), "proforma",
       proforma.series, proforma.number, proforma.issueDate, proforma.dueDate, proforma.issuedAt, proforma.currency,
       proforma.issuer.name, proforma.issuer.fiscalIdentifier, ...addressValues(proforma.issuer.address),

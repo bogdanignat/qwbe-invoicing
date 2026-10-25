@@ -48,5 +48,24 @@ void test("direct proforma authoring needs only a proforma series configuration"
     const id = (created.body as { id: string }).id
     assert.deepEqual((await handleApiRequest({ method: "GET", url: `/api/proformas/${id}`, authorization, body: undefined }, runtime)).body,
       created.body)
+    assert.equal(Object.hasOwn(created.body as object, "customerId"), false)
+
+    // T-2088: the saved customer travels on the proforma and on the draft made from it.
+    assert.equal((await handleApiRequest({ method: "POST", url: "/api/document-series", authorization,
+      body: { documentType: "invoice", series: "INV" } }, runtime)).status, 200)
+    const customer = await handleApiRequest({ method: "POST", url: "/api/customers", authorization, body: {
+      partyType: "company", name: "Client SRL", fiscalIdentifier: "87654329", vatRegistered: true, defaultPaymentTermDays: 30,
+      address: { countryCode: "RO", city: "Iași", street: "Strada 2", county: "RO-IS" } } }, runtime)
+    const customerId = (customer.body as { id: string }).id
+    const linked = await handleApiRequest({ method: "POST", url: "/api/proformas", authorization,
+      idempotencyKey: "proforma-saved-customer", body: { customerId, proformaSeries: "PRO", issueDate: "2026-09-05", currency: "RON",
+        lines: [{ description: "Servicii", quantity: "1", unitPrice: "100", unitOfMeasure: { code: "HUR", name: "oră" }, vatRateCode: "RO_STANDARD" }],
+      } }, runtime)
+    assert.equal(linked.status, 200)
+    assert.equal((linked.body as { customerId?: string }).customerId, customerId)
+    const draft = await handleApiRequest({ method: "POST", url: `/api/proformas/${(linked.body as { id: string }).id}/draft-invoice`,
+      authorization, idempotencyKey: "proforma-saved-customer-draft", body: { invoiceSeries: "INV" } }, runtime)
+    assert.equal(draft.status, 200)
+    assert.equal((draft.body as { customerId?: string }).customerId, customerId)
   })
 })
