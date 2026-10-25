@@ -2,6 +2,8 @@ import type { IssuerCompanySnapshot, NumberedDocumentSnapshot } from "../../doma
 import type { AuthoringDocumentInput, BuyerSource } from "../../domain/inputs.ts"
 
 export interface Proforma extends NumberedDocumentSnapshot {
+  // The saved customer the buyer was copied from; absent for an occasional buyer.
+  readonly customerId?: string
   readonly sourceDraftId: string | null
   readonly convertedDraftId: string | null
   readonly convertedInvoiceId: string | null

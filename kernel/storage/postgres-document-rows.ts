@@ -31,10 +31,11 @@ export const issuedInvoiceFrom = async (client: TransactionClient, value: Row): 
 
 export const proformaFrom = async (client: TransactionClient, value: Row): Promise<Proforma> => {
   const id = text(value, "id")
+  const customerId = optionalText(value, "customer_id")
   const source = sourceFrom(value)
   return {
     id, sourceDraftId: nullableText(value, "source_draft_id"), organizationId: text(value, "organization_id"),
-    ...(source === undefined ? {} : { source }), convertedDraftId: nullableText(value, "converted_draft_id"),
+    ...(customerId === undefined ? {} : { customerId }), ...(source === undefined ? {} : { source }), convertedDraftId: nullableText(value, "converted_draft_id"),
     convertedInvoiceId: nullableText(value, "converted_invoice_id"), series: text(value, "series"),
     number: integer(value, "number"), issueDate: text(value, "issue_date"), dueDate: nullableText(value, "due_date"),
     issuedAt: text(value, "issued_at"), actorId: text(value, "actor_id"), currency: text(value, "currency"),

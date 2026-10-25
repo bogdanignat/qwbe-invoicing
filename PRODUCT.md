@@ -309,6 +309,17 @@ invoice number. It can be listed, opened in detail, and rendered/downloaded as a
 that conspicuously says `DOCUMENT NEFISCAL`. Invoice issuance is allowed exactly once
 and copies the preserved snapshot directly into a numbered immutable fiscal document.
 
+A proforma issued for a saved customer (directly, or from a draft linked to one)
+keeps that customer's id next to its frozen buyer snapshot, as immutably as the rest
+of it; a one-time buyer leaves it empty. Converting it into an editable draft re-reads
+the customer in the same transaction: while it still exists in the organization and is
+not deleted, the draft is linked to it (with the proforma's buyer copy), so a draft
+without a due date gets the customer's payment term proposed, or the organization's
+when the customer has none. A customer deleted since then leaves a one-time buyer, as
+before. A proforma with a due date keeps its own term on the draft. Proformas never
+block deleting a customer, but the linked draft does while it is open, like any open
+draft. Direct invoice issuance from a proforma is unchanged.
+
 A proforma has no RO e-Factura submission state, payment ledger, overdue state, or
 invoice-correction/storno semantics. Proforma delivery currently means downloadable
 PDF, not email.
