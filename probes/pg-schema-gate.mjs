@@ -212,11 +212,12 @@ const main = async () => {
       assert.equal(liveIndexes.length, 38)
     })
     // 129 checks before e-Factura, plus 10 of its connection, 33 of its submissions,
-    // 33 of its received invoices and the e-Factura status of a correction.
-    check("70 triggers, 206 named checks, 7 functions", () => {
+    // 33 of its received invoices, the e-Factura status of a correction and the
+    // archived flag of a series (T-2082), whose draft trigger gained a function.
+    check("70 triggers, 207 named checks, 8 functions", () => {
       assert.equal(countOf(inventoryA, "trigger"), 70)
-      assert.equal(countOf(inventoryA, "check"), 206)
-      assert.equal(countOf(inventoryA, "function"), 7)
+      assert.equal(countOf(inventoryA, "check"), 207)
+      assert.equal(countOf(inventoryA, "function"), 8)
     })
     check("every check constraint is named and within 63 characters", () => {
       const names = inventoryA.filter((entry) => entry.startsWith("check "))
@@ -257,10 +258,21 @@ const main = async () => {
           "issuer_social_capital", "issuer_vat_registered"],
         raiseMessages: ["correction documents are immutable except e_factura_status"],
       },
+      // T-2082: an open draft may change series, so the blanket refusal became a
+      // check of the new reference, in the function body because it reads a table.
+      invoice_drafts_series_update: {
+        when: "OLD.organization_id IS DISTINCT FROM NEW.organization_id OR(OLD.series IS DISTINCT FROM NEW.series AND NOT EXISTS("
+          + "SELECT 1 FROM document_series WHERE organization_id=NEW.organization_id AND document_type='invoice' AND series=NEW.series))",
+        whenUsesSubquery: true,
+        raiseMessages: ["invoice draft keeps its organization and a configured invoice series"],
+      },
     }
+    const changedWith = (property) => Object.entries(changedAfterCapture)
+      .filter(([, change]) => change[property] !== undefined && change[property] !== false).map(([name]) => name)
     const goldenTriggers = {
       ...capturedTriggers,
-      withUpdateOf: [...capturedTriggers.withUpdateOf, ...Object.keys(changedAfterCapture)],
+      withUpdateOf: [...capturedTriggers.withUpdateOf, ...changedWith("updateOf")],
+      withSubqueryInWhen: [...capturedTriggers.withSubqueryInWhen, ...changedWith("whenUsesSubquery")],
       triggers: capturedTriggers.triggers.map((trigger) => ({ ...trigger, ...changedAfterCapture[trigger.name] })),
     }
     check("each declared post-capture change names a captured trigger", () => {
@@ -315,15 +327,15 @@ const main = async () => {
         assert.notDeepEqual(triggerDifferences(goldenTriggers, mutated), [], label)
       }
     })
-    check("the 12 UPDATE OF column lists (the capture's 11 and the correction's) and the 6 moved predicates match", () => {
+    check("the 12 UPDATE OF column lists (the capture's 11 and the correction's) and the 7 moved predicates match", () => {
       const withUpdateOf = liveTriggers.filter((row) => row.update_of.length > 0).map(({ name }) => name).sort()
       assert.deepEqual(withUpdateOf, [...goldenTriggers.withUpdateOf].sort())
       assert.equal(withUpdateOf.length, 12)
       const inBody = liveTriggers.filter((row) => translatedPredicate(row).where === "body")
         .map(({ name }) => name).sort()
       assert.deepEqual(inBody, [...goldenTriggers.withSubqueryInWhen].sort())
-      assert.equal(inBody.length, 6)
-      // The other 54 keep their predicate (or their unconditional firing) in the trigger.
+      assert.equal(inBody.length, 7)
+      // The other 53 keep their predicate (or their unconditional firing) in the trigger.
       assert.equal(liveTriggers.filter((row) => row.has_when).length,
         goldenTriggers.triggers.filter((t) => t.when !== null && !t.whenUsesSubquery).length)
     })

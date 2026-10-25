@@ -55,6 +55,8 @@ export interface DocumentSeries {
   readonly organizationId: string
   readonly documentType: DocumentType
   readonly series: string
+  /** Kept on its documents, left out of every choice for a new one; reactivating it continues its numbering. */
+  readonly archived: boolean
 }
 
 export type NonVatBasis = "article_310"
@@ -174,6 +176,8 @@ export type CreateDraftInput = BuyerSource & {
 
 export type UpdateDraftInput = BuyerSource & {
   readonly source?: DocumentSource | null
+  /** Absent keeps the draft's series; another one must be an active invoice series. */
+  readonly series?: string
   readonly issueDate: string
   readonly dueDate?: string | null
   readonly notes?: string | null

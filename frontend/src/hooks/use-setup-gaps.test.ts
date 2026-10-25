@@ -39,7 +39,7 @@ const gapsWith = (plugins: ReadonlyArray<PluginName>, seed: (client: QueryClient
 
 const seedAll = (client: QueryClient): void => {
   client.setQueryData(referenceQueryKeys.issuer, null)
-  client.setQueryData(referenceQueryKeys.documentSeries, [{ organizationId: "org", documentType: "invoice", series: "F" }])
+  client.setQueryData(referenceQueryKeys.documentSeries, [{ organizationId: "org", documentType: "invoice", series: "F", archived: false }])
   client.setQueryData(companyLookupQueryKeys.availability, { provider: "none", nameSearch: false, minCuiDigits: 2, minNameLetters: 3 })
   client.setQueryData(efacturaQueryKeys.connection, {
     status: "disconnected", environment: "test", verifiedCif: null, refreshExpiresAt: null,

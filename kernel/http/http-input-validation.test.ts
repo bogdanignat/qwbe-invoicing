@@ -40,6 +40,8 @@ const inputs: ReadonlyArray<InputCase> = [
   { name: "customer", schema: S.CustomerInput, decode: A.customerInput, value: customer },
   { name: "preset", schema: S.ProductPresetInput, decode: A.productPresetInput, value: { ...line, code: "SRV", kind: "service" } },
   { name: "series", schema: S.DocumentSeriesInput, decode: A.documentSeriesInput, value: { documentType: "invoice", series: "QWBE" } },
+  { name: "series archived", schema: S.DocumentSeriesArchivedInput, decode: (value) => A.documentSeriesArchivedInput("invoice", "QWBE", value),
+    value: { archived: true }, ids: { documentType: "invoice", series: "QWBE" } },
   { name: "draft", schema: S.DraftInput, decode: A.draftInput, value: draft },
   { name: "update draft", schema: S.UpdateDraftInput, decode: (value) => A.updateDraftInput("draft-1", value), value: draft, ids: { draftId: "draft-1" } },
   { name: "line", schema: S.DraftLineInput, decode: (value) => A.lineInput("draft-1", value), value: line, ids: { draftId: "draft-1" } },

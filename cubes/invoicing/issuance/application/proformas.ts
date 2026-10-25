@@ -6,7 +6,7 @@ import type { InvoicingFailure } from "../../contracts/failures.ts"
 import type { InvoicingPermissions } from "../../contracts/permissions.ts"
 import type { DocumentSource, Idempotent } from "../../domain/invoice.ts"
 import { calendarDate, validateDocumentSource } from "../../domain/validation.ts"
-import type { AuthoringTransaction } from "../../drafts/index.ts"
+import { activeDocumentSeries, type AuthoringTransaction } from "../../drafts/index.ts"
 import type { ProformaTransaction } from "./ports.ts"
 import { validateIssuerForIssuance } from "../../issuer/index.ts"
 import type { AuthoringProformaInput, IssueProformaInput, Proforma, ProformaSummary } from "../domain/proforma.ts"
@@ -38,8 +38,7 @@ export const createProformaOperations = (
       const id = yield* dependencies.ids.next
       const issuedAt = yield* dependencies.clock.now
       const proformaSeries = "draftId" in input ? input.series : input.proformaSeries
-      const series = yield* transaction.findDocumentSeries(context.organization.id, "proforma", proformaSeries)
-      if (series === undefined) return yield* Effect.fail(missing("document_series", proformaSeries))
+      const series = yield* activeDocumentSeries(transaction, context.organization.id, "proforma", proformaSeries)
       yield* ensureChronology(transaction, context.organization.id, "proforma", series.series, document.issueDate, calendarDate(issuedAt))
       const proforma: Proforma = {
         sourceDraftId: draft?.id ?? null, convertedDraftId: null, convertedInvoiceId: null,

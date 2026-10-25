@@ -19,6 +19,7 @@ const receivedRoutes = ["POST /api/efactura/received/fetches", "GET /api/efactur
   "GET /api/efactura/received/:id", "GET /api/efactura/received/:id/archive"]
 const inventory = [
   "GET /api/issuer", "PUT /api/issuer", "GET /api/document-series", "POST /api/document-series",
+  "PUT /api/document-series/:documentType/:series/archived",
   "GET /api/unit-of-measures", "GET /api/vat-regimes",
   "GET /api/customers", "GET /api/customers/:id", "POST /api/customers", "PUT /api/customers/:id", "DELETE /api/customers/:id",
   "GET /api/product-presets", "POST /api/product-presets", "PUT /api/product-presets/:id", "DELETE /api/product-presets/:id",
@@ -47,15 +48,15 @@ const efacturaRoutes = ["GET /api/invoices/:id/efactura.xml", "GET /api/correcti
 const companyLookupRoutes = ["GET /api/settings/company-lookup", "PUT /api/settings/company-lookup",
   "GET /api/company-lookup/availability", "POST /api/company-lookup/lookup", "POST /api/company-lookup/search"]
 
-void test("the contract with every plugin on exposes exactly the current 75 operations", () => {
+void test("the contract with every plugin on exposes exactly the current 76 operations", () => {
   const applicationRoutes: Array<{ readonly method: string, readonly operationId: string, readonly path: string }> = []
   HttpApi.reflect(activeHttpApi(allPlugins), { onGroup() {}, onEndpoint({ endpoint }) {
     applicationRoutes.push({ method: endpoint.method, operationId: endpoint.name, path: endpoint.path })
   } })
-  assert.equal(operationNames.length, 75)
-  assert.equal(new Set(operationNames).size, 75)
-  assert.equal(applicationRoutes.length, 75)
-  assert.equal(new Set(applicationRoutes.map((route) => route.operationId)).size, 75)
+  assert.equal(operationNames.length, 76)
+  assert.equal(new Set(operationNames).size, 76)
+  assert.equal(applicationRoutes.length, 76)
+  assert.equal(new Set(applicationRoutes.map((route) => route.operationId)).size, 76)
   assert.ok(operationNames.includes("listVatRegimes"))
   assert.deepEqual(applicationRoutes.map((route) => `${route.method} ${route.path}`).sort(), inventory)
   assert.equal(applicationRoutes.some((route) => route.path === "/api"), false)
@@ -266,6 +267,8 @@ void test("OpenAPI 3.1 mirrors paths, PDF encoding, and authentication metadata"
   // A fiscal issuer change is refused over issued documents or a concurrent change (409), or while ANAF is down (503).
   expectStatuses("put", "/api/issuer", ["409", "413"])
   expectStatuses("post", "/api/document-series", ["409", "413"])
+  // Archiving answers the series, the same state included; an absent one is a 404.
+  expectStatuses("put", "/api/document-series/{documentType}/{series}/archived", ["404", "413"])
   for (const [method, path] of [["put", "/api/customers/{id}"],
     ["delete", "/api/product-presets/{id}"]] as const) expectStatuses(method, path, ["404", "413"])
   // Creating a draft is idempotent like issuing one, so it answers 409 too:

@@ -36,7 +36,8 @@ export const DraftInput = Schema.Struct({
   currency: optionalString, dueDate: optionalNullableString, notes: optionalNullableNotes,
   lines: optional(Schema.Array(DraftLineInput)),
 }).annotations(bodyObject).pipe(requireBuyer)
+// `series` absent keeps the draft's series; a new one must be an active invoice series (T-2082).
 export const UpdateDraftInput = Schema.Struct({
-  ...BuyerSelection.fields, source: optional(Schema.NullOr(DocumentSource)), issueDate: Schema.String,
+  ...BuyerSelection.fields, source: optional(Schema.NullOr(DocumentSource)), series: optionalString, issueDate: Schema.String,
   dueDate: optionalNullableString, notes: optionalNullableNotes,
 }).annotations(bodyObject).pipe(requireBuyer)

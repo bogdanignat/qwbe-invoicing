@@ -41,10 +41,11 @@ export const createDraftPayload = (form: InvoiceAuthoringForm): CreateDraftInput
   notes: form.notes.trim() === "" ? null : form.notes.trim(),
 })
 
-// The series is deliberately absent: `UpdateDraftInput` has none, so the series
-// is chosen before the first save and read-only afterwards.
+// The series is always sent: the server moves the draft only when it differs,
+// and then only to an active invoice series, so keeping an archived one is no move.
 export const updateDraftPayload = (form: InvoiceAuthoringForm): UpdateDraftInput => ({
   ...buyerPayload(form),
+  series: form.series,
   issueDate: form.issueDate,
   dueDate: form.dueDate === "" ? null : form.dueDate,
   notes: form.notes.trim() === "" ? null : form.notes.trim(),

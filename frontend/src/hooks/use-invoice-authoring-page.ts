@@ -111,7 +111,8 @@ export const useInvoiceAuthoringPage = (id: string | undefined): InvoiceAuthorin
   if (issuerData == null) return { kind: "issuer-required" }
   if (catalogueData === undefined) return { kind: "vat-catalogue-empty" }
   const seriesOptions = authoringSeriesOptions(seriesData ?? [], "invoice")
-  if (seriesOptions.length === 0) return { kind: "invoice-series-required" }
+  // A saved draft still opens when no series is active: it can be read, edited or deleted, only not issued.
+  if (seriesOptions.length === 0 && id === undefined) return { kind: "invoice-series-required" }
   if ((unitsData ?? []).length === 0) return { kind: "unit-catalogue-empty" }
   if (id !== undefined && draft.data === undefined) return { kind: "draft-missing" }
   return {

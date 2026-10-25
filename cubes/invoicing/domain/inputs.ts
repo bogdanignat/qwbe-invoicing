@@ -37,6 +37,8 @@ export type CreateDraftInput = BuyerSource & {
 
 export type UpdateDraftInput = BuyerSource & {
   readonly draftId: string
+  // Absent keeps the draft's series; a new one must be an active invoice series.
+  readonly series?: string
   readonly source?: DocumentSource | null
   readonly issueDate: string
   readonly dueDate?: string | null

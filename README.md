@@ -601,7 +601,7 @@ handler on shutdown.
 |---|---|
 | Issuer | `GET`, `PUT /api/issuer` |
 | VAT catalogue | `GET /api/vat-regimes` |
-| Series | `GET`, `POST /api/document-series` |
+| Series | `GET`, `POST /api/document-series`, `PUT /api/document-series/:documentType/:series/archived` |
 | Customers | `GET`, `POST /api/customers`, `GET`, `PUT`, `DELETE /api/customers/:id` |
 | Product presets | `GET`, `POST /api/product-presets`, `PUT`, `DELETE /api/product-presets/:id` |
 | Drafts | `GET`, `POST /api/drafts`, `GET`, `PUT`, `DELETE /api/drafts/:id`, lines under `/api/drafts/:id/lines` |

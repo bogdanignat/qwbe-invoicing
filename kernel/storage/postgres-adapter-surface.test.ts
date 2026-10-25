@@ -40,7 +40,7 @@ const expectedInvoicingKeys = [
   "listCustomers", "listDocumentSeries", "listDrafts", "listInvoiceRegister", "listIssuedInvoices", "listProductPresets",
   "listProformas", "saveCorrection", "saveCustomer", "saveDraft", "saveIdempotencyRecord",
   "saveIssuedInvoice", "saveIssuer", "saveProductPreset", "saveProforma", "saveProformaConversion",
-  "saveProformaInvoiceConversion", "softDeleteCustomer",
+  "saveProformaInvoiceConversion", "setDocumentSeriesArchived", "softDeleteCustomer",
 ]
 
 const unusedClient: TransactionClient = {

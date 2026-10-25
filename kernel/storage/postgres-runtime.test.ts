@@ -20,7 +20,7 @@ void test("a committed transaction returns its connection and leaves nothing idl
   try {
     const store = createPostgresStore(runtime.pool)
     await Effect.runPromise(store.transaction((transaction) => transaction.addDocumentSeries({
-      organizationId: "org-1", documentType: "invoice", series: "QWBE",
+      organizationId: "org-1", documentType: "invoice", series: "QWBE", archived: false,
     })))
     const found = await Effect.runPromise(store.transaction((transaction) =>
       transaction.findDocumentSeries("org-1", "invoice", "QWBE")))
@@ -38,7 +38,7 @@ void test("a failing operation rolls back and the connection goes back to the po
     const store = createPostgresStore(runtime.pool)
     const failure = await Effect.runPromise(Effect.flip(store.transaction((transaction) =>
       Effect.flatMap(
-        transaction.addDocumentSeries({ organizationId: "org-1", documentType: "invoice", series: "QWBE" }),
+        transaction.addDocumentSeries({ organizationId: "org-1", documentType: "invoice", series: "QWBE", archived: false }),
         () => Effect.fail(new PersistenceFailure({ operation: "deliberate" })),
       ))))
     assert.equal(failure instanceof PersistenceFailure, true)
@@ -77,7 +77,7 @@ void test("an interrupt with a query in flight waits for it, rolls back and reus
     // The same connection is usable immediately afterwards.
     const store = createPostgresStore(runtime.pool)
     await Effect.runPromise(store.transaction((transaction) => transaction.addDocumentSeries({
-      organizationId: "org-1", documentType: "invoice", series: "AFTER",
+      organizationId: "org-1", documentType: "invoice", series: "AFTER", archived: false,
     })))
     const found = await Effect.runPromise(store.transaction((transaction) =>
       transaction.findDocumentSeries("org-1", "invoice", "AFTER")))
@@ -150,7 +150,7 @@ void test("a multi-statement body interrupted between statements cannot write af
     // The same connection is safe to reuse: a fresh transaction commits normally.
     const store = createPostgresStore(runtime.pool)
     await Effect.runPromise(store.transaction((transaction) => transaction.addDocumentSeries({
-      organizationId: "org-1", documentType: "invoice", series: "AFTER",
+      organizationId: "org-1", documentType: "invoice", series: "AFTER", archived: false,
     })))
     const reused = await runtime.pool.query<{ readonly series: string }>(
       "SELECT series FROM document_series ORDER BY series",
@@ -183,7 +183,7 @@ void test("concurrent number allocations serialise on the exclusive lock, with n
   try {
     const store = createPostgresStore(runtime.pool)
     await Effect.runPromise(store.transaction((transaction) => transaction.addDocumentSeries({
-      organizationId: "org-1", documentType: "invoice", series: "QWBE",
+      organizationId: "org-1", documentType: "invoice", series: "QWBE", archived: false,
     })))
     const allocate = store.transaction((transaction) =>
       transaction.allocateDocumentNumber("org-1", "invoice", "QWBE"))

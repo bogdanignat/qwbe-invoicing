@@ -1,4 +1,5 @@
 import type { BuyerSnapshot, Customer, DraftInvoice, Issuer, ProductPreset, UnitOfMeasure, VatCatalogue, VatRate } from "../lib/draft-models.ts"
+import type { SeriesChoice } from "../lib/draft-series.ts"
 import type { DraftDeletionState } from "../lib/invoice-authoring-workflow.ts"
 import type { RecoveryRecord } from "../lib/operation-recovery-types.ts"
 import type { RecoveryNoticeModel } from "../lib/operation-recovery-view.ts"
@@ -42,7 +43,8 @@ export interface InvoiceAuthoringSession {
     readonly customersHasMore: boolean
     readonly customersLoadingMore: boolean
     readonly customersLoadMore: () => void
-    readonly invoiceSeries: ReadonlyArray<string>
+    /** The active invoice series, after the draft's own when it was archived since (marked). */
+    readonly seriesChoices: ReadonlyArray<SeriesChoice>
     readonly unitOfMeasures: ReadonlyArray<UnitOfMeasure>
     readonly form: InvoiceAuthoringForm
     readonly lines: ReadonlyArray<EditableInvoiceLine>
@@ -62,6 +64,8 @@ export interface InvoiceAuthoringSession {
     readonly issueUnconfirmedMessage: string | undefined
     readonly issuerWarning: string | undefined
     readonly staleTaxWarning: string | null
+    /** The chosen series is archived: issuance waits for an active one. */
+    readonly seriesWarning: string | undefined
     readonly notesIssue: string | null
     readonly notesMaxLength: number
     readonly dueDateIssue: string | null

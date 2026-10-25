@@ -60,6 +60,8 @@ export interface SettingsClient {
   /** The saved profile and the save's `warnings` (`issuer-save-result.ts`). */
   readonly saveIssuer: (csrfToken: string, body: IssuerInput) => Promise<IssuerSaveResult>
   readonly createDocumentSeries: (csrfToken: string, body: DocumentSeriesInput) => Promise<DocumentSeries>
+  /** Archive or reactivate; the answer is the whole series, also when it already had that state. */
+  readonly setDocumentSeriesArchived: (csrfToken: string, series: DocumentSeriesInput, archived: boolean) => Promise<DocumentSeries>
 }
 
 export const createSettingsClient = (transport: BrowserTransport): SettingsClient => ({
@@ -67,4 +69,6 @@ export const createSettingsClient = (transport: BrowserTransport): SettingsClien
     readableWrite(transport.json("/api/issuer", { csrfToken, method: "PUT", body }).then(decodeIssuerSaveResult)),
   createDocumentSeries: async (csrfToken, body) =>
     decodeDocumentSeries(await transport.json("/api/document-series", { csrfToken, method: "POST", body })),
+  setDocumentSeriesArchived: async (csrfToken, { documentType, series }, archived) => decodeDocumentSeries(await transport.json(
+    `/api/document-series/${documentType}/${encodeURIComponent(series)}/archived`, { csrfToken, method: "PUT", body: { archived } })),
 })

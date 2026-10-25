@@ -107,8 +107,11 @@ export const triggerRejections = [
     "issued drafts are immutable"],
   ["invoice_drafts_series_insert", draftWith("draft-bad-series", { series: "'ZZZ'" }),
     "invoice document series is not configured"],
+  // T-2082: an open draft may move to another invoice series of its organization, nowhere else.
   ["invoice_drafts_series_update", "UPDATE invoice_drafts SET series='PRO' WHERE id='draft-2'",
-    "invoice draft series is immutable"],
+    "invoice draft keeps its organization and a configured invoice series"],
+  ["invoice_drafts_series_update", "UPDATE invoice_drafts SET organization_id='org-2' WHERE id='draft-2'",
+    "invoice draft keeps its organization and a configured invoice series"],
   ["invoice_drafts_source_insert", draftWith("draft-bad-source", { sourceApp: "'crm'" }), "invalid draft source"],
   ["invoice_drafts_source_update", "UPDATE invoice_drafts SET source_app='crm' WHERE id='draft-2'",
     "invalid draft source"],
@@ -233,6 +236,8 @@ export const acceptedWrites = [
   ["issued invoice e-Factura status", "UPDATE issued_invoices SET e_factura_status='queued' WHERE id='invoice-1'"],
   ["correction e-Factura status", "UPDATE correction_documents SET e_factura_status='queued' WHERE id='corr-1'"],
   ["draft notes cleared", "UPDATE invoice_drafts SET notes=NULL WHERE id='draft-2'"],
+  ["open draft moved to another invoice series", "UPDATE invoice_drafts SET series='ALT' WHERE id='draft-2'"],
+  ["series archived", "UPDATE document_series SET archived=1 WHERE organization_id='org-1' AND series='INV'"],
   ["customer soft delete", "UPDATE customers SET deleted_at='2026-09-10' WHERE id='customer-1'"],
   ["sequence advance", "UPDATE invoice_sequences SET last_number=4 WHERE organization_id='org-1'"],
   ["e-Factura submission progress", "UPDATE efactura_submissions SET polls=1,updated_at='t' WHERE id='sub-3'"],
@@ -266,6 +271,8 @@ export const constraintCases = [
      tax_rate,vat_exemption_reason,total_excluding_tax,tax_amount,total_including_tax,unit_code,unit_name)
      VALUES('dl-bad','draft-2',9,'Servicii','1.00',10000,'RO_STANDARD','S','5.00',NULL,10000,500,
      10500,'C62','unitate')`],
+  ["check: a series is archived or not", "23514",
+    "UPDATE document_series SET archived=2 WHERE organization_id='org-1' AND series='ALT'"],
   ["check: product unit price is non-negative", "23514",
     `INSERT INTO product_presets(id,organization_id,code,kind,description,unit_price,unit_code,unit_name)
      VALUES('preset-neg','org-1','NEG','goods','X',-1,'C62','unitate')`],

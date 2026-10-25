@@ -47,16 +47,17 @@ export const useInvoiceAuthoringSession = (input: InvoiceAuthoringSessionInput):
   const workflowPending = draftWorkflow.pending
   const derived = authoringDerived({
     form, lines, draft, workflowPending,
-    issuer: input.issuer, vatCatalogue: input.vatCatalogue, staleLineIds: forcedUpdateLineIds,
+    issuer: input.issuer, vatCatalogue: input.vatCatalogue, staleLineIds: forcedUpdateLineIds, invoiceSeries: input.invoiceSeries,
   })
-  const { payload, taxReadiness, dueDateRequired, vatRates } = derived
+  const { payload, taxReadiness, dueDateRequired, vatRates, series } = derived
   // A save whose create outcome is unknown blocks every other write — most
   // importantly issuance, which could seal an unidentified document and later
   // orphan the draft into a second fiscal invoice.
   const issuanceBlock = draftWorkflow.unconfirmedMessage
+  // An archived series takes no new number (`series.warning`); the server refuses it too.
   const invoiceIssuance = useInvoiceIssuance({
     draftId: draft?.id, payload,
-    canIssue: taxReadiness.canIssue && !dueDateRequired && issuanceBlock === undefined && !recovery.blocked,
+    canIssue: taxReadiness.canIssue && !dueDateRequired && issuanceBlock === undefined && !recovery.blocked && series.warning === undefined,
     workflowPending, blockedMessage: issuanceBlock, recovery: recovery.port,
   })
   // An issuance whose outcome is unknown freezes the document instead: only
@@ -81,7 +82,7 @@ export const useInvoiceAuthoringSession = (input: InvoiceAuthoringSessionInput):
       draft, issuer: issuerForIssueDate(input.issuer, form.issueDate),
       customers: input.customers, customersHasMore: input.customersHasMore,
       customersLoadingMore: input.customersLoadingMore, customersLoadMore: input.customersLoadMore,
-      invoiceSeries: input.invoiceSeries, unitOfMeasures: input.unitOfMeasures, form, lines,
+      seriesChoices: series.choices, unitOfMeasures: input.unitOfMeasures, form, lines,
       savedBuyer: draft?.customerId !== undefined
         ? { customerId: draft.customerId, customer: draft.customer }
         : undefined,
@@ -99,7 +100,7 @@ export const useInvoiceAuthoringSession = (input: InvoiceAuthoringSessionInput):
       resumableSave: draftWorkflow.resumableSave,
       unconfirmedMessage: draftWorkflow.unconfirmedMessage,
       issueUnconfirmedMessage: issueUnconfirmed,
-      issuerWarning: issuerIssuanceWarning(input.issuer), staleTaxWarning: taxReadiness.warning,
+      issuerWarning: issuerIssuanceWarning(input.issuer), staleTaxWarning: taxReadiness.warning, seriesWarning: series.warning,
       notesIssue: documentNotesIssue(form.notes), notesMaxLength: documentNotesMaxLength,
       dueDateIssue: invoiceDueDateIssue(dueDateRequired), notice: draftWorkflow.notice,
       // The issuance controller's own confirmed-but-unfollowed result reaches

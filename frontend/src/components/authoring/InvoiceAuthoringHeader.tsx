@@ -6,8 +6,9 @@ import { Select } from "../ui/Select.tsx"
 
 /**
  * The document head: identity, series, dates and currency, next to the issuer
- * the invoice will be signed by. The series is chosen before the first save
- * and read-only afterwards — the update contract has no field for it.
+ * the invoice will be signed by. The series stays a choice while the draft is
+ * open; a series archived since the draft was saved is still listed, marked,
+ * until another one is chosen.
  */
 export const InvoiceAuthoringHeader = ({ session }: { readonly session: InvoiceAuthoringSession }) => {
   const { actions, document, feedback, status } = session
@@ -18,9 +19,10 @@ export const InvoiceAuthoringHeader = ({ session }: { readonly session: InvoiceA
     </div></div>
     <div className="document-date-fields">
       <Field label="Serie factură" required>
-        <Select required disabled={status.pending || document.draft !== undefined} value={document.form.series}
+        <Select required disabled={status.pending} value={document.form.series}
+          aria-describedby={feedback.seriesWarning === undefined ? undefined : "invoice-series-warning"}
           onChange={(event) => { actions.changeForm({ series: event.currentTarget.value }) }}>
-          {document.invoiceSeries.map((series) => <option key={series} value={series}>{series}</option>)}
+          {document.seriesChoices.map((choice) => <option key={choice.value} value={choice.value}>{choice.label}</option>)}
         </Select>
       </Field>
       <Field label="Data emiterii" required>

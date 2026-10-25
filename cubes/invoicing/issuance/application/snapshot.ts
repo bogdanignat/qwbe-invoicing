@@ -6,7 +6,7 @@ import type { IdGenerator } from "../../contracts/host.ts"
 import type { DraftInvoice, IssuerSnapshot } from "../../domain/invoice.ts"
 import { validateFiscalDocument } from "../../domain/calculation.ts"
 import type { AuthoringDocumentInput } from "../../domain/inputs.ts"
-import { authorDocument, type AuthoringTransaction } from "../../drafts/index.ts"
+import { activeDocumentSeries, authorDocument, type AuthoringTransaction } from "../../drafts/index.ts"
 import { currentVatRegistration, validateVatForIssuance, type IssuerProfile } from "../../issuer/index.ts"
 import type { AuthoringProformaInput } from "../domain/proforma.ts"
 
@@ -57,6 +57,9 @@ export const issuanceSource = (
   if (draft.status !== "draft") return yield* Effect.fail(new DomainConflict({
     code: kind === "invoice" ? "invoice_already_issued" : "draft_already_issued", message: "Draft was already used",
   }))
+  // Read again in the issuing transaction: the series may have been archived since the draft was saved.
+  // A proforma is numbered in the series of the request, which the proforma issuance checks.
+  if (kind === "invoice") yield* activeDocumentSeries(transaction, organizationId, "invoice", draft.series)
   if (draft.lines.length === 0) return yield* Effect.fail(new ValidationFailure({ issues: [`${kind} must contain at least one line`] }))
   const issuer = yield* transaction.findIssuer(organizationId)
   if (issuer === undefined) return yield* Effect.fail(missing("issuer", organizationId))

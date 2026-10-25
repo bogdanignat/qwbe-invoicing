@@ -73,7 +73,7 @@ export const seedStatements = [
   ISSUER,
   `INSERT INTO issuer_tax_configurations(organization_id,code,category,rate,vat_exemption_reason,
      effective_from,effective_to) VALUES('org-1','RO_STANDARD','S','21.00',NULL,'2026-01-01',NULL)`,
-  "INSERT INTO document_series VALUES('org-1','invoice','INV'),('org-1','proforma','PRO')",
+  "INSERT INTO document_series VALUES('org-1','invoice','INV'),('org-1','invoice','ALT'),('org-1','proforma','PRO')",
   "INSERT INTO invoice_sequences VALUES('org-1','invoice','INV',3)",
   CUSTOMER,
   `INSERT INTO product_presets(id,organization_id,code,kind,description,unit_price,unit_code,unit_name,

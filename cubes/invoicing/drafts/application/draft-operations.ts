@@ -6,9 +6,10 @@ import type { InvoicingPermissions } from "../../contracts/permissions.ts"
 import { calculateLine } from "../../domain/calculation.ts"
 import type { DocumentSource, DraftInvoice, Idempotent } from "../../domain/invoice.ts"
 import type { CreateDraftInput, UpdateDraftInput } from "../../domain/inputs.ts"
-import { validateDocumentNotes, validateDocumentSource } from "../../domain/validation.ts"
+import { validateDocumentNotes, validateDocumentSeries, validateDocumentSource } from "../../domain/validation.ts"
 import { resolveVatConfiguration } from "../../issuer/index.ts"
 import { buyerFrom, dates, documentSource, findEditable, withTotals, type AuthoringTransaction } from "./authoring.ts"
+import { activeDocumentSeries } from "./active-series.ts"
 import { createDraftOperation } from "./draft-creation.ts"
 
 export interface DraftDocumentOperations {
@@ -40,8 +41,14 @@ export const createDraftDocumentOperations = (
   const updateDraft = (input: UpdateDraftInput) => Effect.gen(function*() {
     const context = yield* authorize(permissions.draftInvoices)
     return yield* dependencies.store.transaction((transaction) => Effect.gen(function*() {
-      yield* checked(() => { validateDocumentNotes(input.notes) })
+      yield* checked(() => {
+        validateDocumentNotes(input.notes)
+        if (input.series !== undefined) validateDocumentSeries({ documentType: "invoice", series: input.series })
+      })
       const current = yield* findEditable(transaction, context.organization.id, input.draftId)
+      // Moving the draft needs an active series; keeping it, even archived, lets its lines still be edited.
+      const series = input.series ?? current.series
+      if (series !== current.series) yield* activeDocumentSeries(transaction, context.organization.id, "invoice", series)
       const issuer = yield* transaction.findIssuer(context.organization.id)
       if (issuer === undefined) return yield* Effect.fail(missing("issuer", context.organization.id))
       const buyer = yield* buyerFrom(input, context.organization.id, transaction)
@@ -55,7 +62,7 @@ export const createDraftDocumentOperations = (
       delete base.customerId
       delete base.source
       const notes = input.notes === undefined ? current.notes : input.notes
-      const updated = withTotals({ ...base, ...buyer, ...(source === undefined ? {} : { source }), ...header, notes, lines })
+      const updated = withTotals({ ...base, ...buyer, ...(source === undefined ? {} : { source }), series, ...header, notes, lines })
       yield* transaction.saveDraft(updated)
       return structuredClone(updated)
     }))

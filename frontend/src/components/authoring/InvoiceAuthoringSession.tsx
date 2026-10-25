@@ -38,6 +38,8 @@ export const InvoiceAuthoringSession = (input: InvoiceAuthoringSessionInput) => 
       ? null
       : <p className="status-note warning" role="status">{feedback.issuerWarning} Salvarea draftului rămâne disponibilă; API-ul verifică emiterea.</p>}
     {feedback.staleTaxWarning === null ? null : <p className="status-note warning" role="status" aria-live="polite">{feedback.staleTaxWarning}</p>}
+    {feedback.seriesWarning === undefined ? null
+      : <p className="status-note warning" id="invoice-series-warning" role="status" aria-live="polite">{feedback.seriesWarning}</p>}
     <form className="authoring-layout" onSubmit={(event) => { event.preventDefault(); actions.save() }}>
       <div className="section-stack">
         <InvoiceAuthoringHeader session={session} />

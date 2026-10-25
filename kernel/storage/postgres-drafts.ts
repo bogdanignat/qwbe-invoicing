@@ -16,12 +16,12 @@ const draftColumns = [
 ]
 
 /**
- * Everything the upsert refreshes. `series` and `organization_id` are absent on
- * purpose: the series is fixed when the draft is created, and the organization
- * is the guard in the WHERE clause rather than a value to overwrite.
+ * Everything the upsert refreshes. `organization_id` is absent on purpose: it is
+ * the guard in the WHERE clause rather than a value to overwrite. The series
+ * follows an open draft (T-2082); `invoice_drafts_series_update` holds it to a
+ * configured invoice series of the same organization.
  */
-const draftUpdatedColumns = draftColumns.filter((column) =>
-  column !== "id" && column !== "organization_id" && column !== "series")
+const draftUpdatedColumns = draftColumns.filter((column) => column !== "id" && column !== "organization_id")
 
 const draftSelect = `SELECT d.*,c.proforma_id AS source_proforma_id FROM invoice_drafts d
   LEFT JOIN proforma_conversions c ON c.organization_id=d.organization_id AND c.resulting_draft_id=d.id`

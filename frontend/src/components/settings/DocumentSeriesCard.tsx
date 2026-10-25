@@ -12,7 +12,7 @@ import {
 } from "../../lib/document-series-form.ts"
 import type { DocumentSeriesModel } from "../../hooks/use-document-series.ts"
 
-/** The series configured for invoices and proformas, and the add-only form under them. */
+/** The series configured for invoices and proformas, their archive toggle, and the add form under them. */
 export const DocumentSeriesCard = ({ model }: { readonly model: DocumentSeriesModel }) => {
   const { load, form, issue } = model
   useRefusedFieldFocus(SERIES_FORM, issue?.field)
@@ -20,12 +20,13 @@ export const DocumentSeriesCard = ({ model }: { readonly model: DocumentSeriesMo
   return <section className="card form-card" aria-labelledby="document-series-title">
     <div className="section-heading"><div>
       <h2 id="document-series-title">Serii de documente</h2>
-      <p>Adaugă separat seriile permise pentru facturi și proforme. Seriile adăugate rămân disponibile și nu pot fi editate aici.</p>
+      <p>Adaugă separat seriile permise pentru facturi și proforme. O serie nu se redenumește și nu se șterge: o serie pe care nu o mai folosești o arhivezi, iar numerotarea ei continuă dacă o reactivezi.</p>
     </div></div>
     {load.kind === "loading" ? <Loading label="Se încarcă seriile…" /> : null}
     {load.kind === "error" ? <ErrorAlert error={load.error} onRetry={model.retry} /> : null}
-    {load.kind === "ready" ? <DocumentSeriesTable series={model.series} /> : null}
+    {load.kind === "ready" ? <DocumentSeriesTable series={model.series} archiving={model.archiving} onToggleArchived={model.toggleArchived} /> : null}
     {model.notice === undefined ? null : <p className="status-note" role="status">{model.notice}</p>}
+    {model.archiveError === null || model.archiveError === undefined ? null : <ErrorAlert error={model.archiveError} />}
     {model.error === null || model.error === undefined ? null : <ErrorAlert error={model.error} />}
     <form className="document-series-form"
       onSubmit={(event) => { event.preventDefault(); model.submit() }}>
@@ -45,7 +46,7 @@ export const DocumentSeriesCard = ({ model }: { readonly model: DocumentSeriesMo
           <FieldIssue issue={issue} field="series" form={SERIES_FORM} />
         </Field>
       </div>
-      <p className="hint">Folosește 1–20 de caractere: litere mari, cifre, „_” sau „-”. Operația este doar de adăugare.</p>
+      <p className="hint">Folosește 1–20 de caractere: litere mari, cifre, „_” sau „-”. O serie arhivată nu primește documente noi.</p>
       <div className="button-row">
         <Button className="secondary" type="submit" disabled={model.pending || load.kind !== "ready"}>
           {model.pending ? "Se adaugă…" : "Adaugă seria"}

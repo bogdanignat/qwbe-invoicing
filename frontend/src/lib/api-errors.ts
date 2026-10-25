@@ -61,6 +61,8 @@ const failureMessages: Readonly<Record<string, string>> = {
   draft_creation_result_deleted: "Draftul creat sub această cheie a fost între timp șters. Începe un document nou.",
   invoice_already_issued: "Factura a fost deja emisă. Deschide-o din registrul de facturi.",
   derived_draft_cannot_be_deleted: "Draftul provine dintr-o proformă și nu poate fi șters.",
+  // T-2082: a new document, a draft's issuance or a conversion into an archived series.
+  document_series_archived: "Seria aleasă e arhivată: alege o serie activă pentru document sau reactivează seria din Setări.",
   // A conversion is allowed once: the answer carries this code and an English
   // `message`, so without an entry here the screen would print the English one.
   proforma_already_converted: "Proforma a fost deja convertită. Reîncarcă pagina pentru a deschide documentul rezultat.",

@@ -6,14 +6,14 @@ import { validateDate, validateDocumentSeries } from "./validation.ts"
 import { resolveVatConfiguration, validateIssuer } from "../issuer/index.ts"
 
 void test("validates supported document types and fiscal series format", () => {
-  assert.doesNotThrow(() => { validateDocumentSeries({ organizationId: "org-1", documentType: "invoice", series: "QWBE_01" }) })
-  assert.doesNotThrow(() => { validateDocumentSeries({ organizationId: "org-1", documentType: "proforma", series: "PRO-F" }) })
+  assert.doesNotThrow(() => { validateDocumentSeries({ documentType: "invoice", series: "QWBE_01" }) })
+  assert.doesNotThrow(() => { validateDocumentSeries({ documentType: "proforma", series: "PRO-F" }) })
   assert.throws(
-    () => { validateDocumentSeries({ organizationId: "org-1", documentType: "invoice", series: "lower" }) },
+    () => { validateDocumentSeries({ documentType: "invoice", series: "lower" }) },
     (error: unknown) => error instanceof ValidationFailure && error.issues.includes("series is invalid"),
   )
   assert.throws(
-    () => { validateDocumentSeries({ organizationId: "org-1", documentType: "receipt", series: "R" } as never) },
+    () => { validateDocumentSeries({ documentType: "receipt", series: "R" } as never) },
     (error: unknown) => error instanceof ValidationFailure && error.issues.includes("documentType must be invoice or proforma"),
   )
 })

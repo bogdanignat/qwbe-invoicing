@@ -31,9 +31,9 @@ void test("issues deterministic immutable invoice snapshots through the public s
   await Effect.runPromise(service.addDocumentSeries({ documentType: "invoice", series: "ALT" }))
   await Effect.runPromise(service.addDocumentSeries({ documentType: "proforma", series: "PRO" }))
   assert.deepEqual(await Effect.runPromise(service.listDocumentSeries()), [
-    { organizationId: "org-1", documentType: "invoice", series: "ALT" },
-    { organizationId: "org-1", documentType: "invoice", series: "QWBE" },
-    { organizationId: "org-1", documentType: "proforma", series: "PRO" },
+    { organizationId: "org-1", documentType: "invoice", series: "ALT", archived: false },
+    { organizationId: "org-1", documentType: "invoice", series: "QWBE", archived: false },
+    { organizationId: "org-1", documentType: "proforma", series: "PRO", archived: false },
   ])
   const duplicateSeries = await Effect.runPromise(Effect.flip(
     service.addDocumentSeries({ documentType: "invoice", series: "QWBE" }),
