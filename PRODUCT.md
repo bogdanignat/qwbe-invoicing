@@ -195,7 +195,10 @@ are not universal mandatory elements in the standard invoice list.
 `dueDate` is nullable on drafts and proformas. As a product choice satisfying the
 due-date/payment-terms alternative, a positive invoice requires a due date before
 number allocation, including direct issuance, draft issuance and proforma conversion.
-No payment-terms field or implicit date is introduced. A proforma without a due date
+No payment-terms field is introduced, and the API adds no date of its own. The editor
+proposes one: an open draft saved without a due date opens with the issue date plus the saved
+customer's payment term, else the organization's, and the reasons that block "Emite factura"
+are listed under the button. The proposal is only saved with the draft. A proforma without a due date
 can be converted to an editable draft first. Zero invoices remain exempt; corrections
 retain their own rules. A null date never makes a document overdue by date alone.
 

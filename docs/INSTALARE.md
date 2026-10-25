@@ -115,12 +115,16 @@ incompletă”, cu ce mai lipsește și linkul spre locul unde se rezolvă):
    regimul TVA. Fără Registrul Comerțului (și capital, la SRL) nu se poate emite.
 3. **Seriile.** Pe aceeași pagină, în **Serii de documente**, adaugi cu „Adaugă seria” cel
    puțin o serie pentru „Factură” (și una pentru „Proformă”, dacă le folosești). O serie
-   adăugată nu se mai editează.
+   adăugată nu se mai editează și nu se șterge; o arhivezi din același tabel („Arhivează” / „Reactivează”),
+   iar o serie arhivată nu mai apare la documente noi și nu mai emite, dar documentele ei
+   rămân, iar la reactivare numerotarea continuă. Numerotarea merge mai departe peste ani;
+   de la 1 se pornește doar cu o serie nouă (de exemplu `FCT2027`).
 4. **Căutarea firmelor** (opțional). În **Integrări** alegi furnizorul: ANAF
    (gratuit, fără cheie) sau openapi.ro (cu cheia ta); cel mult unul pornit.
 5. **Primul client** (opțional). În **Clienți**: o firmă cu CUI valid sau o persoană fizică,
    cu CNP opțional. Poți factura și unui cumpărător scris direct în factură.
-6. **Prima factură.** **Facturi → Factură nouă**, completezi rândurile, apoi „Emite factura”.
+6. **Prima factură.** **Facturi → Factură nouă**, completezi rândurile, apoi „Emite factura”. Scadența se propune din termenul clientului salvat (altfel al firmei);
+   dacă butonul e blocat, motivele apar sub el.
    Numărul se alocă la emitere; factura emisă nu se mai modifică, se corectează prin storno.
 
 ## 5. Conectarea la ANAF e-Factura

@@ -125,13 +125,14 @@ Every cube use-case is an `Effect` and has a 1:1 authenticated HTTP endpoint. Au
 - `POST /api/efactura/connection/start` / `GET /api/anaf/callback` / `GET|DELETE /api/efactura/connection` — the ANAF OAuth connection of the `efactura` plugin (404 when it is off): start answers ANAF's `authorizeUrl` and sets the attempt cookie (`efactura:connection.manage`, 409 without the ANAF variables), the callback answers only a 303 to `/integrations?anaf=<code>`, the status never carries a token (`efactura:read`); see docs/EFACTURA.md
 - `GET|PUT /api/settings/company-lookup` (`settings.manage`; `provider` `none`/`anaf`/`openapi`, write-only `openapiKey`, `clearOpenapiKey`; answers only `openapiKeyLast4`) / `GET /api/company-lookup/availability` / `POST /api/company-lookup/lookup` `{cui}` / `POST /api/company-lookup/search` `{q}` — the `company-lookup` plugin (404 when it is off); a CUI under 4 digits or with a wrong check digit and a name under 6 letters answer 400 without asking ANAF or openapi.ro
 
-T-1069 proforma route inventory (seven authenticated routes):
+T-1069 proforma route inventory (authenticated routes):
 
 - `POST /api/proformas` — emit an immutable proforma directly from complete authoring content; no draft is persisted
 - `POST /api/drafts/:draftId/proformas` — emit an immutable proforma from the editable draft, using the requested configured proforma series
 - `GET /api/proformas` — list proformas
 - `GET /api/proformas/:id` — read proforma detail, including conversion state
 - `POST /api/proformas/:id/invoice` — issue exactly one immutable invoice directly from the preserved proforma snapshot and allocate its invoice number atomically
+- `POST /api/proformas/:id/draft-invoice` — convert the proforma into an editable draft; the draft is linked to the proforma's saved customer (`customerId` on the proforma, absent for a one-time buyer) while that customer still exists and is not deleted, otherwise it carries the buyer copy only
 - `POST /api/proformas/:proformaId/pdf` — idempotently render the proforma PDF
 - `GET /api/proformas/:proformaId/pdf` — download the proforma PDF
 
