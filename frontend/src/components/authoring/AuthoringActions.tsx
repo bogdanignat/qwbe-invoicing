@@ -1,6 +1,7 @@
 import { AppLink } from "../ui/AppLink.tsx"
 import type { InvoiceAuthoringSession } from "../../hooks/invoice-authoring-session-types.ts"
 import { Button } from "../Button.tsx"
+import { ISSUE_BLOCK_REASONS_ID, IssueBlockReasons } from "./IssueBlockReasons.tsx"
 
 /**
  * Save, issue and delete, with every warning the session computed. Issuance is
@@ -19,9 +20,10 @@ export const AuthoringActions = ({ session }: { readonly session: InvoiceAuthori
     <h2>Emitere factură</h2>
     <Button className="full-width" disabled={!status.canIssueInvoice} onClick={(event) => {
       if (event.currentTarget.form?.reportValidity() !== false) actions.issueInvoice()
-    }}>
+    }} aria-describedby={feedback.issueBlockReasons.length === 0 ? undefined : ISSUE_BLOCK_REASONS_ID}>
       {status.invoicePending ? "Se emite…" : "Emite factura"}
     </Button>
+    <IssueBlockReasons reasons={feedback.issueBlockReasons} />
     {draftDeletion.kind === "hidden" ? null : draftDeletion.kind === "available"
       ? <Button className="danger full-width" disabled={status.pending} onClick={actions.deleteDraft}>Șterge draftul</Button>
       : draftDeletion.kind === "derived"

@@ -1,4 +1,5 @@
 import type { DraftInvoice, Issuer } from "./draft-models.ts"
+import type { AuthoringReadiness } from "./invoice-authoring-model.ts"
 
 /**
  * What a derived draft says instead of a delete button: which proforma owns it
@@ -40,6 +41,33 @@ export const draftDeletionState = (draft: DraftInvoice | undefined): DraftDeleti
 export const invoiceDueDateIssue = (required: boolean): string | null => required
   ? "Data scadenței este obligatorie pentru o factură cu total pozitiv."
   : null
+
+export const UNSAVED_CHANGES_ISSUE = "Draftul are modificări nesalvate. Salvează draftul înainte de emitere."
+export const INCOMPLETE_LINES_ISSUE = "Completează toate liniile (descriere, cantitate, preț, unitate, cotă TVA) și corectează codurile semnalate înainte de emitere."
+
+export interface IssueBlockInput {
+  readonly readiness: Pick<AuthoringReadiness, "editable" | "synchronized" | "hasLines">
+  readonly hasDraft: boolean
+  /** Whether anything was typed on a line (`documentLinesStarted`); a blank new document is not told off. */
+  readonly linesStarted: boolean
+  /** A write in flight or unresolved speaks for itself (button label, recovery notice). */
+  readonly pending: boolean
+  readonly staleTaxWarning: string | null
+  readonly dueDateIssue: string | null
+  readonly seriesWarning: string | undefined
+}
+
+/** Why "Emite factura" is closed, in the words the screen already uses for each rule, so the button never just goes grey. */
+export const issueBlockReasons = (input: IssueBlockInput): ReadonlyArray<string> => {
+  if (input.pending || !input.readiness.editable) return []
+  return [
+    input.readiness.hasLines || !(input.hasDraft || input.linesStarted) ? null : INCOMPLETE_LINES_ISSUE,
+    input.hasDraft && !input.readiness.synchronized ? UNSAVED_CHANGES_ISSUE : null,
+    input.staleTaxWarning,
+    input.dueDateIssue,
+    input.seriesWarning ?? null,
+  ].filter((reason) => reason !== null)
+}
 
 export const authoringBackgroundErrors = (
   errors: ReadonlyArray<Error>,

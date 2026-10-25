@@ -34,6 +34,11 @@ export const documentLinesReady = (lines: ReadonlyArray<EditableDocumentLine>): 
     && itemCodeIssue(line.itemCode ?? "") === null
     && barcodeIssue(line.barcode ?? "") === null)
 
+/** Something typed on a line: until then a blank new document has nothing to complain about. */
+export const documentLinesStarted = (lines: ReadonlyArray<EditableDocumentLine>): boolean =>
+  lines.some((line) => [line.description, line.unitPrice, line.itemCode ?? "", line.barcode ?? ""]
+    .some((value) => value.trim() !== ""))
+
 /** A stale tax configuration withdraws the right to issue and says why, whatever the rest of the screen thinks. */
 export const documentTaxReadiness = (
   readiness: { readonly canIssue: boolean; readonly synchronized: boolean },

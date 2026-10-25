@@ -7,13 +7,13 @@ import { useAuthoringRecovery } from "./use-authoring-recovery.ts"
 import type { InvoiceAuthoringSession, InvoiceAuthoringSessionInput } from "./invoice-authoring-session-types.ts"
 import { today } from "../lib/format.ts"
 import { authoringDerived, authoringRecoveryDerived } from "../lib/invoice-authoring-derived.ts"
-import { draftLinesForEditing } from "../lib/document-authoring-options.ts"
-import { formFromDraft, newAuthoringForm } from "../lib/document-authoring-transitions.ts"
-import { newEditableInvoiceLine, preferredUnitOfMeasure } from "../lib/invoice-authoring-model.ts"
-import { draftDeletionState, invoiceDueDateIssue, issuerIssuanceWarning } from "../lib/invoice-authoring-workflow.ts"
+import { openingAuthoringForm, openingAuthoringLines } from "../lib/invoice-authoring-opening.ts"
+import { documentLinesStarted } from "../lib/document-authoring-readiness.ts"
+import {
+  draftDeletionState, invoiceDueDateIssue, issueBlockReasons, issuerIssuanceWarning,
+} from "../lib/invoice-authoring-workflow.ts"
 import { documentNotesIssue, documentNotesMaxLength } from "../lib/invoice-notes-validation.ts"
 import { countyRequiresSector } from "../lib/romanian-counties.ts"
-import { defaultVatCode } from "../lib/vat-defaults.ts"
 import { issuerForIssueDate, staleDraftLineIds } from "../lib/vat-snapshots.ts"
 import type { DraftInvoice } from "../lib/draft-models.ts"
 
@@ -24,16 +24,8 @@ import type { DraftInvoice } from "../lib/draft-models.ts"
  * computed here so the components underneath only render.
  */
 export const useInvoiceAuthoringSession = (input: InvoiceAuthoringSessionInput): InvoiceAuthoringSession => {
-  const [form, setForm] = useState(() => input.initialDraft === undefined
-    ? newAuthoringForm(input.issuer, input.invoiceSeries[0] ?? "", input.customers.length > 0, today())
-    : formFromDraft(input.initialDraft))
-  const [lines, setLines] = useState(() => input.initialDraft === undefined
-    ? [newEditableInvoiceLine(
-        crypto.randomUUID(),
-        defaultVatCode(input.vatCatalogue, input.issuer, today()),
-        preferredUnitOfMeasure(input.unitOfMeasures),
-      )]
-    : draftLinesForEditing(input.initialDraft))
+  const [form, setForm] = useState(() => openingAuthoringForm(input, today()))
+  const [lines, setLines] = useState(() => openingAuthoringLines(input, today(), crypto.randomUUID()))
   const forcedUpdateLineIds = (currentDraft: DraftInvoice): ReadonlyArray<string> =>
     staleDraftLineIds(currentDraft.issueDate, currentDraft.lines, input.vatCatalogue, input.issuer)
   // An unresolved write from this tab blocks both saving and issuing until it
@@ -74,9 +66,10 @@ export const useInvoiceAuthoringSession = (input: InvoiceAuthoringSessionInput):
   const editorActions = createInvoiceAuthoringEditorActions({
     issuer: input.issuer, vatCatalogue: input.vatCatalogue, unitOfMeasures: input.unitOfMeasures,
     productPresets: input.productPresets, customers: input.customers,
-    issueDate: form.issueDate, deriveDueDate: draft === undefined, setForm, setLines,
+    issueDate: form.issueDate, deriveDueDate: draft === undefined || draft.dueDate === null, setForm, setLines,
   })
   const pending = workflowPending || invoiceIssuance.pending || issueUnconfirmed !== undefined || recovery.pending
+  const dueDateIssue = invoiceDueDateIssue(dueDateRequired)
   return {
     document: {
       draft, issuer: issuerForIssueDate(input.issuer, form.issueDate),
@@ -102,7 +95,11 @@ export const useInvoiceAuthoringSession = (input: InvoiceAuthoringSessionInput):
       issueUnconfirmedMessage: issueUnconfirmed,
       issuerWarning: issuerIssuanceWarning(input.issuer), staleTaxWarning: taxReadiness.warning, seriesWarning: series.warning,
       notesIssue: documentNotesIssue(form.notes), notesMaxLength: documentNotesMaxLength,
-      dueDateIssue: invoiceDueDateIssue(dueDateRequired), notice: draftWorkflow.notice,
+      dueDateIssue, notice: draftWorkflow.notice,
+      issueBlockReasons: issueBlockReasons({
+        readiness: derived.readiness, hasDraft: draft !== undefined, linesStarted: documentLinesStarted(lines), pending,
+        staleTaxWarning: taxReadiness.warning, dueDateIssue, seriesWarning: series.warning,
+      }),
       // The issuance controller's own confirmed-but-unfollowed result reaches
       // the same card: one place on the screen says what is known to exist.
       recoveryNotice: recoveryState.notice,

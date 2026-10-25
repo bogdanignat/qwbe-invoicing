@@ -109,6 +109,18 @@ void test("the customer and preset registries page by cursor", async () => {
   assert.equal(calls[1]?.path, "/api/product-presets")
 })
 
+void test("one saved customer is read by its encoded id", async () => {
+  const { calls, transport } = recorder(() => ({
+    id: "client 1", organizationId: "org", partyType: "company", name: "Alfa", fiscalIdentifier: "123",
+    vatRegistered: false, address: { countryCode: "RO", city: "B", street: "s", county: "RO-B", sector: 1 },
+    defaultPaymentTermDays: 30,
+  }))
+  const client = createAuthoringReferenceClient(transport)
+  const customer = await client.getCustomer("client 1", new AbortController().signal)
+  assert.equal(calls[0]?.path, "/api/customers/client%201")
+  assert.equal(customer.defaultPaymentTermDays, 30)
+})
+
 void test("the vat catalogue is decoded with its canonical treatments", async () => {
   const { calls, transport } = recorder(() => ({
     rates: [{ code: "RO_NON_VAT", rate: "0", vatCategoryCode: "O",
