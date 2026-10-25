@@ -23,6 +23,8 @@ import { Route as InvoicesNewRouteImport } from "./routes/invoices/new.tsx"
 import { Route as ProformasIndexRouteImport } from "./routes/proformas/index.tsx"
 import { Route as ProformasIdRouteImport } from "./routes/proformas/$id.tsx"
 import { Route as ProformasNewRouteImport } from "./routes/proformas/new.tsx"
+import { Route as ReceivedIndexRouteImport } from "./routes/received/index.tsx"
+import { Route as ReceivedIdRouteImport } from "./routes/received/$id.tsx"
 import { Route as SettingsIndexRouteImport } from "./routes/settings/index.tsx"
 
 const IndexRoute = IndexRouteImport.update({
@@ -95,6 +97,16 @@ const ProformasNewRoute = ProformasNewRouteImport.update({
   path: "/proformas/new",
   getParentRoute: () => rootRouteImport,
 } as any)
+const ReceivedIndexRoute = ReceivedIndexRouteImport.update({
+  id: "/received/",
+  path: "/received/",
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReceivedIdRoute = ReceivedIdRouteImport.update({
+  id: "/received/$id",
+  path: "/received/$id",
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SettingsIndexRoute = SettingsIndexRouteImport.update({
   id: "/settings/",
   path: "/settings/",
@@ -114,8 +126,10 @@ export interface FileRoutesByFullPath {
   "/invoices/new": typeof InvoicesNewRoute
   "/proformas/$id": typeof ProformasIdRoute
   "/proformas/new": typeof ProformasNewRoute
+  "/received/$id": typeof ReceivedIdRoute
   "/invoices/": typeof InvoicesIndexRoute
   "/proformas/": typeof ProformasIndexRoute
+  "/received/": typeof ReceivedIndexRoute
   "/settings/": typeof SettingsIndexRoute
 }
 export interface FileRoutesByTo {
@@ -131,8 +145,10 @@ export interface FileRoutesByTo {
   "/invoices/new": typeof InvoicesNewRoute
   "/proformas/$id": typeof ProformasIdRoute
   "/proformas/new": typeof ProformasNewRoute
+  "/received/$id": typeof ReceivedIdRoute
   "/invoices": typeof InvoicesIndexRoute
   "/proformas": typeof ProformasIndexRoute
+  "/received": typeof ReceivedIndexRoute
   "/settings": typeof SettingsIndexRoute
 }
 export interface FileRoutesById {
@@ -149,8 +165,10 @@ export interface FileRoutesById {
   "/invoices/new": typeof InvoicesNewRoute
   "/proformas/$id": typeof ProformasIdRoute
   "/proformas/new": typeof ProformasNewRoute
+  "/received/$id": typeof ReceivedIdRoute
   "/invoices/": typeof InvoicesIndexRoute
   "/proformas/": typeof ProformasIndexRoute
+  "/received/": typeof ReceivedIndexRoute
   "/settings/": typeof SettingsIndexRoute
 }
 export interface FileRouteTypes {
@@ -168,8 +186,10 @@ export interface FileRouteTypes {
     | "/invoices/new"
     | "/proformas/$id"
     | "/proformas/new"
+    | "/received/$id"
     | "/invoices/"
     | "/proformas/"
+    | "/received/"
     | "/settings/"
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -185,8 +205,10 @@ export interface FileRouteTypes {
     | "/invoices/new"
     | "/proformas/$id"
     | "/proformas/new"
+    | "/received/$id"
     | "/invoices"
     | "/proformas"
+    | "/received"
     | "/settings"
   id:
     | "__root__"
@@ -202,8 +224,10 @@ export interface FileRouteTypes {
     | "/invoices/new"
     | "/proformas/$id"
     | "/proformas/new"
+    | "/received/$id"
     | "/invoices/"
     | "/proformas/"
+    | "/received/"
     | "/settings/"
   fileRoutesById: FileRoutesById
 }
@@ -220,8 +244,10 @@ export interface RootRouteChildren {
   InvoicesNewRoute: typeof InvoicesNewRoute
   ProformasIdRoute: typeof ProformasIdRoute
   ProformasNewRoute: typeof ProformasNewRoute
+  ReceivedIdRoute: typeof ReceivedIdRoute
   InvoicesIndexRoute: typeof InvoicesIndexRoute
   ProformasIndexRoute: typeof ProformasIndexRoute
+  ReceivedIndexRoute: typeof ReceivedIndexRoute
   SettingsIndexRoute: typeof SettingsIndexRoute
 }
 
@@ -325,6 +351,20 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof ProformasNewRouteImport
       parentRoute: typeof rootRouteImport
     }
+    "/received/": {
+      id: "/received/"
+      path: "/received"
+      fullPath: "/received/"
+      preLoaderRoute: typeof ReceivedIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    "/received/$id": {
+      id: "/received/$id"
+      path: "/received/$id"
+      fullPath: "/received/$id"
+      preLoaderRoute: typeof ReceivedIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     "/settings/": {
       id: "/settings/"
       path: "/settings"
@@ -348,8 +388,10 @@ const rootRouteChildren: RootRouteChildren = {
   InvoicesNewRoute: InvoicesNewRoute,
   ProformasIdRoute: ProformasIdRoute,
   ProformasNewRoute: ProformasNewRoute,
+  ReceivedIdRoute: ReceivedIdRoute,
   InvoicesIndexRoute: InvoicesIndexRoute,
   ProformasIndexRoute: ProformasIndexRoute,
+  ReceivedIndexRoute: ReceivedIndexRoute,
   SettingsIndexRoute: SettingsIndexRoute,
 }
 export const routeTree = rootRouteImport

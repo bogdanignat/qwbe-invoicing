@@ -34,3 +34,14 @@ export const efacturaFailureMessage = (error: unknown): string => {
 /** The failure as the shared alert shows it: an `Error` whose message is already the sentence above. */
 export const efacturaFailure = (error: unknown): Error | undefined =>
   error === null || error === undefined ? undefined : new Error(efacturaFailureMessage(error))
+
+/**
+ * A fetch of received invoices is refused for the issuer's CIF, not a
+ * document's: the shared sentence for `efactura_cif_mismatch` names a document,
+ * so this one says which CIF and where to fix it. The rest are the plugin's own.
+ */
+const RECEIVED_CIF_MISMATCH = "Conexiunea ANAF este verificată pentru alt CIF decât cel din datele firmei. "
+  + "Reconectează-te din Integrări cu certificatul firmei sau corectează CIF-ul în Setări."
+
+export const receivedFetchFailure = (error: unknown): Error | undefined =>
+  error instanceof ApiFailure && error.code === "efactura_cif_mismatch" ? new Error(RECEIVED_CIF_MISMATCH) : efacturaFailure(error)

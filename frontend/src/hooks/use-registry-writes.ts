@@ -35,7 +35,7 @@ export interface RegistryWrites {
   readonly dismissNotice: () => void
 }
 
-export const SESSION_CLOSED = "Sesiunea nu mai este deschisă. Deblochează din nou ca să salvezi."
+export const SESSION_CLOSED = "Sesiunea nu mai este deschisă. Deblochează din nou ca să continui."
 
 export const useRegistryWrites = (
   queryKey: ReadonlyArray<string>,
