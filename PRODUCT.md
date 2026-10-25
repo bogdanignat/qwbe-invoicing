@@ -100,8 +100,23 @@ without a CNP the XML carries `0000000000000` as the buyer identifier (BT-47).
 - atomic allocation from the applicable document-type sequence when an invoice or
   proforma is issued;
 - drafts do not consume invoice or proforma numbers;
-- every invoice draft selects one configured invoice series, while proforma issuance
-  explicitly selects a configured proforma series;
+- every invoice draft selects one active invoice series, while proforma issuance
+  explicitly selects an active proforma series;
+- a series cannot be deleted, since its documents refer to it, but it can be archived
+  (`PUT /api/document-series/{documentType}/{series}/archived`, settings permission):
+  it leaves every selection for new documents, its documents and counter stay as they
+  are, and reactivating it continues the counter where it stopped. Archiving and
+  reactivating are audited; asking for the state the series already has changes nothing;
+- an archived series is refused (`409 document_series_archived`, no number taken) when a
+  draft is created in it, an invoice or proforma is issued in it directly, a draft is
+  issued as an invoice in it, a proforma is issued in it from a draft, or a proforma is
+  converted into it; the series is read again in the issuing transaction. The archived
+  series of a proforma being converted does not block its conversion into an active one;
+- an open draft can change its invoice series to another active one of the same
+  organization, so a draft left on an archived series is moved (or deleted) rather than
+  stuck; its lines stay editable meanwhile, only its issuance waits for the move;
+- the exception is the storno: it is always numbered in the series of the original
+  invoice, archived or not;
 - an allocated invoice or proforma number is never silently reused;
 - gaps, abandoned allocations, and voided numbers remain explainable in the audit
   trail.

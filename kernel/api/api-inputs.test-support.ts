@@ -29,6 +29,8 @@ export const issuerInput = (value: unknown): ConfigureIssuerInput => decode(S.Is
 export const customerInput = (value: unknown): CreateCustomerInput => decode(S.CustomerInput, value)
 export const productPresetInput = (value: unknown): ProductPresetInput => decode(S.ProductPresetInput, value)
 export const documentSeriesInput = (value: unknown): ConfigureDocumentSeriesInput => decode(S.DocumentSeriesInput, value)
+export const documentSeriesArchivedInput = (documentType: "invoice" | "proforma", series: string, value: unknown) =>
+  ({ documentType, series, ...decode(S.DocumentSeriesArchivedInput, value) })
 export const draftInput = (value: unknown): CreateDraftInput => decode(S.DraftInput, value)
 export const updateDraftInput = (draftId: string, value: unknown): UpdateDraftInput => ({
   ...decode(S.UpdateDraftInput, value), draftId,

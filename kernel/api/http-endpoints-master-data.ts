@@ -4,7 +4,7 @@ import { Schema } from "effect"
 import * as C from "./schema-customers-catalog.ts"
 import * as I from "./schema-issuer.ts"
 import { PageQuery, UnitOfMeasure } from "./schema-primitives.ts"
-import { body, conflict, id, invoicingBase, notFound, validation } from "./http-api-shared.ts"
+import { body, conflict, documentType, id, invoicingBase, notFound, series, validation } from "./http-api-shared.ts"
 import { Deleted, VatRegistryUnavailableError } from "./schema-errors-session.ts"
 
 export const masterDataEndpoints = {
@@ -13,6 +13,8 @@ export const masterDataEndpoints = {
     .addSuccess(I.ConfiguredIssuer).addError(VatRegistryUnavailableError))))),
   listDocumentSeries: invoicingBase(HttpApiEndpoint.get("listDocumentSeries", "/document-series").addSuccess(Schema.Array(I.DocumentSeries))),
   addDocumentSeries: invoicingBase(conflict(validation(body(HttpApiEndpoint.post("addDocumentSeries", "/document-series").setPayload(I.DocumentSeriesInput).addSuccess(I.DocumentSeries))))),
+  setDocumentSeriesArchived: invoicingBase(notFound(validation(body(HttpApiEndpoint.put("setDocumentSeriesArchived")`/document-series/${documentType}/${series}/archived`
+    .setPayload(I.DocumentSeriesArchivedInput).addSuccess(I.DocumentSeries))))),
   listUnitOfMeasures: invoicingBase(HttpApiEndpoint.get("listUnitOfMeasures", "/unit-of-measures").addSuccess(Schema.Array(UnitOfMeasure))),
   listVatRegimes: invoicingBase(validation(HttpApiEndpoint.get("listVatRegimes", "/vat-regimes").addSuccess(I.VatCatalogue))),
   listCustomers: invoicingBase(validation(HttpApiEndpoint.get("listCustomers", "/customers").setUrlParams(PageQuery).addSuccess(C.CustomerPage))),

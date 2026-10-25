@@ -36,7 +36,7 @@ export const validateDate = (value: string, field: string): void => {
   }
 }
 
-export const validateDocumentSeries = (documentSeries: DocumentSeries): void => {
+export const validateDocumentSeries = (documentSeries: Pick<DocumentSeries, "documentType" | "series">): void => {
   const issues: Array<string> = []
   const documentType: unknown = documentSeries.documentType
   if (documentType !== "invoice" && documentType !== "proforma") issues.push("documentType must be invoice or proforma")

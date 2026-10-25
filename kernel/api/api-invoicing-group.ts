@@ -26,6 +26,7 @@ export const invoicingGroup = (runtime: ApiRuntime, use: UseServices) => {
   return HttpApiBuilder.group(applicationHttpApi, "invoicing", (handlers) => handlers
     .handle("getIssuer", m.getIssuer).handle("configureIssuer", m.configureIssuer)
     .handle("listDocumentSeries", m.listDocumentSeries).handle("addDocumentSeries", m.addDocumentSeries)
+    .handle("setDocumentSeriesArchived", m.setDocumentSeriesArchived)
     .handle("listUnitOfMeasures", m.listUnitOfMeasures).handle("listVatRegimes", m.listVatRegimes)
     .handle("listCustomers", c.listCustomers).handle("getCustomer", c.getCustomer)
     .handle("createCustomer", c.createCustomer).handle("updateCustomer", c.updateCustomer).handle("deleteCustomer", c.deleteCustomer)

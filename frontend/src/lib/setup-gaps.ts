@@ -16,11 +16,13 @@ export type SetupCheck<Value> =
   | { readonly kind: "failed" }
   | { readonly kind: "ready"; readonly value: Value }
 
+type SeriesState = Pick<DocumentSeries, "documentType" | "archived">
+
 export interface SetupState {
   readonly plugins: { readonly companyLookup: boolean; readonly efactura: boolean }
   /** The issuer profile, `null` while it has never been saved. */
   readonly issuer: SetupCheck<object | null>
-  readonly series: SetupCheck<ReadonlyArray<Pick<DocumentSeries, "documentType">>>
+  readonly series: SetupCheck<ReadonlyArray<SeriesState>>
   readonly lookupProvider: SetupCheck<LookupProvider>
   readonly anaf: SetupCheck<Pick<EFacturaConnection, "status" | "refreshExpiryWarning">>
 }
@@ -46,12 +48,17 @@ const issuerGaps = (issuer: object | null): ReadonlyArray<SetupGap> => issuer ==
   ? [gap("issuer", "Datele firmei emitente nu sunt completate.", fix("Completează datele firmei", SETTINGS))]
   : []
 
-const seriesGaps = (series: ReadonlyArray<Pick<DocumentSeries, "documentType">>): ReadonlyArray<SetupGap> => [
-  ...series.some((item) => item.documentType === "invoice") ? []
-    : [gap("invoice_series", "Nu există nicio serie pentru facturi.", fix("Adaugă o serie de facturi", SETTINGS))],
-  ...series.some((item) => item.documentType === "proforma") ? []
-    : [gap("proforma_series", "Nu există nicio serie pentru proforme.", fix("Adaugă o serie de proforme", SETTINGS))],
-]
+// An archived series takes no new document, so only an active one counts.
+const seriesGaps = (series: ReadonlyArray<SeriesState>): ReadonlyArray<SetupGap> => {
+  const active = (documentType: SeriesState["documentType"]): boolean =>
+    series.some((item) => item.documentType === documentType && !item.archived)
+  return [
+    ...active("invoice") ? []
+      : [gap("invoice_series", "Nu există nicio serie activă pentru facturi.", fix("Adaugă o serie de facturi", SETTINGS))],
+    ...active("proforma") ? []
+      : [gap("proforma_series", "Nu există nicio serie activă pentru proforme.", fix("Adaugă o serie de proforme", SETTINGS))],
+  ]
+}
 
 // The backend reads an openapi.ro key it cannot open as no provider, so `none` covers that case too.
 const lookupGaps = (provider: LookupProvider): ReadonlyArray<SetupGap> => provider === "none"

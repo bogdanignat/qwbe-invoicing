@@ -1,4 +1,4 @@
-import { array, integer, nullableText, object, optionalText, text, type Decoder } from "./model-decoder.ts"
+import { array, boolean, integer, nullableText, object, optionalText, text, type Decoder } from "./model-decoder.ts"
 import { decodeAddress, decodeUnitOfMeasure, decodeVatCategoryCode } from "./document-snapshot-decoders.ts"
 import { decodeIssuerBranding } from "./branding-decoder.ts"
 import type {
@@ -19,7 +19,10 @@ export const decodeDocumentSeries: Decoder<DocumentSeries> = (input) => {
   const value = object(input)
   const documentType = text(value.documentType, "documentType")
   if (documentType !== "invoice" && documentType !== "proforma") throw new Error("invalid documentType")
-  return { organizationId: text(value.organizationId, "organizationId"), documentType, series: text(value.series, "series") }
+  return {
+    organizationId: text(value.organizationId, "organizationId"), documentType, series: text(value.series, "series"),
+    archived: boolean(value.archived, "archived"),
+  }
 }
 
 export const decodeDocumentSeriesList: Decoder<ReadonlyArray<DocumentSeries>> = (input) =>

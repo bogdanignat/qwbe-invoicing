@@ -20,7 +20,7 @@ void test("document series authorize, isolate organizations and roll back with t
   await Effect.runPromise(first.addDocumentSeries(input))
   assert.deepEqual(await Effect.runPromise(second.listDocumentSeries()), [])
   await Effect.runPromise(second.addDocumentSeries(input))
-  assert.deepEqual(await Effect.runPromise(first.listDocumentSeries()), [{ organizationId: "org-1", ...input }])
+  assert.deepEqual(await Effect.runPromise(first.listDocumentSeries()), [{ organizationId: "org-1", ...input, archived: false }])
   assert.deepEqual(state.auditEvents.map(({ organizationId }) => organizationId), ["org-1", "org-2"])
   const before = structuredClone(state)
   const denied = createInvoicingService(dependencies("org-1", []))

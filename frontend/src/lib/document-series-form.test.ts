@@ -7,8 +7,8 @@ import {
 import type { DocumentSeries } from "./draft-models.ts"
 
 const existing: ReadonlyArray<DocumentSeries> = [
-  { organizationId: "org-1", documentType: "invoice", series: "FACT" },
-  { organizationId: "org-1", documentType: "proforma", series: "PRO" },
+  { organizationId: "org-1", documentType: "invoice", series: "FACT", archived: false },
+  { organizationId: "org-1", documentType: "proforma", series: "PRO", archived: false },
 ]
 
 void test("series form — starts on an invoice series and nothing typed", () => {
@@ -66,11 +66,11 @@ void test("series payload — the same series may number the other document type
 
 void test("series notice — names what was added", () => {
   assert.equal(
-    documentSeriesNotice({ organizationId: "org-1", documentType: "invoice", series: "FACT-2026" }),
+    documentSeriesNotice({ organizationId: "org-1", documentType: "invoice", series: "FACT-2026", archived: false }),
     "Seria FACT-2026 pentru factură a fost adăugată.",
   )
   assert.equal(
-    documentSeriesNotice({ organizationId: "org-1", documentType: "proforma", series: "PRO" }),
+    documentSeriesNotice({ organizationId: "org-1", documentType: "proforma", series: "PRO", archived: false }),
     "Seria PRO pentru proformă a fost adăugată.",
   )
 })

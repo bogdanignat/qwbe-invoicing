@@ -135,10 +135,13 @@ void test("persists an issued snapshot across store recreation and isolates orga
       series: "QWBE",
       source: { app: "crm", kind: "contract", id: "contract-1" },
     })))
-    // An open draft keeps the series it was created with, even for another
-    // series of the same document type.
+    // An open draft may move to another invoice series of its organization
+    // (T-2082), never to a proforma series, an unknown one or another organization.
     await refuses(sql, "UPDATE invoice_drafts SET series = 'PRO' WHERE id = $1", [draft.id])
-    await refuses(sql, "UPDATE invoice_drafts SET series = 'ALT' WHERE id = $1", [draft.id])
+    await refuses(sql, "UPDATE invoice_drafts SET series = 'NOPE' WHERE id = $1", [draft.id])
+    await refuses(sql, "UPDATE invoice_drafts SET organization_id = 'org-2' WHERE id = $1", [draft.id])
+    await sql.query("UPDATE invoice_drafts SET series = 'ALT' WHERE id = $1", [draft.id])
+    await sql.query("UPDATE invoice_drafts SET series = 'QWBE' WHERE id = $1", [draft.id])
     const openDraftDeletion = await Effect.runPromise(Effect.flip(service.deleteCustomer(customer.id)))
     assert.equal(openDraftDeletion instanceof DomainConflict && openDraftDeletion.code === "customer_has_open_drafts", true)
     await Effect.runPromise(service.addDraftLine({
@@ -223,9 +226,9 @@ void test("persists an issued snapshot across store recreation and isolates orga
     assert.equal(persistedDraft.customer.partyType, "company")
     assert.equal(persistedDraft.totalIncludingVat, "151.25")
     assert.deepEqual(await Effect.runPromise(restarted.listDocumentSeries()), [
-      { organizationId: "org-1", documentType: "invoice", series: "ALT" },
-      { organizationId: "org-1", documentType: "invoice", series: "QWBE" },
-      { organizationId: "org-1", documentType: "proforma", series: "PRO" },
+      { organizationId: "org-1", documentType: "invoice", series: "ALT", archived: false },
+      { organizationId: "org-1", documentType: "invoice", series: "QWBE", archived: false },
+      { organizationId: "org-1", documentType: "proforma", series: "PRO", archived: false },
     ])
 
     await Effect.runPromise(restarted.deleteCustomer(customer.id))
@@ -362,13 +365,13 @@ void test("rolls sequence allocation back with the surrounding transaction", asy
   await withMigrated("store_sequence", async ({ pool }) => {
     const store = createPostgresStore(pool)
     await Effect.runPromise(store.transaction((transaction) => transaction.addDocumentSeries({
-      organizationId: "org-1", documentType: "invoice", series: "QWBE",
+      organizationId: "org-1", documentType: "invoice", series: "QWBE", archived: false,
     })))
     await Effect.runPromise(store.transaction((transaction) => transaction.addDocumentSeries({
-      organizationId: "org-1", documentType: "invoice", series: "ALT",
+      organizationId: "org-1", documentType: "invoice", series: "ALT", archived: false,
     })))
     await Effect.runPromise(store.transaction((transaction) => transaction.addDocumentSeries({
-      organizationId: "org-1", documentType: "proforma", series: "QWBE",
+      organizationId: "org-1", documentType: "proforma", series: "QWBE", archived: false,
     })))
     const failure = await Effect.runPromise(Effect.flip(store.transaction((transaction) => Effect.gen(function*() {
        yield* transaction.allocateDocumentNumber("org-1", "invoice", "QWBE")

@@ -3,7 +3,7 @@ export {
 } from "./schema-primitives.ts"
 export {
   IssuerCompany, IssuerCompanySnapshot, IssuerParty, VatConfiguration, VatChange, VatRegistration,
-  VatRate, VatCatalogue, IssuerInput, Issuer, ConfiguredIssuer, DocumentSeriesInput, DocumentSeries,
+  VatRate, VatCatalogue, IssuerInput, Issuer, ConfiguredIssuer, DocumentSeriesInput, DocumentSeries, DocumentSeriesArchivedInput,
 } from "./schema-issuer.ts"
 export {
   CustomerInput, Customer, CustomerPage, ProductPresetInput, ProductPreset, ProductPresetPage,

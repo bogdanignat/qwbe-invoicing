@@ -98,6 +98,8 @@ export interface DocumentSeries {
   readonly organizationId: string
   readonly documentType: DocumentType
   readonly series: string
+  // An archived series stays on its documents but is refused for new ones; reactivating it continues its numbering.
+  readonly archived: boolean
 }
 
 /** BT-155 and BT-157: copied from the product when one is chosen, absent on a line typed by hand. */

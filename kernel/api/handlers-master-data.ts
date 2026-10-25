@@ -28,6 +28,8 @@ export const masterDataHandlers = (use: UseServices) => ({
     use((s) => s.invoicing.listDocumentSeries()).pipe(Effect.mapError(errors()))),
   addDocumentSeries: HttpApiBuilder.handler(applicationHttpApi, "invoicing", "addDocumentSeries", ({ payload }) =>
     use((s) => s.invoicing.addDocumentSeries(payload)).pipe(Effect.mapError(errors("ValidationFailure", "DomainConflict")))),
+  setDocumentSeriesArchived: HttpApiBuilder.handler(applicationHttpApi, "invoicing", "setDocumentSeriesArchived", ({ path, payload }) =>
+    use((s) => s.invoicing.setDocumentSeriesArchived({ ...path, ...payload })).pipe(Effect.mapError(errors("ValidationFailure", "ResourceNotFound")))),
   listUnitOfMeasures: HttpApiBuilder.handler(applicationHttpApi, "invoicing", "listUnitOfMeasures", () =>
     use((s) => s.invoicing.listUnitOfMeasures()).pipe(Effect.mapError(errors()))),
   listVatRegimes: HttpApiBuilder.handler(applicationHttpApi, "invoicing", "listVatRegimes", () =>

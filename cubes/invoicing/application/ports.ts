@@ -29,6 +29,7 @@ export interface InvoicingTransaction {
     series: string,
   ) => Read<DocumentSeries | undefined>
   readonly listDocumentSeries: List<DocumentSeries>
+  readonly setDocumentSeriesArchived: Save<DocumentSeries>
   readonly saveDraft: Save<DraftInvoice>
   readonly findDraft: Find<DraftInvoice>
   readonly listDrafts: PagedList<DraftInvoice, DraftCursor>

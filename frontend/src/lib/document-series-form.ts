@@ -2,11 +2,12 @@ import type { DocumentSeries, DocumentType } from "./draft-models.ts"
 import type { DocumentSeriesInput } from "./settings-client.ts"
 
 /**
- * The only write the series card performs, and the rules over it.
+ * The add form of the series card, and the rules over it.
  *
- * Configuring a series is add-only by design: a series that has numbered a
- * document cannot be renamed or removed without breaking the numbering it
- * guarantees, so the screen offers no edit and no delete. What it does offer is
+ * A series that has numbered a document cannot be renamed or removed without
+ * breaking the numbering it guarantees, so the screen offers no edit and no
+ * delete; a series no longer used is archived instead
+ * (`document-series-archive.ts`). What the form does offer is
  * an early refusal of the two things the backend would reject anyway — a series
  * outside the accepted alphabet, and one that already exists for that document
  * type — because a `document_series_exists` failure reads worse than a sentence

@@ -151,9 +151,9 @@ void test("the refusal to delete a derived draft names the source proforma", () 
 
 void test("a screen offers the series of the document it authors, never the other family's", () => {
   const series = [
-    { documentType: "invoice", series: "FCT" },
-    { documentType: "proforma", series: "PRO" },
-    { documentType: "invoice", series: "FCT2" },
+    { documentType: "invoice", series: "FCT", archived: false },
+    { documentType: "proforma", series: "PRO", archived: false },
+    { documentType: "invoice", series: "FCT2", archived: false },
   ] as const
   assert.deepEqual(authoringSeriesOptions(series, "invoice"), ["FCT", "FCT2"])
   assert.deepEqual(authoringSeriesOptions(series, "proforma"), ["PRO"])

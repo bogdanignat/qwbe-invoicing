@@ -7,12 +7,13 @@ import { authoringReadiness, authoringTaxReadiness } from "./invoice-authoring-r
 import { positiveInvoiceRequiresDueDate } from "./invoice-positive-total.ts"
 import { knownResultNotice, type KnownWrite, type RecoveryNoticeModel } from "./operation-recovery-view.ts"
 import { vatRatesForIssuer } from "./vat-defaults.ts"
+import { draftSeriesState } from "./draft-series.ts"
 
 /**
  * Everything the authoring screen can work out from the form, the lines and the
  * server's draft, in one place: what is ready, what the document would be if it
  * were sent now, which VAT rates apply, and whether the tax snapshot the draft
- * carries has gone stale.
+ * carries has gone stale, and what the series select offers.
  *
  * It is a plain function so the rules can be read and tested without a screen.
  */
@@ -24,6 +25,8 @@ export interface AuthoringDerivedInput {
   readonly issuer: Issuer
   readonly vatCatalogue: VatCatalogue
   readonly staleLineIds: (draft: DraftInvoice) => ReadonlyArray<string>
+  /** The active invoice series; a draft on an archived one cannot be issued. */
+  readonly invoiceSeries: ReadonlyArray<string>
 }
 
 export interface AuthoringDerived {
@@ -33,6 +36,7 @@ export interface AuthoringDerived {
   readonly staleTax: boolean
   readonly taxReadiness: AuthoringTaxReadiness
   readonly dueDateRequired: boolean
+  readonly series: ReturnType<typeof draftSeriesState>
 }
 
 export const authoringDerived = (input: AuthoringDerivedInput): AuthoringDerived => {
@@ -50,6 +54,7 @@ export const authoringDerived = (input: AuthoringDerivedInput): AuthoringDerived
       readiness.synchronized ? input.draft?.totalIncludingVat : undefined,
       input.lines,
     ),
+    series: draftSeriesState(input.form.series, input.invoiceSeries, input.draft?.series),
   }
 }
 

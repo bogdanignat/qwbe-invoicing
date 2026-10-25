@@ -14,7 +14,8 @@ export type { BrowserPrincipal } from "./api-context.ts"
 export { ApiAuthentication, SessionAuthentication } from "./http-api-shared.ts"
 
 export const operationNames = [
-  "getIssuer", "configureIssuer", "listDocumentSeries", "addDocumentSeries", "listUnitOfMeasures", "listVatRegimes",
+  "getIssuer", "configureIssuer", "listDocumentSeries", "addDocumentSeries", "setDocumentSeriesArchived",
+  "listUnitOfMeasures", "listVatRegimes",
   "listCustomers", "getCustomer", "createCustomer", "updateCustomer", "deleteCustomer",
   "listProductPresets", "createProductPreset", "updateProductPreset", "deleteProductPreset",
   "listDrafts", "getDraft", "createDraft", "updateDraft", "deleteDraft",
@@ -29,7 +30,7 @@ export const operationNames = [
 export type OperationName = typeof operationNames[number]
 
 const invoicing = HttpApiGroup.make("invoicing")
-  .add(m.getIssuer).add(m.configureIssuer).add(m.listDocumentSeries).add(m.addDocumentSeries)
+  .add(m.getIssuer).add(m.configureIssuer).add(m.listDocumentSeries).add(m.addDocumentSeries).add(m.setDocumentSeriesArchived)
   .add(m.listUnitOfMeasures).add(m.listVatRegimes)
   .add(m.listCustomers).add(m.getCustomer).add(m.createCustomer).add(m.updateCustomer).add(m.deleteCustomer)
   .add(m.listProductPresets).add(m.createProductPreset).add(m.updateProductPreset).add(m.deleteProductPreset)

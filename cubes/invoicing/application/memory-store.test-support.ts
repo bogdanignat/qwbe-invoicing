@@ -108,6 +108,9 @@ export const memoryStore = (state: MemoryState): InvoicingDependencies["store"] 
         [...working.documentSeries.values()].filter((item) => item.organizationId === organizationId)
           .sort((left, right) => left.documentType.localeCompare(right.documentType) || left.series.localeCompare(right.series)),
       ),
+      setDocumentSeriesArchived: (documentSeries) => Effect.sync(() => {
+        working.documentSeries.set(`${documentSeries.organizationId}:${documentSeries.documentType}:${documentSeries.series}`, documentSeries)
+      }),
       saveCustomer: (customer) => Effect.sync(() => { working.customers.set(customer.id, customer) }),
       findCustomer: (organizationId, id) => Effect.succeed(
         working.customers.get(id)?.organizationId === organizationId ? working.customers.get(id) : undefined,

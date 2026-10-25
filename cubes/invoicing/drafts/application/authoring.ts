@@ -11,6 +11,7 @@ import type { CustomersTransaction } from "../../customers/index.ts"
 import { validateDate, validateDocumentNotes, validateDocumentSeries, validateDocumentSource, validateLineDescription } from "../../domain/validation.ts"
 import { validateBuyer } from "../../parties/index.ts"
 import { resolveVatConfiguration, type IssuerTransaction } from "../../issuer/index.ts"
+import { activeDocumentSeries } from "./active-series.ts"
 
 // Authoring resolves the saved customer and the live issuer in the same transaction as the draft.
 export type AuthoringTransaction = InvoicingTransaction & Pick<CustomersTransaction, "findCustomer"> & Pick<IssuerTransaction, "findIssuer">
@@ -80,14 +81,13 @@ export const authorDocument = (
   documentType: DocumentType = "invoice",
 ) => Effect.gen(function*() {
   yield* checked(() => {
-    validateDocumentSeries({ organizationId, documentType, series: input.series })
+    validateDocumentSeries({ documentType, series: input.series })
     if (input.currency !== undefined && input.currency !== "RON") throw new ValidationFailure({ issues: ["currency must be RON"] })
     validateDocumentNotes(input.notes)
   })
   const issuer = yield* transaction.findIssuer(organizationId)
   if (issuer === undefined) return yield* Effect.fail(missing("issuer", organizationId))
-  const series = yield* transaction.findDocumentSeries(organizationId, documentType, input.series)
-  if (series === undefined) return yield* Effect.fail(missing("document_series", input.series))
+  const series = yield* activeDocumentSeries(transaction, organizationId, documentType, input.series)
   const customer = yield* buyerFrom(input, organizationId, transaction)
   const header = yield* dates(input.issueDate, input.dueDate)
   const source = yield* documentSource(input.source)

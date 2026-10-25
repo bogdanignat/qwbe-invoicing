@@ -26,6 +26,8 @@ export const lineId = HttpApiSchema.param("lineId", Schema.String)
 export const invoiceId = HttpApiSchema.param("invoiceId", Schema.String)
 export const proformaId = HttpApiSchema.param("proformaId", Schema.String)
 export const paymentId = HttpApiSchema.param("paymentId", Schema.String)
+export const documentType = HttpApiSchema.param("documentType", Schema.Literal("invoice", "proforma"))
+export const series = HttpApiSchema.param("series", Schema.String)
 export const csrfHeaders = Schema.Struct({
   "x-csrf-token": Schema.optional(Schema.String.annotations({
     description: "Required for unsafe requests authenticated with sessionCookie; ignored for bearerAuth.",

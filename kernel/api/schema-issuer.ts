@@ -57,4 +57,7 @@ export const DocumentSeriesInput = Schema.Struct({
 }).annotations(bodyObject)
 export const DocumentSeries = Schema.Struct({
   organizationId: Schema.String, documentType: Schema.Literal("invoice", "proforma"), series: Schema.String,
+  archived: Schema.Boolean,
 })
+/** An archived series stays on its documents and is refused for new ones; reactivating it continues its numbering. */
+export const DocumentSeriesArchivedInput = Schema.Struct({ archived: Schema.Boolean }).annotations(bodyObject)

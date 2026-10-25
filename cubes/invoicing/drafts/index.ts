@@ -31,4 +31,5 @@ export const createDraftOperations = (
 })
 
 export { authorDocument } from "./application/authoring.ts"
+export { activeDocumentSeries, documentSeriesArchived } from "./application/active-series.ts"
 export type { AuthoringTransaction, DraftDocumentOperations, DraftLineOperations }

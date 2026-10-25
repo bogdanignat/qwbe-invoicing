@@ -113,8 +113,8 @@ void test("requires host authentication and serves the complete invoice-core rou
     assert.equal(proformaSeries.status, 200)
     const series = await handleApiRequest({ method: "GET", url: "/api/document-series", authorization, body: undefined }, runtime)
     assert.deepEqual(series.body, [
-      { organizationId: "org-1", documentType: "invoice", series: "QWBE" },
-      { organizationId: "org-1", documentType: "proforma", series: "PRO" },
+      { organizationId: "org-1", documentType: "invoice", series: "QWBE", archived: false },
+      { organizationId: "org-1", documentType: "proforma", series: "PRO", archived: false },
     ])
     const unitOfMeasures = await handleApiRequest({ method: "GET", url: "/api/unit-of-measures", authorization, body: undefined }, runtime)
     assert.equal(unitOfMeasures.status, 200)

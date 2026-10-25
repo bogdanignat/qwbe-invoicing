@@ -2,6 +2,7 @@ import { Effect } from "effect"
 import type { InvoicingTransaction } from "../../application/ports.ts"
 import type { ProformaTransaction } from "./ports.ts"
 import { checked, missing } from "../../application/support.ts"
+import { activeDocumentSeries } from "../../drafts/index.ts"
 import { DomainConflict } from "../../contracts/failures.ts"
 import { calendarDate, validateDocumentSeries } from "../../domain/validation.ts"
 import type { ConvertProformaInput, Proforma } from "../domain/proforma.ts"
@@ -12,10 +13,9 @@ export const conversionSource = (tx: InvoicingTransaction & ProformaTransaction,
   if ((yield* tx.findProformaConversion(org, proforma.id)) || (yield* tx.findProformaInvoiceConversion(org, proforma.id))) {
     return yield* Effect.fail(new DomainConflict({ code: "proforma_already_converted", message: "Proforma was already converted" }))
   }
-  yield* checked(() => { validateDocumentSeries({ organizationId: org, documentType: "invoice", series: input.invoiceSeries }) })
-  if ((yield* tx.findDocumentSeries(org, "invoice", input.invoiceSeries)) === undefined) {
-    return yield* Effect.fail(missing("document_series", input.invoiceSeries))
-  }
+  // The target series must be active; the archived series of the proforma itself does not matter.
+  yield* checked(() => { validateDocumentSeries({ documentType: "invoice", series: input.invoiceSeries }) })
+  yield* activeDocumentSeries(tx, org, "invoice", input.invoiceSeries)
   return proforma
 })
 

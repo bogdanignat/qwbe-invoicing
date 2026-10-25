@@ -1,15 +1,17 @@
 import { DomainConflict, type DocumentSeries, type InvoicingTransaction } from "../../cubes/invoicing/index.ts"
 import { read, write } from "./postgres-errors.ts"
-import { firstRow, integer, optionalText, text, type Row } from "./postgres-rows.ts"
+import { booleanInteger, booleanValue, firstRow, integer, optionalText, text, type Row } from "./postgres-rows.ts"
 import type { TransactionClient } from "./postgres-transaction.ts"
 
 type SeriesTransaction = Pick<InvoicingTransaction,
-  "addDocumentSeries" | "findDocumentSeries" | "listDocumentSeries" | "findLatestIssueDate" | "allocateDocumentNumber">
+  "addDocumentSeries" | "findDocumentSeries" | "listDocumentSeries" | "setDocumentSeriesArchived" | "findLatestIssueDate"
+  | "allocateDocumentNumber">
 
 const documentSeriesFrom = (value: Row): DocumentSeries => ({
   organizationId: text(value, "organization_id"),
   documentType: text(value, "document_type") as DocumentSeries["documentType"],
   series: text(value, "series"),
+  archived: booleanInteger(value, "archived"),
 })
 
 export const seriesTransactionAdapter = (client: TransactionClient): SeriesTransaction => ({
@@ -22,8 +24,8 @@ export const seriesTransactionAdapter = (client: TransactionClient): SeriesTrans
       throw new DomainConflict({ code: "document_series_exists", message: "Document series already exists" })
     }
     await client.query(
-      "INSERT INTO document_series (organization_id, document_type, series) VALUES ($1, $2, $3)",
-      [documentSeries.organizationId, documentSeries.documentType, documentSeries.series],
+      "INSERT INTO document_series (organization_id, document_type, series, archived) VALUES ($1, $2, $3, $4)",
+      [documentSeries.organizationId, documentSeries.documentType, documentSeries.series, booleanValue(documentSeries.archived)],
     )
   }),
   findDocumentSeries: (organizationId, documentType, series) => read("find document series", async () => {
@@ -39,6 +41,13 @@ export const seriesTransactionAdapter = (client: TransactionClient): SeriesTrans
       "SELECT * FROM document_series WHERE organization_id = $1 ORDER BY document_type, series", [organizationId],
     )
     return rows.map(documentSeriesFrom)
+  }),
+  setDocumentSeriesArchived: (documentSeries) => write("set document series archived", async () => {
+    const { rowCount } = await client.query(
+      "UPDATE document_series SET archived = $4 WHERE organization_id = $1 AND document_type = $2 AND series = $3",
+      [documentSeries.organizationId, documentSeries.documentType, documentSeries.series, booleanValue(documentSeries.archived)],
+    )
+    if (rowCount !== 1) throw new Error("document series to archive is missing")
   }),
   findLatestIssueDate: (organizationId, documentType, series) => read("find latest issue date", async () => {
     // The derived table needs a name on PostgreSQL; SQLite allowed it unnamed.

@@ -26,7 +26,7 @@ export const ProformaAuthoringView = () => {
         : page.kind === "error" ? <ErrorAlert error={page.error} onRetry={page.retry} />
         : page.kind === "issuer-required" ? <p className="setup-note">Datele firmei emitente nu sunt completate. Completează-le în <AppLink href="/settings">Setări</AppLink>, împreună cu o serie pentru proforme, apoi revino aici.</p>
         : page.kind === "vat-catalogue-empty" ? <p className="setup-note">Catalogul de regimuri TVA nu a venit de la server; nu se completează din aplicație. Reîncarcă pagina, iar dacă problema rămâne, verifică instalarea serverului.</p>
-        : page.kind === "proforma-series-required" ? <p className="setup-note">Nu există nicio serie pentru proforme. Adaug-o în <AppLink href="/settings">Setări</AppLink>, apoi revino aici.</p>
+        : page.kind === "proforma-series-required" ? <p className="setup-note">Nu există nicio serie activă pentru proforme. Adaug-o sau reactiveaz-o în <AppLink href="/settings">Setări</AppLink>, apoi revino aici.</p>
         : page.kind === "unit-catalogue-empty" ? <p className="setup-note">Catalogul de unități de măsură a venit gol de la server; nu se completează din aplicație. Reîncarcă pagina, iar dacă problema rămâne, verifică instalarea serverului.</p>
         : <ProformaAuthoringSession {...page.session} />}
     </Page>

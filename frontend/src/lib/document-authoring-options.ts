@@ -5,20 +5,22 @@
  * the same catalogue, applies the same product presets and compares a line to
  * the stored one by the same fields.
  */
-import type { DraftInvoice, DraftLineInput, ProductPreset } from "./draft-models.ts"
+import type { DocumentSeries, DraftInvoice, DraftLineInput, ProductPreset } from "./draft-models.ts"
 import type { EditableDocumentLine } from "./document-authoring-form-model.ts"
 import { sameIdentifiers } from "./item-identifiers.ts"
 
 /**
  * The series a screen may author under, which is a property of the document it
  * authors: an invoice never offers a proforma series and a proforma never
- * offers an invoice one, so the type is asked for rather than assumed.
+ * offers an invoice one, so the type is asked for rather than assumed. An
+ * archived series takes no new document, so it is never offered; the shared
+ * query keeps the whole list for Setări.
  */
 export const authoringSeriesOptions = (
-  series: ReadonlyArray<{ readonly documentType: "invoice" | "proforma"; readonly series: string }>,
+  series: ReadonlyArray<Pick<DocumentSeries, "documentType" | "series" | "archived">>,
   documentType: "invoice" | "proforma",
 ): ReadonlyArray<string> =>
-  series.filter((item) => item.documentType === documentType).map((item) => item.series)
+  series.filter((item) => item.documentType === documentType && !item.archived).map((item) => item.series)
 
 // `vatRateCode` is resolved by the caller on the document date at the moment of
 // the choice. A later change of that date leaves filled lines alone; choosing

@@ -10,7 +10,7 @@ const FAILED = { kind: "failed" } as const
 const complete: SetupState = {
   plugins: { companyLookup: true, efactura: true },
   issuer: ready({}),
-  series: ready([{ documentType: "invoice" }, { documentType: "proforma" }]),
+  series: ready([{ documentType: "invoice", archived: false }, { documentType: "proforma", archived: false }]),
   lookupProvider: ready("anaf"),
   anaf: ready({ status: "connected", refreshExpiryWarning: false }),
 }
@@ -30,8 +30,16 @@ void test("no issuer profile and no series: each is a row pointing to Setări", 
 })
 
 void test("a series of one type does not stand for the other", () => {
-  assert.deepEqual(codes({ series: ready([{ documentType: "invoice" }]) }), ["proforma_series"])
-  assert.deepEqual(codes({ series: ready([{ documentType: "proforma" }]) }), ["invoice_series"])
+  assert.deepEqual(codes({ series: ready([{ documentType: "invoice", archived: false }]) }), ["proforma_series"])
+  assert.deepEqual(codes({ series: ready([{ documentType: "proforma", archived: false }]) }), ["invoice_series"])
+})
+
+void test("an archived series does not count: the card asks for an active one", () => {
+  const rows = setupGaps({ ...complete, series: ready([
+    { documentType: "invoice", archived: true }, { documentType: "proforma", archived: false },
+  ]) }) ?? []
+  assert.deepEqual(rows.map((row) => [row.code, row.message]),
+    [["invoice_series", "Nu există nicio serie activă pentru facturi."]])
 })
 
 void test("company lookup without a provider points to Integrări; any provider is enough", () => {

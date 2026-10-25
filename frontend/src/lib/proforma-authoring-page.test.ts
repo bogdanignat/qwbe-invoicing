@@ -26,8 +26,8 @@ const vatCatalogue: VatCatalogue = {
 }
 
 const series: ReadonlyArray<DocumentSeries> = [
-  { organizationId: "org", documentType: "proforma", series: "PRO" },
-  { organizationId: "org", documentType: "invoice", series: "FCT" },
+  { organizationId: "org", documentType: "proforma", series: "PRO", archived: false },
+  { organizationId: "org", documentType: "invoice", series: "FCT", archived: false },
 ]
 
 const units: ReadonlyArray<UnitOfMeasure> = [{ code: "H87", name: "bucată" }]
@@ -105,7 +105,7 @@ void test("the missing prerequisites are refused in order: issuer, then VAT, the
  */
 void test("no proforma series is its own state before the form; an invoice series does not stand for one", () => {
   const state = proformaAuthoringPageState({
-    ...ready, series: answered<ReadonlyArray<DocumentSeries>>([{ organizationId: "org", documentType: "invoice", series: "FCT" }]),
+    ...ready, series: answered<ReadonlyArray<DocumentSeries>>([{ organizationId: "org", documentType: "invoice", series: "FCT", archived: false }]),
   })
 
   assert.equal(state.kind, "proforma-series-required")
