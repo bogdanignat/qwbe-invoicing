@@ -708,7 +708,7 @@ are rejected rather than interpreted in a different ordering.
 
 Issued invoices have no `DELETE`. Mistakes are handled through correction documents, which are
 numbered in the invoice series like any other invoice (Codul fiscal art. 330). Issue dates cannot be
-in the future or before the last document numbered in the same series and fiscal year, and an invoice
+in the future or before the last document numbered in the same series (numbering runs on across years), and an invoice
 issued from a proforma is dated on the day of conversion (art. 319 (20) b) with the proforma's payment
 term carried over.
 The complete route inventory with request rules is in

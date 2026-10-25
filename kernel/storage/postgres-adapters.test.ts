@@ -356,8 +356,8 @@ void test("a trigger, a CHECK and a type error all become a 409-shaped conflict"
     // A type violation: PostgreSQL answers 22P02 where STRICT SQLite answered
     // SQLITE_CONSTRAINT_DATATYPE, and both have to reach the same 409.
     const typeError = await errorOf(
-      "INSERT INTO invoice_sequences(organization_id,fiscal_year,document_type,series,last_number) VALUES($1,$2,$3,$4,$5)",
-      ["org-1", "not-a-year", "invoice", "QWBE", 1],
+      "INSERT INTO invoice_sequences(organization_id,document_type,series,last_number) VALUES($1,$2,$3,$4)",
+      ["org-1", "invoice", "QWBE", "not-a-number"],
     )
     assert.equal((typeError as { readonly code?: string }).code, "22P02")
     const mappedType = writeFailure(typeError, "allocate document number")

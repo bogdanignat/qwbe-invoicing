@@ -10,7 +10,7 @@ import { calendarDate, validateDocumentSource } from "../../domain/validation.ts
 import type { AuthoringTransaction } from "../../drafts/index.ts"
 import { validateIssuerForIssuance } from "../../issuer/index.ts"
 import { ensureChronology } from "./chronology.ts"
-import { fiscalYear, issuanceSource, numberedSnapshot } from "./snapshot.ts"
+import { issuanceSource, numberedSnapshot } from "./snapshot.ts"
 
 export type IssueInvoiceInput = Idempotent<AuthoringDocumentInput | { readonly draftId: string }>
 
@@ -48,7 +48,7 @@ export const createInvoiceOperations = (
       const invoiceId = yield* dependencies.ids.next
       const issuedAt = yield* dependencies.clock.now
       yield* ensureChronology(transaction, context.organization.id, "invoice", document.series, document.issueDate, calendarDate(issuedAt))
-      const number = yield* transaction.allocateDocumentNumber(context.organization.id, fiscalYear(document.issueDate), "invoice", document.series)
+      const number = yield* transaction.allocateDocumentNumber(context.organization.id, "invoice", document.series)
       const invoice: IssuedInvoice = {
         draftId: draft?.id ?? null, sourceProformaId: draft?.sourceProformaId ?? null,
         ...numberedSnapshot(document, issuer, { id: invoiceId, series: document.series, number, issuedAt, actorId: context.identity.id }),

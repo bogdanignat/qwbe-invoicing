@@ -136,8 +136,12 @@ T-1069 proforma route inventory (seven authenticated routes):
 
 The original direct draft-to-invoice route remains available. Invoice numbers are
 allocated only by invoice issuance, through `POST /api/invoices`, `POST /api/drafts/:id/issue`,
-or `POST /api/proformas/:id/invoice`. Invoice and proforma series use
-separate configured sequence scopes, and neither kind reuses allocated numbers.
+or `POST /api/proformas/:id/invoice`. Numbering is continuous per organization,
+numbering type (`invoice`/`proforma`) and series, across years: a series does not restart
+at 1 in January, and starting again from 1 means configuring a new series (e.g. `FCT2027`).
+Stornos take the next number of the original invoice's series from the invoice counter, and
+a conversion takes the next invoice number, not the proforma's. Neither kind reuses
+allocated numbers.
 `dueDate` is nullable on draft, proforma, and invoice responses; without one, an
 invoice is not `overdue` from the calendar date alone. Proformas have list/detail/PDF
 support, but no e-Factura, payment, overdue, or correction/storno semantics. Their PDF

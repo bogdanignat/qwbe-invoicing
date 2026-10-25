@@ -20,8 +20,6 @@ export interface NumberedIdentity {
   readonly issuedAt: Date
 }
 
-export const fiscalYear = (isoDate: string): number => Number(isoDate.slice(0, 4))
-
 const issuerAtIssuance = (issuer: IssuerProfile, document: SnapshotContent) => checked((): IssuerSnapshot => {
   validateFiscalDocument(document)
   validateVatForIssuance(issuer, document.issueDate, document.lines)

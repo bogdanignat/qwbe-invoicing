@@ -67,8 +67,8 @@ void test("corrects an issued invoice exactly once with a negated immutable snap
     address: invoice.issuer.address, legalForm: "srl", vatRegistered: true, tradeRegistryNumber: "J40/123/2020",
     socialCapital: "200.00", iban: "", bankName: "" })
   assert.deepEqual(correction.customer, invoice.customer)
-  assert.equal(state.sequences.get("org-1:2026:invoice:QWBE"), 2)
-  assert.equal(state.sequences.get("org-1:2026:correction:QWBE"), undefined)
+  assert.equal(state.sequences.get("org-1:invoice:QWBE"), 2)
+  assert.equal(state.sequences.get("org-1:correction:QWBE"), undefined)
 
   const replay = await Effect.runPromise(service.createCorrection(attempt))
   assert.deepEqual(replay, correction)

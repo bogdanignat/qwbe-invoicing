@@ -11,7 +11,7 @@ import type { ProformaTransaction } from "./ports.ts"
 import { validateIssuerForIssuance } from "../../issuer/index.ts"
 import type { AuthoringProformaInput, IssueProformaInput, Proforma, ProformaSummary } from "../domain/proforma.ts"
 import { ensureChronology } from "./chronology.ts"
-import { fiscalYear, issuanceSource, numberedSnapshot } from "./snapshot.ts"
+import { issuanceSource, numberedSnapshot } from "./snapshot.ts"
 
 export interface ProformaOperations {
   readonly issueProforma: (input: Idempotent<AuthoringProformaInput | IssueProformaInput>) => Effect.Effect<Proforma, InvoicingFailure>
@@ -44,7 +44,7 @@ export const createProformaOperations = (
       const proforma: Proforma = {
         sourceDraftId: draft?.id ?? null, convertedDraftId: null, convertedInvoiceId: null,
         ...numberedSnapshot(document, issuer, { id, series: series.series,
-          number: yield* transaction.allocateDocumentNumber(context.organization.id, fiscalYear(document.issueDate), "proforma", series.series),
+          number: yield* transaction.allocateDocumentNumber(context.organization.id, "proforma", series.series),
           issuedAt, actorId: context.identity.id }),
       }
       yield* transaction.saveProforma(proforma)

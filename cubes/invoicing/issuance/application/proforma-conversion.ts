@@ -9,7 +9,7 @@ import type { DraftInvoice, Idempotent, IssuedInvoice } from "../../domain/invoi
 import { validateFiscalDocument } from "../../domain/calculation.ts"
 import { currentVatRegistration, validateIssuerForIssuance, validateVatForIssuance, type IssuerTransaction } from "../../issuer/index.ts"
 import type { ConvertProformaInput } from "../domain/proforma.ts"
-import { fiscalYear, numberedSnapshot } from "./snapshot.ts"
+import { numberedSnapshot } from "./snapshot.ts"
 import { ensureChronology } from "./chronology.ts"
 import { validateInvoiceDueDate } from "./invoices.ts"
 import { conversionDates, conversionSource } from "./proforma-conversion-context.ts"
@@ -58,7 +58,7 @@ export const createProformaConversionOperations = (
       const invoice: IssuedInvoice = {
         draftId: null, sourceProformaId: proforma.id, eFacturaStatus: "not_sent",
         ...numberedSnapshot({ ...proforma, issueDate, dueDate }, proforma.issuer, { id, series: input.invoiceSeries,
-          number: yield* transaction.allocateDocumentNumber(context.organization.id, fiscalYear(issueDate), "invoice", input.invoiceSeries),
+          number: yield* transaction.allocateDocumentNumber(context.organization.id, "invoice", input.invoiceSeries),
           issuedAt: convertedAt, actorId: context.identity.id }),
       }
       yield* transaction.saveIssuedInvoice(invoice)

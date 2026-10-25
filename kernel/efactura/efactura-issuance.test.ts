@@ -93,8 +93,8 @@ const issuanceState = async (rig: TestFixture) => {
     invoices: await counted(sql, "SELECT count(*) FROM issued_invoices"),
     audits: await counted(sql, "SELECT count(*) FROM audit_events"),
     idempotency: await counted(sql, "SELECT count(*) FROM idempotency_records"),
-    invoiceSequences: await sql.query(`SELECT organization_id,fiscal_year,series,last_number FROM invoice_sequences
-      WHERE document_type='invoice' ORDER BY organization_id,fiscal_year,series`),
+    invoiceSequences: await sql.query(`SELECT organization_id,series,last_number FROM invoice_sequences
+      WHERE document_type='invoice' ORDER BY organization_id,series`),
   }
 }
 

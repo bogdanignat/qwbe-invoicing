@@ -124,8 +124,8 @@ void test("migrations leave the immutability triggers, typed columns and named c
        WHERE table_schema = 'public' AND table_name = 'audit_events' AND data_type NOT IN ('text','integer','bigint')`,
     ), [])
     assert.equal((await sql.rejects(
-      "INSERT INTO invoice_sequences(organization_id,fiscal_year,document_type,series,last_number)"
-      + " VALUES('org-typed','not-a-year','invoice','INV',1)",
+      "INSERT INTO invoice_sequences(organization_id,document_type,series,last_number)"
+      + " VALUES('org-typed','invoice','INV','not-a-number')",
     )).code, "22P02")
     for (const [table, brandingColumn] of [["issuers", "branding"], ["issued_invoices", "issuer_branding"], ["proformas", "issuer_branding"]] as const) {
       assert.ok(await column(table, brandingColumn), `${table}.${brandingColumn}`)

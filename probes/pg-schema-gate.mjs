@@ -504,11 +504,11 @@ const main = async () => {
       // rounds; a BOUND parameter is sent as text and is rejected. Every adapter
       // is parameterized, so the rounding path is not reachable from the API.
       const rawLiteral = await attempt(behaviourClient,
-        "INSERT INTO invoice_sequences VALUES('org-1',2030,'invoice','INV',7.5)")
+        "INSERT INTO invoice_sequences VALUES('org-1','invoice','R2030',7.5)")
       await behaviourClient.query("SAVEPOINT num")
-      await behaviourClient.query("INSERT INTO invoice_sequences VALUES('org-1',2030,'invoice','INV',7.5)")
+      await behaviourClient.query("INSERT INTO invoice_sequences VALUES('org-1','invoice','R2030',7.5)")
       const rounded = await behaviourClient.query(
-        "SELECT last_number FROM invoice_sequences WHERE fiscal_year=2030")
+        "SELECT last_number FROM invoice_sequences WHERE series='R2030'")
       await behaviourClient.query("ROLLBACK TO SAVEPOINT num")
       check("a raw numeric literal is assignment-cast and rounds (SQLite STRICT refused it)", () => {
         assert.equal(rawLiteral.ok, true, rawLiteral.message)
@@ -519,7 +519,7 @@ const main = async () => {
         let code
         try {
           await behaviourClient.query(
-            "INSERT INTO invoice_sequences VALUES('org-1',2031,'invoice','INV',$1)", [value])
+            "INSERT INTO invoice_sequences VALUES('org-1','invoice','R2031',$1)", [value])
         } catch (error) { code = error.code }
         await behaviourClient.query("ROLLBACK TO SAVEPOINT bind")
         check(`a bound fraction (${label}) is refused with 22P02`, () => { assert.equal(code, "22P02") })
