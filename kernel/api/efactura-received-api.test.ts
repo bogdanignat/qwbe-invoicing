@@ -29,6 +29,7 @@ const bodyOf = (reply: Reply, status = 200): Body => {
 }
 const fetchOf = (status: Body) => status.fetch as Body
 const itemsOf = (page: Body) => page.items as ReadonlyArray<Body>
+const withoutDueDate = (xml: string) => xml.replace(/<cbc:DueDate>[^<]*<\/cbc:DueDate>/u, "")
 
 /** The archive route answered as bytes, with the headers that matter for a download. */
 const download = async (server: Served, id: string) => {
@@ -67,7 +68,8 @@ void test("a click is answered 202 at once; the dispatcher fetches; the list, de
     assert.deepEqual(itemsOf(list).map((item) => [item.messageId, item.readable]), [["4000000002", false], ["4000000001", true]], "newest first")
     const [unreadable, readable] = itemsOf(list)
     assert.equal((unreadable?.reason as Body).source, "zip")
-    assert.deepEqual([readable?.spvCreatedAt, readable?.warnings], ["202610221000", 1])
+    assert.deepEqual([readable?.spvCreatedAt, readable?.dueDate, readable?.warnings], ["202610221000", "2026-11-06", ["buyer_cif_mismatch"]])
+    assert.equal("dueDate" in (unreadable ?? {}), false, "an unreadable one has no due date")
     assert.deepEqual(readable?.listing, { kind: "invoice", number: "TEST 19", issueDate: (readable?.listing as Body).issueDate, currency: "RON",
       supplierName: "FURNIZOR TEST S.R.L.", supplierCif: "19999927", totalExcludingTax: "10.00", taxTotal: "0.00", payable: "10.00" })
 
@@ -91,12 +93,13 @@ void test("the list pages newest first, then by the id as a number, with an opaq
     await rig.connect()
     const same = "202610201000"
     rig.fake.receive([{ id: "9", createdAt: same }, { id: "4000000001", createdAt: same }, { id: "5", createdAt: "202610211000" },
-      { id: "10", createdAt: same }].map(({ id, createdAt }) => ({ id, createdAt, zip: receivedZip(`R-${id}`) })))
+      { id: "10", createdAt: same }].map(({ id, createdAt }) => ({ id, createdAt, zip: receivedZip(`R-${id}`, id === "5" ? withoutDueDate : undefined) })))
     bodyOf(await requested(rig), 202)
     rig.dispatcher()
     await completed(rig)
     const first = bodyOf(await rig.server.call("GET", "/api/efactura/received?limit=2"))
     assert.deepEqual(itemsOf(first).map((item) => item.messageId), ["5", "4000000001"])
+    assert.deepEqual(itemsOf(first).map((item) => item.dueDate), [undefined, "2026-11-06"], "a document without a due date has none in the list")
     const second = bodyOf(await rig.server.call("GET", `/api/efactura/received?limit=2&cursor=${String(first.nextCursor)}`))
     assert.deepEqual([itemsOf(second).map((item) => item.messageId), second.nextCursor], [["10", "9"], null], "9 < 10, not as text")
     assert.equal((await rig.server.call("GET", "/api/efactura/received?cursor=nonsense")).status, 400)

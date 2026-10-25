@@ -39,9 +39,11 @@ const Reason = Schema.Union(
     Schema.Struct({ reason: Schema.Literal("unbound_prefix", "missing", "duplicate", "invalid"), field: Schema.String }),
   ) }),
 ).annotations({ description: "Why the archive could not be read; it is kept and downloadable all the same." })
+const TotalsCode = Schema.Literal("lines_total_mismatch", "tax_inclusive_mismatch")
+const BuyerCode = Schema.Literal("buyer_cif_mismatch")
 const Warning = Schema.Union(
-  Schema.Struct({ code: Schema.Literal("lines_total_mismatch", "tax_inclusive_mismatch"), declared: Schema.String, computed: Schema.String }),
-  Schema.Struct({ code: Schema.Literal("buyer_cif_mismatch"), expected: Schema.String, found: Schema.Array(Schema.String) }),
+  Schema.Struct({ code: TotalsCode, declared: Schema.String, computed: Schema.String }),
+  Schema.Struct({ code: BuyerCode, expected: Schema.String, found: Schema.Array(Schema.String) }),
 )
 const Message = {
   messageId: Schema.String.annotations({ description: "ANAF's message id: the `{id}` of the routes below." }),
@@ -50,7 +52,9 @@ const Message = {
 }
 const Unreadable = Schema.Struct({ ...Message, readable: Schema.Literal(false), reason: Reason })
 export const EFacturaReceivedSummary = Schema.Union(
-  Schema.Struct({ ...Message, readable: Schema.Literal(true), listing: Listing, warnings: Schema.Int.annotations({ description: "How many." }) }),
+  Schema.Struct({ ...Message, readable: Schema.Literal(true), listing: Listing,
+    dueDate: Schema.optional(Schema.String).annotations({ description: "The document's due date; absent when it has none." }),
+    warnings: Schema.Array(Schema.Union(TotalsCode, BuyerCode)).annotations({ description: "The codes of its warnings; the detail has them in full." }) }),
   Unreadable,
 )
 export const EFacturaReceivedDetail = Schema.Union(

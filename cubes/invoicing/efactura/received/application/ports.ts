@@ -64,9 +64,17 @@ export interface ReceivedMessage {
   readonly storedAt: string
 }
 
-/** What the list shows of one: the columns of a read invoice and how many warnings it has, or why it is unreadable. */
+/**
+ * What the list shows of one: the columns of a read invoice, its due date when
+ * the document has one, and the codes of its warnings; or why it is unreadable.
+ */
 export type ReceivedSummary = ReceivedMessage & (
-  | { readonly readable: true; readonly listing: ReceivedListing; readonly warnings: number }
+  | {
+    readonly readable: true
+    readonly listing: ReceivedListing
+    readonly dueDate?: string
+    readonly warnings: ReadonlyArray<ReceivedWarning["code"]>
+  }
   | { readonly readable: false; readonly reason: UnreadableReason })
 
 /** One received invoice in full: the whole normalized document and its warnings, or why it is unreadable. */

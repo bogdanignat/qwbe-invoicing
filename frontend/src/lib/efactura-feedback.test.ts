@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import { parseApiFailure } from "./api-errors.ts"
-import { efacturaFailure, efacturaFailureMessage } from "./efactura-feedback.ts"
+import { efacturaFailure, efacturaFailureMessage, receivedFetchFailure } from "./efactura-feedback.ts"
 
 const conflict = (code: string) => parseApiFailure({ error: "DomainConflict", code }, 409)
 
@@ -26,4 +26,16 @@ void test("no failure is no alert", () => {
   assert.equal(efacturaFailure(null), undefined)
   assert.equal(efacturaFailure(undefined), undefined)
   assert.equal(efacturaFailure(conflict("efactura_index_linked"))?.message, "Indexul este deja legat de altă trimitere.")
+})
+
+void test("a refused fetch of received invoices names the issuer's CIF; every other failure reads as the plugin's", () => {
+  assert.equal(receivedFetchFailure(conflict("efactura_cif_mismatch"))?.message,
+    "Conexiunea ANAF este verificată pentru alt CIF decât cel din datele firmei. "
+    + "Reconectează-te din Integrări cu certificatul firmei sau corectează CIF-ul în Setări.")
+  const denied = parseApiFailure({ error: "PermissionDenied" }, 403)
+  assert.equal(receivedFetchFailure(denied)?.message, efacturaFailureMessage(denied))
+  for (const code of ["efactura_not_connected", "efactura_not_configured"]) {
+    assert.equal(receivedFetchFailure(conflict(code))?.message, efacturaFailureMessage(conflict(code)), code)
+  }
+  assert.equal(receivedFetchFailure(null), undefined)
 })

@@ -21,9 +21,9 @@ assert.ok(opened.ok, "the fixture opens")
 const FIXTURE_XML = new TextDecoder().decode(opened.invoice)
 
 /** ANAF's layout (signature first, then the invoice) around the fixture's invoice renumbered: one distinct, readable invoice per message. */
-export const receivedZip = (number: string): Buffer => buildZip([
+export const receivedZip = (number: string, edit = (xml: string) => xml): Buffer => buildZip([
   { name: "semnatura_1.xml", content: "<Signature/>" },
-  { name: "1.xml", content: FIXTURE_XML.replace("<cbc:ID>TEST 19</cbc:ID>", `<cbc:ID>${number}</cbc:ID>`) },
+  { name: "1.xml", content: edit(FIXTURE_XML.replace("<cbc:ID>TEST 19</cbc:ID>", `<cbc:ID>${number}</cbc:ID>`)) },
 ])
 
 /** Starts like a ZIP, so ANAF's answer is an archive, and is nothing more. */

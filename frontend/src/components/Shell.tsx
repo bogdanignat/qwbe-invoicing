@@ -3,7 +3,7 @@ import type { ReactNode } from "react"
 
 import { AppLink } from "./ui/AppLink.tsx"
 import { useAuth } from "../hooks/auth-context.ts"
-import { integrationsActive } from "../lib/plugins.ts"
+import { integrationsActive, pluginActive } from "../lib/plugins.ts"
 import { shellNavigation } from "../lib/shell-navigation.ts"
 
 interface ShellProps {
@@ -22,7 +22,8 @@ interface ShellProps {
  */
 export const Shell = ({ unlocked, logoutPending = false, onLogout, children }: ShellProps) => {
   const pathname = useLocation({ select: (location) => location.pathname })
-  const links = shellNavigation(pathname, unlocked, integrationsActive(useAuth()))
+  const auth = useAuth()
+  const links = shellNavigation(pathname, unlocked, { integrations: integrationsActive(auth), received: pluginActive(auth, "efactura") })
   return <div className={unlocked ? "shell" : "shell locked"}>
     <a className="skip-link" href="#main-content">Sari la conținut</a>
     <aside className="sidebar">

@@ -6,10 +6,11 @@ import { FETCH_COLUMNS, fetchFrom } from "./postgres-efactura-received-rows.ts"
 import { oneOf } from "./postgres-efactura-submission-rows.ts"
 import { read } from "./postgres-errors.ts"
 import { money } from "./postgres-money.ts"
-import { bytes, firstRow, integer, row as objectOf, text, type Row } from "./postgres-rows.ts"
+import { bytes, firstRow, row as objectOf, text, type Row } from "./postgres-rows.ts"
 import type { TransactionClient } from "./postgres-transaction.ts"
 
 const KINDS: ReadonlyArray<ReceivedKind> = ["invoice", "credit_note"]
+const WARNING_CODES: ReadonlyArray<ReceivedWarning["code"]> = ["lines_total_mismatch", "tax_inclusive_mismatch", "buyer_cif_mismatch"]
 const SCOPE = "a.organization_id=$1 AND a.environment=$2"
 
 /**
@@ -53,10 +54,18 @@ const readable = (value: Row): boolean => {
 
 const unreadable = (value: Row) => ({ readable: false as const, reason: json(value, "reason", "object") as UnreadableReason })
 
-const summaryFrom = (value: Row): ReceivedSummary => ({
-  ...messageFrom(value),
-  ...readable(value) ? { readable: true, listing: listingFrom(value), warnings: integer(value, "warning_count") } : unreadable(value),
-})
+/** The list's extra columns, read out of the stored document and warnings: the due date when it has one, the warning codes. */
+const SUMMARY = "i.content->>'dueDate' AS due_date,"
+  + "COALESCE((SELECT jsonb_agg(w->'code' ORDER BY n) FROM jsonb_array_elements(i.warnings) WITH ORDINALITY AS x(w,n)),'[]') AS warning_codes"
+
+const warningCodes = (value: Row): ReadonlyArray<ReceivedWarning["code"]> =>
+  (json(value, "warning_codes", "array") as ReadonlyArray<unknown>).map((code) => oneOf(WARNING_CODES, { code }, "code"))
+
+const summaryFrom = (value: Row): ReceivedSummary => {
+  if (!readable(value)) return { ...messageFrom(value), ...unreadable(value) }
+  const dueDate = value.due_date === null ? {} : { dueDate: text(value, "due_date") }
+  return { ...messageFrom(value), readable: true, listing: listingFrom(value), ...dueDate, warnings: warningCodes(value) }
+}
 
 const detailFrom = (value: Row): ReceivedDetail => ({
   ...messageFrom(value),
@@ -76,7 +85,7 @@ export const receivedReads = (client: TransactionClient): ReceivedReads => ({
   listReceived: ({ organizationId, environment }, page) => read("list received invoices", async () => {
     const after = page.after === undefined ? "" : `AND ${NEWEST}<($4,length($5),$5)`
     const cursor = page.after === undefined ? [] : [page.after.spvCreatedAt, page.after.messageId]
-    const { rows } = await client.query(`${RECEIVED("COALESCE(jsonb_array_length(i.warnings),0)::int AS warning_count")} ${after}
+    const { rows } = await client.query(`${RECEIVED(SUMMARY)} ${after}
       ORDER BY m.anaf_created DESC,length(m.anaf_message_id) DESC,m.anaf_message_id DESC LIMIT $3`,
     [organizationId, environment, page.limit + 1, ...cursor])
     return rows.map(summaryFrom)
