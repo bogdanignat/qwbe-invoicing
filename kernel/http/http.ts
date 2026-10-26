@@ -127,7 +127,7 @@ export const startServer = async (
     ...(dependencies.requestDeadlineMs === undefined ? {} : { deadlineMs: dependencies.requestDeadlineMs }),
     ...(dependencies.peerKey === undefined ? {} : { peerKey: dependencies.peerKey }),
   }))
-  hardenTransport(server)
+  hardenTransport(server, config)
   // Set synchronously on `listening`, before the first connection can be read.
   server.once("listening", () => { edge = edgePolicyFor(config, server.address()) })
   const close = (): Promise<void> => closePromise ??= (async () => {

@@ -243,7 +243,23 @@ docker build -t qwbe-invoicing:local .
 
    The proxy must pass the public `Host` and `X-Forwarded-Proto` unchanged: the
    application compares them, and `X-Forwarded-Host` when present, with `PUBLIC_ORIGIN`,
-   and answers `400` otherwise. Add HSTS at the proxy; the application does not send it.
+   and answers `400` otherwise. It must also overwrite `X-Forwarded-For` with the
+   client's address (nginx `$remote_addr`; Caddy and Traefik do it by default): it
+   reaches `app` from the project network's gateway, which `QWBE_TRUSTED_PROXY` trusts by
+   default, so the login throttle keys on that address. Do not append
+   (`$proxy_add_x_forwarded_for`): whatever the client sent stays in front, and a value
+   the application cannot read (`unknown`, `1.2.3.4:5678`) answers `400
+   invalid_forwarded_for` to that client. A proxy that cannot overwrite it:
+   `QWBE_TRUSTED_PROXY=` (empty) in `.env`. The application sends HSTS
+   (`max-age=31536000`) itself on an `https` origin.
+
+   With IPv6, the bundled Caddy keeps each visitor's address only on Docker 27 or newer
+   with `ip6tables` (the default there): `compose.prod.yaml` gives its network a fixed IPv6
+   ULA (`QWBE_NETWORK_SUBNET_IPV6`, `fd93:1c5e:a7b0::/64`, also trusted by default), and
+   Docker forwards IPv6 visitors to Caddy's own address. With `ip6tables` off, Docker hands
+   them to Caddy from the network's gateway, and every IPv6 visitor shares one throttle
+   bucket again. A host without IPv6 adds `compose.ipv4-only.yaml` to `COMPOSE_FILE`,
+   which leaves the network its IPv4 subnet alone.
 
    ```nginx
    server {
@@ -252,14 +268,13 @@ docker build -t qwbe-invoicing:local .
      server_name invoice.example.com;
      ssl_certificate     /etc/ssl/invoice.example.com/fullchain.pem;
      ssl_certificate_key /etc/ssl/invoice.example.com/privkey.pem;
-     add_header Strict-Transport-Security "max-age=31536000" always;
 
      location / {
        proxy_pass http://127.0.0.1:3180;
        proxy_set_header Host $host;
        proxy_set_header X-Forwarded-Host $host;
        proxy_set_header X-Forwarded-Proto $scheme;
-       proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+       proxy_set_header X-Forwarded-For $remote_addr;
      }
    }
    ```
@@ -425,7 +440,7 @@ Everything is configured through environment variables, read once at startup.
 | `PUBLIC_ORIGIN` | none | the canonical public origin, e.g. `https://invoice.example.com` (scheme and host, no path or trailing slash). `Host`, `X-Forwarded-Host`/`-Proto` and, on unsafe methods, `Origin` must match it, otherwise 400/403. Validated whenever it is set; required only to serve in production (`migrate`, `backup`, `restore` and `doctor` run without it). Outside production it may be left out only when `HOST` is a loopback address, and the origin is then the address the server listens on. In Compose it comes from `.env`, required with no fallback in `compose.prod.yaml`; `compose.yaml` derives it from `APP_DOMAIN` and `compose.vite.yaml` sets `http://localhost:5173` |
 | `QWBE_BEARER_API` | `off` | `on` serves the Bearer API on the same listener as the browser. Off, any `Authorization` header (empty included) is refused with 400. On, a request carrying both `Authorization` and a session cookie is still refused, and an unsafe request still needs `Origin: <PUBLIC_ORIGIN>`. Any other value stops the application at startup |
 | `QWBE_UI_DIR` | none | the Vite build the kernel serves (`index.html`, hashed `assets/*`), read once at startup; empty means unset. Required to serve in production (the image sets `/app/frontend/dist`); elsewhere the kernel runs without it and the UI routes answer 503 `ui_not_built`. A symlink or special file in it stops the application at startup |
-| `QWBE_TRUSTED_PROXY` | none | the reverse proxies whose `X-Forwarded-For` keys the login throttle, comma-separated addresses or CIDR ranges (`172.18.0.0/16`, `fd00::/8`). Only a request whose socket peer is in the list is keyed on the right-most forwarded address that is not itself listed; everyone else keeps the socket address, whatever they forward. From a listed proxy, a repeated or malformed `X-Forwarded-For` answers 400, and a missing one, or one whose every address is listed, keys on the proxy. An unreadable entry or a `/0` range stops the application at startup. Set it to the proxy's fixed address (or its network) only when that proxy overwrites `X-Forwarded-For` for untrusted clients, as Caddy and Traefik do by default. The Compose files pass it through from `.env` only when set: unset, every client behind the bundled Caddy or your own proxy shares the proxy's throttle bucket |
+| `QWBE_TRUSTED_PROXY` | none | the reverse proxies whose `X-Forwarded-For` keys the login throttle, comma-separated addresses or CIDR ranges (`172.18.0.0/16`, `fd00::/8`). Only a request whose socket peer is in the list is keyed on the right-most forwarded address that is not itself listed; everyone else keeps the socket address, whatever they forward. From a listed proxy, a repeated or malformed `X-Forwarded-For` answers 400, and a missing one, or one whose every address is listed, keys on the proxy. An unreadable entry or a `/0` range stops the application at startup. List only a proxy that overwrites `X-Forwarded-For` with the address it received the request from (Caddy and Traefik by default, nginx with `$remote_addr`); an appending one (`$proxy_add_x_forwarded_for`) passes on whatever the client wrote, and an unreadable value there answers 400. `compose.prod.yaml` defaults it to the project network (`QWBE_NETWORK_SUBNET`, `10.93.0.0/24`, and `QWBE_NETWORK_SUBNET_IPV6`, `fd93:1c5e:a7b0::/64`): the bundled Caddy, and a proxy on the host through `compose.loopback.yaml`, both reach `app` from it. Empty in `.env` trusts nobody, and every client behind the proxy then shares its throttle bucket. `compose.yaml` passes it through only when set |
 | `QWBE_PLUGINS` | absent: every plugin | the optional plugins to run, comma-separated: `payments`, `efactura`, `company-lookup`. Absent runs all three; empty (`QWBE_PLUGINS=`) runs none; an unknown name stops the application at startup with an error naming the known plugins. Spaces are ignored and duplicates tolerated; a change takes a restart. A plugin that is off has no route (404), no OpenAPI entry and, for payments, no `payments:*` grant; with e-Factura off every invoice response says `eFacturaStatus: null`; with company lookup off the forms show no lookup and no request leaves for ANAF or openapi.ro. Migrations, tables and data stay, so switching a plugin back on finds its records (and its company-lookup settings) |
 
 Variables used only by the Compose files, in `.env`:
@@ -774,11 +789,14 @@ being ignored.
   thing, the login throttle, which keys failed unlocks on the client address. Unset,
   nobody's forwarded header is read and the address is the TCP peer: behind a proxy
   that is the proxy itself, so every client shares one throttle bucket and a stranger's
-  failed attempts slow everyone down. Set it to the proxy's fixed address or network
-  (`172.18.0.0/16`, the Compose network of the bundled Caddy) only when that proxy
-  overwrites `X-Forwarded-For` for the clients in front of it, as Caddy and Traefik do;
-  a proxy that appends what the client sent would let anyone pick their own bucket.
-  `/0` ranges are refused.
+  failed attempts slow everyone down. `compose.prod.yaml` fixes the subnets of its
+  network (`10.93.0.0/24` and the ULA `fd93:1c5e:a7b0::/64`) and trusts them by default:
+  the bundled Caddy and the gateway a proxy on the host comes in through are in them.
+  Trust only a proxy that overwrites `X-Forwarded-For` with its own peer (Caddy and
+  Traefik do, nginx with `$remote_addr`); one that passes on what the client sent would
+  let anyone pick their own bucket. IPv6 visitors keep their address through the bundled
+  Caddy only with Docker's `ip6tables` (27+, the default); without it they share one
+  bucket. `/0` ranges are refused.
 - **`QWBE_BEARER_API`: whether the API token is accepted on the public listener.**
   `off` by default: the browser never needs it (it exchanges the token once for a
   session, below), so any `Authorization` header is refused with 400 and the token
@@ -839,8 +857,10 @@ The rest of the model:
   Provider calls have a 5-second timeout, refuse redirects and bodies over 256 KB, and never
   pass the provider's error text on. A key openapi.ro refuses answers `502 auth_failed`,
   never `401`, so it does not end the browser session.
-- The container is read-only and non-root. TLS and network exposure are the
-  reverse proxy's job; the included Caddy profile sets HSTS and the usual hardening headers.
+- The container is read-only and non-root, and every service in `compose.prod.yaml` drops
+  all capabilities (the database and Caddy add back only what their entrypoints need) with
+  `no-new-privileges`. TLS and network exposure are the reverse proxy's job; the application
+  sends HSTS on an `https` origin, and the included Caddy profile adds the usual hardening headers.
 
 ## Repository layout
 

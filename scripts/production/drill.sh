@@ -122,6 +122,16 @@ runs_image install || fail "the previous app is not running again"
 [[ "$(archives | wc -l)" == "$before" ]] || fail "a failed backup left an archive"
 pass "deploy with a failing backup: refused, IMAGE_TAG unchanged, previous app running, no archive"
 
+# ---- A network on other subnets than the Compose files fix: refused before app stops ---
+subnet="$(env_value QWBE_NETWORK_SUBNET)"
+set_env QWBE_NETWORK_SUBNET 10.93.3.0/24
+refused 'has the subnets' "$scripts/deploy.sh"
+set_env QWBE_NETWORK_SUBNET "$subnet"
+[[ "$(env_value IMAGE_TAG)" == install ]] || fail "IMAGE_TAG changed by a deploy refused for its network"
+runs_image install || fail "app stopped by a deploy refused for its network"
+[[ "$(archives | wc -l)" == "$before" ]] || fail "a deploy refused for its network made a backup"
+pass "network on other subnets: deploy refuses before app stops or a backup is made; the next deploy runs with them restored"
+
 # ---- Deploy from the checkout ----------------------------------------------------------
 succeeds "$scripts/deploy.sh"
 ! grep -q 'the new deploy.sh was read' "$log" || fail "bash read the deploy.sh that git pull wrote"

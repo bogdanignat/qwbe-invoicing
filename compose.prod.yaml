@@ -12,6 +12,11 @@ name: qwbe-invoicing
 #     docker compose -f compose.prod.yaml -f compose.loopback.yaml up -d
 #     (publishes `app` on 127.0.0.1:${APP_LOOPBACK_PORT} only)
 #
+# Either proxy reaches `app` from inside the project network, whose subnets are fixed
+# below: the bundled Caddy has addresses in them, and a proxy on the host comes in
+# through the gateway. QWBE_TRUSTED_PROXY defaults to both subnets, so the login throttle
+# keys on the client each proxy writes in X-Forwarded-For, not on the proxy.
+#
 # Before the first `up`, create the four secret files (`scripts/init-secrets.sh` does it,
 # from the paths in .env); this file mounts three, compose.anaf.yaml the ANAF token key.
 # They are never in this file, never in the image and never in an environment variable.
@@ -35,9 +40,18 @@ x-postgres-environment: &postgres-environment
   # missing or empty, so this is fail-closed rather than best effort.
   PGPASSWORD_FILE: /run/secrets/pg_password
 
+# No capability and no privilege gained on exec, unless a service adds back what it needs.
+x-hardening: &hardening
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+
 services:
   db:
     image: postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
+    <<: *hardening
+    # The entrypoint starts as root: it owns PGDATA and the socket directory to
+    # `postgres` (CHOWN, FOWNER, DAC_OVERRIDE), then drops to that user (SETUID, SETGID).
+    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
     environment:
       POSTGRES_DB: qwbe_invoicing
       POSTGRES_USER: qwbe
@@ -65,6 +79,7 @@ services:
 
   migrate:
     image: ${QWBE_IMAGE:-ghcr.io/bogdanignat/qwbe-invoicing}:${IMAGE_TAG:?Set IMAGE_TAG, e.g. local for your own build or 0.3.0@sha256:<digest> for a release}
+    <<: *hardening
     command: ["node", "bin/qwbe-invoicing.ts", "migrate", "--apply", "--confirm-production", "--json"]
     environment:
       <<: *postgres-environment
@@ -87,6 +102,7 @@ services:
 
   app:
     image: ${QWBE_IMAGE:-ghcr.io/bogdanignat/qwbe-invoicing}:${IMAGE_TAG:?Set IMAGE_TAG, e.g. local for your own build or 0.3.0@sha256:<digest> for a release}
+    <<: *hardening
     environment:
       <<: *postgres-environment
       NODE_ENV: production
@@ -109,9 +125,10 @@ services:
       # Off by default: any Authorization header is refused. `on` serves the Bearer API
       # on this same listener; see the README before switching it on.
       QWBE_BEARER_API: ${QWBE_BEARER_API:-off}
-      # Unset trusts no proxy's X-Forwarded-For, so the login throttle keys on the
-      # proxy itself (README, Configuration). Passed through only when set.
-      QWBE_TRUSTED_PROXY:
+      # Whose X-Forwarded-For keys the login throttle (README, Configuration): the project
+      # network by default, i.e. the bundled Caddy or a proxy on the host. Empty in .env
+      # trusts nobody, and every client behind the proxy then shares the proxy's bucket.
+      QWBE_TRUSTED_PROXY: ${QWBE_TRUSTED_PROXY-${QWBE_NETWORK_SUBNET:-10.93.0.0/24},${QWBE_NETWORK_SUBNET_IPV6:-fd93:1c5e:a7b0::/64}}
       # The Vite build the kernel serves; the image sets the same value. Required in
       # production: `serve` refuses to start without an index.html there.
       QWBE_UI_DIR: /app/frontend/dist
@@ -149,8 +166,13 @@ services:
       start_period: 10s
 
   caddy:
-    image: caddy:2-alpine
+    # Pinned like the database: a new Caddy is a reviewed edit of this line, not a pull.
+    image: caddy:2.11.7-alpine@sha256:eb4d35b7452d1ab6171fbdbe8d9275b2301dad6dad92115d91e19fb9b24d510f
     profiles: ["proxy"]
+    <<: *hardening
+    # Root inside the container, to bind 80 and 443; nothing else. The Caddyfile must
+    # be world-readable (a plain `cp` is): without DAC_OVERRIDE root cannot read a 0600 file.
+    cap_add: [NET_BIND_SERVICE]
     # `app` is healthy only once it holds the SHARED maintenance barrier and the
     # schema matches the ledger, so Caddy deliberately does not come up in front of
     # an application that would answer 503 to every `/api` request.
@@ -165,6 +187,20 @@ services:
       - caddy-data:/data
       - caddy-config:/config
     restart: unless-stopped
+
+# The project network, on fixed subnets so QWBE_TRUSTED_PROXY can name them. IPv4 outside
+# Docker's default pools (172.17-31.x, 192.168.x), IPv6 a ULA; change one in .env if it
+# overlaps a network of this host, and QWBE_TRUSTED_PROXY follows unless set on its own.
+# IPv6 is on so that Docker (27+, ip6tables) forwards Caddy's IPv6 visitors to its own
+# IPv6 address with their real source, instead of through docker-proxy from the gateway.
+# A host without IPv6 adds compose.ipv4-only.yaml, which drops the IPv6 subnet.
+networks:
+  default:
+    enable_ipv6: true
+    ipam:
+      config:
+        - subnet: ${QWBE_NETWORK_SUBNET:-10.93.0.0/24}
+        - subnet: ${QWBE_NETWORK_SUBNET_IPV6:-fd93:1c5e:a7b0::/64}
 
 secrets:
   api_token:

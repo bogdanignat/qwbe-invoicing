@@ -1,0 +1,14 @@
+# Optional overlay on compose.prod.yaml, only for a host without IPv6:
+#
+#   COMPOSE_FILE=compose.prod.yaml:compose.ipv4-only.yaml        (or :compose.loopback.yaml too)
+#
+# The project network then has its IPv4 subnet alone: no IPv6 pool that Docker could
+# refuse, or keep in IPAM without using it. QWBE_TRUSTED_PROXY may still name the IPv6
+# subnet; nothing on this network has an address in it. A switch on an existing network
+# takes `docker compose down` (no -v), then `up -d` (docs/INSTALARE.md).
+networks:
+  default:
+    enable_ipv6: false
+    ipam:
+      config: !override
+        - subnet: ${QWBE_NETWORK_SUBNET:-10.93.0.0/24}

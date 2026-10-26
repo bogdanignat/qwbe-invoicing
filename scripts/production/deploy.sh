@@ -9,8 +9,10 @@
 #     `.env` names, and no other deploy/backup/restore holds the host lock.
 #  2. Records the active version: the ID of the image `app` runs, and the commit.
 #  3. `git pull --ff-only` and `docker build`, tagged ${QWBE_IMAGE}:<12-hex commit> (the
-#     previous image keeps its own tag for the rollback). Production runs untouched
-#     until here; a failure stops the deploy without downtime.
+#     previous image keeps its own tag for the rollback). Then the project network must
+#     have the subnets the new Compose files fix: Compose does not move a running
+#     network, so a mismatch would only fail at `up`, after `app` stopped. Production
+#     runs untouched until here; a failure stops the deploy without downtime.
 #  4. Stops `app` and backs up with the active image (backup.sh). No backup, no
 #     deploy: the previous `app` starts again and the exit is non-zero.
 #  5. Only then writes the new IMAGE_TAG to `.env` and starts `migrate` and `app`;
@@ -71,6 +73,27 @@ pull_and_build() {
   docker build --label "org.opencontainers.image.revision=$commit" -t "$QWBE_IMAGE:$NEW_TAG" "$QWBE_ROOT" \
     || die "build failed; production is untouched"
   compose_tag "$NEW_TAG" config --quiet || die "the new Compose files do not accept this .env; production is untouched"
+}
+
+# The subnets of the default network as the new Compose files define it, against the
+# network Docker has, exactly: compose.prod.yaml declares IPv6 only together with
+# enable_ipv6, and compose.ipv4-only.yaml drops both.
+network_ready() {
+  local name wanted actual
+  local -a network
+  mapfile -t network < <(compose_tag "$NEW_TAG" config --format json \
+    | docker run --rm -i --network none --entrypoint node "$QWBE_IMAGE:$NEW_TAG" -e '
+      const n = JSON.parse(require("node:fs").readFileSync(0, "utf8")).networks.default
+      console.log([n.name, ...(n.ipam?.config ?? []).map((c) => c.subnet)].join("\n"))')
+  name="${network[0]:-}"
+  [[ -n "$name" ]] || die "could not read the network of the new Compose files; production is untouched"
+  wanted="$(printf '%s\n' "${network[@]:1}" | LC_ALL=C sort)"
+  actual="$(docker network inspect -f '{{range .IPAM.Config}}{{println .Subnet}}{{end}}' "$name" | sed '/^$/d' | LC_ALL=C sort)" \
+    || die "network $name not found; production is untouched"
+  [[ "$actual" == "$wanted" ]] || die "network $name has the subnets [${actual//$'\n'/ }], the new Compose files fix [${wanted//$'\n'/ }].
+Compose does not change a running network. In a maintenance window, recreate it with the
+running version (volumes are kept): ${COMPOSE[*]} down && ${COMPOSE[*]} up -d
+then run the deploy again. Production is untouched."
 }
 
 stop_and_backup() {
@@ -170,6 +193,7 @@ main() {
   checkout_ready
   record_active
   pull_and_build
+  network_ready
   trap on_exit EXIT
   trap 'exit 143' TERM
   trap 'exit 130' INT

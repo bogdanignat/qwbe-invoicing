@@ -51,12 +51,31 @@ Comenzile rulează din directorul repository-ului.
    (restul ghidului presupune asta):
    - **a) Caddy-ul inclus:** `COMPOSE_FILE=compose.prod.yaml` și `COMPOSE_PROFILES=proxy`.
      Apoi `cp Caddyfile.example Caddyfile` și înlocuiește `invoice.example.com` cu gazda
-     din `PUBLIC_ORIGIN`.
+     din `PUBLIC_ORIGIN`. `Caddyfile` trebuie să rămână lizibil pentru toți (`0644`, cum îl
+     lasă `cp`): Caddy rulează fără capabilitatea care i-ar permite să citească un fișier `0600`.
+     Limitarea încercărilor de login merge pe IP-ul real al vizitatorului fără altă setare.
    - **b) Proxy-ul tău, pe același server:**
      `COMPOSE_FILE=compose.prod.yaml:compose.loopback.yaml` și `APP_LOOPBACK_PORT=3180`.
      Proxy-ul trimite spre `http://127.0.0.1:3180` și păstrează neschimbate `Host` și
-     `X-Forwarded-Proto` (altfel aplicația răspunde `400`); HSTS se pune în proxy. Exemple
-     nginx și Caddy: [Quick start, pasul 5](../README.md#quick-start-self-host).
+     `X-Forwarded-Proto` (altfel aplicația răspunde `400`). Pentru limitarea încercărilor
+     de login pe IP-ul real, proxy-ul suprascrie `X-Forwarded-For` cu adresa vizitatorului
+     (nginx: `proxy_set_header X-Forwarded-For $remote_addr;`; Caddy și Traefik o fac
+     implicit). Nu folosi `$proxy_add_x_forwarded_for`: păstrează în față ce a trimis
+     clientul, iar o valoare pe care aplicația nu o poate citi (`unknown`, `1.2.3.4:5678`)
+     primește `400 invalid_forwarded_for`. Un proxy care nu poate suprascrie primește
+     `QWBE_TRUSTED_PROXY=` (gol) în `.env`; atunci toți vizitatorii împart aceeași limită.
+     Exemple nginx și Caddy: [Quick start, pasul 5](../README.md#quick-start-self-host).
+
+   În ambele variante proxy-ul ajunge la aplicație din rețeaua proiectului, pe subneturile
+   fixe `10.93.0.0/24` și `fd93:1c5e:a7b0::/64` (IPv6 ULA), în care `QWBE_TRUSTED_PROXY` are
+   încredere implicit. HSTS (`max-age=31536000`) îl trimite aplicația, pentru o
+   `PUBLIC_ORIGIN` cu `https`.
+
+   **IPv6 (varianta a).** Vizitatorii IPv6 ajung la Caddy cu adresa lor reală doar pe Docker
+   27 sau mai nou, cu `ip6tables` pornit (implicit acolo). Cu `ip6tables` oprit, Docker îi
+   predă lui Caddy din gateway-ul rețelei și toți vizitatorii IPv6 împart din nou aceeași
+   limită de login. Pe un server fără IPv6 adaugi `compose.ipv4-only.yaml` la `COMPOSE_FILE`
+   (de exemplu `compose.prod.yaml:compose.ipv4-only.yaml`): rețeaua rămâne doar cu subnetul IPv4.
 4. Generează secretele:
    ```bash
    scripts/init-secrets.sh
@@ -99,7 +118,8 @@ Instalarea dintr-un release publicat (imagine din registry, fixată pe digest):
 | `PUBLIC_ORIGIN` | singura origine acceptată; `Host`, `X-Forwarded-*` și `Origin` trebuie să coincidă cu ea |
 | `ORGANIZATION_ID` | firma deservită; nu se schimbă după primul start |
 | `QWBE_PLUGINS` | plugin-urile pornite: absentă = toate, goală = niciunul, nume necunoscut = refuz la pornire |
-| `QWBE_TRUSTED_PROXY` | proxy-urile ale căror `X-Forwarded-For` contează la limitarea încercărilor de login |
+| `QWBE_TRUSTED_PROXY` | proxy-urile ale căror `X-Forwarded-For` contează la limitarea încercărilor de login; implicit rețeaua proiectului, gol = nimeni |
+| `QWBE_NETWORK_SUBNET`, `QWBE_NETWORK_SUBNET_IPV6` | subneturile fixe ale rețelei proiectului, implicit `10.93.0.0/24` și `fd93:1c5e:a7b0::/64`; se schimbă doar dacă se suprapun cu o rețea de pe server |
 | `QWBE_BEARER_API` | `off` implicit; `on` deschide API-ul cu token Bearer pe aceeași adresă |
 
 O schimbare cere repornirea (`docker compose up -d`). Tabelul complet:
@@ -226,6 +246,11 @@ staging-ul de backup: nu e niciodată un pas de actualizare sau de backup.
 | `bind source path does not exist: .../pg-password` la `up` | lipsește un fișier secret: rulează `scripts/init-secrets.sh` și `up` din nou; clusterul nu a fost creat, nu ai ce șterge |
 | `password authentication failed` | parola a fost regenerată după primul start; pune la loc fișierul vechi sau urmează [rotirea parolei](../README.md#rotate-it-keeping-the-data) |
 | `migrate` iese cu `schema does not match the migration contract (...); recreate the database` | drift de migrare: noua versiune a schimbat schema de bază. Cât proiectul e în dezvoltare nu există upgrade între scheme, baza se recreează (README, [API](../README.md#api), „Schema during development”) |
+| `Pool overlaps with other one on this address space` la `up` | un subnet al rețelei e deja folosit pe server: pune alt `/24` în `QWBE_NETWORK_SUBNET` sau alt `/64` în `QWBE_NETWORK_SUBNET_IPV6` |
+| la `up`, o eroare despre IPv6 la crearea rețelei | serverul nu are IPv6: adaugă `compose.ipv4-only.yaml` la `COMPOSE_FILE`, apoi `docker compose down` (fără `-v`) și `up -d` |
+| `400 invalid_forwarded_for` la unii vizitatori (varianta b) | proxy-ul adaugă la `X-Forwarded-For` în loc să-l suprascrie: în nginx `proxy_set_header X-Forwarded-For $remote_addr;` |
+| la `up`, o eroare despre rețeaua `qwbe-invoicing_default`, sau `deploy.sh` refuză: `network ... has the subnets` | rețeaua e creată cu alte subneturi (de o versiune fără subnet fix sau înainte de o schimbare în `.env`): `docker compose down` (fără `-v`, volumele rămân), apoi `docker compose up -d` |
+| Caddy: `permission denied` la `/etc/caddy/Caddyfile` | `Caddyfile` are mod `0600`: `chmod 644 Caddyfile` |
 | `400` la orice cerere prin proxy | `Host` sau `X-Forwarded-Proto` diferă de `PUBLIC_ORIGIN`; verifică proxy-ul și gazda din `Caddyfile` |
 | `404` pe plăți sau e-Factura | plugin-ul e oprit în `QWBE_PLUGINS`; datele rămân și reapar când îl pornești |
 | aplicația nu pornește după o schimbare în `QWBE_PLUGINS` | nume de plugin necunoscut; eroarea listează numele valide |

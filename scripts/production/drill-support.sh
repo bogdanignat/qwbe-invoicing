@@ -116,7 +116,8 @@ setup() {
     -e "s|^ANAF_TOKEN_KEY_PATH=.*|ANAF_TOKEN_KEY_PATH=$work/secrets/anaf-token-key|" \
     "$checkout/.env.example" > "$checkout/.env"
   printf '%s\n' "COMPOSE_PROJECT_NAME=$project" "COMPOSE_FILE=compose.prod.yaml:compose.loopback.yaml:$work/volumes.yaml" \
-    "APP_LOOPBACK_PORT=$port" "BACKUP_KEEP=3" >> "$checkout/.env"
+    "APP_LOOPBACK_PORT=$port" "BACKUP_KEEP=3" QWBE_NETWORK_SUBNET=10.93.2.0/24 \
+    QWBE_NETWORK_SUBNET_IPV6=fd93:1c5e:a7b2::/64 >> "$checkout/.env"
   "$checkout/scripts/init-secrets.sh" "$checkout/.env" >/dev/null
   # Every fixed volume name, renamed; the data volume follows QWBE_DATA_VOLUME in .env.
   printf '%s\n' volumes: "  invoicing-postgres: { name: $project-postgres }" \
