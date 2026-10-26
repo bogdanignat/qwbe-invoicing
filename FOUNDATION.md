@@ -4,7 +4,7 @@ Status: architecture baseline; T-1876 direction (standalone plugin pack), with p
 Source snapshot: QWBE mother repository at `a98d9ef` (main, 31 August 2026; previous baseline `987e11b`); structural reference: `qwbe-plugins/crm-pack`
 Conformance review against that snapshot: 2 September 2026, section 18 (historical)
 Package manager: pnpm
-Runtime: Node.js + TypeScript + **Effect 3.x as primary runtime** (`effect`, `@effect/platform`, `@effect/platform-node`) — all cube application logic, host capabilities (Clock, Store, IdGenerator, Auth), and HTTP handling are modelled as `Effect`
+Runtime: Node.js + TypeScript + **Effect 3.x as primary runtime** (`effect`, `@effect/platform`) — all cube application logic, host capabilities (Clock, Store, IdGenerator, Auth), and HTTP handling are modelled as `Effect`
 UI: React 19 + TypeScript styled with Tailwind CSS 4, a single-page application in `frontend/` built with Vite and routed with TanStack Router (file routes in `frontend/src/routes/`); the kernel serves the build (`QWBE_UI_DIR`) and the API (`/api/*`) on one origin, `PUBLIC_ORIGIN`, so the browser calls `/api` directly with its session cookie; TanStack Query integrates server state with React. The boundary remains API-first: every cube use-case has a corresponding authenticated HTTP endpoint, and the UI contains no fiscal business logic
 
 ## 1. Purpose
@@ -468,7 +468,6 @@ Initial compatibility target from the mother repository:
 - `effect` `^3.21.0` — core runtime (required);
 - `pg` `^8.23.0` — the mother's Postgres driver since QWB-44 (host concern; the cube never imports it);
 - `@effect/platform` `^0.96.0` — HTTP API surface (required);
-- `@effect/platform-node` `^0.107.0` — Node adapter (required);
 - imports include `.ts` where Node executes source directly.
 
 Rule: do not introduce an alternative async/runtime abstraction. New code must use `Effect.gen`/`Effect.flatMap` and the injected `Clock`/`Store`/`Context` capabilities. Every cube use-case exposed via `InvoicingService` has a 1:1 authenticated HTTP endpoint in `kernel/api/api.ts`.
