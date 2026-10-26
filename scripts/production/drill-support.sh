@@ -2,6 +2,8 @@
 # The isolated stack of scripts/production/drill.sh: its names, cleanup, the isolation
 # check, the helpers that run a production script and read the result, the HTTP API
 # calls that make the data, and the setup (upstream, checkout, .env, secrets).
+# The drill runs without the company-lookup plugin (QWBE_PLUGINS in setup): the issuer's
+# VAT guard would ask ANAF live about a made-up CIF, and a drill must not need the network.
 
 drill_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 project=qwbe-drill
@@ -118,7 +120,7 @@ setup() {
     -e "s|^ANAF_TOKEN_KEY_PATH=.*|ANAF_TOKEN_KEY_PATH=$work/secrets/anaf-token-key|" \
     "$checkout/.env.example" > "$checkout/.env"
   printf '%s\n' "COMPOSE_PROJECT_NAME=$project" "COMPOSE_FILE=compose.prod.yaml:compose.loopback.yaml:$work/volumes.yaml" \
-    "APP_LOOPBACK_PORT=$port" "BACKUP_KEEP=3" QWBE_NETWORK_SUBNET=10.93.2.0/24 \
+    "APP_LOOPBACK_PORT=$port" "BACKUP_KEEP=3" QWBE_PLUGINS=payments,efactura QWBE_NETWORK_SUBNET=10.93.2.0/24 \
     QWBE_NETWORK_SUBNET_IPV6=fd93:1c5e:a7b2::/64 >> "$checkout/.env"
   "$checkout/scripts/init-secrets.sh" "$checkout/.env" >/dev/null
   # Every fixed volume name, renamed; the data volume follows QWBE_DATA_VOLUME in .env.
