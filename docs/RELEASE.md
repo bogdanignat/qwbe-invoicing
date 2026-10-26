@@ -14,6 +14,7 @@ docs/LOCAL_DEVELOPMENT.md
 docs/ANAF.md
 scripts/init-secrets.sh
 scripts/production/lib.sh, backup.sh, restore.sh   (deploy.sh needs a git checkout)
+deploy/postgres/grants.sql, db-init.sh   (the database roles; mounted by db-init)
 deploy/systemd/qwbe-invoicing-backup.service, .timer
 ```
 
@@ -91,6 +92,8 @@ no size thresholds or cube rules are relaxed.
 mkdir -p /opt/qwbe-invoicing && cd /opt/qwbe-invoicing
 cp /path/to/release/{compose.prod.yaml,compose.loopback.yaml,compose.ipv4-only.yaml,Caddyfile.example} .
 mkdir -p scripts && cp /path/to/release/scripts/init-secrets.sh scripts/
+# db-init runs these on every start: the roles, grants and passwords (README, "Database access")
+mkdir -p deploy/postgres && cp /path/to/release/deploy/postgres/{grants.sql,db-init.sh} deploy/postgres/
 cp /path/to/release/.env.example .env
 # Edit .env (each key is documented there):
 #   PUBLIC_ORIGIN=https://invoice.example.com   (required: the origin users type)
@@ -99,10 +102,11 @@ cp /path/to/release/.env.example .env
 #   ORGANIZATION_ID=...                         (once, never changed afterwards)
 #   QWBE_PGDATABASE=qwbe_invoicing / QWBE_DATA_VOLUME=qwbe-invoicing-data (required; a restore switches them)
 #   BACKUP_DIR=/var/backups/qwbe-invoicing      (for scripts/production/; absolute, outside the checkout)
-#   AUTH_TOKEN_PATH / PG_PASSWORD_PATH / COMPANY_LOOKUP_KEY_PATH / ANAF_TOKEN_KEY_PATH (required; .local/ by default)
+#   AUTH_TOKEN_PATH / PG_SUPERUSER_PASSWORD_PATH / PG_OWNER_PASSWORD_PATH / PG_APP_PASSWORD_PATH /
+#   COMPANY_LOOKUP_KEY_PATH / ANAF_TOKEN_KEY_PATH (required; .local/ by default)
 sudo install -d -m 0770 -o "$USER" -g 1000 /var/backups/qwbe-invoicing   # writable by you and the image's `node`
 
-# 2. The four secrets, at those paths: mode 0600, never overwritten, never printed
+# 2. The six secrets, at those paths: mode 0600, never overwritten, never printed
 scripts/init-secrets.sh
 
 # 3. TLS, one of:
@@ -135,7 +139,7 @@ The commands below are written for a); with b), replace `--profile proxy` by
 `-f compose.loopback.yaml` wherever the stack is started. Setting `COMPOSE_FILE` and
 `COMPOSE_PROFILES` in `.env` (see `.env.example`) makes both unnecessary.
 
-Requirements enforced by the bundle: `read_only: true` with bounded `tmpfs`, named volume `qwbe-invoicing-data`, `depends_on: migrate: service_completed_successfully`, `HEALTHCHECK` on `/health/ready`, secrets from file, no fallback for `PUBLIC_ORIGIN`, `IMAGE_TAG` or the three secret paths, `cap_drop: [ALL]` and `no-new-privileges` on every service (`db` adds back `CHOWN`, `DAC_OVERRIDE`, `FOWNER`, `SETGID`, `SETUID` for its entrypoint, Caddy `NET_BIND_SERVICE`), PostgreSQL and Caddy pinned by version and digest in `compose.prod.yaml` itself (only the application image is in `image-digests.txt`), the project network on fixed IPv4 and IPv6 subnets that `QWBE_TRUSTED_PROXY` trusts by default, and HSTS (`max-age=31536000`) sent by the application on an `https:` `PUBLIC_ORIGIN`.
+Requirements enforced by the bundle: `read_only: true` with bounded `tmpfs`, named volume `qwbe-invoicing-data`, `depends_on: migrate: service_completed_successfully` (and `migrate` on `db-init`), `HEALTHCHECK` on `/health/ready`, secrets from file, three database roles (`app` connects as `qwbe_app`, DML only; `migrate` as `qwbe_owner`; the `postgres` superuser only in `db` and `db-init`), no fallback for `PUBLIC_ORIGIN`, `IMAGE_TAG` or the five secret paths, `cap_drop: [ALL]` and `no-new-privileges` on every service (`db` adds back `CHOWN`, `DAC_OVERRIDE`, `FOWNER`, `SETGID`, `SETUID` for its entrypoint, `db-init` `DAC_READ_SEARCH` to read the secret files as root, Caddy `NET_BIND_SERVICE`), PostgreSQL and Caddy pinned by version and digest in `compose.prod.yaml` itself (only the application image is in `image-digests.txt`), the project network on fixed IPv4 and IPv6 subnets that `QWBE_TRUSTED_PROXY` trusts by default, and HSTS (`max-age=31536000`) sent by the application on an `https:` `PUBLIC_ORIGIN`.
 
 Compose does not move an existing network to other subnets. An installation whose network
 was created before the subnets were fixed (or before they changed in `.env`) needs, once,
@@ -314,8 +318,9 @@ scripts/production/restore.sh /var/backups/qwbe-invoicing/qwbe-invoicing-<time>.
   switched, no volume made. Digests and compatibility are verified only by `--apply`.
 - `--apply` shows the archive and its time, the source, the target, the image and
   the organization, and asks for the archive name. It creates a new database
-  `<QWBE_PGDATABASE>_r<time>` and volume `<QWBE_DATA_VOLUME>-r<time>`, restores, runs
-  `doctor` on them; only when that is ready it stops `app`, writes `QWBE_PGDATABASE`,
+  `<QWBE_PGDATABASE>_r<time>` owned by `qwbe_owner`, runs `db-init` on it, creates the
+  volume `<QWBE_DATA_VOLUME>-r<time>`, restores in `migrate` (as `qwbe_owner`), runs
+  `doctor` on them in `app` (as `qwbe_app`); only when that is ready it stops `app`, writes `QWBE_PGDATABASE`,
   `QWBE_DATA_VOLUME` and `IMAGE_TAG` to `.env` in one atomic write (the previous copy is
   in `.local/production/`), starts the stack and checks `doctor` on the new database.
 - A failed restore leaves its target as it is for investigation and the installation
@@ -335,7 +340,7 @@ scripts/production/restore.sh /var/backups/qwbe-invoicing/qwbe-invoicing-<time>.
 
 Backup reads the database and writes only the archive; repeating it produces the same contents. The archive holds `manifest.json`, a plain `pg_dump` of the one database as `database.sql` and the `/data/artifacts` tree, with a SHA-256 per member — therefore it includes proforma records/conversion metadata, proforma artifact metadata and proforma PDF files without a separate backup command or format. `browser_sessions` keeps its definition and loses its rows, so no live cookie survives a restore.
 
-Both commands take the maintenance key EXCLUSIVE as a *try* and refuse immediately while `app` holds it SHARED: stop `app` first. Every `run` below carries `--no-deps`: `db` is already up, and without it Compose would also start the `migrate` service and change the schema of the database being backed up or restored. `restore --apply` executes `database.sql` through `psql` as the application role — only an archive you trust may be applied — and requires an **empty** target database: create a fresh one and point `QWBE_PGDATABASE` at it. Nothing is ever dropped.
+Both commands take the maintenance key EXCLUSIVE as a *try* and refuse immediately while `app` holds it SHARED: stop `app` first. Every `run` below carries `--no-deps`: `db` is already up, and without it Compose would also start the `migrate` service and change the schema of the database being backed up or restored. `restore --apply` executes `database.sql` through `psql` as the schema owner role (`qwbe_owner`, NOSUPERUSER), so it runs in the `migrate` service — only an archive you trust may be applied — and requires an **empty** target database: create a fresh one owned by `qwbe_owner`, run `db-init` on it before the restore (its grants give `qwbe_app` its rights on every object the restore creates) and point `QWBE_PGDATABASE` at it. Nothing is ever dropped.
 
 ```bash
 # Backup — stop app first; `run --rm --no-deps app` carries the same environment and secrets
@@ -350,16 +355,20 @@ docker compose -f compose.prod.yaml start app
 # deletes nothing, so it refuses a populated database or a non-empty /data/artifacts,
 # the dry-run included. Create both first:
 docker compose -f compose.prod.yaml stop app
-docker compose -f compose.prod.yaml exec db psql -U qwbe -d postgres \
-  -c "CREATE DATABASE qwbe_invoicing_restored TEMPLATE template0 LC_COLLATE 'C' LC_CTYPE 'C' ENCODING 'UTF8'"
+docker compose -f compose.prod.yaml exec db psql -U postgres -d postgres \
+  -c "CREATE DATABASE qwbe_invoicing_restored OWNER qwbe_owner TEMPLATE template0 LC_COLLATE 'C' LC_CTYPE 'C' ENCODING 'UTF8'"
+docker compose -f compose.prod.yaml run --rm --no-deps -e PGDATABASE=qwbe_invoicing_restored db-init
 docker volume create qwbe-invoicing-data-restored
-# Dry-run against that target: verifies the whole archive, writes nothing
+# Dry-run against that target: verifies the whole archive, writes nothing. In `migrate`
+# (qwbe_owner), staging on the staging volume: `migrate` has only a small /tmp.
 docker compose -f compose.prod.yaml run --rm --no-deps -e PGDATABASE=qwbe_invoicing_restored \
-  -v qwbe-invoicing-data-restored:/data -v /opt/qwbe-invoicing/backups:/backup app \
+  -e TMPDIR=/var/backups/staging -v invoicing-backup-staging:/var/backups/staging \
+  -v qwbe-invoicing-data-restored:/data -v /opt/qwbe-invoicing/backups:/backup:ro migrate \
   node bin/qwbe-invoicing.ts restore --input /backup/qwbe-2026-08-31.tar.gz --json
 # Apply
 docker compose -f compose.prod.yaml run --rm --no-deps -e PGDATABASE=qwbe_invoicing_restored \
-  -v qwbe-invoicing-data-restored:/data -v /opt/qwbe-invoicing/backups:/backup app \
+  -e TMPDIR=/var/backups/staging -v invoicing-backup-staging:/var/backups/staging \
+  -v qwbe-invoicing-data-restored:/data -v /opt/qwbe-invoicing/backups:/backup:ro migrate \
   node bin/qwbe-invoicing.ts restore --input /backup/qwbe-2026-08-31.tar.gz --apply --confirm-production --json
 # Point the stack at both: QWBE_PGDATABASE=qwbe_invoicing_restored and
 # QWBE_DATA_VOLUME=qwbe-invoicing-data-restored in .env (IMAGE_TAG: the image that made the backup), then verify
@@ -368,7 +377,7 @@ docker compose -f compose.prod.yaml exec app node bin/qwbe-invoicing.ts doctor -
 docker compose -f compose.prod.yaml exec app node bin/qwbe-invoicing.ts migrate --json
 ```
 
-Separately protect `.env` (`PUBLIC_ORIGIN`, `ORGANIZATION_ID`, `IMAGE_TAG`), the contents of the four secret files, `Caddyfile`/`compose.prod.yaml` edits and `image-digests.txt` — they are operator config, not part of the data backup. A restored database needs the same `ORGANIZATION_ID`; sessions do not survive a restore, so users unlock again.
+Separately protect `.env` (`PUBLIC_ORIGIN`, `ORGANIZATION_ID`, `IMAGE_TAG`), the contents of the six secret files, `Caddyfile`/`compose.prod.yaml` edits and `image-digests.txt` — they are operator config, not part of the data backup. A restored database needs the same `ORGANIZATION_ID`; sessions do not survive a restore, so users unlock again.
 
 ## Rollback
 
@@ -417,6 +426,6 @@ gunzip -c qwbe-invoicing-0.3.0-image.tar.gz | docker load
 
 ## Security and audit notes
 
-- Secrets are mounted from `${AUTH_TOKEN_PATH}`, `${PG_PASSWORD_PATH}` and `${COMPANY_LOOKUP_KEY_PATH}` as Compose secrets (`/run/secrets/*`), never baked into the image or printed; `scripts/init-secrets.sh` creates them and never prints or overwrites one. `doctor --json` reports only `authTokenReadable`, never the value.
+- Secrets are mounted from `${AUTH_TOKEN_PATH}`, `${PG_SUPERUSER_PASSWORD_PATH}`, `${PG_OWNER_PASSWORD_PATH}`, `${PG_APP_PASSWORD_PATH}` and `${COMPANY_LOOKUP_KEY_PATH}` as Compose secrets (`/run/secrets/*`), never baked into the image or printed; `scripts/init-secrets.sh` creates them and never prints or overwrites one. `doctor --json` reports only `authTokenReadable`, never the value.
 - `issued_invoices`, `issued_lines`, `issued_tax_breakdown`, `proformas`, `proforma_lines`, `proforma_tax_breakdown`, legacy `proforma_conversions`, direct `proforma_invoice_conversions`, invoice/proforma artifact metadata, and document sequences are append-only or guarded by triggers — verified by current migrations and the boundary/size gates (`pnpm verify`). Direct mutation of an issued fiscal snapshot must fail with `issued invoices are immutable`; sealed proformas and both conversion audit records are likewise immutable.
 - Keep invoice and proforma artifacts immutable: the PDF object key is `sha256/<2>/<64>.pdf` and reads verify key + digest + byte length. Proforma PDFs are marked `DOCUMENT NEFISCAL`; they carry no e-Factura, payment, or correction semantics and delivery means download, not email.

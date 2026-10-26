@@ -17,8 +17,11 @@ name: qwbe-invoicing
 # through the gateway. QWBE_TRUSTED_PROXY defaults to both subnets, so the login throttle
 # keys on the client each proxy writes in X-Forwarded-For, not on the proxy.
 #
-# Before the first `up`, create the four secret files (`scripts/init-secrets.sh` does it,
-# from the paths in .env); this file mounts three, compose.anaf.yaml the ANAF token key.
+# Before the first `up`, create the six secret files (`scripts/init-secrets.sh` does it,
+# from the paths in .env); this file mounts five, compose.anaf.yaml the ANAF token key.
+# Three database roles, one password each (deploy/postgres/grants.sql): `postgres`, the
+# superuser, only for `db-init` and restore; qwbe_owner, the schema owner, for `migrate`
+# and restore; qwbe_app, DML only, for `app`.
 # They are never in this file, never in the image and never in an environment variable.
 # The company-lookup key encrypts the openapi.ro key at rest;
 # it is never rotated in place: a new one makes the stored openapi.ro key unreadable
@@ -33,12 +36,6 @@ x-postgres-environment: &postgres-environment
   # scripts/production/restore.sh, which switches it together with QWBE_DATA_VOLUME.
   # POSTGRES_DB below only names the database the cluster is created with.
   PGDATABASE: ${QWBE_PGDATABASE:?Set QWBE_PGDATABASE to the active database, qwbe_invoicing at install}
-  PGUSER: qwbe
-  # The application reads the password from this file, never from PGPASSWORD: an
-  # environment variable travels into every child process and into `docker inspect`.
-  # Outside development `kernel/config.ts` refuses to boot when the file is
-  # missing or empty, so this is fail-closed rather than best effort.
-  PGPASSWORD_FILE: /run/secrets/pg_password
 
 # No capability and no privilege gained on exec, unless a service adds back what it needs.
 x-hardening: &hardening
@@ -54,22 +51,24 @@ services:
     cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]
     environment:
       POSTGRES_DB: qwbe_invoicing
-      POSTGRES_USER: qwbe
-      POSTGRES_PASSWORD_FILE: /run/secrets/pg_password
+      # The cluster's superuser: db-init and restore only, never the application.
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD_FILE: /run/secrets/pg_superuser_password
       # C collation for the whole cluster. The schema's indexes, keyset cursors and
       # the folded case-insensitive expressions were all written against binary text
       # ordering; any other collation silently changes paging order.
       POSTGRES_INITDB_ARGS: --locale=C --encoding=UTF8
       PGDATA: /var/lib/postgresql/data/pgdata
+    # The superuser's only: db-init sets the two role passwords.
     secrets:
-      - pg_password
+      - pg_superuser_password
     volumes:
       - invoicing-postgres:/var/lib/postgresql/data
     # Not published. Only the application network reaches the database.
     expose:
       - "5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U qwbe -d qwbe_invoicing"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres -d qwbe_invoicing"]
       interval: 10s
       timeout: 3s
       retries: 20
@@ -77,22 +76,56 @@ services:
     stop_grace_period: 30s
     restart: unless-stopped
 
+  # deploy/postgres/grants.sql and the two login passwords, as the superuser, on the
+  # active database before every `migrate`; restore.sh runs it on its new database too.
+  # Idempotent. Root with DAC_READ_SEARCH alone, to read the operator's 0600 secret
+  # files: the image's initdb scripts run as `postgres` and cannot.
+  db-init:
+    image: postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
+    <<: *hardening
+    cap_add: [DAC_READ_SEARCH]
+    user: "0:0"
+    command: ["sh", "/qwbe-postgres/db-init.sh"]
+    environment:
+      PGHOST: db
+      PGDATABASE: ${QWBE_PGDATABASE:?Set QWBE_PGDATABASE to the active database, qwbe_invoicing at install}
+    secrets:
+      - pg_superuser_password
+      - pg_owner_password
+      - pg_app_password
+    volumes:
+      - ./deploy/postgres:/qwbe-postgres:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    read_only: true
+    restart: "no"
+
   migrate:
     image: ${QWBE_IMAGE:-ghcr.io/bogdanignat/qwbe-invoicing}:${IMAGE_TAG:?Set IMAGE_TAG, e.g. local for your own build or 0.3.0@sha256:<digest> for a release}
     <<: *hardening
     command: ["node", "bin/qwbe-invoicing.ts", "migrate", "--apply", "--confirm-production", "--json"]
     environment:
       <<: *postgres-environment
+      # The schema owner, NOSUPERUSER. The password is read from this file, never from
+      # PGPASSWORD: an environment variable travels into every child process and into
+      # `docker inspect`. Outside development `kernel/config.ts` refuses to boot when
+      # the file is missing or empty, so this is fail-closed rather than best effort.
+      PGUSER: qwbe_owner
+      PGPASSWORD_FILE: /run/secrets/pg_owner_password
       NODE_ENV: production
       DATA_DIR: /data
     secrets:
-      - pg_password
+      - pg_owner_password
     # Without this the migration runs against a server that is not accepting
-    # connections yet and `app` comes up on an empty schema. There is no fallback
-    # path in which `migrate` runs without the database or without the secret.
+    # connections yet, or before its role exists, and `app` comes up on an empty
+    # schema. There is no fallback path in which `migrate` runs without the database,
+    # its role or the secret.
     depends_on:
       db:
         condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
     volumes:
       - invoicing-data:/data
     read_only: true
@@ -105,6 +138,10 @@ services:
     <<: *hardening
     environment:
       <<: *postgres-environment
+      # DML only, NOSUPERUSER: no DDL in `public`, no trigger switch, no server program
+      # (deploy/postgres/grants.sql). Its own secret file, read as `migrate` reads its.
+      PGUSER: qwbe_app
+      PGPASSWORD_FILE: /run/secrets/pg_app_password
       NODE_ENV: production
       HOST: 0.0.0.0
       PORT: 3000
@@ -138,7 +175,7 @@ services:
       TMPDIR: /var/backups/staging
     secrets:
       - api_token
-      - pg_password
+      - pg_app_password
       - company_lookup_key
     depends_on:
       db:
@@ -205,8 +242,12 @@ networks:
 secrets:
   api_token:
     file: ${AUTH_TOKEN_PATH:?Set AUTH_TOKEN_PATH to the operator-created API token file}
-  pg_password:
-    file: ${PG_PASSWORD_PATH:?Set PG_PASSWORD_PATH to the operator-created PostgreSQL password file}
+  pg_superuser_password:
+    file: ${PG_SUPERUSER_PASSWORD_PATH:?Set PG_SUPERUSER_PASSWORD_PATH to the operator-created PostgreSQL superuser password file}
+  pg_owner_password:
+    file: ${PG_OWNER_PASSWORD_PATH:?Set PG_OWNER_PASSWORD_PATH to the operator-created qwbe_owner password file}
+  pg_app_password:
+    file: ${PG_APP_PASSWORD_PATH:?Set PG_APP_PASSWORD_PATH to the operator-created qwbe_app password file}
   company_lookup_key:
     file: ${COMPANY_LOOKUP_KEY_PATH:?Set COMPANY_LOOKUP_KEY_PATH to the operator-created company lookup master key file}
 

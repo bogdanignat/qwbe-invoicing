@@ -16,7 +16,7 @@ The dev host is the machine that runs Docker and Warden.
 pnpm local:setup             # dry-run
 pnpm local:setup --apply     # starts Warden services and signs invoice.test once
 cp -n .env.example .env      # default secret paths: ./.local/...
-scripts/init-secrets.sh      # api-token, pg-password, company-lookup-key, anaf-token-key; 0600, never overwritten
+scripts/init-secrets.sh      # api-token, pg-{superuser,owner,app}-password, company-lookup-key, anaf-token-key; 0600, never overwritten
 docker compose build         # one image; its ui-builder stage runs `pnpm build:frontend`
 docker compose up -d
 docker compose ps
@@ -30,22 +30,26 @@ container in front of the kernel) moves to the single image with
 volumes stay. If `migrate` then refuses the database as drift, the baseline changed
 since the cluster was created; see README, "Schema during development".
 
-`scripts/init-secrets.sh` creates the four secret files once and keeps them on every
-later run. Never regenerate `.local/pg-password` after the
-cluster exists (PostgreSQL keeps the first password and `migrate` then fails with
+`scripts/init-secrets.sh` creates the six secret files once and keeps them on every
+later run. The database has three roles, one password each (README, [Database
+access](../README.md#database-access)): `postgres`, the superuser, for `db-init`, restore
+and the test rig; `qwbe_owner`, the schema owner, for `migrate`; `qwbe_app`, DML only, for
+`app`. Before every `migrate`, `db-init` applies `deploy/postgres/grants.sql` and sets the
+two role passwords from their files. Never regenerate `.local/pg-superuser-password` after
+the cluster exists (PostgreSQL keeps the first password and `db-init` then fails with
 `password authentication failed`), and never regenerate an existing `.local/api-token`.
 A new `.local/company-lookup-key` makes a stored openapi.ro key unreadable: the
 provider reads as off until the key is entered again in Integrări. A new
 `.local/anaf-token-key` makes the stored ANAF tokens unreadable: e-Factura asks for the
 certificate again.
-To change the password, or to start over, see README, [Database
-password](../README.md#database-password).
+To change a password, or to start over, see README, [Database
+access](../README.md#database-access).
 
 All the secrets are files the operator creates. Nothing in this repository holds a
-credential, no default password exists, and the PostgreSQL password is never passed
-as `PGPASSWORD`: the server reads it through `POSTGRES_PASSWORD_FILE` and the
-application through `PGPASSWORD_FILE`, so it reaches neither a child process nor
-`docker inspect`. Outside `development` a missing or empty password file is a refusal
+credential, no default password exists, and no PostgreSQL password is passed as an
+environment variable of a service: the server reads the superuser's through
+`POSTGRES_PASSWORD_FILE`, `migrate` and `app` theirs through `PGPASSWORD_FILE`, and
+`db-init` reads all three from the mounted files, so none reaches `docker inspect`. Outside `development` a missing or empty password file is a refusal
 to start, not a fallback. `.env.example` lists the paths and the volume names.
 
 Persistence is a PostgreSQL 16 cluster in the `db` service — a container like
@@ -270,7 +274,10 @@ to the font in `kernel/documents/assets/fonts/`.
 `doctor` reports `database` (host, port, database, user — never the password),
 `databaseReady`, `pendingMigrations`, `migrationsReady`, `schemaDrift`,
 `organizationId`, `authTokenFile`/`authTokenReadable`, `nodeVersion` and `writable`;
-it exits non-zero while any check fails so it can gate deployments. Liveness remains
+it exits non-zero while any check fails so it can gate deployments. `extraSchemas` lists
+user schemas other than `public`; it does not fail `doctor`, but `backup` refuses while it
+is non-empty. `extraExtensions` lists the extensions besides `plpgsql`, which the schema
+never needs (README, "Database access"). Liveness remains
 `GET /health/live` (process up, answered without touching the database, so it stays
 200 under saturation); readiness is `GET /health/ready` (maintenance barrier held,
 artifact directory present and writable — observed, never created, so a missing
@@ -320,17 +327,22 @@ docker compose run --rm --no-deps -v $(pwd)/.local/backup:/backup app node bin/q
 # Restore — into a FRESH, empty database AND a fresh artifact volume, never the live
 # `qwbe_invoicing` and `/data`: restore deletes nothing, so it refuses a populated
 # target, the dry-run included. The archive comes from the host directory above.
-docker compose exec db psql -U qwbe -d postgres \
-  -c "CREATE DATABASE qwbe_invoicing_restored TEMPLATE template0 LC_COLLATE 'C' LC_CTYPE 'C' ENCODING 'UTF8'"
+# Owned by qwbe_owner, with the grants in place before anything is restored into it.
+docker compose exec db psql -U postgres -d postgres \
+  -c "CREATE DATABASE qwbe_invoicing_restored OWNER qwbe_owner TEMPLATE template0 LC_COLLATE 'C' LC_CTYPE 'C' ENCODING 'UTF8'"
+docker compose run --rm --no-deps -e PGDATABASE=qwbe_invoicing_restored db-init
 docker volume create qwbe-invoicing-data-restored
-# Dry-run restore — validates the whole archive and reports the target, writing nothing
+# Dry-run restore — validates the whole archive and reports the target, writing nothing.
+# In `migrate`: database.sql runs as the schema owner (qwbe_owner), staging on the staging volume.
 docker compose run --rm --no-deps -e PGDATABASE=qwbe_invoicing_restored \
-  -v qwbe-invoicing-data-restored:/data -v $(pwd)/.local/backup:/backup:ro app \
+  -e TMPDIR=/var/backups/staging -v invoicing-backup-staging:/var/backups/staging \
+  -v qwbe-invoicing-data-restored:/data -v $(pwd)/.local/backup:/backup:ro migrate \
   node bin/qwbe-invoicing.ts restore --input /backup/qwbe-backup.tar.gz --json
 
 # Apply restore; outside development it also requires --confirm-production
 docker compose run --rm --no-deps -e PGDATABASE=qwbe_invoicing_restored \
-  -v qwbe-invoicing-data-restored:/data -v $(pwd)/.local/backup:/backup:ro app \
+  -e TMPDIR=/var/backups/staging -v invoicing-backup-staging:/var/backups/staging \
+  -v qwbe-invoicing-data-restored:/data -v $(pwd)/.local/backup:/backup:ro migrate \
   node bin/qwbe-invoicing.ts restore --input /backup/qwbe-backup.tar.gz --apply --json
 
 docker compose start app
@@ -362,7 +374,8 @@ Artifacts are copied first and the SQL goes in last as one
 `psql --single-transaction` transaction, so the commit is the only point after which
 rows can reference PDFs. A failure before it leaves an empty database.
 
-`database.sql` is **executed** as the application's own database role, and the
+`database.sql` is **executed** by `psql` as the schema owner role (`qwbe_owner`), backslash
+meta-commands included (`\!` runs a shell command in the `migrate` container), and the
 archive's checksums live inside the archive: they prove integrity, never authenticity.
 `restore --apply` therefore prints the trust boundary on stderr before it writes —
 `--json` consumers keep a clean stdout — and the rule is to restore only from a source

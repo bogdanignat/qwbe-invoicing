@@ -199,9 +199,9 @@ doctor_ready() {
 }
 
 # Starts what `.env` names: this run's `migrate` (an earlier exited one is removed, so
-# the outcome read afterwards is this one's), then `app`, then the rest (Caddy) with
-# --no-deps: a plain `up` would start the exited `migrate` again, which refuses while
-# `app` holds the maintenance key. Ready means healthy, `doctor` ready (plus an
+# the outcome read afterwards is this one's; `db-init` runs again before it, on the
+# active database), then `app`, then the rest (Caddy) with --no-deps: a plain `up` would
+# start the exited `migrate` again, which refuses while `app` holds the maintenance key. Ready means healthy, `doctor` ready (plus an
 # optional condition) and every service up. app-stopped goes once `app` is healthy:
 # from then on it runs, whatever fails after it.
 start_stack() {
@@ -211,7 +211,7 @@ start_stack() {
   wait_app_healthy 300 || return 1
   app_started
   doctor_ready "$QWBE_IMAGE:$1" "${2:-true}" || { warn "app is healthy, but doctor --json is not ready"; return 1; }
-  mapfile -t rest < <(compose config --services | grep -vxE 'db|migrate|app' || true)
+  mapfile -t rest < <(compose config --services | grep -vxE 'db|db-init|migrate|app' || true)
   ((${#rest[@]} == 0)) || compose up -d --pull never --no-deps "${rest[@]}" \
     || { warn "app is ready, but ${rest[*]} did not start: docker compose logs ${rest[*]}"; return 1; }
 }

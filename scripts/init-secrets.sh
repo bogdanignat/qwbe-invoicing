@@ -1,6 +1,8 @@
 #!/bin/sh
-# Create the four secret files a Compose stack mounts, at the paths named in `.env`:
-# AUTH_TOKEN_PATH (API token), PG_PASSWORD_PATH (PostgreSQL password),
+# Create the six secret files a Compose stack mounts, at the paths named in `.env`:
+# AUTH_TOKEN_PATH (API token), the PostgreSQL passwords of the three roles
+# (PG_SUPERUSER_PASSWORD_PATH for `postgres`, PG_OWNER_PASSWORD_PATH for qwbe_owner,
+# PG_APP_PASSWORD_PATH for qwbe_app; deploy/postgres/grants.sql),
 # COMPANY_LOOKUP_KEY_PATH (company-lookup master key) and ANAF_TOKEN_KEY_PATH (the key
 # that seals the ANAF e-Factura tokens, mounted by compose.anaf.yaml). Each one is 32
 # random bytes as 64 hex characters, mode 0600, in a directory created 0700 when it is
@@ -8,7 +10,8 @@
 # operator writes it to ANAF_CLIENT_SECRET_PATH (docs/LOCAL_DEVELOPMENT.md).
 #
 # Idempotent: an existing secret is never overwritten, so a second run changes
-# nothing. That matters: PostgreSQL keeps the password it was created with, and a new
+# nothing. That matters: PostgreSQL keeps the superuser password it was created with
+# (db-init sets the two role passwords on every start, from their files), and a new
 # company-lookup key makes the stored openapi.ro key unreadable, a new ANAF token key the
 # stored ANAF tokens (the organization then reconnects with its certificate). Secrets are never
 # printed; only their paths and whether they were created or kept.
@@ -75,6 +78,7 @@ create_secret() {
 }
 
 umask 077
-# All four paths are validated before the first file is written.
-for key in AUTH_TOKEN_PATH PG_PASSWORD_PATH COMPANY_LOOKUP_KEY_PATH ANAF_TOKEN_KEY_PATH; do path_of "$key" > /dev/null; done
-for key in AUTH_TOKEN_PATH PG_PASSWORD_PATH COMPANY_LOOKUP_KEY_PATH ANAF_TOKEN_KEY_PATH; do create_secret "$key"; done
+keys="AUTH_TOKEN_PATH PG_SUPERUSER_PASSWORD_PATH PG_OWNER_PASSWORD_PATH PG_APP_PASSWORD_PATH COMPANY_LOOKUP_KEY_PATH ANAF_TOKEN_KEY_PATH"
+# Every path is validated before the first file is written.
+for key in $keys; do path_of "$key" > /dev/null; done
+for key in $keys; do create_secret "$key"; done

@@ -111,7 +111,9 @@ setup() {
     -e "s|^IMAGE_TAG=.*|IMAGE_TAG=install|" -e "s|^ORGANIZATION_ID=.*|ORGANIZATION_ID=drill-org|" \
     -e "s|^QWBE_DATA_VOLUME=.*|QWBE_DATA_VOLUME=$project-data|" -e "s|^BACKUP_DIR=.*|BACKUP_DIR=$backups|" \
     -e "s|^AUTH_TOKEN_PATH=.*|AUTH_TOKEN_PATH=$work/secrets/api-token|" \
-    -e "s|^PG_PASSWORD_PATH=.*|PG_PASSWORD_PATH=$work/secrets/pg-password|" \
+    -e "s|^PG_SUPERUSER_PASSWORD_PATH=.*|PG_SUPERUSER_PASSWORD_PATH=$work/secrets/pg-superuser-password|" \
+    -e "s|^PG_OWNER_PASSWORD_PATH=.*|PG_OWNER_PASSWORD_PATH=$work/secrets/pg-owner-password|" \
+    -e "s|^PG_APP_PASSWORD_PATH=.*|PG_APP_PASSWORD_PATH=$work/secrets/pg-app-password|" \
     -e "s|^COMPANY_LOOKUP_KEY_PATH=.*|COMPANY_LOOKUP_KEY_PATH=$work/secrets/company-lookup-key|" \
     -e "s|^ANAF_TOKEN_KEY_PATH=.*|ANAF_TOKEN_KEY_PATH=$work/secrets/anaf-token-key|" \
     "$checkout/.env.example" > "$checkout/.env"

@@ -66,7 +66,7 @@ void test("no compose file runs a frontend service or a Next variable", () => {
 
 void test("development: app owns the Warden route and derives PUBLIC_ORIGIN from APP_DOMAIN", () => {
   const compose = source("compose.yaml")
-  assert.deepEqual(services(compose), ["db", "migrate", "app"])
+  assert.deepEqual(services(compose), ["db", "db-init", "migrate", "app"])
   const app = serviceBlock(compose, "app")
   assert.match(app, /PUBLIC_ORIGIN: https:\/\/\$\{APP_DOMAIN:-invoice\.test\}/u)
   assert.match(app, /networks:\n {6}- default\n {6}- warden/u)
@@ -85,7 +85,7 @@ void test("vite dev reaches the kernel on loopback only, with the dev server as 
 
 void test("production: no Warden, no public port, PUBLIC_ORIGIN and the image tag required, Caddy opt-in on app", () => {
   const compose = source("compose.prod.yaml")
-  assert.deepEqual(services(compose), ["db", "migrate", "app", "caddy"])
+  assert.deepEqual(services(compose), ["db", "db-init", "migrate", "app", "caddy"])
   assert.doesNotMatch(code("compose.prod.yaml"), /warden|traefik/iu)
   const app = serviceBlock(compose, "app")
   assert.match(app, /PUBLIC_ORIGIN: \$\{PUBLIC_ORIGIN:\?/u)
@@ -93,7 +93,7 @@ void test("production: no Warden, no public port, PUBLIC_ORIGIN and the image ta
   for (const name of ["migrate", "app"]) {
     assert.match(serviceBlock(compose, name), /image: \$\{QWBE_IMAGE:-[^}]+\}:\$\{IMAGE_TAG:\?/u, `${name} image`)
   }
-  for (const secret of ["AUTH_TOKEN_PATH", "PG_PASSWORD_PATH", "COMPANY_LOOKUP_KEY_PATH"]) {
+  for (const secret of ["AUTH_TOKEN_PATH", "PG_SUPERUSER_PASSWORD_PATH", "PG_OWNER_PASSWORD_PATH", "PG_APP_PASSWORD_PATH", "COMPANY_LOOKUP_KEY_PATH"]) {
     assert.match(compose, new RegExp(`\\$\\{${secret}:\\?`, "u"))
   }
   // The active database and artifact volume, switched together by scripts/production/restore.sh.
@@ -111,6 +111,7 @@ void test("production: every service drops its capabilities, Caddy is pinned, th
   const added = (name) => serviceBlock(compose, name).match(/^ {4}cap_add: .*$/gmu) ?? []
   assert.deepEqual(added("db"), ["    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]"])
   assert.deepEqual(added("caddy"), ["    cap_add: [NET_BIND_SERVICE]"])
+  assert.deepEqual(added("db-init"), ["    cap_add: [DAC_READ_SEARCH]"])
   for (const name of ["migrate", "app"]) assert.deepEqual(added(name), [], name)
   assert.match(serviceBlock(compose, "caddy"), /^ {4}image: caddy:\d+\.\d+\.\d+-alpine@sha256:[0-9a-f]{64}$/mu)
   // IPv6 on, so Docker forwards Caddy's IPv6 visitors with their own address, not the gateway's.
@@ -121,6 +122,23 @@ void test("production: every service drops its capabilities, Caddy is pinned, th
   const trusted = `QWBE_TRUSTED_PROXY: \${QWBE_TRUSTED_PROXY-\${QWBE_NETWORK_SUBNET:-${ipv4}},\${QWBE_NETWORK_SUBNET_IPV6:-${ipv6}}}\n`
   assert.ok(serviceBlock(compose, "app").includes(trusted),
     "QWBE_TRUSTED_PROXY defaults to the same subnets, and an empty value in .env still trusts nobody")
+})
+
+void test("database roles: the superuser password reaches db and db-init only, migrate is qwbe_owner, app is qwbe_app", () => {
+  for (const name of ["compose.yaml", "compose.prod.yaml"]) {
+    const compose = code(name)
+    const secrets = (service) => serviceBlock(compose, service).match(/- pg_\w+/gu)
+    assert.match(serviceBlock(compose, "db"), /POSTGRES_USER: postgres\n/u, name)
+    assert.deepEqual(secrets("db"), ["- pg_superuser_password"], `${name} db`)
+    assert.deepEqual(secrets("db-init"), ["- pg_superuser_password", "- pg_owner_password", "- pg_app_password"], `${name} db-init`)
+    assert.match(serviceBlock(compose, "db-init"), /depends_on:\n {6}db:\n {8}condition: service_healthy\n/u, name)
+    const migrate = serviceBlock(compose, "migrate")
+    assert.match(migrate, /PGUSER: qwbe_owner\n {6}PGPASSWORD_FILE: \/run\/secrets\/pg_owner_password\n/u, name)
+    assert.match(migrate, /db-init:\n {8}condition: service_completed_successfully\n/u, `${name}: migrate waits for the roles`)
+    assert.deepEqual(secrets("migrate"), ["- pg_owner_password"], name)
+    assert.match(serviceBlock(compose, "app"), /PGUSER: qwbe_app\n {6}PGPASSWORD_FILE: \/run\/secrets\/pg_app_password\n/u, name)
+    assert.deepEqual(secrets("app"), ["- pg_app_password"], name)
+  }
 })
 
 void test("a host without IPv6: the overlay turns IPv6 off and replaces the subnets with the IPv4 one alone", () => {
