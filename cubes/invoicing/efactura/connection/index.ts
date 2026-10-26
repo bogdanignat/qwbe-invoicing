@@ -34,7 +34,7 @@ export type {
 } from "./domain/connection.ts"
 export { classifyTokenReply, type TokenGrant, type TokenReply } from "./domain/token-reply.ts"
 export { efacturaPermissions, type EFacturaPermissions } from "./contracts/permissions.ts"
-export { CALLBACK_OUTCOMES, CALLBACK_TARGET_PATH, REFRESH_TOKEN_DAYS, callbackTarget, spvCif, type CallbackOutcome, type CifVerdict } from "./domain/callback.ts"
+export { CALLBACK_OUTCOMES, CALLBACK_TARGET_PATH, REFRESH_TOKEN_DAYS, attemptUntouched, callbackTarget, spvCif, type CallbackOutcome, type CifVerdict } from "./domain/callback.ts"
 export { createConnectionService, type ConnectionDependencies, type ConnectionFailure, type ConnectionService, type ConnectionStart } from "./application/connection.ts"
 export type { ConnectionView } from "./application/view.ts"
 export { completeCallback, type CallbackInput } from "./application/callback.ts"

@@ -24,8 +24,11 @@ export interface CallbackInput {
 }
 
 /**
- * ANAF's callback, fail-closed at every step. The attempt is consumed in its
- * own short transaction; the code exchange and the right check on the issuer's
+ * ANAF's callback, fail-closed at every step. An `error` answer or a missing
+ * code ends before the attempt is read: any page can send the browser here, so
+ * only a callback carrying a code may consume it (an untouched attempt lapses on
+ * its own). The attempt is consumed in its own short transaction; the code
+ * exchange and the right check on the issuer's
  * CIF run outside any transaction; the connection is saved only after a
  * recognised positive answer, and only if the consumed attempt is still the
  * organization's current one and the generation it started from still holds.
@@ -39,6 +42,9 @@ export const completeCallback = (host: ConnectionHost) =>
     const { anaf, clock, store } = host
     if (anaf === undefined) return "neconfigurat"
     if (input.nonce === undefined) return "tentativa_lipsa"
+    if (input.refused) return "refuzat_anaf"
+    if (!usableCode(input.code)) return "cod_lipsa"
+    const code = input.code
     const nonceHash = anaf.nonceHash(input.nonce)
     const now = yield* clock.now
     const claim = yield* store.transaction((transaction) => Effect.gen(function*() {
@@ -50,9 +56,7 @@ export const completeCallback = (host: ConnectionHost) =>
       return { attempt, fiscalIdentifier: yield* transaction.findIssuerFiscalIdentifier(attempt.organizationId) }
     }))
     if ("outcome" in claim) return claim.outcome
-    if (input.refused) return "refuzat_anaf"
-    if (!usableCode(input.code)) return "cod_lipsa"
-    const reply = yield* anaf.exchangeCode(Redacted.make(input.code))
+    const reply = yield* anaf.exchangeCode(Redacted.make(code))
     if (reply.kind !== "granted") return "schimb_esuat"
     const { grant } = reply
     const verdict = yield* verified(anaf, grant, claim.fiscalIdentifier, now)

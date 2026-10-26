@@ -10,6 +10,9 @@ export const CALLBACK_OUTCOMES = [
 ] as const
 export type CallbackOutcome = (typeof CALLBACK_OUTCOMES)[number]
 
+/** Answers that end before the attempt is read: the attempt and its cookie stay as they were. */
+export const attemptUntouched = (outcome: CallbackOutcome): boolean => outcome === "refuzat_anaf" || outcome === "cod_lipsa"
+
 export const CALLBACK_TARGET_PATH = "/integrations"
 
 export const callbackTarget = (outcome: CallbackOutcome): string => `${CALLBACK_TARGET_PATH}?anaf=${outcome}`

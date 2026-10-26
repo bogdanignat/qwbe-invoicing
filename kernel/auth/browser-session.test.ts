@@ -6,6 +6,7 @@ import test from "node:test"
 import { createBrowserSession } from "./browser-session.ts"
 import { createSessionStore } from "./browser-session-store.ts"
 import { withMigrated } from "../storage/postgres-rig.test-support.ts"
+import { sessionsLockKey } from "../storage/postgres-transaction.ts"
 
 /**
  * The same session contract, now asynchronous: every entry point is a query, so
@@ -98,5 +99,28 @@ void test("an opaque browser session survives a host restart, enforces CSRF, and
     // The write path collects what has expired, under the same lock.
     await rotatedHost.login({ token: rotatedToken, origin: "https://invoice.test", host: "invoice.test" })
     assert.equal(Number(await sql.scalar("SELECT count(*) FROM browser_sessions")), 1)
+  })
+})
+
+void test("reading a session does not wait for the writers' exclusive key, writing still does", async () => {
+  await withMigrated("browser_session_read_lock", async ({ pool }) => {
+    const store = createSessionStore(pool)
+    const writer = await pool.connect()
+    const settled = (promise: Promise<unknown>): Promise<boolean> =>
+      Promise.race([promise.then(() => true), new Promise<boolean>((resolve) => setTimeout(resolve, 500, false))])
+    try {
+      await writer.query("BEGIN")
+      await writer.query("SELECT pg_advisory_xact_lock($1, $2)", [sessionsLockKey.classId, sessionsLockKey.objectId])
+      const reads = Array.from({ length: 8 }, () => store.find("f".repeat(64)))
+      assert.equal(await settled(Promise.all(reads)), true, "an invented cookie's lookup does not queue behind the key")
+      assert.deepEqual(await Promise.all(reads), Array.from({ length: 8 }, () => undefined))
+      const create = store.create({ sessionHash: "a".repeat(64), credentialHash: "b", csrfToken: "c", createdAt: 1, expiresAt: 2 })
+      assert.equal(await settled(create), false, "a writer still waits for the exclusive key")
+      await writer.query("COMMIT")
+      await create
+    } finally {
+      // Destroyed, not returned: a failed assertion must not leave the key held on a pooled connection.
+      writer.release(true)
+    }
   })
 })

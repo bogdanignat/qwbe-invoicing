@@ -135,8 +135,15 @@ transaction surface today; documents has key 3 so writing artifact metadata does
 not serialise against issuance. Taking the logical lock first would deadlock
 against maintenance. Isolation is READ COMMITTED (the default): the exclusive
 logical lock is what serialises writers, so nothing retries and no external
-effect is replayed. Reads take the same exclusive lock — there is no read-only
-fast path, exactly as `BEGIN IMMEDIATE` had none.
+effect is replayed. Reads in these stores take the same exclusive lock — there is
+no read-only fast path, exactly as `BEGIN IMMEDIATE` had none. The browser
+session store is the one exception (T-2130): its read (`find`) takes only the
+SHARED maintenance barrier, while its writers (`create`, `remove`) keep the
+EXCLUSIVE sessions key (1480,4). An exclusive read let an anonymous flood of
+invented, well-formed cookies serialise the owner's requests on the
+four-connection pool and push them into `lock_timeout` 500s; a single SELECT by
+primary key under READ COMMITTED sees a committed sweep or logout whole or not at
+all, so it needs no writer lock.
 
 **The handle has three phases, and that is what makes interruption safe.**
 `Effect.tryPromise` with a zero-argument `try` compiles to a bare `OP_ASYNC` with

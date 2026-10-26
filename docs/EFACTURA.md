@@ -295,7 +295,7 @@ HTTP); its rows in `efactura_connections` and `efactura_oauth_attempts`.
 | Route | Grant | What it does |
 | --- | --- | --- |
 | `POST /api/efactura/connection/start` | `efactura:connection.manage`, session + CSRF | a new attempt; answers ANAF's `authorize` URL and sets the attempt cookie; `409 efactura_not_configured` without the ANAF variables, `409 efactura_issuer_cif_invalid` when the issuer has no CIF the SPV can check |
-| `GET /api/anaf/callback` | none: the attempt cookie | ANAF's redirect; always `303` to `/integrations?anaf=<code>` |
+| `GET /api/anaf/callback` | none: the attempt cookie | ANAF's redirect; always `303` to `/integrations?anaf=<code>`; clears the attempt cookie unless the answer was `error=` or had no code |
 | `GET /api/efactura/connection` | `efactura:read` | `not_configured`, `disconnected`, `connected` or `needs_reconnect`, the environment, the verified CIF, the refresh token's expiry, who connected and when, and whether your own attempt never came back. Never a token |
 | `DELETE /api/efactura/connection` | `efactura:connection.manage`, session + CSRF | a new generation, the tokens deleted; ANAF's `revoke` is asked after the commit, best effort |
 
@@ -305,15 +305,20 @@ All four belong to the `efactura` plugin: off, they answer 404 and are absent fr
 connection's generation, and replaces the organization's previous attempt, which
 can then never complete. The nonce travels only in `qwbe_anaf_oauth` (HttpOnly,
 Secure, SameSite=Lax, `Path=/api/anaf`, Max-Age 600). The attempt lives ten minutes
-and is consumed by the first callback that presents it, whatever ANAF answered. The
+and is consumed by the first callback that presents it with a `code` (see the
+callback below; an `error=` or code-less answer leaves it untouched). The
 `authorize` URL carries `response_type=code`, `client_id`, `redirect_uri` (the
 configured one, never one from a request) and `token_content_type=jwt`; no `state`
 and no `scope`, because ANAF closes the session when `state` is sent (verified live,
 2026-10-19; ANAF's OAuth guide, p. 23: "State se lasă necompletat").
 
-**The callback**, fail-closed at every step: no cookie, an attempt that is expired,
-consumed or no longer the current one, `error=`, or a missing code end it with a
-fixed code. Otherwise the attempt is consumed in a short transaction; the code is
+**The callback**, fail-closed at every step: no cookie, `error=` or a missing code,
+or an attempt that is expired, consumed or no longer the current one end it with
+a fixed code. `error=` (`refuzat_anaf`) and a missing code (`cod_lipsa`) end it
+before the attempt is read (T-2130): any page can send the browser to the
+callback, so such an answer neither consumes the attempt nor clears the cookie,
+and the attempt lapses on its own after ten minutes. Only a callback with a code
+consumes it, in a short transaction; the code is
 exchanged (Basic client auth, `token_content_type=jwt`) outside any transaction; the
 token's right on the issuer's CIF is checked with a read-only
 `listaMesajePaginatieFactura` (one day, page 1). Only a recognised positive answer (a
@@ -328,7 +333,10 @@ changing the outcome: the new pair on `fara_drept_cif`, `verificare_esuata` and
 `conexiune_schimbata`, the previous pair when a reconnect replaces it. The issuer's
 CIF is checked at start as well; the callback keeps its check for a CIF changed in
 between. The answer is
-`no-store` and `Referrer-Policy: no-referrer` and clears the cookie. The query string,
+`no-store` and `Referrer-Policy: no-referrer`, and clears the cookie on every
+answer except `refuzat_anaf` and `cod_lipsa`. Remaining risk: without `state`, a
+foreign page that sends the browser to `?code=<anything>` still consumes a
+started attempt (it ends as `schimb_esuat`); tracked in T-2121. The query string,
 the cookie, the code and the tokens never reach a log, the failure log included: a
 storage failure logs its tag and fixed operation name, and the browser sees `eroare`.
 

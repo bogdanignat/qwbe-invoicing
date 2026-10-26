@@ -61,6 +61,12 @@ void test("requires host authentication and serves the complete invoice-core rou
       body: issuerBody,
     }, runtime)
     assert.equal(denied.status, 401)
+    // The handler reads the raw header with the authenticator's parser, not the
+    // platform's 7-character slice: the right token under any other scheme is refused.
+    for (const scheme of ["bearer", "BEARER", "Basic ", "Xyzzy1"]) {
+      const foreign = await handleApiRequest({ method: "GET", url: "/api/vat-regimes", authorization: `${scheme} ${token}`, body: undefined }, runtime)
+      assert.equal(foreign.status, 401, scheme)
+    }
 
     const authorization = `Bearer ${token}`
     const vatCatalogue = await handleApiRequest({ method: "GET", url: "/api/vat-regimes", authorization, body: undefined }, runtime)

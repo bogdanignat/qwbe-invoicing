@@ -4,7 +4,6 @@ import { Effect, Either } from "effect"
 
 import type { ApiHandler } from "../api/api.ts"
 import type { RequestAuthenticator } from "../auth/auth.ts"
-import { hasBearerCredential } from "../auth/auth.ts"
 import type { BrowserSession } from "../auth/browser-session.ts"
 import type { LoginThrottle } from "../auth/login-throttle.ts"
 import { failureReason, logInternalFailure } from "../failure-log.ts"
@@ -47,8 +46,12 @@ export const forwardApiRequest = async (
     if (!await untilAborted(isReady(), signal)) { send(response, 503, { error: "not_ready" }); return }
     const login = routerPath(path) === "/api/session" && request.method === "POST"
     if (login && rejectCooldown()) return
+    // Any `Authorization` header is an explicit credential: the authenticator
+    // reads it with the only parser there is, so a value that is not exactly
+    // `Bearer <token>` is a counted failure here, before the handler (whose
+    // platform would slice off any 7-character prefix) ever sees it.
     const authorization = header(request.headers.authorization)
-    const explicitCredential = hasBearerCredential(authorization)
+    const explicitCredential = authorization !== undefined
     if (explicitCredential && rejectCooldown()) return
     const raw = await readRawBody(request, signal)
     if ((login || explicitCredential) && rejectCooldown()) return

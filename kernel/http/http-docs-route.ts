@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http"
 
 import type { BrowserSession } from "../auth/browser-session.ts"
+import { sessionCookieValues } from "../auth/browser-session-helpers.ts"
 import { failureReason, logInternalFailure } from "../failure-log.ts"
 import type { ApiDocsResponse } from "./api-docs.ts"
 import { untilAborted } from "./edge-deadline.ts"
@@ -14,10 +15,13 @@ export interface DocsRoute {
 
 /**
  * `GET /api`, the Swagger page. A missing or invalid session is sent to
- * `/unlock` (303) with the session cookie cleared; every other answer keeps its
- * status: 503 while not ready, 500 when rendering fails. Each await is bounded
- * by the request's signal, and one try/catch covers all three, so a database
- * failure answers the request instead of escaping as an unhandled rejection.
+ * `/unlock` (303); the session cookie is cleared only when the request carried
+ * one. The cookie is SameSite=Strict, so a cross-site link arrives without it,
+ * and clearing it then would log the owner out from any page. Every other
+ * answer keeps its status: 503 while not ready, 500 when rendering fails. Each
+ * await is bounded by the request's signal, and one try/catch covers all three,
+ * so a database failure answers the request instead of escaping as an unhandled
+ * rejection.
  */
 export const serveApiDocs = async (
   route: DocsRoute,
@@ -28,12 +32,13 @@ export const serveApiDocs = async (
   const { browserSession, isReady, renderApiDocs } = route
   try {
     if (!await untilAborted(isReady(), signal)) { send(response, 503, { error: "not_ready" }); return }
-    const session = await untilAborted(browserSession.resume(header(request.headers.cookie)), signal)
+    const cookie = header(request.headers.cookie)
+    const session = await untilAborted(browserSession.resume(cookie), signal)
     if (session.kind === "unauthorized") {
       send(response, 303, new Uint8Array(), {
         "cache-control": "no-store",
         location: "/unlock",
-        "set-cookie": browserSession.clearCookie,
+        ...(sessionCookieValues(cookie).length > 0 ? { "set-cookie": browserSession.clearCookie } : {}),
       })
       return
     }

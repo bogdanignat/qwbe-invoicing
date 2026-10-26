@@ -53,12 +53,17 @@ void test("the HTTP host exchanges the API token for a cookie session", async ()
 
     const resumed = await fetch(`${origin}/api/session`, { headers: { cookie } })
     assert.equal(resumed.status, 200)
-    // Without a session the docs page sends the browser to `/unlock` and clears
-    // whatever session cookie it had; a render failure stays a 500.
-    const anonymousDocs = await fetch(`${origin}/api`, { redirect: "manual" })
+    // Without a session the docs page sends the browser to `/unlock`; it clears
+    // only a session cookie the request carried, so a cross-site link (which
+    // arrives without the SameSite=Strict cookie) logs nobody out. A render
+    // failure stays a 500.
+    const anonymousDocs = await fetch(`${origin}/api`, { redirect: "manual", headers: { cookie: "other=1" } })
     assert.equal(anonymousDocs.status, 303)
     assert.equal(anonymousDocs.headers.get("location"), "/unlock")
-    assert.match(anonymousDocs.headers.get("set-cookie") ?? "", /^qwbe_session=; .*Max-Age=0/u)
+    assert.equal(anonymousDocs.headers.get("set-cookie"), null)
+    const staleDocs = await fetch(`${origin}/api`, { redirect: "manual", headers: { cookie: `qwbe_session=${"x".repeat(43)}` } })
+    assert.equal(staleDocs.status, 303)
+    assert.match(staleDocs.headers.get("set-cookie") ?? "", /^qwbe_session=; .*Max-Age=0/u)
     const failedDocs = await fetch(`${origin}/api`, { headers: { cookie }, redirect: "manual" })
     assert.equal(failedDocs.status, 500)
     assert.deepEqual(await failedDocs.json(), { error: "internal_failure" })
