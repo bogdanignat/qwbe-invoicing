@@ -31,3 +31,15 @@ void test("validates correction input: original invoice, reason length and calen
   assert.throws(() => { validateCreateCorrectionInput({ originalInvoiceId: "inv-1", reason: "Storno", issueDate: "2026/09/01" }) }, hasIssue("issueDate must be YYYY-MM-DD"))
   assert.throws(() => { validateCreateCorrectionInput({ originalInvoiceId: "inv-1", reason: "Storno", issueDate: "2027-02-29" }) }, hasIssue("issueDate must be a valid calendar date"))
 })
+
+void test("the storno reason becomes an e-Factura note: LF is kept, other control characters are refused", () => {
+  const issuesOf = (reason: string): ReadonlyArray<string> => {
+    try { validateCreateCorrectionInput({ originalInvoiceId: "inv-1", reason }); return [] } catch (error) {
+      return error instanceof ValidationFailure ? error.issues : [String(error)]
+    }
+  }
+  assert.deepEqual(issuesOf("Eroare de cantitate\nreemisă corect"), [])
+  for (const character of ["\u0000", "\t", "\u000b", "\u001f", "\u2028", "\ufffe"]) {
+    assert.deepEqual(issuesOf(`Eroare${character}de cantitate`), ["reason must not contain control characters"], JSON.stringify(character))
+  }
+})

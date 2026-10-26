@@ -8,7 +8,6 @@ import { all, one, refuseField, type UblNode } from "./xml-tree.ts"
  * checked to be `xs:decimal`, amounts with their `currencyID`, dates as
  * `YYYY-MM-DD`. A value that is present and wrong is refused with its path.
  */
-const XML_SPACE = /^[\t\n\r ]+|[\t\n\r ]+$/gu
 const DECIMAL = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/u
 const CURRENCY = /^[A-Z]{3}$/u
 
@@ -20,8 +19,24 @@ type Defined<T> =
 export const defined = <T extends object>(value: T): Defined<T> =>
   Object.fromEntries(Object.entries(value).filter(([, field]) => field !== undefined)) as Defined<T>
 
+/** Tab, LF, CR and space; a no-break space is text to XML, so `String.trim` would cut too much. */
+const isXmlSpace = (code: number): boolean => code === 0x20 || code === 0x9 || code === 0xA || code === 0xD
+
+/**
+ * The text without the XML whitespace at its two ends, scanned in from each end.
+ * Not a regex: `[\t\n\r ]+$` restarts at every space of an inner run, quadratic
+ * on the long runs a supplier's invoice can carry.
+ */
+const trimXmlSpace = (text: string): string => {
+  let start = 0
+  let end = text.length
+  while (start < end && isXmlSpace(text.charCodeAt(start))) start += 1
+  while (end > start && isXmlSpace(text.charCodeAt(end - 1))) end -= 1
+  return text.slice(start, end)
+}
+
 export const textOf = (node: UblNode | undefined): string | undefined => {
-  const text = node?.text.replace(XML_SPACE, "")
+  const text = node === undefined ? "" : trimXmlSpace(node.text)
   return text === "" ? undefined : text
 }
 

@@ -54,15 +54,28 @@ export const ciusTextLength = (value: string): number =>
 /** BR-RO-L200 (party name), L150 (street), L050 (city), L020 (postal code), L100 (item name). */
 export const CIUS_TEXT_LIMITS = { partyName: 200, street: 150, city: 50, postalCode: 20, lineDescription: 100 } as const
 
-export const textLimit = (field: string, value: string | undefined, maximum: number, issues: Array<string>): void => {
+/** The one rule for every text a person types: no C0/C1 control, lone surrogate (`pg` would store it
+ * as U+FFFD), line or paragraph separator, nor the non-characters U+FFFE/U+FFFF. XML 1.0 cannot carry
+ * them (an issued invoice would never reach ANAF), PostgreSQL refuses U+0000, and a layout cannot place
+ * them; LF stays only in a multi-line field. */
+export const hasControlCharacters = (value: string, newlines = false): boolean =>
+  (newlines ? /(?!\n)[\p{Cc}\p{Cs}\p{Zl}\p{Zp}\uFFFE\uFFFF]/u : /[\p{Cc}\p{Cs}\p{Zl}\p{Zp}\uFFFE\uFFFF]/u).test(value)
+
+export const controlCharacters = (field: string, value: string | undefined, issues: Array<string>, newlines = false): void => {
+  if (value !== undefined && hasControlCharacters(value, newlines)) issues.push(`${field} must not contain control characters`)
+}
+
+/** A text that reaches e-Factura: the CIUS-RO length and the control-character rule. */
+export const ciusText = (field: string, value: string | undefined, maximum: number, issues: Array<string>): void => {
   if (value !== undefined && ciusTextLength(value) > maximum) issues.push(`${field} must be at most ${String(maximum)} characters`)
+  controlCharacters(field, value, issues)
 }
 
 /** Only where a line description is entered: totals are recomputed on read and on storno,
  * and a description stored before the limit must stay readable and correctable. */
 export const validateLineDescription = (description: string): void => {
   const issues: Array<string> = []
-  textLimit("description", description.trim(), CIUS_TEXT_LIMITS.lineDescription, issues)
+  ciusText("description", description.trim(), CIUS_TEXT_LIMITS.lineDescription, issues)
   if (issues.length > 0) throw new ValidationFailure({ issues })
 }
 
@@ -70,7 +83,7 @@ const freeText = (field: string, value: string, maximum: number, issues: Array<s
   if (value.trim().length === 0) issues.push(`${field} is required`)
   if (value !== value.trim()) issues.push(`${field} must not have surrounding whitespace`)
   if (value.length > maximum) issues.push(`${field} must be at most ${String(maximum)} characters`)
-  if ((newlines ? /(?!\n)[\p{Cc}\p{Zl}\p{Zp}]/u : /[\p{Cc}\p{Zl}\p{Zp}]/u).test(value)) issues.push(`${field} must not contain control characters`)
+  controlCharacters(field, value, issues, newlines)
 }
 
 export const validateDocumentSource = (source: DocumentSource): void => {

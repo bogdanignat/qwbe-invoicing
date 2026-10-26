@@ -542,7 +542,7 @@ durable workflow seam are stable.
 
 ### Phase 0 — repository and contracts
 
-- pin Node, pnpm, TypeScript, **Effect 3.x** (`effect`, `@effect/platform`, `@effect/platform-node`) and platform dependencies — Effect is the application runtime;
+- pin Node, pnpm, TypeScript, **Effect 3.x** (`effect`, `@effect/platform`) and platform dependencies — Effect is the application runtime;
 - create strict TypeScript, test, lint, size, and boundary gates;
 - define organization, identity, store, clock, ID, and rendering ports as `Effect` capabilities;
 - define observable domain failures as typed `Effect` failures;

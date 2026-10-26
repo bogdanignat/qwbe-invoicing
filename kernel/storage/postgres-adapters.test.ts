@@ -363,6 +363,14 @@ void test("a trigger, a CHECK and a type error all become a 409-shaped conflict"
     const mappedType = writeFailure(typeError, "allocate document number")
     assert.equal(mappedType instanceof DomainConflict && mappedType.code === "persistence_conflict", true)
 
+    // A U+0000 the domain did not catch: the UTF-8 database answers 22021, a refused input and not a 500.
+    const nulError = await errorOf(
+      "INSERT INTO document_series(organization_id,document_type,series) VALUES($1,$2,$3)", ["org-1", "invoice", "A\u0000B"],
+    )
+    assert.equal((nulError as { readonly code?: string }).code, "22021")
+    const mappedNul = writeFailure(nulError, "add document series")
+    assert.equal(mappedNul instanceof DomainConflict && mappedNul.code === "persistence_conflict", true)
+
     // A trigger: `audit_events_no_update` runs the shared foundation function,
     // which raises 23514, so a refused write is a conflict and not a 500.
     await Effect.runPromise(raw((client) => Effect.promise(async () => {

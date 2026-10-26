@@ -31,7 +31,7 @@ const serviceBlock = (compose, name) => {
 const stage = (docker, name) => docker.split(new RegExp(`^FROM .* AS ${name}$`, "mu"))[1]?.split(/^FROM /mu)[0] ?? ""
 
 const shippedCompose = ["compose.yaml", "compose.prod.yaml", "compose.preview.yaml"]
-const allCompose = [...shippedCompose, "compose.loopback.yaml", "compose.vite.yaml", "compose.verify.yaml", "compose.test.yaml"]
+const allCompose = [...shippedCompose, "compose.loopback.yaml", "compose.ipv4-only.yaml", "compose.vite.yaml", "compose.verify.yaml", "compose.test.yaml"]
 
 void test("one image: the kernel ships the Vite build from its ui-builder stage and nothing else of the frontend", () => {
   assert.equal(existsSync(path("frontend/Dockerfile")), false, "the -frontend image is gone")
@@ -102,6 +102,32 @@ void test("production: no Warden, no public port, PUBLIC_ORIGIN and the image ta
   const caddy = serviceBlock(compose, "caddy")
   assert.match(caddy, /profiles: \["proxy"\]/u)
   assert.match(caddy, /depends_on:\n {6}app:\n {8}condition: service_healthy\n {4}ports:/u, "Caddy waits for app, and only for app")
+})
+
+void test("production: every service drops its capabilities, Caddy is pinned, the throttle trusts the fixed project subnet", () => {
+  const compose = code("compose.prod.yaml")
+  assert.match(compose, /^x-hardening: &hardening\n {2}cap_drop: \[ALL\]\n {2}security_opt: \["no-new-privileges:true"\]$/mu)
+  for (const name of services(compose)) assert.match(serviceBlock(compose, name), /^ {4}<<: \*hardening$/mu, name)
+  const added = (name) => serviceBlock(compose, name).match(/^ {4}cap_add: .*$/gmu) ?? []
+  assert.deepEqual(added("db"), ["    cap_add: [CHOWN, DAC_OVERRIDE, FOWNER, SETGID, SETUID]"])
+  assert.deepEqual(added("caddy"), ["    cap_add: [NET_BIND_SERVICE]"])
+  for (const name of ["migrate", "app"]) assert.deepEqual(added(name), [], name)
+  assert.match(serviceBlock(compose, "caddy"), /^ {4}image: caddy:\d+\.\d+\.\d+-alpine@sha256:[0-9a-f]{64}$/mu)
+  // IPv6 on, so Docker forwards Caddy's IPv6 visitors with their own address, not the gateway's.
+  assert.match(compose, /^ {2}default:\n {4}enable_ipv6: true$/mu)
+  const subnet = (name) => new RegExp(`^ {8}- subnet: \\$\\{${name}:-([^}]+)\\}$`, "mu").exec(compose)?.[1]
+  const [ipv4, ipv6] = [subnet("QWBE_NETWORK_SUBNET"), subnet("QWBE_NETWORK_SUBNET_IPV6")]
+  assert.ok(ipv4 !== undefined && ipv6 !== undefined, "the default network has fixed IPv4 and IPv6 subnets")
+  const trusted = `QWBE_TRUSTED_PROXY: \${QWBE_TRUSTED_PROXY-\${QWBE_NETWORK_SUBNET:-${ipv4}},\${QWBE_NETWORK_SUBNET_IPV6:-${ipv6}}}\n`
+  assert.ok(serviceBlock(compose, "app").includes(trusted),
+    "QWBE_TRUSTED_PROXY defaults to the same subnets, and an empty value in .env still trusts nobody")
+})
+
+void test("a host without IPv6: the overlay turns IPv6 off and replaces the subnets with the IPv4 one alone", () => {
+  const overlay = code("compose.ipv4-only.yaml")
+  assert.deepEqual(services(overlay), [])
+  assert.match(overlay, /^networks:\n {2}default:\n {4}enable_ipv6: false\n {4}ipam:\n {6}config: !override\n {8}- subnet: \$\{QWBE_NETWORK_SUBNET:-10\.93\.0\.0\/24\}$/mu)
+  assert.match(code("compose.prod.yaml"), /^ {8}- subnet: \$\{QWBE_NETWORK_SUBNET:-10\.93\.0\.0\/24\}$/mu, "the same IPv4 default")
 })
 
 void test("an existing proxy reaches app through the loopback overlay, never a public address", () => {

@@ -14,6 +14,9 @@ import { DomainConflict, PersistenceFailure } from "../../cubes/invoicing/index.
  * - the three class-22 type violations SQLite reported as
  *   `SQLITE_CONSTRAINT_DATATYPE` on a STRICT table — `22P02` invalid text
  *   representation, `22003` numeric out of range, `22001` string too long.
+ * - `22021` character not in repertoire: a U+0000 the UTF-8 database cannot
+ *   store. The domain refuses control characters first; this keeps one that
+ *   slips past a 4xx instead of a 500.
  *
  * `22007`/`22008` are deliberately absent: dates stay TEXT, so no column casts
  * a date and those codes cannot come from a parity path. A code outside the
@@ -32,7 +35,7 @@ export const persistence = (operation: string): PersistenceFailure => new Persis
 /** Both classes, as a single set: membership is the whole decision. */
 export const conflictSqlStates: ReadonlySet<string> = new Set([
   "23505", "23514", "23502", "23503", "23P01",
-  "22P02", "22003", "22001",
+  "22P02", "22003", "22001", "22021",
 ])
 
 export const sqlState = (error: unknown): string | undefined => {

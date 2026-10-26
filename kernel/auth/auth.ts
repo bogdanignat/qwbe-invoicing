@@ -16,14 +16,16 @@ import { efacturaPermissions } from "../../cubes/invoicing/efactura/connection/i
 import { paymentsPermissions } from "../../cubes/invoicing/payments/index.ts"
 import type { RuntimeConfig } from "../config.ts"
 
+/**
+ * The one reading of an `Authorization` header: exactly `Bearer <token>`, or
+ * nothing. Any other scheme or spelling (`bearer`, `BEARER`, `Basic`) is not a
+ * credential, and the caller that sent it is refused like a wrong token.
+ */
 const bearerToken = (authorization: string | undefined): string | undefined => {
   if (authorization === undefined || !authorization.startsWith("Bearer ")) return undefined
   const token = authorization.slice("Bearer ".length).trim()
   return token.length > 0 ? token : undefined
 }
-
-export const hasBearerCredential = (authorization: string | undefined): boolean =>
-  bearerToken(authorization) !== undefined
 
 const matches = (actual: string, expected: string): boolean => {
   const actualBytes = Buffer.from(actual)

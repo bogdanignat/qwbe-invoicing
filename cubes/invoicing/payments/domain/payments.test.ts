@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import { ValidationFailure } from "../contracts/failures.ts"
-import { calendarDate, formatMinor, moneyMinor, validateRecordPaymentInput } from "./payments.ts"
+import { calendarDate, formatMinor, moneyMinor, validateRecordPaymentInput, validateReversePaymentInput } from "./payments.ts"
 import { derivePaymentStatus } from "./settlement.ts"
 
 void test("formats the Romanian calendar day of an instant", () => {
@@ -56,4 +56,30 @@ void test("a recorded payment amount is trimmed, positive and has at most two de
   for (const amount of ["-1.00", "-0.00", "1.234", "1.", ".5", "+1", "1e2", "1,00", ""]) {
     assert.deepEqual(issues(amount), ["amount must be a non-negative amount with at most two decimals"], amount)
   }
+})
+
+const issuesOf = (validate: () => void): ReadonlyArray<string> => {
+  try { validate() } catch (error) { if (error instanceof ValidationFailure) return error.issues }
+  return []
+}
+
+void test("payment texts are bounded as stored (trimmed) and refuse control characters; only note and reason span lines", () => {
+  const base = { invoiceId: "invoice-1", amount: "10.00", currency: "RON", paymentDate: "2026-09-10", method: "bank_transfer" }
+  const recorded = (fields: object) => issuesOf(() => { validateRecordPaymentInput({ ...base, ...fields }) })
+  const limits = [["method", 50], ["externalReference", 100], ["note", 500]] as const
+  for (const [field, maximum] of limits) {
+    assert.deepEqual(recorded({ [field]: ` ${"x".repeat(maximum)} ` }), [], field)
+    assert.deepEqual(recorded({ [field]: "x".repeat(maximum + 1) }), [`${field} must be at most ${String(maximum)} characters`], field)
+    for (const character of ["\u0000", "\u000b", "\u001f", "\u007f", "\u0085", "\u2028", "\u2029", "\ufffe", "\uffff"]) {
+      assert.deepEqual(recorded({ [field]: `a${character}b` }), [`${field} must not contain control characters`], `${field} ${character}`)
+    }
+  }
+  assert.deepEqual(recorded({ note: "linia 1\nlinia 2" }), [])
+  assert.deepEqual(recorded({ externalReference: "OP\n12" }), ["externalReference must not contain control characters"])
+  assert.deepEqual(recorded({ method: "card\tPOS" }), ["method must not contain control characters"])
+
+  const reversed = (reason: string) => issuesOf(() => { validateReversePaymentInput({ invoiceId: "invoice-1", paymentId: "payment-1", reason }) })
+  assert.deepEqual(reversed("Încasare dublă\nreturnată"), [])
+  assert.deepEqual(reversed("x".repeat(501)), ["reason must be at most 500 characters"])
+  assert.deepEqual(reversed("a\u0000b"), ["reason must not contain control characters"])
 })

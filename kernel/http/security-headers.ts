@@ -29,6 +29,14 @@ export const securityHeaders: Readonly<Record<string, string>> = {
   "x-content-type-options": "nosniff",
 }
 
+/**
+ * HSTS, from the kernel itself and only when `PUBLIC_ORIGIN` is `https:`: an
+ * installation behind its own proxy keeps it even when that proxy does not add
+ * it. Over plain http a browser ignores it, so a development origin sends none.
+ */
+export const transportSecurityHeaders = (publicOrigin: string | undefined): Readonly<Record<string, string>> =>
+  publicOrigin?.startsWith("https:") === true ? { "strict-transport-security": "max-age=31536000" } : {}
+
 const clientErrorStatus = (code: string | undefined): string => {
   if (code === "ERR_HTTP_REQUEST_TIMEOUT") return "408 Request Timeout"
   if (code === "HPE_HEADER_OVERFLOW") return "431 Request Header Fields Too Large"
@@ -40,12 +48,16 @@ const clientErrorStatus = (code: string | undefined): string => {
  * `requestTimeout`) with the same headers. Written only on a socket that has not
  * answered anything yet, exactly as Node's default does, and always closed.
  */
-export const answerClientError = (error: Error & { readonly code?: string }, socket: Duplex & { readonly bytesWritten?: number }): void => {
+export const answerClientError = (
+  error: Error & { readonly code?: string },
+  socket: Duplex & { readonly bytesWritten?: number },
+  transport: Readonly<Record<string, string>> = {},
+): void => {
   if (!socket.writable || error.code === "ECONNRESET" || (socket.bytesWritten ?? 0) > 0) {
     socket.destroy()
     return
   }
-  const headers = { ...securityHeaders, "cache-control": "no-store", connection: "close", "content-length": "0" }
+  const headers = { ...securityHeaders, ...transport, "cache-control": "no-store", connection: "close", "content-length": "0" }
   const lines = Object.entries(headers).map(([name, value]) => `${name}: ${value}\r\n`).join("")
   socket.end(`HTTP/1.1 ${clientErrorStatus(error.code)}\r\n${lines}\r\n`)
 }

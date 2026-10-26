@@ -1,4 +1,5 @@
 import { formatDecimal, parseDecimal, parseUnsignedDecimal } from "../../contracts/money.ts"
+import { controlCharacters } from "../../domain/validation.ts"
 import { ValidationFailure } from "../contracts/failures.ts"
 
 // Same rule as the invoicing cube: the fiscal "today" is the Romanian calendar day, not UTC.
@@ -64,6 +65,13 @@ const validateDate = (value: string, field: string): void => {
     throw new ValidationFailure({ issues: [`${field} must be a valid calendar date`] })
   }
 }
+/** A text as stored (trimmed); the baseline CHECKs the same lengths. A note may span lines. */
+const boundedText = (field: string, value: string | undefined, maximum: number, issues: Array<string>, newlines = false): void => {
+  if (value === undefined) return
+  const text = value.trim()
+  if (text.length > maximum) issues.push(`${field} must be at most ${String(maximum)} characters`)
+  controlCharacters(field, text, issues, newlines)
+}
 export const validateRecordPaymentInput = (input: RecordPaymentInput): void => {
   const issues: Array<string> = []
   if (input.invoiceId.trim().length === 0) issues.push("invoiceId is required")
@@ -74,6 +82,9 @@ export const validateRecordPaymentInput = (input: RecordPaymentInput): void => {
   if (input.method.trim().length === 0) issues.push("method is required")
   if (input.externalReference !== undefined && input.externalReference.trim().length === 0) issues.push("externalReference must not be empty when provided")
   if (input.note !== undefined && input.note.trim().length === 0) issues.push("note must not be empty when provided")
+  boundedText("method", input.method, 50, issues)
+  boundedText("externalReference", input.externalReference, 100, issues)
+  boundedText("note", input.note, 500, issues, true)
   try { validateDate(input.paymentDate, "paymentDate") } catch (error) {
     if (error instanceof ValidationFailure) issues.push(...error.issues)
   }
@@ -84,7 +95,7 @@ export const validateReversePaymentInput = (input: ReversePaymentInput): void =>
   if (input.invoiceId.trim().length === 0) issues.push("invoiceId is required")
   if (input.paymentId.trim().length === 0) issues.push("paymentId is required")
   if (input.reason !== undefined && input.reason.trim().length === 0) issues.push("reason must not be empty when provided")
-  if (input.reason !== undefined && input.reason.trim().length > 500) issues.push("reason must be at most 500 characters")
+  boundedText("reason", input.reason, 500, issues, true)
   if (issues.length > 0) throw new ValidationFailure({ issues })
 }
 /** A canonical amount ("12.50", "-0.05") or a validated input amount, in bani. */

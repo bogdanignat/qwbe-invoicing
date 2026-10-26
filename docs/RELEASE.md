@@ -5,6 +5,7 @@ Each versioned release publishes one image, for `linux/amd64` + `linux/arm64`, t
 ```text
 compose.prod.yaml
 compose.loopback.yaml
+compose.ipv4-only.yaml   (only for a host without IPv6)
 .env.example
 Caddyfile.example
 image-digests.txt
@@ -88,7 +89,7 @@ no size thresholds or cube rules are relaxed.
 ```bash
 # 1. The bundle, in its own directory
 mkdir -p /opt/qwbe-invoicing && cd /opt/qwbe-invoicing
-cp /path/to/release/{compose.prod.yaml,compose.loopback.yaml,Caddyfile.example} .
+cp /path/to/release/{compose.prod.yaml,compose.loopback.yaml,compose.ipv4-only.yaml,Caddyfile.example} .
 mkdir -p scripts && cp /path/to/release/scripts/init-secrets.sh scripts/
 cp /path/to/release/.env.example .env
 # Edit .env (each key is documented there):
@@ -108,7 +109,15 @@ scripts/init-secrets.sh
 #    a) the bundled Caddy: copy the Caddyfile, set the host of PUBLIC_ORIGIN in it
 cp Caddyfile.example Caddyfile
 #    b) your own proxy on this host: APP_LOOPBACK_PORT=3180 in .env, and the proxy
-#       passes Host and X-Forwarded-Proto (README, "Quick start (self-host)")
+#       passes Host and X-Forwarded-Proto and overwrites X-Forwarded-For with the
+#       client (nginx: $remote_addr, not $proxy_add_x_forwarded_for; README, "Quick
+#       start (self-host)"); one that cannot: QWBE_TRUSTED_PROXY= (empty)
+#    Both reach `app` from the project network (QWBE_NETWORK_SUBNET, default
+#    10.93.0.0/24; QWBE_NETWORK_SUBNET_IPV6, default fd93:1c5e:a7b0::/64), which
+#    QWBE_TRUSTED_PROXY trusts by default. If `up` reports that a pool overlaps a
+#    network of this host, pick another subnet there; on a host without IPv6, add
+#    compose.ipv4-only.yaml to COMPOSE_FILE. IPv6 visitors keep their address through Caddy only
+#    with Docker 27+ and ip6tables on (the default); otherwise they share one bucket.
 
 # 4. Start: migrate runs first, app starts only on success
 docker compose -f compose.prod.yaml pull
@@ -126,7 +135,13 @@ The commands below are written for a); with b), replace `--profile proxy` by
 `-f compose.loopback.yaml` wherever the stack is started. Setting `COMPOSE_FILE` and
 `COMPOSE_PROFILES` in `.env` (see `.env.example`) makes both unnecessary.
 
-Requirements enforced by the bundle: `read_only: true` with bounded `tmpfs`, named volume `qwbe-invoicing-data`, `depends_on: migrate: service_completed_successfully`, `HEALTHCHECK` on `/health/ready`, secrets from file, and no fallback for `PUBLIC_ORIGIN`, `IMAGE_TAG` or the three secret paths.
+Requirements enforced by the bundle: `read_only: true` with bounded `tmpfs`, named volume `qwbe-invoicing-data`, `depends_on: migrate: service_completed_successfully`, `HEALTHCHECK` on `/health/ready`, secrets from file, no fallback for `PUBLIC_ORIGIN`, `IMAGE_TAG` or the three secret paths, `cap_drop: [ALL]` and `no-new-privileges` on every service (`db` adds back `CHOWN`, `DAC_OVERRIDE`, `FOWNER`, `SETGID`, `SETUID` for its entrypoint, Caddy `NET_BIND_SERVICE`), PostgreSQL and Caddy pinned by version and digest in `compose.prod.yaml` itself (only the application image is in `image-digests.txt`), the project network on fixed IPv4 and IPv6 subnets that `QWBE_TRUSTED_PROXY` trusts by default, and HSTS (`max-age=31536000`) sent by the application on an `https:` `PUBLIC_ORIGIN`.
+
+Compose does not move an existing network to other subnets. An installation whose network
+was created before the subnets were fixed (or before they changed in `.env`) needs, once,
+`docker compose -f compose.prod.yaml down` without `-v`, which removes the containers and the
+network and keeps every volume, then `up -d`. `deploy.sh` checks this before it stops
+anything (Upgrade, step 3).
 
 ## Production scripts
 
@@ -172,8 +187,11 @@ scripts/production/deploy.sh
    pending and no other operation holds the lock.
 2. Records the active version: the ID of the image `app` runs, and the commit.
 3. `git pull --ff-only` and `docker build`, tagged `${QWBE_IMAGE}:<12-hex commit>`;
-   the running version keeps its own tag. Until here production runs untouched, and a
-   failure (pull, build, new Compose files that reject `.env`) ends without downtime.
+   the running version keeps its own tag. Then the project network must have the
+   subnets the new Compose files fix (`docker network inspect`); otherwise the deploy
+   stops with the `down` / `up -d` to run first. Until here production runs untouched,
+   and a failure (pull, build, new Compose files that reject `.env`, a network on other
+   subnets) ends without downtime.
 4. Stops `app` and backs up with the active image (`backup.sh`, below). Without a
    verified backup the deploy stops and the previous `app` starts again.
 5. Only then writes the new `IMAGE_TAG` to `.env` (the previous copy is kept in
@@ -184,6 +202,15 @@ scripts/production/deploy.sh
    image retention follows backup retention, so every kept backup stays restorable.
 
 Failures are in Rollback, below. Every failure exits non-zero.
+
+Upgrading to the first version with fixed network subnets, by script or by hand:
+
+- delete an explicit `QWBE_TRUSTED_PROXY` from `.env` that names the old Compose network
+  (for example `172.18.0.0/16`): it no longer covers the new subnets, and the throttle
+  would silently go back to one bucket for everyone. Unset, the default follows
+  `QWBE_NETWORK_SUBNET` and `QWBE_NETWORK_SUBNET_IPV6`;
+- by hand, recreate the network once before the steps below, in a maintenance window:
+  `docker compose -f compose.prod.yaml down` (no `-v`), then `up -d` with the running version.
 
 The manual procedure, also for a release image:
 

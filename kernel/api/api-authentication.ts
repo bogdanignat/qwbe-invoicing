@@ -10,10 +10,10 @@ const principal = (runtime: ApiRuntime, authorization: string): Effect.Effect<Re
   Effect.mapError(runtime.authenticate(authorization).current, (failure) => ({ error: failure._tag }))
 
 export const authenticationLayer = (runtime: ApiRuntime) => Layer.succeed(ApiAuthentication, {
-  bearerAuth: (token) => {
-    const value = Redacted.value(token)
-    return value.length === 0 ? Effect.fail({ error: "AuthenticationRequired" as const }) : principal(runtime, `Bearer ${value}`)
-  },
+  // The platform slices any 7-character prefix off the header; the raw header
+  // goes to the authenticator instead, so its parser alone decides the scheme.
+  bearerAuth: () => Effect.flatMap(HttpServerRequest.HttpServerRequest, (request) =>
+    principal(runtime, request.headers.authorization ?? "")),
   sessionCookie: (cookie) => Effect.gen(function*() {
     const request = yield* HttpServerRequest.HttpServerRequest
     if (request.headers.authorization !== undefined) return yield* Effect.fail({ error: "AuthenticationRequired" as const })

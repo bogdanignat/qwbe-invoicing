@@ -48,7 +48,8 @@ sed -e "s|^PUBLIC_ORIGIN=.*|PUBLIC_ORIGIN=$origin|" -e "s|^IMAGE_TAG=.*|IMAGE_TA
   -e "s|^PG_PASSWORD_PATH=.*|PG_PASSWORD_PATH=$work/secrets/pg-password|" \
   -e "s|^COMPANY_LOOKUP_KEY_PATH=.*|COMPANY_LOOKUP_KEY_PATH=$work/secrets/company-lookup-key|" \
   "$root/.env.example" > "$work/.env"
-printf 'APP_LOOPBACK_PORT=%s\n' "$port" >> "$work/.env"
+# Its own subnets: compose.prod.yaml fixes them, which an installation on this host may hold.
+printf '%s\n' "APP_LOOPBACK_PORT=$port" QWBE_NETWORK_SUBNET=10.93.1.0/24 QWBE_NETWORK_SUBNET_IPV6=fd93:1c5e:a7b1::/64 >> "$work/.env"
 "$root/scripts/init-secrets.sh" "$work/.env" >/dev/null
 cat > "$work/volumes.yaml" <<YAML
 volumes:

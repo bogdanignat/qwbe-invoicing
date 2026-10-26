@@ -80,3 +80,10 @@ void test("a taken code is a conflict that names the code it was given", () => {
   assert.equal(conflict.code, productPresetCodeTaken)
   assert.equal(conflict.message, "Codul CONS-1 e deja folosit.")
 })
+
+void test("refuses a control character in the description a document line copies", () => {
+  for (const description of ["Audit\u0000", "Au\u001fdit", "Audit\u2028anual", "Audit\uffff"]) {
+    assert.throws(() => normalizeProductPreset({ ...product, description, unitPrice: "1", unitOfMeasure: each }, today),
+      (error: unknown) => issueOf(error) === "description must not contain control characters", JSON.stringify(description))
+  }
+})

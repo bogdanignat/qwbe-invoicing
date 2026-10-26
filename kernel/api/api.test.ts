@@ -61,6 +61,12 @@ void test("requires host authentication and serves the complete invoice-core rou
       body: issuerBody,
     }, runtime)
     assert.equal(denied.status, 401)
+    // The handler reads the raw header with the authenticator's parser, not the
+    // platform's 7-character slice: the right token under any other scheme is refused.
+    for (const scheme of ["bearer", "BEARER", "Basic ", "Xyzzy1"]) {
+      const foreign = await handleApiRequest({ method: "GET", url: "/api/vat-regimes", authorization: `${scheme} ${token}`, body: undefined }, runtime)
+      assert.equal(foreign.status, 401, scheme)
+    }
 
     const authorization = `Bearer ${token}`
     const vatCatalogue = await handleApiRequest({ method: "GET", url: "/api/vat-regimes", authorization, body: undefined }, runtime)
@@ -158,6 +164,15 @@ void test("requires host authentication and serves the complete invoice-core rou
     }, runtime)
     assert.equal(companyWithoutCui.status, 400)
     assert.equal((companyWithoutCui.body as { issues: ReadonlyArray<string> }).issues.includes("fiscalIdentifier is required for company"), true)
+    // T-2129: a character XML 1.0 cannot carry is refused at the door, never frozen into an issued invoice; U+0000 is a 400, not a 500.
+    for (const name of ["Client\u000bSRL", "Client\u0000SRL", "Client\uffffSRL"]) {
+      const refused = await handleApiRequest({
+        method: "POST", url: "/api/customers", authorization,
+        body: { partyType: "company", name, fiscalIdentifier: "87654329", vatRegistered: true,
+          address: { countryCode: "RO", city: "Iași", street: "Strada 2", county: "RO-IS" } },
+      }, runtime)
+      assert.deepEqual(refused, { status: 400, body: { error: "ValidationFailure", issues: ["name must not contain control characters"] } }, JSON.stringify(name))
+    }
     const draftWithoutCui = await handleApiRequest({
       method: "POST", url: "/api/drafts", authorization, idempotencyKey: "http-draft-1",
       body: { customer: { partyType: "company", name: "Fără CUI SRL", fiscalIdentifier: "", vatRegistered: false,

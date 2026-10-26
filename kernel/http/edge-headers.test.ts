@@ -90,7 +90,10 @@ void test("the docs page replaces only the CSP, and only a missing or invalid se
       assert.equal(redirect.status, 303)
       assert.equal(redirect.headers.location, "/unlock")
       assert.equal(redirect.headers["cache-control"], "no-store")
-      assert.match(String(redirect.headers["set-cookie"]), /^qwbe_session=; Path=\/api; HttpOnly; SameSite=Strict; Secure; /u)
+      // Only a session cookie the request carried is cleared: a cross-site link
+      // arrives without the SameSite=Strict cookie and must not log anyone out.
+      if (cookie === undefined) assert.equal(redirect.headers["set-cookie"], undefined)
+      else assert.match(String(redirect.headers["set-cookie"]), /^qwbe_session=; Path=\/api; HttpOnly; SameSite=Strict; Secure; /u)
       assert.equal(redirect.body, "")
       assertSecured(redirect, "docs redirect")
     }

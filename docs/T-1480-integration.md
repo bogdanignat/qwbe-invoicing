@@ -97,7 +97,8 @@ the pool sees the value. `PGPASSWORD` is never set, so no child process and no
 `docker inspect` can see it; `doctor` reports host/port/database/user and not the
 secret; pool errors are reported through `redactSecrets`.
 
-**Session writes take both locks, in the only safe order:** the SHARED
+**Session writes take both locks, in the only safe order** (the read, `find`,
+takes only the barrier since T-2130 — see §2, finding 6): the SHARED
 maintenance barrier first, then `pg_advisory_xact_lock` on the sessions key
 (1480,4). Both are transaction-scoped. `BIGINT` epochs arrive as strings and are
 decoded with `Number.isSafeInteger`, so an out-of-range value is refused instead
@@ -138,7 +139,7 @@ The full finding-by-finding answer, the commands and the remaining gaps are in
 | 3 | high | boot died with the database | `startMaintenanceSession` no longer rejects (acquire failures are caught internally, the candidate client is destroyed), and `bin` additionally `.catch`es it into an unheld session. HTTP listens regardless |
 | 4 | high | lost barrier was terminal | rewritten: `held()` flips false at once, the client is destroyed (`release(error)`) so the `max: 1` pool keeps its slot, and a bounded-backoff worker (250ms → 5000ms cap) re-acquires forever. Verified live with `pg_terminate_backend` |
 | 5 | high | `resume` on `GET /api` outside try/catch | that branch now wraps readiness + `resume` + docs render in one try/catch (500 + `logInternalFailure`), the `/api/*` branch keeps its own, and the dispatch IIFE has an outer `.catch`. **No `process.on("unhandledRejection")` was added** — it would hide this class of bug instead of surfacing it |
-| 6 | medium | exclusive lock on session reads | **invalid by decision** — see §2 |
+| 6 | medium | exclusive lock on session reads | **invalid by decision** at the time — see §2; **reversed in T-2130**: `find` now takes only the SHARED barrier |
 | 7 | medium | dirty connection returned after a failed ROLLBACK | `ScratchNotRolledBack` (`postgres-schema-replay.ts`) is thrown when the second ROLLBACK also fails; `schemaDrift` and `doctorReport` both `client.release(error)` on it, so a dirty connection is never pooled |
 | 8 | medium | DDL privilege for runtime readiness | **approved plan decision** (owner role + scratch schema) kept; the real gap — no diagnostic — is fixed: `applicationReady` takes a `report` callback emitting codes `maintenance_barrier_not_held` / `artifact_directory_not_writable` / `schema_pending_or_drifted` / `schema_check_failed:<Error.name>`, and `serve` logs them with the barrier state. Codes and `Error.name` only, never a driver message |
 | 9 | medium | raw `error.message` in the CLI catch | `kernel/ops/cli-redaction.ts`: `cliRedactor(secret)` = pattern redactor + the literal secret, `failureMessage` walks a bounded cause chain (3 links). Used for the final catch, the barrier catch and pool errors. Tests: `kernel/ops/postgres-cli-redaction.test.ts` |
@@ -157,6 +158,19 @@ hazard the lock exists for. The approved plan states it explicitly ("lock logic
 EXCLUSIV pe TOATE tranzacțiile"). The legitimate half of the finding — that the
 cost was asserted and not measured — is recorded as an open item, and the comment
 in `browser-session-store.ts` no longer claims a test that does not exist.
+
+*Superseded by T-2130.* The security audit (T-2119) showed the cost the open item
+left unmeasured: on a four-connection pool, an anonymous flood of invented but
+well-formed `qwbe_session` cookies took the EXCLUSIVE sessions key on every
+lookup, serialised the owner's requests behind it and pushed them into
+`lock_timeout` 500s. `find` now takes only the SHARED maintenance barrier;
+`create` and `remove` keep the barrier then the EXCLUSIVE sessions key. The
+hazard above does not apply to PostgreSQL: `find` is one SELECT by primary key
+under READ COMMITTED, so it sees a committed expiry sweep, insert or logout whole
+or not at all; a committed logout hides the row from every later `find`, and an
+expired row the sweep has not reached is still refused against the clock. The
+contention case is now a test (`kernel/auth/browser-session.test.ts`: a read does
+not wait for a held sessions key, a write still does).
 
 **Finding 8 — least privilege for the runtime role.** Not changed. The
 application role owns the schema it migrates; the scratch replay is the only way
@@ -217,7 +231,7 @@ introspection excludes the ledger and sees triggers and constraints.
 5. Backup staging volume (`/var/backups/staging`, explicit `TMPDIR`, bounded
    tmpfs) not added to any compose file.
 6. Regression tests still owed: saturation liveness, `/api` docs-resume rejection
-   → 500 without crash, session-read contention under a concurrent writer, and the
+   → 500 without crash, and the
    CLI smoke (`doctor`/`migrate`/reapply/`help` exit codes + pool shutdown).
 7. `pnpm verify` end to end was not run this round (the tests worker owns the
    harness and the suite); only lint, typecheck and the four static gates were.

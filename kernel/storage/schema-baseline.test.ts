@@ -217,6 +217,28 @@ void test("refuses negative payment terms and invalid preset prices, and lets an
     for (const price of ["1.00", "1.5", "1e2", ""]) assert.equal((await badPrice(price)).code, "22P02", price)
     assert.equal(Number(await sql.scalar("SELECT count(*) FROM product_presets")), 1)
 
+    // T-2129: the payment texts are bounded by the baseline as by the domain; U+0000 never reaches a row.
+    const payment = (id: string, method: string, reference: string | null, note: string | null) => [
+      `INSERT INTO invoice_payments(id,invoice_id,organization_id,amount,currency,payment_date,method,external_reference,note,actor_id,created_at)
+        VALUES($1,'invoice-1','org-1',100,'RON','2026-09-02',$2,$3,$4,'operator','2026-09-02T10:00:00.000Z')`,
+      [id, method, reference, note],
+    ] as const
+    assert.equal(await sql.rowCount(...payment("pay-1", "m".repeat(50), "r".repeat(100), "n".repeat(500))), 1)
+    assert.equal(await sql.rowCount(...payment("pay-2", "card", null, null)), 1)
+    for (const [values, constraint] of [
+      [payment("bad-1", "m".repeat(51), null, null), "invoice_payments_method_length"],
+      [payment("bad-2", "", null, null), "invoice_payments_method_length"],
+      [payment("bad-3", "card", "r".repeat(101), null), "invoice_payments_external_reference_length"],
+      [payment("bad-4", "card", null, "n".repeat(501)), "invoice_payments_note_length"],
+      [payment("bad-5", "card", null, ""), "invoice_payments_note_length"],
+    ] as const) {
+      const failure = await sql.rejects(...values)
+      assert.equal(failure.code, "23514", constraint)
+      assert.equal(failure.constraint, constraint)
+    }
+    assert.equal((await sql.rejects(...payment("bad-6", "card", null, "a\u0000b"))).code, "22021")
+    assert.equal(Number(await sql.scalar("SELECT count(*) FROM invoice_payments")), 2)
+
     assert.equal(await sql.rowCount("UPDATE issued_invoices SET e_factura_status='queued' WHERE id='invoice-1'"), 1)
     assert.equal(await sql.scalar("SELECT e_factura_status FROM issued_invoices WHERE id='invoice-1'"), "queued")
     for (const change of ["issuer_county='RO-CJ'", "customer_legal_name='Alt client'", "total_including_tax=100", "notes='Adaugata'"]) {

@@ -13,15 +13,17 @@ import { sessionsLockKey } from "../storage/postgres-transaction.ts"
  * wants the rest. Both are transaction-scoped, so they are released by COMMIT or
  * ROLLBACK and nothing has to remember to unlock.
  *
- * The read path takes the EXCLUSIVE logical lock too, and that is the approved
- * decision, not an oversight: SQLite's `BEGIN IMMEDIATE` had no read-only fast
- * path either, so every transaction — read or write — serialised on the same
- * writer lock. Keeping a shared mode here would be a behaviour change smuggled
- * in as an optimisation, and it would do it on the authentication path, where a
- * reader that observes a half-applied expiry sweep is exactly the hazard. The
- * The cost is bounded by `lock_timeout` (3000ms) rather than unbounded, and a
- * contention measurement against a concurrent writer is still owed — it is named
- * as an open item in docs/T-1480-integration.md, not claimed here.
+ * The read path (`find`) takes only the SHARED barrier, never the session key:
+ * it is one SELECT by primary key, and under READ COMMITTED a statement sees
+ * committed rows only, so the expiry sweep plus insert of `create` and the
+ * DELETE of a logout are each observed whole or not at all. A logout that has
+ * committed hides the row from every later `find`, exactly as the exclusive
+ * key did (a `find` racing a logout was ordered by whoever won the lock, which
+ * is the same race), and an expired row the sweep has not reached yet is still
+ * refused by `decode`, which compares `expires_at` with the clock. The writers
+ * keep the EXCLUSIVE key between themselves. The exclusive read lock let any
+ * request with a well-formed invented cookie serialise the owner's requests on
+ * a four-connection pool and push them into `lock_timeout` 500s.
  *
  * `created_at`/`expires_at` are `BIGINT`, which `pg` decodes as a **string** —
  * no global type parser is installed, so the conversion is explicit and refuses
@@ -46,19 +48,20 @@ export interface SessionStore {
   readonly remove: (sessionHash: string) => Promise<boolean>
 }
 
-const lockStatements = [
-  `SELECT pg_advisory_xact_lock_shared(${String(maintenanceLockKey.classId)}, ${String(maintenanceLockKey.objectId)})`,
-  `SELECT pg_advisory_xact_lock(${String(sessionsLockKey.classId)}, ${String(sessionsLockKey.objectId)})`,
-] as const
+const barrierLock = `SELECT pg_advisory_xact_lock_shared(${String(maintenanceLockKey.classId)}, ${String(maintenanceLockKey.objectId)})`
+const sessionsLock = `SELECT pg_advisory_xact_lock(${String(sessionsLockKey.classId)}, ${String(sessionsLockKey.objectId)})`
+const readLocks = [barrierLock] as const
+const writeLocks = [barrierLock, sessionsLock] as const
 
 /**
- * One transaction, both locks, release exactly once. A failure after BEGIN rolls
- * back; a client whose ROLLBACK itself fails is destroyed instead of returned to
- * the pool, because a connection with an unknown transaction state would poison
- * the next caller.
+ * One transaction, its locks in barrier-first order, release exactly once. A
+ * failure after BEGIN rolls back; a client whose ROLLBACK itself fails is
+ * destroyed instead of returned to the pool, because a connection with an
+ * unknown transaction state would poison the next caller.
  */
 const inTransaction = async <Value>(
   pool: Pool,
+  locks: ReadonlyArray<string>,
   use: (client: PoolClient) => Promise<Value>,
 ): Promise<Value> => {
   const client = await pool.connect()
@@ -66,7 +69,7 @@ const inTransaction = async <Value>(
   try {
     await client.query("BEGIN")
     try {
-      for (const statement of lockStatements) await client.query(statement)
+      for (const statement of locks) await client.query(statement)
       const value = await use(client)
       await client.query("COMMIT")
       return value
@@ -98,7 +101,7 @@ interface SessionRow {
 }
 
 export const createSessionStore = (pool: Pool): SessionStore => ({
-  find: (sessionHash) => inTransaction(pool, async (client) => {
+  find: (sessionHash) => inTransaction(pool, readLocks, async (client) => {
     const { rows } = await client.query<SessionRow>(
       "SELECT credential_hash, csrf_token, expires_at FROM browser_sessions WHERE session_hash = $1",
       [sessionHash],
@@ -111,7 +114,7 @@ export const createSessionStore = (pool: Pool): SessionStore => ({
     }
     return { credentialHash: row.credential_hash, csrfToken: row.csrf_token, expiresAt }
   }),
-  create: (record) => inTransaction(pool, async (client) => {
+  create: (record) => inTransaction(pool, writeLocks, async (client) => {
     // Expiry collection happens on the write path, under the same lock, exactly
     // as the SQLite store did it: no background job, no second connection.
     await client.query("DELETE FROM browser_sessions WHERE expires_at <= $1", [record.createdAt])
@@ -121,7 +124,7 @@ export const createSessionStore = (pool: Pool): SessionStore => ({
       [record.sessionHash, record.credentialHash, record.csrfToken, record.createdAt, record.expiresAt],
     )
   }),
-  remove: (sessionHash) => inTransaction(pool, async (client) => {
+  remove: (sessionHash) => inTransaction(pool, writeLocks, async (client) => {
     const result = await client.query(
       "DELETE FROM browser_sessions WHERE session_hash = $1",
       [sessionHash],

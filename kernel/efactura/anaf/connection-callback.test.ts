@@ -54,10 +54,11 @@ void test("every refused callback is a 303 with its fixed code and writes no con
     assert.equal(await rig.callback(expired, CODE), "tentativa_expirata")
     const refused = await rig.start()
     assert.equal(await rig.callback(refused, "?error=access_denied&error_description=x"), "refuzat_anaf")
-    assert.equal(await rig.callback(refused, CODE), "tentativa_folosita", "consumed, even by an error answer")
-    assert.equal(await rig.callback(await rig.start(), ""), "cod_lipsa")
-    assert.equal(await rig.callback(await rig.start(), "?code=a&code=b"), "cod_lipsa", "a repeated code is not guessed at")
-    assert.equal(await rig.callback(await rig.start(), "?code=expired"), "schimb_esuat", "invalid_grant")
+    assert.equal(await rig.callback(refused, ""), "cod_lipsa")
+    assert.equal(await rig.callback(refused, "?code=a&code=b"), "cod_lipsa", "a repeated code is not guessed at")
+    assert.equal((await status(rig)).attempt, "pending", "an error or a missing code does not consume the attempt")
+    assert.equal(await rig.callback(refused, "?code=expired"), "schimb_esuat", "invalid_grant")
+    assert.equal(await rig.callback(refused, CODE), "tentativa_folosita", "a callback with a code consumes it")
     rig.fake.answer("token", "redirect")
     assert.equal(await rig.callback(await rig.start(), CODE), "schimb_esuat", "no usable answer")
     rig.fake.answer("token", "normal")
@@ -70,6 +71,19 @@ void test("every refused callback is a 303 with its fixed code and writes no con
     assert.equal((await status(rig)).status, "disconnected")
     assert.equal(accessToken(await rig.stored()), undefined)
     assert.deepEqual(await rig.audit(), [])
+  })
+})
+
+void test("an error or code-less callback leaves the attempt cookie; one with a code clears it", async () => {
+  await withRig("efconn_cookie", async (rig) => {
+    const cookie = await rig.start()
+    for (const query of ["?error=access_denied", "", "?code=a&code=b"]) {
+      const reply = await rig.call("GET", `/anaf/callback${query}`, { cookie })
+      assert.deepEqual([reply.status, reply.headers.get("set-cookie")], [303, null], query)
+    }
+    const consumed = await rig.call("GET", `/anaf/callback${CODE}`, { cookie })
+    assert.match(consumed.headers.get("set-cookie") ?? "", /^qwbe_anaf_oauth=; Max-Age=0;/u)
+    assert.equal((await status(rig)).status, "connected", "the foreign error answers did not cancel the started connection")
   })
 })
 

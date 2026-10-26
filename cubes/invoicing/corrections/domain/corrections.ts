@@ -1,6 +1,7 @@
 import { ValidationFailure } from "../../contracts/failures.ts"
 import { compareDecimal } from "../../contracts/money.ts"
 import type { BuyerSnapshot, DocumentSource, DraftLine, IssuerCompanySnapshot, VatBreakdown } from "../../domain/invoice.ts"
+import { controlCharacters } from "../../domain/validation.ts"
 export interface CreateCorrectionInput {
   readonly originalInvoiceId: string
   readonly reason: string
@@ -24,6 +25,7 @@ export const validateCreateCorrectionInput = (input: CreateCorrectionInput): voi
   if (input.originalInvoiceId.trim().length === 0) issues.push("originalInvoiceId is required")
   if (input.reason.trim().length === 0) issues.push("reason is required")
   if (input.reason.trim().length > 300) issues.push("reason must be at most 300 characters")
+  controlCharacters("reason", input.reason.trim(), issues, true)
   if (input.issueDate !== undefined) {
     const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(input.issueDate)
     if (m === null) issues.push("issueDate must be YYYY-MM-DD")

@@ -178,9 +178,6 @@ void test("invalid input, rejected origins, CSRF failures, missing auth, and exp
       method: "POST", headers: { cookie, origin: fixture.origin, "x-csrf-token": `${csrfToken}x` }, body: "{}",
     })), 403)
     assert.equal(await drain(await fetch(`${fixture.origin}/api/customers`)), 401)
-    for (const authorization of ["Basic abc", "Bearer", "bearer wrong"]) {
-      assert.equal(await drain(await fetch(`${fixture.origin}/api/customers`, { headers: { authorization } })), 401)
-    }
     fixture.advance(monthMs + 1)
     assert.equal(await drain(await fetch(`${fixture.origin}/api/customers`, { headers: { cookie } })), 401)
     assert.equal(await drain(await fetch(`${fixture.origin}/api/session`, {
@@ -205,13 +202,22 @@ void test("successful credentials reset failures even when the authenticated API
   })
 })
 
-void test("non-Bearer and empty credentials do not consume the Bearer failure allowance", async () => {
+void test("any Authorization that is not exactly `Bearer <token>` is a counted failure, even carrying the right token", async () => {
   await withFixture(async (fixture) => {
-    for (const authorization of ["Basic abc", "Bearer", "bearer wrong", "Bearer ", "Digest abc", "Basic xyz"]) {
-      assert.equal(await drain(await fetch(`${fixture.origin}/api/customers`, { headers: { authorization } })), 401)
+    // The platform slices any 7-character prefix off the header: each of these
+    // carries the correct token, and each is refused before the handler.
+    const foreign = [`bearer ${token}`, `BEARER ${token}`, `Basic ${token}`, `Xyzzy1 ${token}`, "Bearer", `Token  ${token}`]
+    for (const authorization of foreign) {
+      const response = await fetch(`${fixture.origin}/api/customers`, { headers: { authorization } })
+      assert.equal(response.status, 401, authorization)
+      assert.deepEqual(await response.json(), { error: "AuthenticationRequired" })
     }
-    for (let attempt = 0; attempt < 6; attempt += 1) assert.equal(await drain(await bearer(fixture)), 401)
     await assertThrottled(await bearer(fixture, token), 1)
+    for (const authorization of [`bearer ${token}`, `Xyzzy1 ${token}`]) {
+      await assertThrottled(await fetch(`${fixture.origin}/api/customers`, { headers: { authorization } }), 1)
+    }
+    fixture.advance(1_000)
+    assert.equal(await drain(await bearer(fixture, token)), 200)
   })
 })
 

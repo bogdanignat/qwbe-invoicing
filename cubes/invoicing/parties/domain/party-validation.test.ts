@@ -82,10 +82,37 @@ void test("bounds the party texts e-Factura carries, counted the way the CIUS-RO
   assert.deepEqual(issues({ ...party, name: "😀".repeat(200) }), [])
   // normalize-space trims only space, tab, CR and LF: a trailing no-break space is a character.
   assert.deepEqual(issues({ ...party, name: `${"a".repeat(200)}\u00A0` }), ["name must be at most 200 characters"])
-  // ...while runs of XML whitespace collapse to one and the ends are trimmed.
-  assert.deepEqual(issues({ ...party, name: ` ${"a ".repeat(99)}\t\t\n a ` }), [])
+  // ...while runs of spaces collapse to one and the ends are trimmed (tab, CR and LF are refused below).
+  assert.deepEqual(issues({ ...party, name: ` ${"a ".repeat(99)}   a ` }), [])
   assert.deepEqual(issues({ ...party, address: { ...party.address, street: "s".repeat(151) } }), ["address.street must be at most 150 characters"])
   assert.deepEqual(issues({ ...party, address: { ...party.address, city: "c".repeat(51) } }), ["address.city must be at most 50 characters"])
   assert.deepEqual(issues({ ...party, address: { ...party.address, postalCode: "7".repeat(20) } }), [])
   assert.deepEqual(issues({ ...party, address: { ...party.address, postalCode: "7".repeat(21) } }), ["address.postalCode must be at most 20 characters"])
+})
+
+// The issuer, a saved customer and an inline buyer all pass through validateParty, so one refusal
+// here keeps a character XML 1.0 cannot carry from ever being frozen into an issued invoice.
+void test("refuses control characters, separators and U+FFFE/U+FFFF in every party text e-Factura carries", () => {
+  const party = {
+    name: "Exemplu SRL", fiscalIdentifier: "45561046",
+    address: { countryCode: "RO", city: "Botoșani", street: "Strada Mare 1", county: "RO-BT", postalCode: "710001" },
+  }
+  const issues = (value: typeof party): ReadonlyArray<string> => {
+    try { validateParty(value); return [] } catch (error) { return error instanceof ValidationFailure ? error.issues : [String(error)] }
+  }
+  const fields = [
+    ["name", (text: string) => ({ ...party, name: `Exemplu${text}SRL` })],
+    ["address.street", (text: string) => ({ ...party, address: { ...party.address, street: `Strada${text}Mare 1` } })],
+    ["address.city", (text: string) => ({ ...party, address: { ...party.address, city: `Boto${text}șani` } })],
+    ["address.postalCode", (text: string) => ({ ...party, address: { ...party.address, postalCode: `71${text}0001` } })],
+  ] as const
+  for (const [field, withText] of fields) {
+    for (const character of ["\u0000", "\t", "\n", "\r", "\u000b", "\u001f", "\u007f", "\u0085", "\u2028", "\u2029", "\ufffe", "\uffff"]) {
+      assert.deepEqual(issues(withText(character)), [`${field} must not contain control characters`], `${field} ${JSON.stringify(character)}`)
+    }
+    assert.deepEqual(issues(withText("\u00a0")), [], `${field} keeps a no-break space`)
+  }
+  const buyer = { ...party, partyType: "individual" as const, fiscalIdentifier: "", vatRegistered: false }
+  assert.throws(() => { validateBuyer({ ...buyer, name: "Ion\u000bPopescu" }) },
+    (error: unknown) => error instanceof ValidationFailure && error.issues.includes("name must not contain control characters"))
 })

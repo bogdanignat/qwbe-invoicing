@@ -12,7 +12,10 @@ invoice.example.com {
     header_up Host {host}
     header_up X-Forwarded-Proto {scheme}
   }
+  # `defer`: applied when the response is written, so these replace the same headers
+  # the application already sends (HSTS included) instead of being sent twice.
   header {
+    defer
     Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
     X-Content-Type-Options "nosniff"
     X-Frame-Options "DENY"

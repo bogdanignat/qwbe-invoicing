@@ -2,7 +2,7 @@ import { HttpServerResponse, type HttpServerRequest } from "@effect/platform"
 import { Cause, Effect, Option, Redacted } from "effect"
 
 import {
-  OAUTH_ATTEMPT_TTL_SECONDS, callbackTarget, type CallbackInput, type CallbackOutcome,
+  OAUTH_ATTEMPT_TTL_SECONDS, attemptUntouched, callbackTarget, type CallbackInput, type CallbackOutcome,
 } from "../../../cubes/invoicing/efactura/connection/index.ts"
 import { sessionCookieValues } from "../../auth/browser-session-helpers.ts"
 import { logInternalFailure } from "../../failure-log.ts"
@@ -44,7 +44,9 @@ const failed = (cause: Cause.Cause<{ readonly _tag: string; readonly operation?:
 
 /**
  * `GET /api/anaf/callback`: whatever happened, a 303 to the one fixed page with
- * a fixed code, the attempt cookie cleared, nothing cached and no referrer.
+ * a fixed code, nothing cached and no referrer. The attempt cookie is cleared
+ * unless the answer left the attempt untouched (`error=` or no code), so a
+ * foreign page cannot cancel a connection the owner has started.
  */
 export const anafCallbackResponse = <E extends { readonly _tag: string; readonly operation?: string }>(
   complete: (input: CallbackInput) => Effect.Effect<CallbackOutcome, E>,
@@ -52,5 +54,6 @@ export const anafCallbackResponse = <E extends { readonly _tag: string; readonly
 ) => Effect.suspend(() => complete(callbackInput(request))).pipe(
   Effect.catchAllCause(failed),
   Effect.map((outcome) => HttpServerResponse.redirect(callbackTarget(outcome), { status: 303, headers: {
-    "set-cookie": clearedAttemptCookie, "cache-control": "no-store", "referrer-policy": "no-referrer",
+    ...(attemptUntouched(outcome) ? {} : { "set-cookie": clearedAttemptCookie }),
+    "cache-control": "no-store", "referrer-policy": "no-referrer",
   } })))
