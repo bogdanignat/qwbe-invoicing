@@ -40,11 +40,14 @@ const firstDayOf = (index: number): string =>
 /** How many calendar months the range touches, both ends included. */
 export const rangeMonthCount = (range: ReportRange): number => monthIndex(range.to) - monthIndex(range.from) + 1
 
+/** One wording for an interval that runs backwards, on the dashboard and in the register. */
+export const RANGE_ORDER_ISSUE = "Data de început nu poate fi după data de sfârșit."
+
 /** Why a typed interval cannot be asked for, in the words shown under the inputs; undefined when it can. */
 export const rangeIssue = (range: ReportRange): string | undefined => {
   if (range.from === "" || range.to === "") return "Alege ambele date ale intervalului."
   if (!isCalendarDate(range.from) || !isCalendarDate(range.to)) return "Datele trebuie să fie zile calendaristice valide."
-  if (range.from > range.to) return "Data de început nu poate fi după data de sfârșit."
+  if (range.from > range.to) return RANGE_ORDER_ISSUE
   if (rangeMonthCount(range) > MAXIMUM_REPORT_MONTHS) {
     return `Intervalul poate cuprinde cel mult ${String(MAXIMUM_REPORT_MONTHS)} de luni calendaristice.`
   }

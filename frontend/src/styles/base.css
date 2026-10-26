@@ -118,6 +118,9 @@ input:hover { border-color: var(--color-invoice-control-border-hover); }
 .filter-choice input { width: auto; min-height: 0; }
 .filter-search { display: grid; gap: .42rem; min-width: min(20rem, 100%); }
 .filter-search label { color: var(--color-invoice-label); font-size: .76rem; font-weight: 750; }
+.custom-range { display: flex; flex-wrap: wrap; gap: .75rem 1rem; align-items: flex-end; }
+.custom-range label { min-width: 10.5rem; }
+.custom-range .hint { flex-basis: 100%; }
 .table-wrap { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; font-size: .89rem; }
 th, td { padding: .7rem .75rem; border-bottom: 1px solid var(--color-invoice-border); text-align: left; vertical-align: top; }

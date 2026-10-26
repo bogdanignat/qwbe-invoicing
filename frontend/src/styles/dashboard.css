@@ -1,4 +1,4 @@
-/* Dashboard: the figure cards, the custom period and the revenue chart. */
+/* Dashboard: the figure cards and the revenue chart. */
 /* Narrow enough that five cards share one desktop row; fewer columns as the card narrows. */
 .stat-cards { display: grid; gap: .9rem; grid-template-columns: repeat(auto-fit, minmax(min(100%, 10.5rem), 1fr)); margin: 0 0 1.25rem; }
 .stat-card { display: grid; gap: .3rem; align-content: start; padding: 1rem 1.1rem; border: 1px solid var(--color-invoice-border); border-radius: var(--radius-invoice-container); background: var(--color-invoice-secondary-surface); }
@@ -7,9 +7,6 @@
 .stat-value { color: var(--color-invoice-ink); font-size: 1.3rem; font-weight: 750; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .stat-hint { color: var(--color-invoice-muted); font-size: .78rem; line-height: 1.45; }
 .dashboard-filters { align-items: flex-start; }
-.custom-range { display: flex; flex-wrap: wrap; gap: .75rem 1rem; align-items: flex-end; }
-.custom-range label { min-width: 10.5rem; }
-.custom-range .hint { flex-basis: 100%; }
 .revenue-chart { margin: 0; }
 /* `contain` keeps the drawing's width out of the card's min-content: a narrow card scrolls the chart instead of growing. */
 .chart-scroll { overflow-x: auto; padding-bottom: .25rem; contain: inline-size; }
@@ -29,5 +26,4 @@
   .stat-value { font-size: 1.05rem; }
   /* Two columns: an odd last card takes the whole row instead of standing alone in half of it. */
   .stat-card:last-child:nth-child(odd) { grid-column: 1 / -1; }
-  .custom-range label { min-width: 0; flex: 1 1 9rem; }
 }

@@ -16,6 +16,15 @@ interface JsonSchema {
 
 void test("invoice register OpenAPI preserves discriminated nullability and original-reference ownership", () => {
   const spec = OpenApi.fromApi(applicationHttpApi)
+  const parameters = (spec.paths["/api/invoice-register"]?.get?.parameters ?? []) as ReadonlyArray<{
+    readonly name: string; readonly in: string; readonly required?: boolean; readonly schema?: JsonSchema
+  }>
+  const query = new Map(parameters.filter((parameter) => parameter.in === "query").map((parameter) => [parameter.name, parameter]))
+  for (const name of ["from", "to", "kind", "q", "limit", "cursor"]) {
+    assert.ok(query.has(name), name)
+    assert.notEqual(query.get(name)?.required, true, name)
+  }
+  assert.deepEqual(query.get("kind")?.schema?.enum, ["invoice", "correction"])
   const response = spec.paths["/api/invoice-register"]?.get?.responses[200]
   assert.ok(response)
   const content = response.content as Readonly<Record<string, { readonly schema?: unknown }>> | undefined

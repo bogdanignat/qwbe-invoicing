@@ -74,35 +74,3 @@ export const projectInvoiceRegisterRow = (row: InvoiceRegisterRow): InvoiceRegis
     }
     : null,
 })
-
-export type RegisterKindFilter = "all" | "invoice" | "correction"
-
-export interface RegisterFilter {
-  readonly kind: RegisterKindFilter
-  readonly search: string
-}
-
-export const emptyRegisterFilter: RegisterFilter = { kind: "all", search: "" }
-
-/**
- * Filtering is over the pages already loaded, not over the register.
- *
- * `GET /api/invoice-register` takes only `limit` and `cursor`; it has no status,
- * customer or date parameter, so no filter here can be pushed to the server.
- * Narrowing what is on screen is therefore exactly that — a narrowing of the
- * rows fetched so far — and "Încarcă mai multe" keeps following the cursor
- * independently of it. A filter that silently hid later pages would read as a
- * complete answer to a question it never asked the backend.
- */
-export const filterInvoiceRegisterRows = (
-  rows: ReadonlyArray<InvoiceRegisterRow>,
-  filter: RegisterFilter,
-): ReadonlyArray<InvoiceRegisterRow> => {
-  const search = filter.search.trim().toLocaleLowerCase("ro-RO")
-  return rows.filter((row) => {
-    if (filter.kind !== "all" && row.kind !== filter.kind) return false
-    if (search === "") return true
-    const haystack = `${row.series} ${String(row.number)} ${row.customer.name}`.toLocaleLowerCase("ro-RO")
-    return haystack.includes(search)
-  })
-}

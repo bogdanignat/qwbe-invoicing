@@ -72,6 +72,33 @@ void test("invoice register exposes invoices and corrections without changing /a
     assert.deepEqual((zeroRegister.body as { items: ReadonlyArray<{ dueDate: string | null; eFacturaStatus: string }> }).items
       .map(({ dueDate, eFacturaStatus }) => ({ dueDate, eFacturaStatus })), [{ dueDate: null, eFacturaStatus: "not_sent" }])
 
+    const listed = async (query: string) => {
+      const answer = await call("GET", `/api/invoice-register?${query}`)
+      assert.equal(answer.status, 200, query)
+      return (answer.body as { items: ReadonlyArray<{ kind: string; number: number }> }).items
+        .map((item) => `${item.kind}:${String(item.number)}`)
+    }
+    assert.deepEqual(await listed(""), ["invoice:3", "correction:2", "invoice:1"])
+    assert.deepEqual(await listed("from=2026-09-04&to=2026-09-04"), ["invoice:1"])
+    assert.deepEqual(await listed("kind=correction"), ["correction:2"])
+    assert.deepEqual(await listed("q=reg%201&limit=100"), ["invoice:1"])
+    assert.deepEqual(await listed("q=CLIENT&kind=invoice&from=2026-09-05"), ["invoice:3"])
+    assert.deepEqual(await listed("q=%20%20"), ["invoice:3", "correction:2", "invoice:1"])
+    assert.deepEqual(await listed("q=%25"), [])
+    const refusals: ReadonlyArray<readonly [string, ReadonlyArray<string>]> = [
+      ["from=2026-09-05&to=2026-09-04", ["from must not be after to"]],
+      ["from=2026-02-30", ["from must be a calendar date in YYYY-MM-DD format"]],
+      ["to=04.09.2026", ["to must be a calendar date in YYYY-MM-DD format"]],
+      ["kind=draft", ["kind: kind must be invoice or correction"]],
+      [`q=${"x".repeat(101)}`, ["q must be at most 100 characters"]],
+      ["q=a%00b", ["q must not contain control characters"]],
+      ["limit=0", ["limit must be an integer between 1 and 200"]],
+      ["limit=201", ["limit must be an integer between 1 and 200"]],
+    ]
+    for (const [query, issues] of refusals) {
+      assert.deepEqual(await call("GET", `/api/invoice-register?${query}`), { status: 400, body: { error: "ValidationFailure", issues } }, query)
+    }
+
     const oldCursor = Buffer.from(JSON.stringify({ issueDate: "2026-09-05", number: 2, id: "x" })).toString("base64url")
     const badKind = Buffer.from(JSON.stringify({ issueDate: "2026-09-05", number: 2, id: "x", kind: "legacy" })).toString("base64url")
     for (const url of ["/api/invoice-register?limit=0", "/api/invoice-register?limit=201",
