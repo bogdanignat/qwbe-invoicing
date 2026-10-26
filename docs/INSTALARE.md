@@ -80,24 +80,33 @@ Comenzile rulează din directorul repository-ului.
    ```bash
    scripts/init-secrets.sh
    ```
-   Scriptul citește căile din `.env` (`AUTH_TOKEN_PATH`, `PG_PASSWORD_PATH`,
-   `COMPANY_LOOKUP_KEY_PATH`, `ANAF_TOKEN_KEY_PATH`; implicit în `.local/`) și creează patru
-   fișiere cu mod 0600: tokenul API, parola PostgreSQL, cheia căutării de firme și cheia
-   tokenurilor ANAF. Nu suprascrie un fișier existent și nu afișează niciun secret. În
+   Scriptul citește căile din `.env` (`AUTH_TOKEN_PATH`, `PG_SUPERUSER_PASSWORD_PATH`,
+   `PG_OWNER_PASSWORD_PATH`, `PG_APP_PASSWORD_PATH`, `COMPANY_LOOKUP_KEY_PATH`,
+   `ANAF_TOKEN_KEY_PATH`; implicit în `.local/`) și creează șase fișiere cu mod 0600: tokenul
+   API, parolele celor trei roluri PostgreSQL, cheia căutării de firme și cheia tokenurilor
+   ANAF. Nu suprascrie un fișier existent și nu afișează niciun secret. În
    producție căile pot sta în afara repository-ului; cele relative se rezolvă față de `.env`.
 
-   **Parola bazei se generează o singură dată.** PostgreSQL o citește doar când creează
-   clusterul, la primul start. Regenerată după aceea, `migrate` și `app` nu se mai conectează
-   (`password authentication failed`). La fel, o cheie nouă de căutare face ilizibilă cheia
-   openapi.ro salvată, iar o cheie ANAF nouă cere reconectarea cu certificatul. Schimbarea
-   parolei: [Rotate it, keeping the data](../README.md#rotate-it-keeping-the-data).
+   Trei roluri, câte o parolă ([Database access](../README.md#database-access)): `postgres`,
+   superuserul clusterului, doar pentru `db-init` și restaurare; `qwbe_owner`, proprietarul
+   schemei, pentru `migrate`; `qwbe_app`, doar citire și scriere de date, pentru `app`. Niciunul
+   dintre ultimele două nu e superuser, așa că o injecție SQL nu poate opri triggerele care
+   păstrează facturile emise neschimbate.
+
+   **Parola superuserului se generează o singură dată.** PostgreSQL o citește doar când
+   creează clusterul, la primul start. Regenerată după aceea, `db-init` nu se mai conectează
+   (`password authentication failed`), deci nici `migrate` și `app` nu pornesc. Parolele celor
+   două roluri le pune `db-init` din fișiere la fiecare pornire. La fel, o cheie nouă de
+   căutare face ilizibilă cheia openapi.ro salvată, iar o cheie ANAF nouă cere reconectarea cu
+   certificatul. Schimbarea parolelor: [Rotate them, keeping the data](../README.md#rotate-them-keeping-the-data).
 5. Construiește imaginea și pornește:
    ```bash
    docker build -t qwbe-invoicing:local .
    docker compose up -d
    ```
-   `db` pornește primul, `migrate` aplică schema, `app` pornește doar dacă migrarea a
-   reușit, iar `caddy` (varianta a) așteaptă ca `app` să fie `healthy`.
+   `db` pornește primul, `db-init` creează rolurile și drepturile, `migrate` aplică schema,
+   `app` pornește doar dacă migrarea a reușit, iar `caddy` (varianta a) așteaptă ca `app` să
+   fie `healthy`.
 6. Verifică:
    ```bash
    docker compose ps
@@ -243,8 +252,9 @@ staging-ul de backup: nu e niciodată un pas de actualizare sau de backup.
 
 | Simptom | Cauză și rezolvare |
 |---|---|
-| `bind source path does not exist: .../pg-password` la `up` | lipsește un fișier secret: rulează `scripts/init-secrets.sh` și `up` din nou; clusterul nu a fost creat, nu ai ce șterge |
-| `password authentication failed` | parola a fost regenerată după primul start; pune la loc fișierul vechi sau urmează [rotirea parolei](../README.md#rotate-it-keeping-the-data) |
+| `bind source path does not exist: .../pg-superuser-password` (sau alt secret) la `up` | lipsește un fișier secret: rulează `scripts/init-secrets.sh` și `up` din nou; clusterul nu a fost creat, nu ai ce șterge |
+| `password authentication failed for user "postgres"` în logul `db-init`, iar `docker compose logs db` arată `Role "postgres" does not exist` | clusterul e dinaintea rolurilor separate, cu superuserul `qwbe`, și nu se convertește: urmează pașii din [Upgrading](../README.md#upgrading) (backup cu checkout-ul vechi dacă datele contează, cele trei linii noi în `.env`, `scripts/init-secrets.sh`, `docker compose down -v`, `up -d`) |
+| `password authentication failed` în logul `db-init`, fără `Role ... does not exist` în logul `db` | parola superuserului a fost regenerată după primul start; pune la loc fișierul vechi sau urmează [rotirea parolelor](../README.md#rotate-them-keeping-the-data) |
 | `migrate` iese cu `schema does not match the migration contract (...); recreate the database` | drift de migrare: noua versiune a schimbat schema de bază. Cât proiectul e în dezvoltare nu există upgrade între scheme, baza se recreează (README, [API](../README.md#api), „Schema during development”) |
 | `Pool overlaps with other one on this address space` la `up` | un subnet al rețelei e deja folosit pe server: pune alt `/24` în `QWBE_NETWORK_SUBNET` sau alt `/64` în `QWBE_NETWORK_SUBNET_IPV6` |
 | la `up`, o eroare despre IPv6 la crearea rețelei | serverul nu are IPv6: adaugă `compose.ipv4-only.yaml` la `COMPOSE_FILE`, apoi `docker compose down` (fără `-v`) și `up -d` |

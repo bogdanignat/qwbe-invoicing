@@ -33,8 +33,8 @@ import type { BackupSession } from "./postgres-backup-create.ts"
  *
  * ## The trust boundary, stated plainly
  *
- * `database.sql` is **executed**, as the application's own database role. Every
- * check in this module is about the archive as a filesystem object — member names,
+ * `database.sql` is **executed**, as the schema owner role (qwbe_owner), NOSUPERUSER:
+ * every right on this database's schema, none on the server. Every check in this module is about the archive as a filesystem object — member names,
  * types, sizes, digests, manifest consistency, tool majors. None of them inspects
  * the SQL, and none of them can: the digests live in the same archive as the file
  * they describe, so they prove the archive is internally consistent and *not* that

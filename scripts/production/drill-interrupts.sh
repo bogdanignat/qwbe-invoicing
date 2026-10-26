@@ -21,14 +21,16 @@ partials() { find "$backups" -maxdepth 1 -name '.partial-*' -printf '%f\n'; }
 # CONDITION holds; its exit status in $status, its output in $log.
 input=/dev/null
 interrupt() {
-  local signal="$1" condition="$2" pid
+  local signal="$1" condition="$2" pid reached=0
   shift 2
   isolated
   log="$work/log.$((step += 1))"
   "$@" <"$input" >"$log" 2>&1 &
   pid=$!
-  for _ in $(seq 1 600); do "$condition" && break; sleep 0.2; done
-  "$condition" || fail "$* never reached the point to interrupt: $(tail -n 20 "$log")"
+  # Signalled as soon as CONDITION is seen, not on a second look: a restore's short
+  # `db-init` one-off may be gone again before its CLI one-off starts.
+  for _ in $(seq 1 600); do "$condition" && { reached=1; break; }; sleep 0.2; done
+  ((reached)) || fail "$* never reached the point to interrupt: $(tail -n 20 "$log")"
   kill "-$signal" "$pid"
   status=0
   wait "$pid" || status=$?

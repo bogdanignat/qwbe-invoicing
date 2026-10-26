@@ -130,8 +130,8 @@ backup writes a pg_dump of the database plus the DATA_DIR artifacts to a .tar.gz
 the database and writes only the archive, and repeating it produces the same contents; it takes the maintenance
 barrier EXCLUSIVE, so it refuses while serve is running.
 restore is a dry-run by default. --apply restores the artifacts into DATA_DIR and executes the archived
-database.sql through psql as this application role, so only an archive you trust may be applied. It takes the
-same barrier EXCLUSIVE and needs an EMPTY target database: create a fresh one, point PGDATABASE at it and
-restore into that; nothing is ever dropped. Outside development it also requires --confirm-production.
+database.sql through psql as the schema owner role (qwbe_owner), NOSUPERUSER, so only an archive you trust
+may be applied. It takes the same barrier EXCLUSIVE and needs an EMPTY target database: create a fresh one,
+point PGDATABASE at it and restore into that; nothing is ever dropped. Outside development it also requires --confirm-production.
 Exit codes: 0 success, 2 invalid input or guard refusal, 1 execution failure.
 `

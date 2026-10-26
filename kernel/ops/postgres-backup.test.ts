@@ -575,7 +575,7 @@ void test("a check that fails after the commit says the database was restored", 
 })
 
 void test("the facade exports the trust warning the CLI has to print", () => {
-  assert.match(restoreTrustWarning, /executes database\.sql as the application's database role/u)
+  assert.match(restoreTrustWarning, /executes database\.sql as the schema owner role \(qwbe_owner\), NOSUPERUSER/u)
   assert.match(restoreTrustWarning, /never for authenticity/u)
 })
 

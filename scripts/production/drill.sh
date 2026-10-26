@@ -159,7 +159,7 @@ refused 'belongs to ORGANIZATION_ID other-org' "$scripts/restore.sh" "$tampered"
 mkdir "$work/odd:dir"
 cp "$deploy_backup" "${deploy_backup%.tar.gz}.meta" "$work/odd:dir/"
 refused 'cannot be mounted' "$scripts/restore.sh" "$work/odd:dir/$(basename "$deploy_backup")"
-databases() { "${compose[@]}" exec -T db psql -U qwbe -d postgres -tAc "SELECT string_agg(datname, ',' ORDER BY datname) FROM pg_database"; }
+databases() { "${compose[@]}" exec -T db psql -U postgres -d postgres -tAc "SELECT string_agg(datname, ',' ORDER BY datname) FROM pg_database"; }
 dbs_before="$(databases)" volumes_before="$(docker volume ls -q --filter "name=^$project-" | sort)"
 refused 'not confirmed; nothing was changed' sh -c "echo wrong-name | '$scripts/restore.sh' '$deploy_backup' --apply"
 succeeds "$scripts/restore.sh" "$deploy_backup"

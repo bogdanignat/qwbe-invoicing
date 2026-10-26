@@ -256,7 +256,7 @@ if (command !== undefined) {
           const context = {
             pool: runtime.pool, settings: config.pgSettings, dataDirectory: config.dataDirectory,
           }
-          // `database.sql` is executed by `psql` as this application's own role, and
+          // `database.sql` is executed by `psql` as the schema owner role (qwbe_owner), NOSUPERUSER, and
           // the manifest digests live inside the same archive as the file they
           // describe: they prove integrity, never authenticity. So the trust boundary
           // is stated before the write, on stderr — `--json` consumers keep a clean

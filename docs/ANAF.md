@@ -65,7 +65,7 @@ configurare parțială e refuzată. Exemplul neutru e în `.env.example`.
 - Valorile publice stau în `.env`: `ANAF_CLIENT_ID`, `ANAF_REDIRECT_URI` și
   `ANAF_ENVIRONMENT` (`test` implicit).
 - Client secret-ul și cheia tokenurilor sunt fișiere montate ca Docker secrets, ca
-  `api-token` și `pg-password`: în `.env` stau doar căile (`ANAF_CLIENT_SECRET_PATH`,
+  `api-token` și parolele bazei: în `.env` stau doar căile (`ANAF_CLIENT_SECRET_PATH`,
   `ANAF_TOKEN_KEY_PATH`), aplicația le citește din `ANAF_CLIENT_SECRET_FILE` și
   `ANAF_TOKEN_KEY_FILE`. Niciodată ca valori în mediu, în `.env`, în imagine sau în git.
 - Cheia tokenurilor (64 de caractere hex) o creează `scripts/init-secrets.sh`; secretul

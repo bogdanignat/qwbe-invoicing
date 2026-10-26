@@ -1,10 +1,11 @@
 import { accessSync, constants } from "node:fs"
 
-import type { Pool } from "pg"
+import type { Pool, PoolClient } from "pg"
 
 import type { RuntimeConfig } from "../config.ts"
 import { artifactsDirectoryReady, ledgerReady, planMigrations, schemaDriftOnClient } from "../storage/migrations.ts"
 import { ScratchNotRolledBack } from "../storage/postgres-schema-fingerprint.ts"
+import { extraSchemas } from "./postgres-backup-guards.ts"
 
 /**
  * `doctor`, as one value. Everything it reports is observed on the real target:
@@ -23,12 +24,29 @@ export interface DoctorReport {
   readonly pendingMigrations: ReadonlyArray<string>
   readonly migrationsReady: boolean
   readonly schemaDrift: ReadonlyArray<string>
+  /**
+   * User schemas besides `public`. The application runs with them, so `ready` ignores
+   * them, but `backup` refuses while one exists: non-empty means backups are failing.
+   */
+  readonly extraSchemas: ReadonlyArray<string>
+  /**
+   * Extensions besides `plpgsql`. The schema needs none, but CREATE on the database lets
+   * `qwbe_app` install a trusted one, whose objects land in `public` without a new schema.
+   */
+  readonly extraExtensions: ReadonlyArray<string>
   readonly organizationId: string | null
   readonly authTokenFile: string | null
   readonly authTokenReadable: boolean
   readonly nodeVersion: string
   /** The one field the exit code is derived from. */
   readonly ready: boolean
+}
+
+const extraExtensions = async (client: PoolClient): Promise<ReadonlyArray<string>> => {
+  const { rows } = await client.query<{ readonly extname: string }>(
+    "SELECT extname FROM pg_extension WHERE extname <> 'plpgsql' ORDER BY extname",
+  )
+  return rows.map(({ extname }) => extname)
 }
 
 const readable = (path: string | undefined): boolean => {
@@ -54,12 +72,16 @@ export const doctorReport = async (config: RuntimeConfig, pool: Pool): Promise<D
   let pending: ReadonlyArray<string>
   let drift: ReadonlyArray<string>
   let ledger: boolean
+  let extra: ReadonlyArray<string>
+  let extensions: ReadonlyArray<string>
   try {
     pending = (await planMigrations(client)).pending
     ledger = await ledgerReady(client)
     // Drift means an applied migration was edited: the database has to be
     // recreated, because no further migration will reconcile it.
     drift = await schemaDriftOnClient(client)
+    extra = await extraSchemas(client)
+    extensions = await extraExtensions(client)
   } catch (error) {
     if (error instanceof ScratchNotRolledBack) dirty = error
     throw error
@@ -81,6 +103,8 @@ export const doctorReport = async (config: RuntimeConfig, pool: Pool): Promise<D
     pendingMigrations: pending,
     migrationsReady: pending.length === 0,
     schemaDrift: drift,
+    extraSchemas: extra,
+    extraExtensions: extensions,
     organizationId: config.organizationId ?? null,
     authTokenFile: config.authTokenFile ?? null,
     authTokenReadable: readable(config.authTokenFile),

@@ -51,11 +51,10 @@ export const applicationBackends = async (client: PoolClient): Promise<number> =
  * either collide or silently merge two schemas — so an unknown object is a
  * refusal, exactly like a known one.
  */
+const userSchemas = "SELECT oid, nspname FROM pg_namespace WHERE nspname NOT IN ('pg_catalog', 'information_schema') AND nspname NOT LIKE 'pg\\_%'"
+
 const inventoryQuery = `
-  WITH scope AS (
-    SELECT oid, nspname FROM pg_namespace
-    WHERE nspname NOT IN ('pg_catalog', 'information_schema') AND nspname NOT LIKE 'pg\\_%'
-  )
+  WITH scope AS (${userSchemas})
   SELECT 'relations' AS kind, count(*) AS count FROM pg_class c JOIN scope s ON s.oid = c.relnamespace
     WHERE c.relkind IN ('r', 'p', 'v', 'm', 'S', 'f')
   UNION ALL
@@ -83,12 +82,22 @@ export const databaseInventory = async (
  * statement that `--schema` adds and that no fresh target can accept.
  */
 export const assertSinglePublicSchema = async (client: PoolClient): Promise<void> => {
-  const extra = (await databaseInventory(client)).find((entry) => entry.kind === "schemas")
-  if ((extra?.count ?? 0) > 0) {
-    throw new GuardRefusal(
-      `backup requires public to be the only user schema; this database has ${String(extra?.count)} more`,
-    )
+  const extra = await extraSchemas(client)
+  if (extra.length > 0) {
+    throw new GuardRefusal(`backup requires public to be the only user schema; this database also has ${extra.join(", ")}`)
   }
+}
+
+/**
+ * The user schemas besides `public`, by name. `qwbe_app` may create one (it has CREATE on
+ * the database for the drift replay), and one left behind makes every backup refuse, so
+ * `doctor` lists them too.
+ */
+export const extraSchemas = async (client: PoolClient): Promise<ReadonlyArray<string>> => {
+  const { rows } = await client.query<{ readonly nspname: string }>(
+    `SELECT nspname FROM (${userSchemas}) AS scope WHERE nspname <> 'public' ORDER BY nspname`,
+  )
+  return rows.map(({ nspname }) => nspname)
 }
 /**
  * The database the guards were read on IS the database the tools are pointed at.

@@ -45,7 +45,7 @@ export { RestoreInterrupted } from "./postgres-backup-restore.ts"
 /**
  * The trust model, as one exported string, because the CLI has to say it out loud.
  *
- * `database.sql` is executed by `psql` as the application's database role. The
+ * `database.sql` is executed by `psql` as the schema owner role (qwbe_owner), NOSUPERUSER. The
  * archive is validated exhaustively as a filesystem object — names, member types,
  * sizes, digests, manifest consistency, tool majors — and not at all as SQL. The
  * digests live inside the same archive as the files they describe, so they prove
@@ -55,7 +55,7 @@ export { RestoreInterrupted } from "./postgres-backup-restore.ts"
  * The integration step is expected to print this before `restore --apply`.
  */
 export const restoreTrustWarning =
-  "restore executes database.sql as the application's database role. The archive is checked for structure "
+  "restore executes database.sql as the schema owner role (qwbe_owner), NOSUPERUSER. The archive is checked for structure "
   + "and integrity, never for authenticity: its checksums live inside it, so anyone able to write the archive "
   + "can recompute them. Restore only from a source trusted as much as the database itself."
 

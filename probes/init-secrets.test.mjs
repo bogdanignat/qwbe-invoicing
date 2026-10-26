@@ -7,8 +7,15 @@ import { URL, fileURLToPath } from "node:url"
 import test from "node:test"
 
 const script = fileURLToPath(new URL("../scripts/init-secrets.sh", import.meta.url))
-const keys = ["AUTH_TOKEN_PATH", "PG_PASSWORD_PATH", "COMPANY_LOOKUP_KEY_PATH", "ANAF_TOKEN_KEY_PATH"]
-const files = { AUTH_TOKEN_PATH: "api-token", PG_PASSWORD_PATH: "pg-password", COMPANY_LOOKUP_KEY_PATH: "company-lookup-key", ANAF_TOKEN_KEY_PATH: "anaf-token-key" }
+const files = {
+  AUTH_TOKEN_PATH: "api-token",
+  PG_SUPERUSER_PASSWORD_PATH: "pg-superuser-password",
+  PG_OWNER_PASSWORD_PATH: "pg-owner-password",
+  PG_APP_PASSWORD_PATH: "pg-app-password",
+  COMPANY_LOOKUP_KEY_PATH: "company-lookup-key",
+  ANAF_TOKEN_KEY_PATH: "anaf-token-key",
+}
+const keys = Object.keys(files)
 
 /** A scratch directory with a `.env` of the given lines; removed after the test. */
 const scratch = (t, lines) => {
@@ -22,7 +29,7 @@ const defaultLines = keys.map((key) => `${key}=./.local/${files[key]}`)
 const run = (...args) => spawnSync("sh", [script, ...args], { encoding: "utf8" })
 const mode = (path) => statSync(path).mode & 0o777
 
-void test("creates the four secrets as 64 hex characters, 0600 in a 0700 directory, and prints none of them", (t) => {
+void test("creates the six secrets as 64 hex characters, 0600 in a 0700 directory, and prints none of them", (t) => {
   const root = scratch(t, defaultLines)
   const result = run(join(root, ".env"))
   assert.equal(result.status, 0, result.stderr)
@@ -40,7 +47,7 @@ void test("creates the four secrets as 64 hex characters, 0600 in a 0700 directo
 void test("is idempotent: a second run keeps every existing secret byte for byte", (t) => {
   const root = scratch(t, defaultLines)
   mkdirSync(join(root, ".local"), { mode: 0o700 })
-  writeFileSync(join(root, ".local", "pg-password"), "kept-by-the-operator\n", { mode: 0o600 })
+  writeFileSync(join(root, ".local", "pg-superuser-password"), "kept-by-the-operator\n", { mode: 0o600 })
   assert.equal(run(join(root, ".env")).status, 0)
   const before = keys.map((key) => readFileSync(join(root, ".local", files[key]), "utf8"))
   assert.equal(before[1], "kept-by-the-operator\n")
@@ -61,11 +68,14 @@ void test("refuses a path it cannot read the way Compose would, and writes nothi
 })
 
 void test("refuses a missing key, a missing env file and extra arguments", (t) => {
-  const root = scratch(t, defaultLines.slice(0, 2))
+  const root = scratch(t, defaultLines.slice(0, 4))
   const missingKey = run(join(root, ".env"))
   assert.equal(missingKey.status, 1)
   assert.match(missingKey.stderr, /COMPANY_LOOKUP_KEY_PATH is not set/u)
-  const withoutAnafKey = scratch(t, defaultLines.slice(0, 3))
+  const withoutAppPassword = run(join(scratch(t, defaultLines.slice(0, 3)), ".env"))
+  assert.equal(withoutAppPassword.status, 1)
+  assert.match(withoutAppPassword.stderr, /PG_APP_PASSWORD_PATH is not set/u)
+  const withoutAnafKey = scratch(t, defaultLines.slice(0, 5))
   const missingAnafKey = run(join(withoutAnafKey, ".env"))
   assert.equal(missingAnafKey.status, 1)
   assert.match(missingAnafKey.stderr, /ANAF_TOKEN_KEY_PATH is not set/u)

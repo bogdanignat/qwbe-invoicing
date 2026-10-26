@@ -9,7 +9,7 @@
 #
 # Side effects, all undone at exit, success or not: the image tag
 # qwbe-invoicing:${SMOKE_IMAGE_TAG} (kept, it is a build cache), a temporary directory
-# with a `.env` made from .env.example and three secrets made by
+# with a `.env` made from .env.example and the secrets made by
 # scripts/init-secrets.sh, and the Compose project `qwbe-smoke` with its own volumes,
 # renamed to `qwbe-smoke-*` by an override in that directory. compose.prod.yaml names
 # its volumes `qwbe-invoicing-*`, which on a development host are the local stack's,
@@ -45,7 +45,9 @@ pass() { echo "smoke: ok   $1"; }
 # temporary directory (absolute paths: Compose resolves relative ones from the checkout).
 sed -e "s|^PUBLIC_ORIGIN=.*|PUBLIC_ORIGIN=$origin|" -e "s|^IMAGE_TAG=.*|IMAGE_TAG=$tag|" \
   -e "s|^AUTH_TOKEN_PATH=.*|AUTH_TOKEN_PATH=$work/secrets/api-token|" \
-  -e "s|^PG_PASSWORD_PATH=.*|PG_PASSWORD_PATH=$work/secrets/pg-password|" \
+  -e "s|^PG_SUPERUSER_PASSWORD_PATH=.*|PG_SUPERUSER_PASSWORD_PATH=$work/secrets/pg-superuser-password|" \
+  -e "s|^PG_OWNER_PASSWORD_PATH=.*|PG_OWNER_PASSWORD_PATH=$work/secrets/pg-owner-password|" \
+  -e "s|^PG_APP_PASSWORD_PATH=.*|PG_APP_PASSWORD_PATH=$work/secrets/pg-app-password|" \
   -e "s|^COMPANY_LOOKUP_KEY_PATH=.*|COMPANY_LOOKUP_KEY_PATH=$work/secrets/company-lookup-key|" \
   "$root/.env.example" > "$work/.env"
 # Its own subnets: compose.prod.yaml fixes them, which an installation on this host may hold.

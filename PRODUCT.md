@@ -431,11 +431,13 @@ does not require a shared database topology, and does not store invoicing data i
 mother's Postgres. A future mother could only call the API as an external client
 (`FOUNDATION.md` section 19); that is not implemented.
 
-The database port is never published; the application role owns the one `public`
-schema it migrates; and both credentials are files the operator creates, read through
-`POSTGRES_PASSWORD_FILE` and `PGPASSWORD_FILE`. `PGPASSWORD` is never set, so the
-password reaches no child process and no `docker inspect` output. In `compose.prod.yaml`
-neither secret has a default: the stack refuses to start rather than come up on a
+The database port is never published; the schema owner role (`qwbe_owner`) owns the one
+`public` schema and `migrate` runs as it, while the application connects as `qwbe_app`,
+which has DML only and cannot change the schema or switch off the immutability triggers
+(`deploy/postgres/grants.sql`); neither is a superuser. Every credential is a file the
+operator creates, read through `POSTGRES_PASSWORD_FILE` and `PGPASSWORD_FILE`. `PGPASSWORD`
+is never set on a service, so no password reaches `docker inspect` output. In `compose.prod.yaml`
+no secret has a default: the stack refuses to start rather than come up on a
 guessable credential.
 
 Deployment requirements:
@@ -602,8 +604,9 @@ The following decisions must be explicit before their relevant implementation:
    (`QWBE_UI_DIR`), the API under `/api/*` and the Swagger page (`GET /api`) on one origin,
    `PUBLIC_ORIGIN`, behind the operator's TLS proxy, and owns the whole public edge itself:
    `Host`/`Origin` pinning, CSRF, CSP and the request deadline. The kernel exchanges the
-   local API token for a revocable, opaque 30-day session persisted server-side and
-   referenced by an HttpOnly `SameSite=Strict` cookie scoped to `/api`. The browser keeps
+   local API token for a revocable, opaque session persisted server-side (12 hours of
+   inactivity, 30 days after login at most) and referenced by an HttpOnly `SameSite=Strict`
+   cookie scoped to `/api`, whose `Max-Age` is that 30-day limit. The browser keeps
    only the per-session CSRF token in memory. The Bearer API is off on the public listener
    unless `QWBE_BEARER_API=on`; the CLI inside the container is the operator's interface.
 

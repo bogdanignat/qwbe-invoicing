@@ -33,7 +33,7 @@ export const serveApiDocs = async (
   try {
     if (!await untilAborted(isReady(), signal)) { send(response, 503, { error: "not_ready" }); return }
     const cookie = header(request.headers.cookie)
-    const session = await untilAborted(browserSession.resume(cookie), signal)
+    const session = await untilAborted(browserSession.resume(cookie, request.method ?? "GET"), signal)
     if (session.kind === "unauthorized") {
       send(response, 303, new Uint8Array(), {
         "cache-control": "no-store",

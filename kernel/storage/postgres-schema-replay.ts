@@ -21,9 +21,10 @@ import { migrationKey, migrationScopes } from "./postgres-migration-plans.ts"
  * so the scratch schema would escape the transaction and survive.
  *
  * Running DDL on the application's own connection is a deliberate, approved
- * decision: the application role owns the schema it migrates, and the scratch
- * schema is the only way to answer "is the live schema what the ledger says"
- * without trusting a stored checksum.
+ * decision: the application role (qwbe_app) owns no object in `public`, but it has
+ * CREATE on the database for exactly this scratch schema (deploy/postgres/grants.sql),
+ * the only way to answer "is the live schema what the ledger says" without trusting
+ * a stored checksum.
  */
 
 const statementsFor = (keys: ReadonlyArray<string>): ReadonlyArray<string> => {

@@ -84,12 +84,19 @@ submissions that were in flight become 'unknown'.
 PLAN
 }
 
-psql_db() { compose exec -T db psql -v ON_ERROR_STOP=1 -U qwbe -d "$1" -tAc "$2"; }
+# The superuser, over the socket of `db`: only it creates and drops databases.
+psql_db() { compose exec -T db psql -v ON_ERROR_STOP=1 -U postgres -d "$1" -tAc "$2"; }
 
 create_database() {
   [[ -z "$(psql_db postgres "SELECT 1 FROM pg_database WHERE datname = '$TARGET_DB'")" ]] || die "database $TARGET_DB exists"
-  psql_db postgres "CREATE DATABASE $TARGET_DB TEMPLATE template0 LC_COLLATE 'C' LC_CTYPE 'C' ENCODING 'UTF8'" >/dev/null
+  psql_db postgres "CREATE DATABASE $TARGET_DB OWNER qwbe_owner TEMPLATE template0 LC_COLLATE 'C' LC_CTYPE 'C' ENCODING 'UTF8'" >/dev/null
   say "created database $TARGET_DB"
+}
+
+# The roles' grants (deploy/postgres/grants.sql) before the archive is loaded, so every
+# object it creates as qwbe_owner gets qwbe_app's rights as it is made.
+grant_target() {
+  compose run --rm --no-deps -T -e "PGDATABASE=$TARGET_DB" db-init >/dev/null || die "the grants on $TARGET_DB failed"
 }
 
 create_volume() {
@@ -103,9 +110,18 @@ create_volume() {
 
 # The CLI on the target (TARGET_DATA: the mount of /data), with the backup's image only.
 on_target() {
-  compose_tag "$TAG" run --rm --no-deps -T -e "PGDATABASE=$TARGET_DB" -v "$TARGET_DATA" \
-    -v "$ARCHIVE_DIR:/backup:ro" app node bin/qwbe-invoicing.ts "$@"
+  compose_tag "$TAG" run --rm --no-deps -T -e "PGDATABASE=$TARGET_DB" -v "$TARGET_DATA" "$@"
 }
+
+# database.sql is executed as the schema owner: `migrate` holds qwbe_owner's secret. It
+# stages on the staging volume, as `app` does, because `migrate` has only a small /tmp.
+restore_on_target() {
+  on_target -e TMPDIR=/var/backups/staging -v invoicing-backup-staging:/var/backups/staging \
+    -v "$ARCHIVE_DIR:/backup:ro" migrate node bin/qwbe-invoicing.ts restore --input "/backup/$NAME" "$@"
+}
+
+# What the application will see: `doctor` as qwbe_app, in `app`.
+doctor_on_target() { on_target app node bin/qwbe-invoicing.ts doctor --json; }
 
 # The dry-run's database goes again, once confirmed empty; its /data was an empty
 # temporary directory, mounted read-only, so no volume is ever made for a dry-run.
@@ -128,8 +144,9 @@ dry_run() {
   TARGET_DATA="$empty:/data:ro"
   create_database
   trap remove_dry_run_target EXIT
+  grant_target
   local report
-  if ! report="$(on_target restore --input "/backup/$NAME" --json)" \
+  if ! report="$(restore_on_target --json)" \
     || ! json_ok "$QWBE_IMAGE:$TAG" 'r.failed === 0 && r.dryRun === true' <<<"$report"; then
     die "dry-run refused the archive (see above)"
   fi
@@ -142,14 +159,15 @@ apply() {
   read -r answer || true
   [[ "$answer" == "$NAME" ]] || die "not confirmed; nothing was changed"
   create_database
+  grant_target
   create_volume
   TARGET_DATA="$TARGET_VOLUME:/data"
   local kept="target $TARGET_DB / $TARGET_VOLUME is left for investigation; the installation is unchanged; a new attempt uses a new target"
-  if ! report="$(on_target restore --input "/backup/$NAME" --apply --confirm-production --json)" \
+  if ! report="$(restore_on_target --apply --confirm-production --json)" \
     || ! json_ok "$QWBE_IMAGE:$TAG" 'r.failed === 0 && r.restored === r.scanned' <<<"$report"; then
     die "restore failed: $kept"
   fi
-  if ! report="$(on_target doctor --json)" \
+  if ! report="$(doctor_on_target)" \
     || ! json_ok "$QWBE_IMAGE:$TAG" 'r.ready === true && r.schemaDrift.length === 0' <<<"$report"; then
     die "the restored target is not ready for $QWBE_IMAGE:$TAG (doctor: $report): $kept"
   fi

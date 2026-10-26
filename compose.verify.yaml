@@ -72,16 +72,18 @@ services:
       # The maintenance database: where `CREATE DATABASE` is issued from,
       # serialised by a session advisory lock. No test data lives in it.
       PGDATABASE: postgres
-      PGUSER: qwbe
+      # The cluster's superuser: the rig creates and drops its databases, and some
+      # fixtures write what the application never could (session_replication_role).
+      PGUSER: postgres
       # The project's own secret, mounted read-only below; never an environment variable.
-      PGPASSWORD_FILE: /run/secrets/pg_password
+      PGPASSWORD_FILE: /run/secrets/pg_superuser_password
       # Prefix of every test database this run creates (`qwbe_t_<run>_…`).
       QWBE_TEST_RUN: ${QWBE_TEST_RUN:?run through scripts/verify-docker.sh}
       # Passed through only when set, for the CLI children the suite spawns; the
       # in-process fixtures choose their plugins themselves. Unset: every plugin.
       QWBE_PLUGINS:
     secrets:
-      - pg_password
+      - pg_superuser_password
     depends_on:
       verify-init:
         condition: service_completed_successfully
@@ -94,8 +96,8 @@ services:
     restart: "no"
 
 secrets:
-  pg_password:
-    file: ${QWBE_PG_PASSWORD_FILE:?run through scripts/verify-docker.sh}
+  pg_superuser_password:
+    file: ${QWBE_PG_SUPERUSER_PASSWORD_FILE:?run through scripts/verify-docker.sh}
 
 networks:
   # The default network of the `qwbe-invoicing` project (compose.yaml), where `db` answers.
