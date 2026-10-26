@@ -1,7 +1,8 @@
 import { decodeCorrectionDocument, decodeIssuedInvoice } from "./document-snapshot-decoders.ts"
 import { decodeInvoiceRegisterPage, type InvoiceRegisterRow } from "./invoice-register.ts"
-import { encoded, paged } from "./client-paths.ts"
-import { array, type Page, type PageRequest } from "./model-decoder.ts"
+import { encoded } from "./client-paths.ts"
+import { registerPath, type RegisterQuery } from "./invoice-register-query.ts"
+import { array, type Page } from "./model-decoder.ts"
 import { readableWrite } from "./unreadable-answer.ts"
 import type { BrowserTransport } from "./browser-transport.ts"
 import type { CorrectionDocument, CorrectionInput, IssuedInvoice } from "./document-snapshot.ts"
@@ -17,12 +18,13 @@ import type { CorrectionDocument, CorrectionInput, IssuedInvoice } from "./docum
  * held by `AuthContext`.
  */
 export interface InvoiceRegisterClient {
-  readonly list: (page: PageRequest | undefined, signal: AbortSignal) => Promise<Page<InvoiceRegisterRow>>
+  /** One page of the register as the server filtered it; `cursor` is the previous page's `nextCursor`. */
+  readonly list: (query: RegisterQuery, cursor: string | undefined, signal: AbortSignal) => Promise<Page<InvoiceRegisterRow>>
 }
 
 export const createInvoiceRegisterClient = (transport: BrowserTransport): InvoiceRegisterClient => ({
-  list: async (page, signal) =>
-    decodeInvoiceRegisterPage(await transport.json(paged("/api/invoice-register", page), { signal })),
+  list: async (query, cursor, signal) =>
+    decodeInvoiceRegisterPage(await transport.json(registerPath(query, cursor), { signal })),
 })
 
 export interface InvoiceDocumentsClient {

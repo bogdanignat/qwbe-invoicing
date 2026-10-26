@@ -714,6 +714,16 @@ reference the organization-scoped original invoice by id, series and number. The
 register uses a dedicated opaque cursor that also contains `kind`; invoice-list cursors
 are rejected rather than interpreted in a different ordering.
 
+The register filters on the server, so any client narrows it the same way: `from` and `to`
+(`YYYY-MM-DD`, inclusive on the issue date, either may be left out), `kind` (`invoice` or
+`correction`; absent = both) and `q` (case-insensitive search in series + number with spaces
+ignored — `FCT 12`, `FCT12`, `12` — or in the customer name; `%` and `_` match themselves; blank =
+no search; at most 100 characters). Without them the answer is the whole register, as before. A
+cursor pages inside the filter it was issued for. Refusals are `400 ValidationFailure` with an
+issue per field: `from must not be after to`, `from|to must be a calendar date in YYYY-MM-DD format`,
+`kind: kind must be invoice or correction`, `q must be at most 100 characters`,
+`q must not contain control characters`, `limit must be an integer between 1 and 200`.
+
 Issued invoices have no `DELETE`. Mistakes are handled through correction documents, which are
 numbered in the invoice series like any other invoice (Codul fiscal art. 330). Issue dates cannot be
 in the future or before the last document numbered in the same series (numbering runs on across years), and an invoice

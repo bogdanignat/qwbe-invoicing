@@ -5,7 +5,7 @@ import type { PageQuery } from "../../application/ports.ts"
 import type { PersistenceFailure } from "../../contracts/failures.ts"
 import type { DocumentSource } from "../../domain/invoice.ts"
 import type { CorrectionDocument } from "../domain/corrections.ts"
-import type { InvoiceRegisterCursor, InvoiceRegisterRow } from "../domain/register.ts"
+import type { InvoiceRegisterCursor, InvoiceRegisterFilter, InvoiceRegisterRow } from "../domain/register.ts"
 import type { ReportPeriod, RevenueAggregate } from "../domain/reports.ts"
 
 type Read<Value> = Effect.Effect<Value, PersistenceFailure>
@@ -18,7 +18,10 @@ export interface CorrectionsTransaction {
   readonly saveCorrection: (correction: CorrectionDocument) => Write
   readonly findCorrection: (organizationId: string, id: string) => Read<CorrectionDocument | undefined>
   readonly listCorrections: (organizationId: string, invoiceId: string, source?: DocumentSource) => Read<ReadonlyArray<CorrectionDocument>>
-  readonly listInvoiceRegister: (organizationId: string, page: PageQuery<InvoiceRegisterCursor>, source?: DocumentSource) => Read<ReadonlyArray<InvoiceRegisterRow>>
+  // `filter` arrives validated and normalized (a blank search removed); absent means the whole register.
+  readonly listInvoiceRegister: (
+    organizationId: string, page: PageQuery<InvoiceRegisterCursor>, source?: DocumentSource, filter?: InvoiceRegisterFilter,
+  ) => Read<ReadonlyArray<InvoiceRegisterRow>>
   readonly aggregateRevenue: (organizationId: string, period: ReportPeriod) => Read<RevenueAggregate>
 }
 

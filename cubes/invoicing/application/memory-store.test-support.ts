@@ -15,7 +15,7 @@ import type { BrandingNormalizer, IssuerTransaction } from "../issuer/index.ts"
 import { codeTakenConflict, type CatalogTransaction, type ProductPreset } from "../catalog/index.ts"
 import type { Customer, CustomersTransaction } from "../customers/index.ts"
 import type { AuditEvent, IdempotencyRecord } from "../domain/invoice.ts"
-import type { CorrectionsTransaction, InvoiceRegisterCursor, InvoiceRegisterRow } from "../corrections/index.ts"
+import type { CorrectionsTransaction, InvoiceRegisterCursor, InvoiceRegisterFilter, InvoiceRegisterRow } from "../corrections/index.ts"
 import type { ProformaConversion, ProformaTransaction } from "../issuance/index.ts"
 import type { DraftInvoice, InvoicingDependencies, InvoicingTransaction, IssuedInvoice, Proforma } from "./invoicing.ts"
 import type { DocumentCursor, DraftCursor, NameCursor, PageQuery } from "./ports.ts"
@@ -43,6 +43,18 @@ const paged = <Item, Key>(sorted: ReadonlyArray<Item>, page: PageQuery<Key>, isA
 const afterDocument = (item: { readonly issueDate: string; readonly number: number; readonly id: string }, after: DocumentCursor): boolean =>
   item.issueDate < after.issueDate || (item.issueDate === after.issueDate && item.number < after.number)
   || (item.issueDate === after.issueDate && item.number === after.number && item.id > after.id)
+// The same contract as the PostgreSQL adapter: inclusive dates, one kind, series + number with spaces
+// ignored or the customer name, case-insensitively.
+const inRegisterFilter = (row: InvoiceRegisterRow, filter: InvoiceRegisterFilter = {}): boolean => {
+  if (filter.from !== undefined && row.issueDate < filter.from) return false
+  if (filter.to !== undefined && row.issueDate > filter.to) return false
+  if (filter.kind !== undefined && row.kind !== filter.kind) return false
+  if (filter.search === undefined) return true
+  const needle = filter.search.toLowerCase()
+  return `${row.series}${String(row.number)}`.toLowerCase().replace(/\s+/gu, "").includes(needle.replace(/\s+/gu, ""))
+    || row.customer.name.toLowerCase().includes(needle)
+}
+
 const afterRegister = (item: InvoiceRegisterRow, after: InvoiceRegisterCursor): boolean =>
   afterDocument(item, after) || (item.issueDate === after.issueDate && item.number === after.number
     && item.id === after.id && item.kind > after.kind)
@@ -221,7 +233,7 @@ export const memoryStore = (state: MemoryState): InvoicingDependencies["store"] 
           && (source === undefined || (c.source?.app === source.app && c.source.kind === source.kind && c.source.id === source.id)))
           .sort((a, b) => a.issuedAt.localeCompare(b.issuedAt)),
       ),
-      listInvoiceRegister: (organizationId, page, source) => Effect.sync(() => {
+      listInvoiceRegister: (organizationId, page, source, filter) => Effect.sync(() => {
         const invoices: ReadonlyArray<InvoiceRegisterRow> = [...working.issued.values()]
           .filter((invoice) => invoice.organizationId === organizationId && sameSource(invoice, source))
           .map((invoice) => ({ kind: "invoice", id: invoice.id, series: invoice.series, number: invoice.number,
@@ -237,7 +249,7 @@ export const memoryStore = (state: MemoryState): InvoicingDependencies["store"] 
               totalIncludingVat: correction.totalIncludingVat, dueDate: null, eFacturaStatus: "not_sent",
               originalReference: { id: original.id, series: original.series, number: original.number } }]
           })
-        return paged([...invoices, ...corrections].sort((a, b) => b.issueDate.localeCompare(a.issueDate)
+        return paged([...invoices, ...corrections].filter((row) => inRegisterFilter(row, filter)).sort((a, b) => b.issueDate.localeCompare(a.issueDate)
           || b.number - a.number || binaryTextCompare(a.id, b.id) || binaryTextCompare(a.kind, b.kind)), page, afterRegister)
       }),
       aggregateRevenue: (organizationId, period) => Effect.sync(() => {

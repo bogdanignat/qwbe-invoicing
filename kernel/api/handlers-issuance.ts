@@ -9,8 +9,9 @@ import { applicationHttpApi } from "./http-api.ts"
 
 export const issuanceHandlers = (use: UseServices, status: EFacturaStatusView) => ({
   listInvoiceRegister: HttpApiBuilder.handler(applicationHttpApi, "invoicing", "listInvoiceRegister", ({ urlParams }) =>
-    sourceFilter(urlParams).pipe(Effect.flatMap((source) => use((s) => s.invoicing.listInvoiceRegister(source, urlParams))),
-      Effect.map(status.register), Effect.mapError(errors("ValidationFailure")))),
+    sourceFilter(urlParams).pipe(Effect.flatMap((source) => use((s) => s.invoicing.listInvoiceRegister(source, urlParams, {
+      from: urlParams.from, to: urlParams.to, kind: urlParams.kind, search: urlParams.q,
+    }))), Effect.map(status.register), Effect.mapError(errors("ValidationFailure")))),
   listIssuedInvoices: HttpApiBuilder.handler(applicationHttpApi, "invoicing", "listIssuedInvoices", ({ urlParams }) =>
     sourceFilter(urlParams).pipe(Effect.flatMap((source) => use((s) => s.invoicing.listIssuedInvoices(source, urlParams))),
       Effect.map(status.invoices), Effect.mapError(errors("ValidationFailure")))),

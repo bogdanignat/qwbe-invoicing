@@ -1,13 +1,8 @@
 import assert from "node:assert/strict"
 import test from "node:test"
 
-import {
-  correctionDetailHref, emptyRegisterFilter, filterInvoiceRegisterRows, invoiceDetailHref,
-  projectInvoiceRegisterRow,
-} from "./invoice-register-projection.ts"
-import type {
-  InvoiceRegisterCorrectionRow, InvoiceRegisterInvoiceRow, InvoiceRegisterRow,
-} from "./invoice-register.ts"
+import { correctionDetailHref, invoiceDetailHref, projectInvoiceRegisterRow } from "./invoice-register-projection.ts"
+import type { InvoiceRegisterCorrectionRow, InvoiceRegisterInvoiceRow } from "./invoice-register.ts"
 
 const invoice: InvoiceRegisterInvoiceRow = {
   kind: "invoice",
@@ -97,48 +92,4 @@ void test("row keys stay distinct when the two kinds share an id", () => {
 void test("an identifier that is not path-safe is encoded into the href", () => {
   assert.equal(invoiceDetailHref("a/b?c"), "/invoices/a%2Fb%3Fc")
   assert.equal(correctionDetailHref("a/b?c"), "/corrections/a%2Fb%3Fc")
-})
-
-const rows: ReadonlyArray<InvoiceRegisterRow> = [
-  invoice,
-  correction,
-  { ...invoice, id: "inv-2", number: 13, customer: { name: "Beta Impex" } },
-]
-
-void test("the empty filter narrows nothing", () => {
-  assert.deepEqual(filterInvoiceRegisterRows(rows, emptyRegisterFilter), rows)
-})
-
-void test("the kind filter keeps one document kind", () => {
-  const invoices = filterInvoiceRegisterRows(rows, { kind: "invoice", search: "" })
-  assert.deepEqual(invoices.map((row) => row.id), ["inv-1", "inv-2"])
-  const corrections = filterInvoiceRegisterRows(rows, { kind: "correction", search: "" })
-  assert.deepEqual(corrections.map((row) => row.id), ["cor-1"])
-})
-
-void test("the search matches series, number and customer, ignoring case and padding", () => {
-  assert.deepEqual(
-    filterInvoiceRegisterRows(rows, { kind: "all", search: "  beta  " }).map((row) => row.id),
-    ["inv-2"],
-  )
-  assert.deepEqual(
-    filterInvoiceRegisterRows(rows, { kind: "all", search: "STR 4" }).map((row) => row.id),
-    ["cor-1"],
-  )
-  assert.deepEqual(
-    filterInvoiceRegisterRows(rows, { kind: "all", search: "fct 13" }).map((row) => row.id),
-    ["inv-2"],
-  )
-})
-
-void test("the two filters combine rather than replacing one another", () => {
-  assert.deepEqual(
-    filterInvoiceRegisterRows(rows, { kind: "invoice", search: "alfa" }).map((row) => row.id),
-    ["inv-1"],
-  )
-  assert.deepEqual(filterInvoiceRegisterRows(rows, { kind: "correction", search: "beta" }), [])
-})
-
-void test("a search nothing matches yields no rows rather than all of them", () => {
-  assert.deepEqual(filterInvoiceRegisterRows(rows, { kind: "all", search: "gamma" }), [])
 })

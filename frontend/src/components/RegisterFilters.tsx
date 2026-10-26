@@ -1,7 +1,11 @@
 import { useId } from "react"
 
+import { PageSizeSelect } from "./PageSizeSelect.tsx"
+import { RegisterPeriodFilter } from "./RegisterPeriodFilter.tsx"
 import { ChoiceGroup } from "./ui/ChoiceGroup.tsx"
-import type { RegisterFilter, RegisterKindFilter } from "../lib/invoice-register-projection.ts"
+import { Input } from "./ui/Input.tsx"
+import type { RegisterFiltersModel } from "../hooks/use-register-filters.ts"
+import { SEARCH_MAX_LENGTH, type RegisterKindFilter } from "../lib/invoice-register-query.ts"
 
 const kinds: ReadonlyArray<{ readonly value: RegisterKindFilter; readonly label: string }> = [
   { value: "all", label: "Toate" },
@@ -9,25 +13,22 @@ const kinds: ReadonlyArray<{ readonly value: RegisterKindFilter; readonly label:
   { value: "correction", label: "Storno" },
 ]
 
-interface RegisterFiltersProps {
-  readonly filter: RegisterFilter
-  readonly onKindChange: (kind: RegisterKindFilter) => void
-  readonly onSearchChange: (search: string) => void
-}
-
-export const RegisterFilters = ({ filter, onKindChange, onSearchChange }: RegisterFiltersProps) => {
+export const RegisterFilters = ({ filters }: { readonly filters: RegisterFiltersModel }) => {
   const searchId = useId()
   return <div className="filters">
-    <ChoiceGroup legend="Tip document" choices={kinds} value={filter.kind} onChange={onKindChange} />
+    <RegisterPeriodFilter filters={filters} />
+    <ChoiceGroup legend="Tip document" choices={kinds} value={filters.kind} onChange={filters.setKind} />
     <div className="filter-search">
       <label htmlFor={searchId}>Caută după număr sau client</label>
-      <input
+      <Input
         id={searchId}
         type="search"
-        value={filter.search}
-        placeholder="ex. FAC 12 sau Alpha"
-        onChange={(event) => { onSearchChange(event.target.value) }}
+        value={filters.search}
+        maxLength={SEARCH_MAX_LENGTH}
+        placeholder="ex. FCT 12 sau Alpha"
+        onChange={(event) => { filters.setSearch(event.target.value) }}
       />
     </div>
+    <PageSizeSelect value={filters.pageSize} onChange={filters.setPageSize} />
   </div>
 }

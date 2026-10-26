@@ -3,6 +3,7 @@ import test from "node:test"
 
 import { createInvoiceDocumentsClient, createInvoiceRegisterClient } from "./invoicing-clients.ts"
 import { paged } from "./client-paths.ts"
+import { registerPath, type RegisterQuery } from "./invoice-register-query.ts"
 import type { BrowserTransport, TransportOptions } from "./browser-transport.ts"
 
 interface Call {
@@ -52,9 +53,11 @@ void test("limit and cursor travel as query parameters, url-encoded", () => {
   )
 })
 
+const everything: RegisterQuery = { range: { from: "", to: "" }, kind: "all", search: "", limit: 2 }
+
 void test("the register client decodes the page it fetched", async () => {
   const { calls, transport } = recorder({ json: { items: [row], nextCursor: "next" } })
-  const page = await createInvoiceRegisterClient(transport).list({ limit: 2 }, AbortSignal.abort())
+  const page = await createInvoiceRegisterClient(transport).list(everything, undefined, AbortSignal.abort())
   assert.equal(page.items[0]?.id, "inv-1")
   assert.equal(page.nextCursor, "next")
   assert.equal(calls[0]?.path, "/api/invoice-register?limit=2")
@@ -65,25 +68,36 @@ void test("the register client decodes the page it fetched", async () => {
 void test("the second page is requested with the cursor the first returned", async () => {
   const { calls, transport } = recorder({ json: { items: [], nextCursor: null } })
   const client = createInvoiceRegisterClient(transport)
-  await client.list({ limit: 2 }, AbortSignal.abort())
-  await client.list({ limit: 2, cursor: "next" }, AbortSignal.abort())
+  await client.list(everything, undefined, AbortSignal.abort())
+  await client.list(everything, "next", AbortSignal.abort())
   assert.deepEqual(calls.map((call) => call.path), [
     "/api/invoice-register?limit=2",
     "/api/invoice-register?limit=2&cursor=next",
   ])
 })
 
+// Every filter is a parameter of the request: another client of the API asks the same way.
+void test("the register filters travel as query parameters, open ends and blanks left out", () => {
+  assert.equal(registerPath(everything, undefined), "/api/invoice-register?limit=2")
+  assert.equal(
+    registerPath({ range: { from: "2026-09-01", to: "2026-09-30" }, kind: "correction", search: "  FCT 12 & 100% ", limit: 50 }, "a b/c"),
+    "/api/invoice-register?from=2026-09-01&to=2026-09-30&kind=correction&q=FCT+12+%26+100%25&limit=50&cursor=a+b%2Fc",
+  )
+  assert.equal(registerPath({ ...everything, range: { from: "", to: "2026-09-30" }, search: "   " }, undefined),
+    "/api/invoice-register?to=2026-09-30&limit=2")
+})
+
 void test("the abort signal of the query reaches the transport", async () => {
   const { calls, transport } = recorder({ json: { items: [], nextCursor: null } })
   const controller = new AbortController()
-  await createInvoiceRegisterClient(transport).list(undefined, controller.signal)
+  await createInvoiceRegisterClient(transport).list(everything, undefined, controller.signal)
   assert.equal(calls[0]?.options?.signal, controller.signal)
 })
 
 void test("a register page the contract does not describe fails the request", async () => {
   const { transport } = recorder({ json: { items: [{ ...row, kind: "receipt" }], nextCursor: null } })
   await assert.rejects(
-    () => createInvoiceRegisterClient(transport).list(undefined, AbortSignal.abort()),
+    () => createInvoiceRegisterClient(transport).list(everything, undefined, AbortSignal.abort()),
     /invalid kind/u,
   )
 })

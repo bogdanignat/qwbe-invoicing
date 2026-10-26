@@ -1,4 +1,5 @@
 @media (max-width: 680px) {
+  .custom-range label { min-width: 0; flex: 1 1 9rem; }
   .shell { display: block; }
   .sidebar { position: static; width: 100%; height: auto; flex-direction: row; align-items: center; padding: .7rem 1rem; }
   .brand { margin: 0 auto 0 0; }

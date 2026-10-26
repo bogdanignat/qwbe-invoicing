@@ -3,7 +3,7 @@ export interface ReportPeriod { readonly from: string; readonly to: string }
 
 export const maximumReportMonths = 36
 
-const isCalendarDate = (value: string): boolean => {
+export const isCalendarDate = (value: string): boolean => {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/u.exec(value)
   if (match === null) return false
   const [year, month, day] = [Number(match[1]), Number(match[2]), Number(match[3])]
