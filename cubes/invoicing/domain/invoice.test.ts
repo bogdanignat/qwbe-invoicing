@@ -2,7 +2,7 @@ import assert from "node:assert/strict"
 import test from "node:test"
 
 import { ValidationFailure } from "../contracts/failures.ts"
-import { validateDate, validateDocumentSeries } from "./validation.ts"
+import { validateDate, validateDocumentNotes, validateDocumentSeries, validateLineDescription } from "./validation.ts"
 import { resolveVatConfiguration, validateIssuer } from "../issuer/index.ts"
 
 void test("validates supported document types and fiscal series format", () => {
@@ -56,4 +56,18 @@ void test("resolves exactly one effective-dated issuer tax configuration", () =>
     () => resolveVatConfiguration(issuer, "UNKNOWN", "2026-01-01"),
     (error: unknown) => error instanceof ValidationFailure,
   )
+})
+
+void test("a line description and the notes refuse what XML 1.0 cannot carry; only the notes keep LF", () => {
+  const issuesOf = (validate: () => void): ReadonlyArray<string> => {
+    try { validate(); return [] } catch (error) { return error instanceof ValidationFailure ? error.issues : [String(error)] }
+  }
+  for (const character of ["\u0000", "\t", "\r", "\u000b", "\u001f", "\u007f", "\u0085", "\u2028", "\u2029", "\ufffe", "\uffff", "\ud800"]) {
+    const label = JSON.stringify(character)
+    assert.deepEqual(issuesOf(() => { validateLineDescription(`Audit${character}anual`) }), ["description must not contain control characters"], label)
+    assert.deepEqual(issuesOf(() => { validateDocumentNotes(`Plata${character}in avans`) }), ["notes must not contain control characters"], label)
+  }
+  assert.deepEqual(issuesOf(() => { validateLineDescription("Audit\nanual") }), ["description must not contain control characters"])
+  assert.deepEqual(issuesOf(() => { validateDocumentNotes("Plata\nin avans") }), [])
+  assert.deepEqual(issuesOf(() => { validateLineDescription("Audit\u00a0anual — 😀") }), [])
 })

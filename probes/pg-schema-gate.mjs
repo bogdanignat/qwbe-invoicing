@@ -200,11 +200,13 @@ const main = async () => {
       // T-2074: a product code is unique per organization, case-insensitively.
       "product_presets_code",
     ]
-    // T-2074: the item code and EAN copied on every kind of line, and the product kind.
+    // T-2074: the item code and EAN copied on every kind of line, and the product kind; T-2129: payment texts.
     const postCaptureChecks = [
       "draft_lines_item_code_shape", "draft_lines_barcode_gtin", "issued_lines_item_code_shape", "issued_lines_barcode_gtin",
       "proforma_lines_item_code_shape", "proforma_lines_barcode_gtin", "correction_lines_item_code_shape",
       "correction_lines_barcode_gtin", "product_presets_code_shape", "product_presets_barcode_gtin", "product_presets_kind_valid",
+      // T-2129: the bounded payment texts.
+      "invoice_payments_method_length", "invoice_payments_external_reference_length", "invoice_payments_note_length",
     ]
     const goldenTables = [...golden.plans.flatMap((plan) => plan.tables.map(({ name }) => name)), ...postCaptureTables].sort()
     const goldenIndexes = [...golden.plans.flatMap((plan) => plan.explicitIndexes.map(({ name }) => name)), ...postCaptureIndexes].sort()
@@ -224,8 +226,9 @@ const main = async () => {
     // 129 checks before e-Factura, plus 10 of its connection, 33 of its submissions,
     // 33 of its received invoices, the e-Factura status of a correction and the
     // archived flag of a series (T-2082), whose draft trigger gained a function, plus
-    // the 11 item-code, EAN and product-kind checks of T-2074, each present by name.
-    check("70 triggers, 218 named checks, 8 functions", () => {
+    // the 11 item-code, EAN and product-kind checks of T-2074 and the 3 payment-text
+    // checks of T-2129, each present by name.
+    check("70 triggers, 221 named checks, 8 functions", () => {
       assert.equal(countOf(inventoryA, "trigger"), 70)
       for (const name of postCaptureChecks) assert.ok(inventoryA.some((entry) => entry.startsWith(`check ${name} `)), name)
       assert.equal(countOf(inventoryA, "check"), 207 + postCaptureChecks.length)

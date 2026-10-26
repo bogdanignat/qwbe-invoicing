@@ -369,7 +369,7 @@ void test("notes contract mirrors the runtime rules for whitespace, length, and 
   const decode = (notes: unknown) => Schema.decodeUnknownSync(S.DraftInput)({ ...base, notes })
   assert.equal(decode(null).notes, null)
   assert.equal(decode("Linie unu\nLinie doi").notes, "Linie unu\nLinie doi")
-  for (const notes of ["", " marginal ", "x".repeat(501), 7, "tab\tstop", "linie\u2028separata", "paragraf\u2029separat"]) {
+  for (const notes of ["", " marginal ", "x".repeat(501), 7, "tab\tstop", "linie\u2028separata", "paragraf\u2029separat", "nul\u0000", "nonchar\ufffe"]) {
     assert.throws(() => decode(notes), String(notes))
   }
 })

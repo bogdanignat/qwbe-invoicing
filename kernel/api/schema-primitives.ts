@@ -1,6 +1,6 @@
 import { Schema } from "effect"
 
-import type { BuyerSource } from "../../cubes/invoicing/index.ts"
+import { hasControlCharacters, type BuyerSource } from "../../cubes/invoicing/index.ts"
 
 export const optional = <S extends Schema.Schema.All>(schema: S) => Schema.optionalWith(schema, { exact: true })
 export const optionalString = optional(Schema.String)
@@ -19,7 +19,7 @@ export const DocumentNotes = Schema.NullOr(Schema.String).pipe(
     if (value.trim().length === 0) issues.push({ path: [], message: "notes is required" })
     if (value !== value.trim()) issues.push({ path: [], message: "notes must not have surrounding whitespace" })
     if (value.length > 300) issues.push({ path: [], message: "notes must be at most 300 characters" })
-    if (/(?!\n)[\p{Cc}\p{Zl}\p{Zp}]/u.test(value)) issues.push({ path: [], message: "notes must not contain control characters" })
+    if (hasControlCharacters(value, true)) issues.push({ path: [], message: "notes must not contain control characters" })
     return issues
   }, {
     description: "1-300 characters, no surrounding whitespace or control characters except LF newlines.",

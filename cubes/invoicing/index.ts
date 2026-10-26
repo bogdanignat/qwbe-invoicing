@@ -28,7 +28,7 @@ export const cube = {
 
 export * from "./contracts/index.ts"
 export { calculateTotals, validateFiscalDocument } from "./domain/calculation.ts"
-export { validateVatTreatment } from "./domain/validation.ts"
+export { hasControlCharacters, validateVatTreatment } from "./domain/validation.ts"
 export { unitOfMeasures } from "./domain/unit-of-measures.ts"
 export { ROMANIAN_COUNTIES, addressCountyName, isRomanianCountyCode, isValidRomanianCnp, romanianCountyName } from "./parties/index.ts"
 export type { RomanianCounty } from "./parties/index.ts"
