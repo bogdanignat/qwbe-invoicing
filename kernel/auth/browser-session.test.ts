@@ -46,13 +46,14 @@ void test("an opaque browser session survives a host restart, enforces CSRF, and
     const record = await createSessionStore(pool).find(stored.session_hash)
     assert.ok(record)
     assert.equal(typeof record.expiresAt, "number")
-    assert.equal(record.expiresAt, now + 30 * 24 * 60 * 60 * 1_000)
+    assert.equal(record.expiresAt, now + 12 * 60 * 60 * 1_000)
+    assert.equal(record.createdAt, now)
     assert.equal(String(record.expiresAt), storedExpiry)
     assert.equal(record.csrfToken, login.csrfToken)
 
     currentTime += 1_000
     const restartedHost = createBrowserSession(config, pool, () => currentTime)
-    const resumed = await restartedHost.resume(cookie)
+    const resumed = await restartedHost.resume(cookie, "GET")
     assert.deepEqual(resumed, { kind: "authenticated", csrfToken: login.csrfToken })
     assert.deepEqual(await restartedHost.authorize({ cookie, method: "GET" }), {
       kind: "authorized",
@@ -78,10 +79,10 @@ void test("an opaque browser session survives a host restart, enforces CSRF, and
       origin: "https://attacker.example",
       host: "invoice.test",
     }), { kind: "forbidden" })
-    assert.deepEqual(await restartedHost.resume(`${cookie}; ${cookie}`), { kind: "unauthorized" })
-    assert.deepEqual(await restartedHost.resume(`${cookie}x`), { kind: "unauthorized" })
+    assert.deepEqual(await restartedHost.resume(`${cookie}; ${cookie}`, "GET"), { kind: "unauthorized" })
+    assert.deepEqual(await restartedHost.resume(`${cookie}x`, "GET"), { kind: "unauthorized" })
     assert.equal(await restartedHost.revoke(cookie), true)
-    assert.deepEqual(await restartedHost.resume(cookie), { kind: "unauthorized" })
+    assert.deepEqual(await restartedHost.resume(cookie, "GET"), { kind: "unauthorized" })
 
     const beforeRotation = await restartedHost.login({ token, origin: "https://invoice.test", host: "invoice.test" })
     assert.equal(beforeRotation.kind, "authenticated")
@@ -89,13 +90,13 @@ void test("an opaque browser session survives a host restart, enforces CSRF, and
     const rotatedToken = "c".repeat(64)
     writeFileSync(tokenFile, rotatedToken, { mode: 0o600 })
     const rotatedHost = createBrowserSession(config, pool, () => currentTime)
-    assert.deepEqual(await rotatedHost.resume(beforeRotationCookie), { kind: "unauthorized" })
+    assert.deepEqual(await rotatedHost.resume(beforeRotationCookie, "GET"), { kind: "unauthorized" })
 
     const expiring = await rotatedHost.login({ token: rotatedToken, origin: "https://invoice.test", host: "invoice.test" })
     assert.equal(expiring.kind, "authenticated")
     const expiringCookie = expiring.setCookie.split(";", 1)[0] as string
     currentTime += 31 * 24 * 60 * 60 * 1_000
-    assert.deepEqual(await rotatedHost.resume(expiringCookie), { kind: "unauthorized" })
+    assert.deepEqual(await rotatedHost.resume(expiringCookie, "GET"), { kind: "unauthorized" })
     // The write path collects what has expired, under the same lock.
     await rotatedHost.login({ token: rotatedToken, origin: "https://invoice.test", host: "invoice.test" })
     assert.equal(Number(await sql.scalar("SELECT count(*) FROM browser_sessions")), 1)

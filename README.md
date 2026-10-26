@@ -915,8 +915,12 @@ The rest of the model:
   `-f compose.prod.yaml` in production): a plain restart keeps the old file when the file
   was replaced rather than rewritten in place (see [Database access](#database-access)).
   The changed credential hash invalidates existing browser sessions.
-- The browser UI exchanges the token once for a revocable, opaque 30-day session held in an
-  `HttpOnly`, `SameSite=Strict` cookie (`Secure` under HTTPS and in production). The token
+- The browser UI exchanges the token once for a revocable, opaque session held in an
+  `HttpOnly`, `SameSite=Strict` cookie (`Secure` under HTTPS and in production), set at login
+  with `Max-Age` equal to the 30-day absolute limit, so closing the browser does not log out.
+  The session ends after 12 hours without an authenticated request (each accepted request
+  slides the window, written at most every 5 minutes; a write is extended only after its CSRF
+  check) and 30 days after login at the latest; the `browser_sessions` row decides. The token
   never reaches browser JavaScript, storage or the URL. State-changing requests carry a
   per-session CSRF token.
 - Failed browser unlocks and failed Bearer authentication are throttled in memory by the

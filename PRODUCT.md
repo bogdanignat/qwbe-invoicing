@@ -604,8 +604,9 @@ The following decisions must be explicit before their relevant implementation:
    (`QWBE_UI_DIR`), the API under `/api/*` and the Swagger page (`GET /api`) on one origin,
    `PUBLIC_ORIGIN`, behind the operator's TLS proxy, and owns the whole public edge itself:
    `Host`/`Origin` pinning, CSRF, CSP and the request deadline. The kernel exchanges the
-   local API token for a revocable, opaque 30-day session persisted server-side and
-   referenced by an HttpOnly `SameSite=Strict` cookie scoped to `/api`. The browser keeps
+   local API token for a revocable, opaque session persisted server-side (12 hours of
+   inactivity, 30 days after login at most) and referenced by an HttpOnly `SameSite=Strict`
+   cookie scoped to `/api`, whose `Max-Age` is that 30-day limit. The browser keeps
    only the per-session CSRF token in memory. The Bearer API is off on the public listener
    unless `QWBE_BEARER_API=on`; the CLI inside the container is the operator's interface.
 

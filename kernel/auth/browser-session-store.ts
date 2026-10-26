@@ -21,7 +21,9 @@ import { sessionsLockKey } from "../storage/postgres-transaction.ts"
  * key did (a `find` racing a logout was ordered by whoever won the lock, which
  * is the same race), and an expired row the sweep has not reached yet is still
  * refused by `decode`, which compares `expires_at` with the clock. The writers
- * keep the EXCLUSIVE key between themselves. The exclusive read lock let any
+ * keep the EXCLUSIVE key between themselves; `extend` is one of them, but only
+ * a session `decode` has accepted ever reaches it, so an invented cookie never
+ * takes the key. The exclusive read lock let any
  * request with a well-formed invented cookie serialise the owner's requests on
  * a four-connection pool and push them into `lock_timeout` 500s.
  *
@@ -33,6 +35,7 @@ import { sessionsLockKey } from "../storage/postgres-transaction.ts"
 export interface SessionRecord {
   readonly credentialHash: string
   readonly csrfToken: string
+  readonly createdAt: number
   readonly expiresAt: number
 }
 
@@ -45,6 +48,7 @@ export interface SessionStore {
     readonly createdAt: number
     readonly expiresAt: number
   }) => Promise<void>
+  readonly extend: (sessionHash: string, expiresAt: number, now: number) => Promise<boolean>
   readonly remove: (sessionHash: string) => Promise<boolean>
 }
 
@@ -97,22 +101,23 @@ const epoch = (value: unknown): number | undefined => {
 interface SessionRow {
   readonly credential_hash: unknown
   readonly csrf_token: unknown
+  readonly created_at: unknown
   readonly expires_at: unknown
 }
 
 export const createSessionStore = (pool: Pool): SessionStore => ({
   find: (sessionHash) => inTransaction(pool, readLocks, async (client) => {
     const { rows } = await client.query<SessionRow>(
-      "SELECT credential_hash, csrf_token, expires_at FROM browser_sessions WHERE session_hash = $1",
+      "SELECT credential_hash, csrf_token, created_at, expires_at FROM browser_sessions WHERE session_hash = $1",
       [sessionHash],
     )
     const row = rows[0]
     if (row === undefined) return undefined
+    const createdAt = epoch(row.created_at)
     const expiresAt = epoch(row.expires_at)
-    if (typeof row.credential_hash !== "string" || typeof row.csrf_token !== "string" || expiresAt === undefined) {
-      return undefined
-    }
-    return { credentialHash: row.credential_hash, csrfToken: row.csrf_token, expiresAt }
+    if (typeof row.credential_hash !== "string" || typeof row.csrf_token !== "string"
+      || createdAt === undefined || expiresAt === undefined) return undefined
+    return { credentialHash: row.credential_hash, csrfToken: row.csrf_token, createdAt, expiresAt }
   }),
   create: (record) => inTransaction(pool, writeLocks, async (client) => {
     // Expiry collection happens on the write path, under the same lock, exactly
@@ -123,6 +128,16 @@ export const createSessionStore = (pool: Pool): SessionStore => ({
       + " VALUES ($1, $2, $3, $4, $5)",
       [record.sessionHash, record.credentialHash, record.csrfToken, record.createdAt, record.expiresAt],
     )
+  }),
+  // Only forward, and never for a row that has already expired: two requests
+  // extending at once leave the later expiry whichever commits first, and a
+  // session past `expires_at` stays dead even if the sweep has not reached it.
+  extend: (sessionHash, expiresAt, now) => inTransaction(pool, writeLocks, async (client) => {
+    const result = await client.query(
+      "UPDATE browser_sessions SET expires_at = $2 WHERE session_hash = $1 AND expires_at > $3 AND expires_at < $2",
+      [sessionHash, expiresAt, now],
+    )
+    return result.rowCount === 1
   }),
   remove: (sessionHash) => inTransaction(pool, writeLocks, async (client) => {
     const result = await client.query(

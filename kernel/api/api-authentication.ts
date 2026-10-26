@@ -40,12 +40,13 @@ export const sessionAuthenticationLayer = (runtime: ApiRuntime) => Layer.succeed
     const session = runtime.browserSession
     if (session === undefined || value.length === 0) return authenticationRequired
     // `Layer.succeed` with a synchronous body is gone: resuming reads the
-    // database, so the answer is an Effect that awaits it.
-    return Effect.flatMap(
-      Effect.promise(() => session.resume(header)),
-      (resumed) => resumed.kind === "unauthorized"
+    // database, so the answer is an Effect that awaits it. The method goes
+    // along so `DELETE /api/session` does not extend before `authorize` checks CSRF.
+    return HttpServerRequest.HttpServerRequest.pipe(
+      Effect.flatMap((request) => Effect.promise(() => session.resume(header, request.method))),
+      Effect.flatMap((resumed) => resumed.kind === "unauthorized"
         ? authenticationRequired
-        : Effect.succeed({ csrfToken: resumed.csrfToken, cookie: header }),
+        : Effect.succeed({ csrfToken: resumed.csrfToken, cookie: header })),
     )
   },
 })
