@@ -21,13 +21,16 @@
 #     - nothing changed (it did not run, or its report says `changed: 0`): back to
 #       the previous image and IMAGE_TAG, which must become ready again;
 #     - schema changed, or unknown (no report; a `migrate` still running is stopped
-#       first): the previous version is NOT started
-#       on that database. `app` stays stopped, the exact restore command (this
-#       deploy's backup, with the image that made it) is printed and kept in
-#       .local/production/recovery-required, and deploy/backup refuse until then.
+#       first): the previous version is NOT started on that database. `app` stays
+#       stopped; the previous image is pinned to its tag again and `.env` gets the
+#       previous IMAGE_TAG back (written to the file: lib.sh ignores the shell's), with
+#       nothing started in between. Then the restore of this deploy's backup, which
+#       restore.sh makes with the image `.env` names, is printed and kept in
+#       .local/production/recovery-required, with the commands for any of those
+#       steps that failed; deploy/backup refuse until then.
 #     Every failure exits non-zero.
-#  7. On success: removes ${QWBE_IMAGE}:<commit> images that are neither the current
-#     one, the previous one, nor named by a backup still kept in BACKUP_DIR.
+#  7. On success: removes ${QWBE_IMAGE}:<commit> images other than the new one and the
+#     previous one (restore.sh restores any archive with the image installed).
 #
 # `git pull` rewrites this file, lib.sh and backup.sh while they run, and bash reads
 # a script as it executes it. So both libraries are sourced here, before the pull,
@@ -141,15 +144,23 @@ roll_back() {
   fi
 }
 
+# The restore of this deploy's backup runs with the image .env names, so the previous
+# image is pinned and written back to .env first, with nothing started in between. Both
+# commands are printed and kept in the marker; a step that failed here says so.
 require_restore() {
-  local command="scripts/production/restore.sh $DEPLOY_BACKUP --apply"
-  pin_previous || true
+  local restore="scripts/production/restore.sh $DEPLOY_BACKUP --apply" image state="done by this deploy"
+  image="sed -i 's|^[[:space:]]*IMAGE_TAG=.*|IMAGE_TAG=$OLD_TAG|' $ENV_FILE"
+  [[ "$OLD_TAG" == *@* ]] || image="docker tag $ACTIVE_ID $QWBE_IMAGE:$OLD_TAG && $image"
+  pin_previous || state="FAILED here: run it first"
+  env_set "IMAGE_TAG=$OLD_TAG" || state="FAILED here: run it first"
   printf '%s\n' "deploy of $NEW_TAG failed $(date -u +%FT%TZ), migrate outcome: $1" \
-    "backup before it: $DEPLOY_BACKUP (made by $QWBE_IMAGE:$OLD_TAG, $ACTIVE_ID)" "restore: $command" > "$RECOVERY_MARKER"
+    "backup before it: $DEPLOY_BACKUP (made by $QWBE_IMAGE:$OLD_TAG, $ACTIVE_ID)" \
+    "image: $image ($state)" "restore: $restore" > "$RECOVERY_MARKER"
   warn "the deploy of $NEW_TAG FAILED and the schema may have changed (migrate: $1).
 The previous version is not started on this database, and app stays stopped.
-Restore the backup taken before this deploy; restore.sh uses the image that made it ($QWBE_IMAGE:$OLD_TAG):
-  $command"
+Restore the backup taken before this deploy with the previous image, $QWBE_IMAGE:$OLD_TAG:
+  1. .env names it ($state): $image
+  2. $restore"
 }
 
 recover() {
@@ -161,8 +172,8 @@ recover() {
   [[ "$outcome" == none || "$outcome" == changed ]] || outcome=unknown
   warn "$QWBE_IMAGE:$NEW_TAG did not become ready; migrate outcome: $outcome"
   # A `migrate` still running would go on changing the schema after the decision.
-  compose stop migrate || true
-  stop_app "deploy.sh (recovering from $QWBE_IMAGE:$NEW_TAG)" || true
+  compose stop migrate || warn "could not stop migrate: check docker compose ps"
+  stop_app "deploy.sh (recovering from $QWBE_IMAGE:$NEW_TAG)" || warn "could not stop app: check docker compose ps"
   if [[ "$outcome" == none ]]; then roll_back; else require_restore "$outcome"; fi
 }
 
@@ -176,11 +187,9 @@ on_exit() {
 }
 
 prune_images() {
-  local tag keep
-  keep=" $NEW_TAG $OLD_TAG $(find "$BACKUP_DIR" -maxdepth 1 -type f -name 'qwbe-invoicing-*.meta' \
-    -exec sed -n 's/^image_tag=//p' {} + | tr '\n' ' ') "
+  local tag
   for tag in $(docker image ls "$QWBE_IMAGE" --format '{{.Tag}}' | grep -E '^[0-9a-f]{12}$' || true); do
-    [[ "$keep" == *" $tag "* ]] && continue
+    [[ "$tag" == "$NEW_TAG" || "$tag" == "$OLD_TAG" ]] && continue
     if docker image rm "$QWBE_IMAGE:$tag" >/dev/null; then say "removed image $QWBE_IMAGE:$tag"; else warn "kept image $QWBE_IMAGE:$tag (in use)"; fi
   done
 }

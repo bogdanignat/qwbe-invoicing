@@ -12,9 +12,12 @@ import { doctorReport } from "../ops/cli-doctor.ts"
 import { dumpDatabase } from "../ops/postgres-backup-dump.ts"
 import { assertSinglePublicSchema } from "../ops/postgres-backup-guards.ts"
 import { allPlugins } from "../plugins.ts"
-import { applyMigrations } from "./postgres-migrations.ts"
+import type { SchemaMigration } from "./postgres-foundation.ts"
+import { migrationScopes } from "./postgres-migration-plans.ts"
+import { applyMigrations, ledgerTable } from "./postgres-migrations.ts"
 import { createQueryPool, type PostgresSettings } from "./postgres-pool.ts"
 import { createTestDatabase, testSettings, type TestFixture, withEmpty } from "./postgres-rig.test-support.ts"
+import { resetFingerprintCache, schemaDrift } from "./postgres-schema-fingerprint.ts"
 
 /**
  * deploy/postgres/grants.sql, the very file db-init runs, in the order production runs it:
@@ -22,7 +25,8 @@ import { createTestDatabase, testSettings, type TestFixture, withEmpty } from ".
  * rights then come from the default privileges alone. As qwbe_app the application runs
  * (readiness with its drift replay, the session, an issued invoice) and everything that
  * would switch off the fiscal guards or reach the server is refused. Last, restore.sh's
- * order: a new database, grants.sql, the dump loaded as qwbe_owner.
+ * order: a new database, grants.sql, the dump loaded as qwbe_owner, then `migrate` with a
+ * migration the dump does not have (an archive older than the image).
  */
 const grants = readFileSync(new URL("../../deploy/postgres/grants.sql", import.meta.url), "utf8")
 
@@ -95,7 +99,57 @@ const migrateAsOwner = async (owner: Login, database: string): Promise<void> => 
   }
 }
 
-/** restore.sh's order: a new database, grants.sql, then the dump loaded as qwbe_owner. */
+/**
+ * A migration newer than the dump: a table, a sequence and a function. It is appended to
+ * the catalog scope for this process only (`node --test` runs each file in its own), as
+ * kernel/storage/migration-upgrade.test.ts does; the shipped migrations are untouched.
+ */
+const newer: SchemaMigration = {
+  name: "catalog-002-test-roles",
+  statements: [
+    "CREATE SEQUENCE roles_test_numbers",
+    "CREATE TABLE roles_test_notes(id BIGINT PRIMARY KEY DEFAULT nextval('roles_test_numbers'), body TEXT NOT NULL)",
+    "CREATE FUNCTION roles_test_count() RETURNS bigint LANGUAGE plpgsql AS $$ BEGIN RETURN (SELECT count(*) FROM roles_test_notes); END $$",
+  ],
+}
+
+/**
+ * restore.sh's `migrate` after the load: qwbe_owner applies the newer migration, with no
+ * GRANT after it, and qwbe_app gets DML on the new table, the sequence and the function
+ * from the default privileges alone, and no DDL on them.
+ */
+const migrateRestored = async (target: string, owner: Login, app: Login): Promise<void> => {
+  const scope = migrationScopes.find(({ scope: name }) => name === "catalog")
+  assert.ok(scope !== undefined, "the catalog scope exists")
+  const catalog = scope.migrations as Array<SchemaMigration>
+  catalog.push(newer)
+  resetFingerprintCache()
+  const asOwner = actingAs(owner, target).pool
+  const asApp = actingAs(app, target).pool
+  try {
+    assert.deepEqual(await schemaDrift(asOwner), [], "the restored history explains the schema")
+    assert.equal((await applyMigrations(asOwner)).changed, 1)
+    assert.deepEqual(await schemaDrift(asOwner), [])
+    assert.equal(await scalar(asOwner, `SELECT count(*)::int FROM ${ledgerTable} WHERE name = '${newer.name}'`), 1)
+    assert.equal(await scalar(asApp, owners), "qwbe_owner")
+    assert.equal(await scalar(asApp, withoutAppRights), 0, "the migrated objects carry qwbe_app's rights")
+    assert.equal(await scalar(asApp, "SELECT has_function_privilege('qwbe_app', 'roles_test_count()', 'EXECUTE')"), true)
+    await asApp.query("INSERT INTO roles_test_notes(body) VALUES ('after the restore')")
+    assert.equal(await scalar(asApp, "SELECT roles_test_count()"), "1")
+    for (const statement of [
+      "ALTER TABLE roles_test_notes ADD COLUMN intruder integer",
+      "ALTER SEQUENCE roles_test_numbers RESTART",
+      "DROP FUNCTION roles_test_count()",
+    ]) assert.equal(await sqlState(asApp, statement), "42501", statement)
+  } finally {
+    catalog.pop()
+    resetFingerprintCache()
+    await asOwner.end()
+    await asApp.end()
+  }
+}
+
+/** restore.sh's order: a new database, grants.sql, the dump loaded as qwbe_owner, then `migrate`. */
 const restoreAsOwner = async (dump: string, owner: Login, app: Login, invoiceId: string): Promise<void> => {
   const target = await createTestDatabase("pg_roles_target")
   const superuser = createQueryPool(testSettings(target))
@@ -118,6 +172,7 @@ const restoreAsOwner = async (dump: string, owner: Login, app: Login, invoiceId:
   } finally {
     await pool.end()
   }
+  await migrateRestored(target, owner, app)
 }
 
 /** The application as qwbe_app, the backup it reads, and what CREATE on the database still leaves it. Answers the invoice it issued. */
@@ -171,7 +226,7 @@ const runAsApplication = async (fixture: TestFixture, app: Login, dump: string):
   }
 }
 
-void test("grants.sql, then migrate as qwbe_owner: qwbe_app runs the application on default privileges alone and cannot switch off the fiscal guards",
+void test("grants.sql, then migrate as qwbe_owner: qwbe_app runs the application on default privileges alone and cannot switch off the fiscal guards; a restored older schema migrates the same way",
   () => withEmpty("pg_roles", async (fixture) => {
     // Twice: db-init runs it before every migrate, so it has to converge.
     await fixture.sql.exec(grants)

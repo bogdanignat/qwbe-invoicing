@@ -2,7 +2,9 @@
 # Drill of scripts/production/ on an isolated stack, with data: install, the
 # fail-closed guards, backup that deletes nothing, a deploy whose backup fails, a deploy from
 # the checkout, restore dry-run and apply with the switch, a deploy whose app does not
-# start (rollback) and one that also changes the schema (restore required, then done).
+# start (rollback), one that also changes the schema (restore required, then done), and
+# restore with the installed image (drill-restore.sh): an older archive migrated, a newer
+# one refused, a migration that fails.
 #
 #   scripts/production/drill.sh          (DRILL_PORT, default 3198, must be free)
 #
@@ -23,6 +25,8 @@ set -euo pipefail
 source "$(dirname "${BASH_SOURCE[0]}")/drill-support.sh"
 # shellcheck source=scripts/production/drill-interrupts.sh
 source "$(dirname "${BASH_SOURCE[0]}")/drill-interrupts.sh"
+# shellcheck source=scripts/production/drill-restore.sh
+source "$(dirname "${BASH_SOURCE[0]}")/drill-restore.sh"
 
 setup
 install_with_data
@@ -147,50 +151,45 @@ pass "deploy $v2 from the checkout: backup by the previous image, IMAGE_TAG pinn
 second_invoice="$(issue_invoice drill-2)"
 
 # ---- Restore: refusals, dry-run, apply and switch --------------------------------------
-mkdir "$work/tampered"
-cp "$deploy_backup" "${deploy_backup%.tar.gz}.meta" "$work/tampered/"
-tampered="$work/tampered/$(basename "$deploy_backup")"
-sed -i 's/^image_id=.*/image_id=sha256:0000/' "${tampered%.tar.gz}.meta"
-refused 'not that image on this host' "$scripts/restore.sh" "$tampered"
-cp "${deploy_backup%.tar.gz}.meta" "$work/tampered/"
-sed -i 's/^organization_id=.*/organization_id=other-org/' "${tampered%.tar.gz}.meta"
-refused 'belongs to ORGANIZATION_ID other-org' "$scripts/restore.sh" "$tampered"
+dbs_before="$(databases)" volumes_before="$(volumes)"
+set_env ORGANIZATION_ID other-org
+refused 'belongs to organization "drill-org", .env says ORGANIZATION_ID other-org; nothing was created' \
+  "$scripts/restore.sh" "$deploy_backup"
+set_env ORGANIZATION_ID drill-org
 mkdir "$work/odd:dir"
-cp "$deploy_backup" "${deploy_backup%.tar.gz}.meta" "$work/odd:dir/"
+cp "$deploy_backup" "$work/odd:dir/"
 refused 'cannot be mounted' "$scripts/restore.sh" "$work/odd:dir/$(basename "$deploy_backup")"
-databases() { "${compose[@]}" exec -T db psql -U postgres -d postgres -tAc "SELECT string_agg(datname, ',' ORDER BY datname) FROM pg_database"; }
-dbs_before="$(databases)" volumes_before="$(docker volume ls -q --filter "name=^$project-" | sort)"
 refused 'not confirmed; nothing was changed' sh -c "echo wrong-name | '$scripts/restore.sh' '$deploy_backup' --apply"
-succeeds "$scripts/restore.sh" "$deploy_backup"
+# The .meta is for people only: an archive without it restores the same.
+mkdir "$work/no-meta"
+cp "$deploy_backup" "$work/no-meta/"
+succeeds "$scripts/restore.sh" "$work/no-meta/$(basename "$deploy_backup")"
 { grep -q 'dry-run ok' "$log" && grep -q 'removed the dry-run database' "$log"; } || fail "dry-run: $(tail -n 10 "$log")"
-[[ "$(databases)" == "$dbs_before" && "$(docker volume ls -q --filter "name=^$project-" | sort)" == "$volumes_before" ]] \
+[[ "$(databases)" == "$dbs_before" && "$(volumes)" == "$volumes_before" ]] \
   || fail "dry-run or a refused restore left a database or a volume"
 [[ "$(env_value IMAGE_TAG)" == "$v2" ]] || fail "dry-run switched .env"
-pass "restore refuses a foreign image, a foreign organization, a directory with ':' and a wrong confirmation; dry-run leaves nothing"
+pass "restore refuses another organization (from the manifest), a directory with ':' and a wrong confirmation; dry-run without .meta leaves nothing"
 dry_run_interrupted "$deploy_backup"
 
+# The deploy's backup was made by $project:install; it is restored with the image installed now.
 succeeds sh -c "basename '$deploy_backup' | '$scripts/restore.sh' '$deploy_backup' --apply"
 { grep -q 'Everything after' "$log" && grep -q 'ANAF OAuth connection are not' "$log"; } || fail "the plan does not warn: $(head -n 20 "$log")"
+grep -q "migrated the target to $project:$v2 (0 applied)" "$log" || fail "migrate on the target: $(tail -n 10 "$log")"
 target_db="$(env_value QWBE_PGDATABASE)"
-[[ "$target_db" == qwbe_invoicing_r* && "$(env_value QWBE_DATA_VOLUME)" == "$project-data-r"* && "$(env_value IMAGE_TAG)" == install ]] \
+[[ "$target_db" == qwbe_invoicing_r* && "$(env_value QWBE_DATA_VOLUME)" == "$project-data-r"* && "$(env_value IMAGE_TAG)" == "$v2" ]] \
   || fail "the switch: $(grep -E '^(QWBE_PGDATABASE|QWBE_DATA_VOLUME|IMAGE_TAG)=' "$checkout/.env")"
 doctor_ok ".schemaDrift == [] and .database.database == \"$target_db\"" || fail "doctor after the switch"
 { docker volume inspect "$project-data" >/dev/null && [[ "$(databases)" == *qwbe_invoicing,* ]]; } || fail "the source was not kept"
 login
 [[ "$(pdf_status "$first_invoice")" == 200 ]] || fail "the restored invoice PDF"
 [[ "$(api GET "/api/invoices/$second_invoice")" == 404 ]] || fail "an invoice made after the backup is present"
-pass "restore --apply: new database + volume, switched with the backup's image, doctor ready, data of the backup only, source kept"
+pass "restore --apply with the installed image: new database + volume, IMAGE_TAG unchanged, doctor ready, data of the backup only, source kept"
 restore_switch_interrupted "$deploy_backup"
 
 # ---- A deploy whose app does not start: rollback --------------------------------------
-docker tag "$project:install" "$project:0123456789ab"
-succeeds "$scripts/deploy.sh"
-[[ "$(env_value IMAGE_TAG)" == "$v2" ]] || fail "deploy after the restore"
-! docker image inspect "$project:0123456789ab" >/dev/null 2>&1 || fail "an image no backup names was not pruned"
-docker image inspect "$project:install" >/dev/null || fail "pruned the image of kept backups"
-pass "deploy after the restore; image retention: an unreferenced commit tag removed, the backups' images kept"
 sed -i 's|^CMD \["node", "bin/qwbe-invoicing.ts", "serve"\]|CMD ["node", "-e", "process.exit(3)"]|' "$author/Dockerfile"
 commit_upstream "drill: v3, app exits"
+v3="$(git -C "$author" rev-parse HEAD | cut -c1-12)"
 refused 'rolled back to '"$v2"' and ready; the deploy of [0-9a-f]{12} FAILED' "$scripts/deploy.sh"
 grep -q 'migrate outcome: none' "$log" || fail "rollback reason: $(tail -n 10 "$log")"
 { [[ "$(env_value IMAGE_TAG)" == "$v2" ]] && runs_image "$v2"; } || fail "not back on $v2"
@@ -202,17 +201,28 @@ jq '. + [{"name":"catalog-002-drill","statements":["CREATE TABLE drill_marker(id
   "$author/cubes/invoicing/catalog/contracts/migrations.json" > "$work/migrations.json"
 cp "$work/migrations.json" "$author/cubes/invoicing/catalog/contracts/migrations.json"
 commit_upstream "drill: v4, new migration, app exits"
+v4="$(git -C "$author" rev-parse HEAD | cut -c1-12)"
 refused 'schema may have changed \(migrate: changed\)' "$scripts/deploy.sh"
+grep -q "1\. \.env names it (done by this deploy): docker tag .* && sed -i .*IMAGE_TAG=$v2" "$log" \
+  || fail "the deploy does not print the image step: $(tail -n 8 "$log")"
 [[ -z "$("${compose[@]}" ps -q --status running app)" ]] || fail "app runs after a schema change"
+[[ "$(env_value IMAGE_TAG)" == "$v2" ]] || fail "IMAGE_TAG not set back to $v2 before the restore"
 marker="$checkout/.local/production/recovery-required"
-[[ -f "$marker" ]] || fail "no recovery marker"
+{ [[ -f "$marker" ]] && grep -q "^image: .*IMAGE_TAG=$v2.* (done by this deploy)$" "$marker"; } || fail "recovery marker: $(cat "$marker")"
 refused 'needs a restore first' "$scripts/backup.sh"
 refused 'needs a restore first' "$scripts/deploy.sh"
 restore_command="$(sed -n 's/^restore: //p' "$marker")"
 archive="$(awk '{ print $2 }' <<<"$restore_command")"
+restore_waits_for_step_one "$archive"
 succeeds sh -c "basename '$archive' | (cd '$checkout' && $restore_command)"
 [[ ! -f "$marker" && "$(env_value IMAGE_TAG)" == "$v2" ]] || fail "after the printed restore: $(tail -n 10 "$log")"
 doctor_ok || fail "doctor after the recovery"
-pass "deploy that changed the schema: old version not started, restore command printed and run, ready on $v2"
+pass "deploy that changed the schema: old version not started, .env back on $v2 with nothing started, restore printed and run, ready on $v2"
+
+# ---- Restore with the installed image: older archive, newer archive, failing migration --
+deploy_new_migration
+restore_older_archive "$older"
+restore_newer_refused
+restore_migrate_fails
 
 echo "drill: all checks passed"
