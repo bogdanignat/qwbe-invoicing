@@ -59,7 +59,7 @@ export class ScratchNotRolledBack extends Error {
  * It is a distinct type because the three answers have three different
  * consequences: a network failure must stay a failure (readiness fails closed
  * and says so), a replay failure must become a *drift* signal so `doctor`,
- * `migrate` and readiness all say "recreate the database", and a clean replay
+ * `migrate` and readiness all refuse the schema, and a clean replay
  * must compare. Nothing is repaired and nothing is ignored.
  */
 export class HistoryNotReplayable extends Error {

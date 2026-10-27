@@ -13,7 +13,7 @@ export { HistoryNotReplayable, ScratchNotRolledBack, replayFingerprint }
  * Expected is not a stored checksum: it is what the migrations the ledger says
  * were applied actually build, replayed into a throwaway schema and introspected
  * with the same queries that introspect the live one. Actual is the live schema.
- * Drift is the symmetric difference, which is why an edited baseline is caught
+ * Drift is the symmetric difference, which is why an edited object is caught
  * by its effect and not by a hash nobody can explain.
  *
  * The replay itself lives in `postgres-schema-replay.ts`; this module owns the
@@ -30,7 +30,7 @@ export { HistoryNotReplayable, ScratchNotRolledBack, replayFingerprint }
  * middle and applied the ones after it CANNOT be replayed — a later statement
  * references a table the skipped migration creates — and the old code let the
  * resulting SQLSTATE 42P01 escape as a raw driver error, so `migrate` crashed
- * instead of telling the operator to recreate the database. A gap is detected
+ * instead of reporting drift. A gap is detected
  * here, by position in the canonical order, and reported as drift.
  *
  * `unknown` is the mirror case: a ledger row no contract declares (a renamed or
@@ -48,8 +48,8 @@ export interface MigrationHistory {
  *
  * The flattened version misread a normal append: a new migration added to an
  * early scope (say `customers`, scope 2 of 8) sits before every later scope's
- * applied rows, so it looked like a hole and `migrate --apply` refused with
- * "recreate the database" instead of applying it. Within one scope the order is
+ * applied rows, so it looked like a hole and `migrate --apply` refused it as
+ * drift instead of applying it. Within one scope the order is
  * the contract's own, so a hole there is a real hole; anything after a scope's
  * high-water mark is simply pending.
  *
@@ -111,7 +111,7 @@ export const appliedOrder = async (executor: SqlExecutor): Promise<ReadonlyArray
 /**
  * A corrupt history, expressed in the same vocabulary as drift so every caller
  * answers the same way: `doctor` reports it under `schemaDrift` and `ready:
- * false`, `migrate` prints "recreate the database" and exits 1, readiness is
+ * false`, `migrate` prints the drifted names and exits 1, readiness is
  * false. The names are prefixed `history:` so an operator can tell a corrupt
  * ledger from an edited object at a glance.
  */

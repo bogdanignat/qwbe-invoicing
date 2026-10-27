@@ -27,8 +27,8 @@ docker compose exec app wget -qO- http://127.0.0.1:3000/health/ready
 A checkout whose stack still runs the earlier two-service layout (a separate `frontend`
 container in front of the kernel) moves to the single image with
 `docker compose up -d --build --remove-orphans`: the orphan container is removed and the
-volumes stay. If `migrate` then refuses the database as drift, the baseline changed
-since the cluster was created; see README, "Schema during development".
+volumes stay. If `migrate` then refuses the database as drift, its schema is not the one
+its ledger explains; see README, "Schema and migrations".
 
 `scripts/init-secrets.sh` creates the six secret files once and keeps them on every
 later run. The database has three roles, one password each (README, [Database
@@ -65,9 +65,9 @@ completes successfully → `app` starts. `app` never migrates: it takes the main
 barrier SHARED and answers `503` on `/health/ready` and on every `/api` route until
 the barrier, the schema and the artifact directory all agree. Repeated
 `docker compose up -d` is safe: migration is idempotent and does not consume invoice
-or proforma numbers or create business records. While the project is in development each
-cube owns one baseline migration; a database created from an older baseline is refused
-as drift and has to be recreated (README, "Schema during development"). In a CHECK,
+or proforma numbers or create business records. Shipped migrations are frozen and a
+schema change is a new migration at the end of its cube's scope, so an older database is
+upgraded, never recreated (README, "Schema and migrations"). In a CHECK,
 write `>=`/`<=` instead of `BETWEEN` when another `AND` follows it; otherwise the
 constraint text differs after a restore and `doctor` reports drift. The API reads its kernel bearer
 credential from the Compose secret; the secret is never stored in the image or

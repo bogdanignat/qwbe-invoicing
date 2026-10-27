@@ -20,8 +20,8 @@ import { parseTrustedProxies } from "../http/trusted-proxy.ts"
  * The corrupt-history signal, on a real PostgreSQL 16 server.
  *
  * Reported by the tests unit: a ledger that skips a migration in the middle made
- * `replayFingerprint` fail with a raw SQLSTATE 42P01, so `migrate` could not say
- * "recreate the database" — it crashed instead. These cases pin the fixed
+ * `replayFingerprint` fail with a raw SQLSTATE 42P01, so `migrate` could not
+ * report drift — it crashed instead. These cases pin the fixed
  * behaviour: a corrupt history is reported as drift, every caller answers the
  * same way, and the connection goes back to the pool clean.
  *

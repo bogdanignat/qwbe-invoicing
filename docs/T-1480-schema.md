@@ -158,7 +158,7 @@ All six GLOB occurrences are translated per conjunct and all are case-sensitive;
 document SQLite accepts.
 
 Money and dates stay `TEXT` (money later became `BIGINT` in bani, T-1904; see
-README, "Schema during development"). Booleans stay `INTEGER` with an `IN (0,1)` CHECK.
+README, "Schema and migrations"). Booleans stay `INTEGER` with an `IN (0,1)` CHECK.
 Counters, years, sectors and line positions are `integer`; the two session epochs
 are `BIGINT`, and no global type parser is installed — decoding stays the
 caller's explicit choice (driver probe g10).

@@ -21,7 +21,9 @@
     "gate:test": "node probes/test-gate.mjs",
     "gate:size": "node probes/size-gate.mjs",
     "gate:boundaries": "node probes/boundary-gate.mjs",
-    "verify": "pnpm gate:runtime && pnpm lint && pnpm typecheck && pnpm test && pnpm build:frontend && pnpm test:app:runtime && pnpm gate:package && pnpm gate:test && pnpm gate:size && pnpm gate:boundaries"
+    "gate:migrations": "node probes/migrations-lock.mjs",
+    "migrations:lock": "node probes/migrations-lock.mjs --append",
+    "verify": "pnpm gate:runtime && pnpm lint && pnpm typecheck && pnpm test && pnpm build:frontend && pnpm test:app:runtime && pnpm gate:package && pnpm gate:test && pnpm gate:size && pnpm gate:boundaries && pnpm gate:migrations"
   },
   "dependencies": {
     "@effect/platform": "0.96.1",

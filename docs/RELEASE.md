@@ -243,12 +243,11 @@ running one, so the previous image stays for a rollback: `git pull --ff-only`, t
 version still serves; then step 1, then that tag as `IMAGE_TAG` (step 2, without
 `pull`) and step 3. This is what `deploy.sh` does.
 
-While the project is in development there is no upgrade path between schema
-versions: each cube owns one baseline migration, and a changed baseline needs a new
-database (README, "Schema during development"). `migrate` refuses a database whose
-schema its history does not explain before writing anything, so `app` does not start
-on it. This upgrade procedure applies once incremental migrations return after the
-development stage. `doctor --json` is the readiness gate and reports
+The upgrade is incremental: `migrate` applies only the migrations the database lacks,
+each in its own transaction with its ledger row, and the shipped ones never change
+(README, "Schema and migrations"). `migrate` refuses a database whose schema its
+history does not explain before writing anything, so `app` does not start on it.
+`doctor --json` is the readiness gate and reports
 `pendingMigrations`, `migrationsReady` and `schemaDrift`. `artifacts` is a dry-run by
 default and now reports both invoices and proformas missing PDFs; use `--apply`
 (plus `--confirm-production` outside development) only to reconcile at most

@@ -96,6 +96,19 @@ export const planMigrations = async (executor: SqlExecutor): Promise<MigrationRe
   return { scanned, changed: 0, skipped: scanned - pending.length, failed: 0, pending }
 }
 
+/**
+ * The statement budget of a migration, and of nothing else: a backfill may
+ * rewrite a whole table, which the application's 5 s `statement_timeout` would
+ * cut. Fifteen minutes is the window `deploy.sh` gives `migrate` and `app`
+ * together (`timeout 900`): a longer statement fails the deploy anyway, and
+ * because the bound is the server's, a statement whose `migrate` container was
+ * stopped still ends by then instead of running on unattended. It is `SET
+ * LOCAL`, so it dies with the migration's transaction and the connection goes
+ * back to the pool with its own budget; `lock_timeout` is untouched, so a
+ * migration still refuses quickly when a table is locked.
+ */
+const migrationStatementTimeoutMillis = 15 * 60_000
+
 const applyMigration = async (
   client: PoolClient,
   scope: string,
@@ -105,6 +118,7 @@ const applyMigration = async (
   // migration and its ledger row commit together or neither does.
   await client.query("BEGIN")
   try {
+    await client.query(`SET LOCAL statement_timeout = ${String(migrationStatementTimeoutMillis)}`)
     for (const statement of migration.statements) await client.query(statement)
     await client.query(
       `INSERT INTO ${ledgerTable} (scope, name, applied_at) VALUES ($1, $2, now())`,
