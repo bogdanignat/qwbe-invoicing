@@ -67,6 +67,9 @@ wait_ready() {
   fail "app not ready on port $port"
 }
 archives() { find "$backups" -maxdepth 1 -type f -name 'qwbe-invoicing-*.tar.gz' | sort; }
+drill_psql() { "${compose[@]}" exec -T db psql -U postgres -d "$1" -tAc "$2"; }
+databases() { drill_psql postgres "SELECT string_agg(datname, ',' ORDER BY datname) FROM pg_database"; }
+volumes() { docker volume ls -q --filter "name=^$project-" | sort; }
 commit_upstream() { "${git[@]}" -C "$author" commit -qam "$1" && "${git[@]}" -C "$author" push -q origin main; }
 
 # ---- The HTTP API, through the loopback port, as a reverse proxy would call it ----
@@ -90,8 +93,8 @@ login() {
 }
 issue_invoice() {
   local customer='{"partyType":"company","name":"Client SRL","fiscalIdentifier":"87654329","vatRegistered":true,"address":{"countryCode":"RO","city":"Iasi","street":"Strada 2","county":"RO-IS"}}'
-  local lines='[{"description":"Servicii","quantity":"1","unitPrice":"100","unitOfMeasure":{"code":"HUR","name":"ora"},"vatRateCode":"RO_STANDARD"}]'
-  [[ "$(api POST /api/invoices "{\"customer\":$customer,\"series\":\"QWBE\",\"issueDate\":\"$(date -u -d yesterday +%F)\",\"dueDate\":\"$(date -u -d '+14 days' +%F)\",\"currency\":\"RON\",\"lines\":$lines}" "$1")" =~ ^2[0-9][0-9]$ ]] \
+  local invoice_lines='[{"description":"Servicii","quantity":"1","unitPrice":"100","unitOfMeasure":{"code":"HUR","name":"ora"},"vatRateCode":"RO_STANDARD"}]'
+  [[ "$(api POST /api/invoices "{\"customer\":$customer,\"series\":\"QWBE\",\"issueDate\":\"$(date -u -d yesterday +%F)\",\"dueDate\":\"$(date -u -d '+14 days' +%F)\",\"currency\":\"RON\",\"lines\":$invoice_lines}" "$1")" =~ ^2[0-9][0-9]$ ]] \
     || fail "issue invoice: $(cat "$work/reply")"
   local id
   id="$(jq -r .id "$work/reply")"

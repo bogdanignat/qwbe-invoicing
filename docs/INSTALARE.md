@@ -233,6 +233,15 @@ verifică arhiva fără bază de date și fără secrete și spune dacă imagine
 fără `--apply` doar verifică arhiva. Pașii: [Data, backup and restore](../README.md#data-backup-and-restore)
 și [Restore](./RELEASE.md#restore). În producție, dintr-un checkout, `scripts/production/backup.sh`,
 `restore.sh` și `deploy.sh` fac acești pași ([Production scripts](./RELEASE.md#production-scripts)).
+`restore.sh` restaurează orice arhivă făcută de `backup.sh` cu imaginea instalată (`IMAGE_TAG`
+din `.env`, pe care nu-l schimbă; fișierul `.meta` nu mai e necesar): o arhivă mai veche e
+migrată automat pe baza nouă înainte de comutare, iar una mai nouă decât imaginea, coruptă
+sau a altei organizații e refuzată înainte să se creeze ceva.
+
+**Rollback-ul** după un deploy care a schimbat schema: `deploy.sh` pune înapoi în `.env`
+tag-ul imaginii vechi (fără să pornească nimic) și afișează comanda de restore a backup-ului
+făcut chiar înainte de deploy; restore-ul rulează atunci cu imaginea veche. Ambele comenzi
+rămân și în `.local/production/recovery-required`.
 
 **Actualizarea** dintr-un checkout: backup întâi, păstrezi imaginea veche pentru rollback,
 apoi construiești și pornești:

@@ -161,7 +161,7 @@ holds a secret.
 | --- | --- |
 | `deploy.sh` | Upgrade: pull, build, backup, start, roll back or ask for a restore (Upgrade, Rollback) |
 | `backup.sh` | One archive in `BACKUP_DIR`, never deleting one; run daily by the systemd timer (Backup) |
-| `restore.sh <archive> [--apply]` | Dry-run, or restore into a new database + volume and switch (Restore) |
+| `restore.sh <archive> [--apply]` | Dry-run, or restore any archive into a new database + volume with the installed image, migrate it and switch (Restore) |
 
 Before a script stops `app` it writes `.local/production/app-stopped` (who stopped it,
 when), and removes it once `app` runs again. A run cut short before that (SIGKILL,
@@ -201,10 +201,9 @@ scripts/production/deploy.sh
 5. Only then writes the new `IMAGE_TAG` to `.env` (the previous copy is kept in
    `.local/production/`) and starts `migrate`, `app` and the rest; ready means
    healthy and `doctor --json` answering `ready: true`.
-6. On success, removes `${QWBE_IMAGE}:<commit>` images that are neither the current
-   one, the previous one, nor the image of a backup in `BACKUP_DIR`:
-   an image is kept as long as a backup in `BACKUP_DIR` names it, so every backup
-   stays restorable.
+6. On success, removes the `${QWBE_IMAGE}:<commit>` images other than the new one and
+   the previous one. Every backup stays restorable without the image that made it:
+   `restore.sh` restores with the installed image and migrates (Restore, below).
 
 Failures are in Rollback, below. Every failure exits non-zero.
 
@@ -267,7 +266,8 @@ and starts `app` again, also when the backup fails; an `app` that was not runnin
 stopped. Success is the CLI's report (exit 0, `failed` 0, `copied` equal to `scanned`);
 only then the archive gets its final name, `BACKUP_DIR/qwbe-invoicing-<UTC time>.tar.gz`,
 with `qwbe-invoicing-<UTC time>.meta` next to it: image, image ID, commit,
-`ORGANIZATION_ID`, database and data volume, no secret. The backup deletes no
+`ORGANIZATION_ID`, database and data volume, no secret. The `.meta` is for people:
+`restore.sh` reads only the archive and its manifest. The backup deletes no
 archive: removing old archives, and copying them to another machine, is the
 administrator's job.
 
@@ -309,27 +309,41 @@ scripts/production/restore.sh /var/backups/qwbe-invoicing/qwbe-invoicing-<time>.
 scripts/production/restore.sh /var/backups/qwbe-invoicing/qwbe-invoicing-<time>.tar.gz --apply   # restore + switch
 ```
 
-- The image is the one in the archive's `.meta`: it must be on this host under that tag
-  with the same ID, and `ORGANIZATION_ID` must match, or the restore is refused before
-  anything is created. A restored database keeps that version's schema, so the switch
-  also sets `IMAGE_TAG` to it.
-- The dry-run is a preliminary check only: an empty database (dropped again once
-  confirmed empty) and an empty read-only `/data`, the CLI's restore plan, nothing
-  switched, no volume made. Digests and compatibility are verified only by `--apply`.
-- `--apply` shows the archive and its time, the source, the target, the image and
-  the organization, and asks for the archive name. It creates a new database
-  `<QWBE_PGDATABASE>_r<time>` owned by `qwbe_owner`, runs `db-init` on it, creates the
-  volume `<QWBE_DATA_VOLUME>-r<time>`, restores in `migrate` (as `qwbe_owner`), runs
-  `doctor` on them in `app` (as `qwbe_app`); only when that is ready it stops `app`, writes `QWBE_PGDATABASE`,
-  `QWBE_DATA_VOLUME` and `IMAGE_TAG` to `.env` in one atomic write (the previous copy is
-  in `.local/production/`), starts the stack and checks `doctor` on the new database.
-- A failed restore leaves its target as it is for investigation and the installation
-  unchanged; a new attempt makes a new target. The source database and volume are
-  never deleted or changed.
+- Any archive made by `backup.sh` restores with the image installed now, `IMAGE_TAG`
+  in `.env`, which the restore never changes. The `.meta` next to the archive is not
+  needed.
+- First, before anything is created, that image inspects the archive
+  (`backup-inspect`, in `migrate`): every member against its manifest, the archive's
+  migrations against the image's, the manifest's organization against
+  `ORGANIZATION_ID`. A broken archive, migrations the image does not know (an archive
+  newer than the image: install that version, or a newer one, first), a history with
+  gaps, or another organization is a refusal, and nothing is made. The plan names the
+  migrations the archive lacks; `--apply` applies them.
+- The dry-run is a preliminary check only: the inspection, then an empty database
+  (dropped again once confirmed empty) and an empty read-only `/data`, the CLI's
+  restore plan, nothing switched, no volume made.
+- `--apply` shows the archive and its time, the source, the target, the image, the
+  migrations to apply and the organization, and asks for the archive name. It creates
+  a new database `<QWBE_PGDATABASE>_r<time>` owned by `qwbe_owner`, runs `db-init` on
+  it, creates the volume `<QWBE_DATA_VOLUME>-r<time>`, restores in `migrate` (as
+  `qwbe_owner`; the restored ledger must equal the manifest), runs `migrate --apply`
+  on the target (drift checked before and after), then `doctor` in `app` (as
+  `qwbe_app`); only when that is ready it stops `app`, writes `QWBE_PGDATABASE` and
+  `QWBE_DATA_VOLUME` to `.env` in one atomic write (the previous copy is in
+  `.local/production/`), starts the stack and checks `doctor` on the new database.
+- While a failed deploy's `recovery-required` exists, the restore first checks that
+  `.env` names the image that made that deploy's backup, with the ID the marker
+  records; otherwise it refuses before anything is created and prints step 1 of the
+  marker (pin the image, set `IMAGE_TAG` back), to run first.
+- A failed restore, a failed migration included, leaves its target as it is for
+  investigation, with the source and `.env` unchanged; a new attempt makes a new
+  target. The source database and volume are never deleted or changed.
 - If the switch itself does not finish (INT/TERM, a stack that is not ready), the exit
   says whether `.env` was switched (read from `.env` itself), where its previous copy
-  is, and the commands to go on with the target or back to the source. Nothing is
-  started from there; `app-stopped` stays until the operator has done it.
+  is, and the commands to go on with the target, back to the source, or to restore
+  again. Going back to the source is not offered while a failed deploy's
+  `recovery-required` exists: that source may hold the failed version's schema.
+  Nothing is started from there; `app-stopped` stays until the operator has done it.
 - What is lost: everything written after the backup (documents, numbers, payments,
   e-Factura submissions) is absent from the restored installation and remains only in
   the source database. Sessions and the ANAF OAuth connection are not restored: users
@@ -375,10 +389,10 @@ docker compose -f compose.prod.yaml run --rm --no-deps -e PGDATABASE=qwbe_invoic
   -v qwbe-invoicing-data-restored:/data -v /opt/qwbe-invoicing/backups:/backup:ro migrate \
   node bin/qwbe-invoicing.ts restore --input /backup/qwbe-2026-08-31.tar.gz --apply --confirm-production --json
 # Point the stack at both: QWBE_PGDATABASE=qwbe_invoicing_restored and
-# QWBE_DATA_VOLUME=qwbe-invoicing-data-restored in .env (IMAGE_TAG: the image that made the backup), then verify
+# QWBE_DATA_VOLUME=qwbe-invoicing-data-restored in .env (IMAGE_TAG unchanged: `up -d`
+# runs `migrate`, which applies what the archive lacks), then verify
 docker compose -f compose.prod.yaml --profile proxy up -d
 docker compose -f compose.prod.yaml exec app node bin/qwbe-invoicing.ts doctor --json
-docker compose -f compose.prod.yaml exec app node bin/qwbe-invoicing.ts migrate --json
 ```
 
 Separately protect `.env` (`PUBLIC_ORIGIN`, `ORGANIZATION_ID`, `IMAGE_TAG`), the contents of the six secret files, `Caddyfile`/`compose.prod.yaml` edits and `image-digests.txt` — they are operator config, not part of the data backup. A restored database needs the same `ORGANIZATION_ID`; sessions do not survive a restore, so users unlock again.
@@ -396,28 +410,32 @@ or a word in a log alone:
 - **Schema changed, or unknown** (no report, `migrate` still running or cut short):
   the previous version is not started on that database and `app` stays stopped (a
   `migrate` still running is stopped first, so it cannot change the schema after the
-  decision). The
-  deploy prints the exact restore command, with its own backup, whose `.meta` names the
-  previous image, and keeps it in `.local/production/recovery-required`; `deploy.sh`
-  and `backup.sh` refuse while that file exists, and a successful `restore.sh --apply`
-  removes it. Remove it by hand only once the installation is consistent again.
+  decision). The deploy pins the previous image to its tag again and writes the
+  previous `IMAGE_TAG` back to `.env` (the file is what counts: the scripts ignore an
+  `IMAGE_TAG` in the shell), starting nothing. It prints both commands, the image step
+  (done, or what failed) and the restore of its own backup, which `restore.sh` makes
+  with that previous image, and keeps them in `.local/production/recovery-required`;
+  `deploy.sh` and `backup.sh` refuse while that file exists, and a successful
+  `restore.sh --apply` removes it. Remove it by hand only once the installation is
+  consistent again.
 
 The deploy exits non-zero in every case. By hand:
 
 ```bash
-# 1. If the upgrade's `migrate` changed the schema, the previous image refuses it as
-#    drift and `app` does not start: restore the backup taken in Upgrade step 1 into a
-#    fresh database first (Restore, above). An unchanged schema skips this.
-# 2. Set IMAGE_TAG in .env back to the previous digest-pinned version (from the
+# 1. Set IMAGE_TAG in .env back to the previous digest-pinned version (from the
 #    previous image-digests.txt; from a checkout, the tag kept before the rebuild).
-#    PUBLIC_ORIGIN and the secrets stay as they are.
+#    PUBLIC_ORIGIN and the secrets stay as they are. Start nothing yet.
+# 2. If the upgrade's `migrate` changed the schema, the previous image refuses it as
+#    drift and `app` does not start: restore the backup taken in Upgrade step 1 into a
+#    fresh database with that previous image (Restore, above). An unchanged schema
+#    skips this.
 docker compose -f compose.prod.yaml pull
 docker compose -f compose.prod.yaml --profile proxy up -d
 docker compose -f compose.prod.yaml exec app node bin/qwbe-invoicing.ts doctor --json
 ```
 
 If `app` does not become healthy, `docker compose -f compose.prod.yaml logs migrate` shows
-why; a drift refusal there means step 1 was needed.
+why; a drift refusal there means step 2 was needed.
 
 ## Offline image bundle (optional)
 

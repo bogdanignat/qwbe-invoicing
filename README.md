@@ -629,9 +629,13 @@ owner's rights on that one database: `psql --file` also runs the backslash meta-
 
 It requires an empty target database: create a fresh one `OWNER qwbe_owner` as `postgres`,
 run `db-init` on it (`run --rm --no-deps -e PGDATABASE=<new> db-init`) and restore into
-that; nothing is ever dropped. Outside development it also requires `--confirm-production`. Run
-`doctor --json` and `migrate --json` afterwards. `docker compose down -v` deletes both the data and
-the cluster volume and is never a backup strategy.
+that; nothing is ever dropped. Outside development it also requires `--confirm-production`.
+`restore` keeps the archive's schema as it was; an archive older than the image is then
+brought up to it by `migrate --apply` (the next `up -d` runs it), and `restore.sh` does
+that on the target before it switches, with the installed image (`IMAGE_TAG` never
+changes). An archive newer than the image is refused. Run `doctor --json` afterwards.
+`docker compose down -v` deletes both the data and the cluster volume and is never a
+backup strategy.
 
 ## Upgrading
 

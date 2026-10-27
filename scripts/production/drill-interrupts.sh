@@ -75,11 +75,14 @@ backup_killed() {
   pass "SIGKILL during the backup: app stays stopped, app-stopped left, backup and deploy refuse until the operator starts the stack"
 }
 
+# Past the inspection: the dry-run's database exists and its one-offs run.
+dry_run_target_running() { grep -q 'created database' "$log" && one_off_running; }
+
 # TERM while the dry-run's CLI runs: its EXIT trap still drops the empty database.
 dry_run_interrupted() {
   local before
   before="$(databases)"
-  interrupt TERM one_off_running "$scripts/restore.sh" "$1"
+  interrupt TERM dry_run_target_running "$scripts/restore.sh" "$1"
   [[ "$status" == 143 ]] || fail "TERM during the dry-run exited $status: $(tail -n 15 "$log")"
   { grep -q 'removed the dry-run database' "$log" && [[ "$(databases)" == "$before" ]]; } \
     || fail "TERM during the dry-run left its database: $(tail -n 10 "$log")"

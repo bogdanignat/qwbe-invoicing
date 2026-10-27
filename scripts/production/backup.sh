@@ -17,7 +17,7 @@
 # output that was asked for. Only then the archive gets its final name,
 # qwbe-invoicing-<UTC time>.tar.gz, with qwbe-invoicing-<UTC time>.meta next to it:
 # the image, its ID, the commit, ORGANIZATION_ID, the database and the data volume, no
-# secret. No script ever deletes an archive: removing old ones is the operator's job.
+# secret; it is for people, restore.sh reads only the archive. No script ever deletes an archive: removing old ones is the operator's job.
 #
 # BACKUP_DIR (absolute, in .env) is created by the operator, outside the checkout,
 # writable by the user running this and by the image's user (`node`, uid 1000); both
