@@ -1,8 +1,15 @@
 import { parseArgs } from "node:util"
 
+import { GuardRefusal } from "./postgres-backup-guards.ts"
+import { ArchiveRejected } from "./postgres-backup-paths.ts"
+
 export class CliInputError extends Error {
   override readonly name = "CliInputError"
 }
+
+/** The one place that says a refusal (unacceptable archive, refused precondition) is exit 2; any other failure is 1. */
+export const failureExitCode = (error: unknown): 1 | 2 =>
+  error instanceof ArchiveRejected || error instanceof GuardRefusal ? 2 : 1
 
 export type Command =
   | { readonly name: "help" }

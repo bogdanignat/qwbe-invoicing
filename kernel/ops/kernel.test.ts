@@ -222,7 +222,7 @@ void test("artifacts refuses a missing DATA_DIR instead of creating it, for the 
     const missing = join(dataDirectory, "not-mounted")
     for (const args of [["artifacts", "--json"], ["artifacts", "--apply", "--json"]]) {
       const result = cli(fixture, args, { DATA_DIR: missing, ORGANIZATION_ID: "org-test", NODE_ENV: "development" })
-      assert.equal(result.status, 1, `${args.join(" ")}: ${result.stdout}${result.stderr}`)
+      assert.equal(result.status, 2, `${args.join(" ")}: ${result.stdout}${result.stderr}`)
       assert.match(result.stderr, /DATA_DIR does not exist/u)
       assert.equal(existsSync(missing), false, `${args.join(" ")} must not create DATA_DIR`)
     }
@@ -263,6 +263,25 @@ void test("CLI distinguishes invalid input, guard refusal, and execution failure
     // `migrate` does not touch the filesystem.
     const failed = cli(fixture, ["migrate", "--apply"], { PGDATABASE: "qwbe_t_absent_database" })
     assert.equal(failed.status, 1)
+    return Promise.resolve()
+  })
+})
+
+void test("backup and restore exit 2 on a refusal, as the help promises", async () => {
+  await withMigrated("ops_refusal_exit", (fixture) => {
+    const env = { ORGANIZATION_ID: "org-test", NODE_ENV: "development" }
+    const output = join(fixture.dataDirectory, "no-such-dir", "refused.tar.gz")
+    const garbage = join(fixture.dataDirectory, "garbage.tar.gz")
+    writeFileSync(garbage, "not an archive")
+    const refusals = [
+      { args: ["backup", "--output", output], message: /output parent does not exist: / },
+      { args: ["restore", "--input", garbage], message: /archive is not a readable gzip stream/ },
+    ]
+    for (const { args, message } of refusals) {
+      const result = cli(fixture, args, { ...env, DATA_DIR: fixture.dataDirectory })
+      assert.equal(result.status, 2, `${args.join(" ")}: ${result.stdout}${result.stderr}`)
+      assert.match(result.stderr, message)
+    }
     return Promise.resolve()
   })
 })
