@@ -8,13 +8,16 @@ import {
   releaseMaintenanceLock,
   tryAcquireMaintenanceLock,
 } from "../storage/postgres-maintenance-lock.ts"
+import { migrationScopes } from "../storage/postgres-migration-plans.ts"
 import type { PostgresSettings } from "../storage/postgres-pool.ts"
 import { type BackupReport, type BackupSession, createBackup, planBackupFiles } from "./postgres-backup-create.ts"
 import { applicationBackends, assertServerMajor16, assertTargetMatches, GuardRefusal } from "./postgres-backup-guards.ts"
+import { type BackupInspection, inspectStaged } from "./postgres-backup-inspect.ts"
 import { type RestoreReport, planRestoreFiles, restoreBackup } from "./postgres-backup-restore.ts"
+import { type ArchiveLimits, defaultArchiveLimits } from "./postgres-backup-tar.ts"
 
 /**
- * The operational surface of PostgreSQL backup and restore: four functions, one
+ * The operational surface of PostgreSQL backup and restore: five functions, one
  * context, and every unsafe thing already decided inside.
  *
  * The context is deliberately its own type and not the runtime configuration. A
@@ -36,10 +39,13 @@ export interface BackupContext {
   readonly pool: Pool
   readonly settings: PostgresSettings
   readonly dataDirectory: string
+  /** `ORGANIZATION_ID`: a backup records it, a restore refuses an archive of another one. */
+  readonly organizationId: string | undefined
 }
 
 export type { BackupReport } from "./postgres-backup-create.ts"
 export type { RestoreReport } from "./postgres-backup-restore.ts"
+export type { BackupInspection } from "./postgres-backup-inspect.ts"
 export { RestoreInterrupted } from "./postgres-backup-restore.ts"
 
 /**
@@ -154,6 +160,7 @@ export const executeBackup = async (context: BackupContext, output: string): Pro
     withStaging("qwbe-pg-backup-", async (staging) => {
       const session: BackupSession = {
         client, settings: context.settings, dataDirectory: context.dataDirectory, staging,
+        organizationId: context.organizationId,
       }
       return createBackup(session, output)
     }))
@@ -169,7 +176,7 @@ export const planRestore = async (
 ): Promise<{ readonly pending: ReadonlyArray<string> }> =>
   withClient(context.pool, async (client) => ({
     pending: await planRestoreFiles(
-      { client, settings: context.settings, dataDirectory: context.dataDirectory },
+      { client, settings: context.settings, dataDirectory: context.dataDirectory, organizationId: context.organizationId },
       input,
     ),
   }))
@@ -179,6 +186,18 @@ export const executeRestore = async (context: BackupContext, input: string): Pro
     withStaging("qwbe-pg-restore-", async (staging) => {
       const session: BackupSession = {
         client, settings: context.settings, dataDirectory: context.dataDirectory, staging,
+        organizationId: context.organizationId,
       }
       return restoreBackup(session, input)
     }))
+
+/**
+ * No database and no configuration: the archive alone, staged privately and discarded
+ * on every path, against the migrations this image ships.
+ */
+export const inspectBackup = async (
+  input: string,
+  limits: ArchiveLimits = defaultArchiveLimits,
+  scopes: typeof migrationScopes = migrationScopes,
+): Promise<BackupInspection> =>
+  withStaging("qwbe-pg-inspect-", async (staging) => inspectStaged(input, staging, limits, scopes))

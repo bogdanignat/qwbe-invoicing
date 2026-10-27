@@ -57,12 +57,19 @@ export interface MigrationHistory {
  * replay fails and `HistoryNotReplayable` turns it into drift — so relaxing this
  * does not open a hole in the fail-closed behaviour.
  */
+const scopeKeys = ({ scope, migrations }: (typeof migrationScopes)[number]): ReadonlyArray<string> =>
+  migrations.map(({ name }) => migrationKey(scope, name))
+
+/** Every migration of `scopes` as a ledger key, in application order. */
+export const canonicalKeys = (scopes: typeof migrationScopes = migrationScopes): ReadonlyArray<string> =>
+  scopes.flatMap(scopeKeys)
+
 const missingWithinScopes = (
   recorded: ReadonlySet<string>,
   scopes: typeof migrationScopes,
 ): ReadonlyArray<string> =>
-  scopes.flatMap(({ scope, migrations }) => {
-    const keys = migrations.map(({ name }) => migrationKey(scope, name))
+  scopes.flatMap((entry) => {
+    const keys = scopeKeys(entry)
     const highWaterMark = keys.reduce(
       (last, key, index) => recorded.has(key) ? index : last,
       -1,
@@ -79,8 +86,7 @@ export const historyFrom = (
   recorded: ReadonlySet<string>,
   scopes: typeof migrationScopes = migrationScopes,
 ): MigrationHistory => {
-  const canonical = scopes
-    .flatMap(({ scope, migrations }) => migrations.map(({ name }) => migrationKey(scope, name)))
+  const canonical = canonicalKeys(scopes)
   const known = new Set(canonical)
   return {
     present: true,

@@ -27,7 +27,7 @@ import {
 } from "./postgres-backup.ts"
 import { dumpClientVersions, dumpDatabase } from "./postgres-backup-dump.ts"
 import { inspectArchive } from "./postgres-backup-archive.ts"
-import { sha256Stream, writeManifest } from "./postgres-backup-manifest.ts"
+import { type BackupManifest, sha256Stream, writeManifest } from "./postgres-backup-manifest.ts"
 import { RestoreInterrupted, restoreBackup } from "./postgres-backup-restore.ts"
 import { createBackup } from "./postgres-backup-create.ts"
 import { defaultArchiveLimits } from "./postgres-backup-tar.ts"
@@ -51,10 +51,13 @@ const settingsFor = (database: string): PostgresSettings => ({
   connectTimeoutMillis: 3_000,
 })
 
+const organizationId = "org-test"
+
 const contextFor = (runtime: TestRuntime, dataDirectory: string): BackupContext => ({
   pool: runtime.pool,
   settings: settingsFor(runtime.database),
   dataDirectory,
+  organizationId,
 })
 
 const digest = "a".repeat(64)
@@ -295,6 +298,7 @@ void test("a failing subprocess reports a redacted error and never touches proce
       pool: runtime.pool,
       settings: { ...settingsFor(runtime.database), password: secret },
       dataDirectory,
+      organizationId,
     }
     await assert.rejects(
       () => executeBackup(context, join(root, "backup.tar.gz")),
@@ -327,13 +331,14 @@ const withLockedRestore = async <Value>(
     readonly settings: PostgresSettings
     readonly dataDirectory: string
     readonly staging: string
+    readonly organizationId: string
   }) => Promise<Value>,
 ): Promise<Value> => {
   const client = await runtime.pool.connect()
   const staging = mkdtempSync(join(tmpdir(), "qwbe-pg-restore-direct-"))
   try {
     assert.equal(await tryAcquireMaintenanceLock(client), true)
-    return await use({ client, settings: settingsFor(runtime.database), dataDirectory, staging })
+    return await use({ client, settings: settingsFor(runtime.database), dataDirectory, staging, organizationId })
   } finally {
     await releaseMaintenanceLock(client).catch(() => undefined)
     client.release()
@@ -538,15 +543,11 @@ void test("a check that fails after the commit says the database was restored", 
       writeFileSync(dump, `${readFileSync(dump, "utf8")}\nINSERT INTO public.browser_sessions `
         + `(session_hash, credential_hash, csrf_token, created_at, expires_at) `
         + `VALUES ('${"9".repeat(64)}', '${"8".repeat(64)}', '${"7".repeat(64)}', 1, 2);\n`)
+      // The real manifest, re-signed for the edited dump: the ledger still matches it,
+      // so the restore reaches its commit and the session check after it.
+      const manifest = JSON.parse(readFileSync(join(staging, "manifest.json"), "utf8")) as BackupManifest
       await writeManifest(staging, {
-        createdAt: new Date().toISOString(),
-        dataDirectory: sourceData,
-        database: source.database,
-        serverVersion: "16.15",
-        dumpVersion: "pg_dump (PostgreSQL) 16.15",
-        dumpFormat: "plain",
-        excludedTableData: ["public.browser_sessions"],
-        schemaMigrations: [],
+        ...manifest,
         files: [{ path: "database.sql", sha256: await sha256Stream(dump), byteLength: statSync(dump).size }],
       })
       assert.ok(staged.some((member) => member.path === "database.sql"))
@@ -698,6 +699,114 @@ void test("the archive the writer produces and the one BusyBox tar produces are 
     assert.deepEqual([...members.map((member) => member.path)].sort(), ["database.sql", "manifest.json"])
   } finally {
     await runtime.close()
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+/**
+ * The same archive with its manifest, and optionally its dump, edited and re-signed:
+ * the digests match again, so integrity holds and only the edit is under test.
+ */
+const withManifest = async (
+  archive: string,
+  output: string,
+  edit: (manifest: BackupManifest) => BackupManifest,
+  editDump?: (sql: string) => string,
+): Promise<string> => {
+  const staging = mkdtempSync(join(tmpdir(), "qwbe-pg-manifest-edit-"))
+  try {
+    const members = (await stageSource(archive, staging)).map((member) => member.path)
+    const dump = join(staging, "database.sql")
+    if (editDump !== undefined) writeFileSync(dump, editDump(readFileSync(dump, "utf8")))
+    const manifest = edit(JSON.parse(readFileSync(join(staging, "manifest.json"), "utf8")) as BackupManifest)
+    await writeManifest(staging, {
+      ...manifest,
+      files: await Promise.all(manifest.files.map(async (file) => file.path !== "database.sql" ? file
+        : { ...file, sha256: await sha256Stream(dump), byteLength: statSync(dump).size })),
+    })
+    await writeArchive(staging, members, output)
+    return output
+  } finally {
+    rmSync(staging, { recursive: true, force: true })
+  }
+}
+
+void test("restore refuses another organization, and a migration the image does not know, before writing", async () => {
+  const root = mkdtempSync(join(tmpdir(), "qwbe-pg-organization-"))
+  const source = await freshRuntime("bkporg")
+  const target = await emptyRuntime("bkporg2")
+  try {
+    const sourceData = join(root, "source")
+    const targetData = join(root, "target")
+    mkdirSync(targetData, { recursive: true })
+    mkdirSync(sourceData, { recursive: true })
+    seedArtifact(sourceData)
+    const archive = join(root, "backup.tar.gz")
+    await executeBackup(contextFor(source, sourceData), archive)
+
+    await assert.rejects(
+      () => executeRestore({ ...contextFor(target, targetData), organizationId: "other-org" }, archive),
+      /backup belongs to organization "org-test", ORGANIZATION_ID is "other-org"/u,
+    )
+    await assert.rejects(
+      () => executeRestore({ ...contextFor(target, targetData), organizationId: undefined }, archive),
+      /ORGANIZATION_ID is \(unset\)/u,
+    )
+    const newer = await withManifest(archive, join(root, "newer.tar.gz"), (manifest) => ({
+      ...manifest, schemaMigrations: [...manifest.schemaMigrations, "kernel/001-from-the-future"],
+    }))
+    await assert.rejects(
+      () => executeRestore(contextFor(target, targetData), newer),
+      /cannot be restored by this image: the archive is newer than this image, which does not know: kernel\/001-from-the-future/u,
+    )
+    assert.deepEqual(readdirSync(targetData), [], "no artifact may land before the refusal")
+    await assert.rejects(() => counts(target.pool), /does not exist/u)
+  } finally {
+    await source.close()
+    await target.close()
+    rmSync(root, { recursive: true, force: true })
+  }
+})
+
+void test("restore rolls back a dump whose ledger is not exactly the manifest's, naming both sides", async () => {
+  const root = mkdtempSync(join(tmpdir(), "qwbe-pg-ledger-"))
+  const source = await freshRuntime("bkpledger")
+  const target = await emptyRuntime("bkpledger2")
+  try {
+    const sourceData = join(root, "source")
+    const targetData = join(root, "target")
+    mkdirSync(sourceData, { recursive: true })
+    mkdirSync(targetData, { recursive: true })
+    const archive = join(root, "backup.tar.gz")
+    await executeBackup(contextFor(source, sourceData), archive)
+    // The last kernel migration dropped from the manifest only: to the image that is
+    // a pending migration, not a gap, so the pre-check passes and the ledger check
+    // inside the transaction is what refuses.
+    const short = await withManifest(archive, join(root, "short.tar.gz"), (manifest) => ({
+      ...manifest, schemaMigrations: manifest.schemaMigrations.filter((key) => key !== "kernel/000-browser-sessions"),
+    }))
+    await assert.rejects(
+      () => executeRestore(contextFor(target, targetData), short),
+      /schema_migrations differs from the manifest; only in the manifest: \(none\); only in the database: kernel\/000-browser-sessions/u,
+    )
+    await assert.rejects(() => counts(target.pool), /does not exist/u, "the restore rolled back: no schema landed")
+
+    // The other side: the dump no longer inserts that ledger row, the manifest still
+    // lists it. The pre-check sees a complete history; the transaction refuses.
+    const ledgerRow = /^kernel\t000-browser-sessions\t[^\n]*\n/mu
+    const unledgered = await withManifest(archive, join(root, "unledgered.tar.gz"), (manifest) => manifest, (sql) => {
+      assert.match(sql, ledgerRow, "the dump carries the kernel ledger row as COPY data")
+      return sql.replace(ledgerRow, "")
+    })
+    await assert.rejects(
+      () => executeRestore(contextFor(target, targetData), unledgered),
+      /schema_migrations differs from the manifest; only in the manifest: kernel\/000-browser-sessions; only in the database: \(none\)/u,
+    )
+    await assert.rejects(() => counts(target.pool), /does not exist/u, "the restore rolled back: no schema landed")
+    assert.deepEqual(readdirSync(targetData), [], "no artifact either")
+  } finally {
+    await source.close()
+    await target.close()
     rmSync(root, { recursive: true, force: true })
   }
 })

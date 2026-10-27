@@ -881,6 +881,7 @@ node bin/qwbe-invoicing.ts doctor    --json
 node bin/qwbe-invoicing.ts artifacts --limit 50 [--apply] [--confirm-production] --json
 node bin/qwbe-invoicing.ts backup    --output <file.tar.gz> --json
 node bin/qwbe-invoicing.ts restore   --input  <file.tar.gz> [--apply] [--confirm-production] --json
+node bin/qwbe-invoicing.ts backup-inspect --input <file.tar.gz> [--json]
 ```
 
 Migration, artifact reconciliation and restore are dry-run unless `--apply` is given, and
@@ -892,7 +893,10 @@ takes the maintenance key SHARED, listens regardless, and answers `503` on
 `/health/ready` and `/api*` until the barrier, the schema and the artifact directory all
 agree. `backup` and `restore` take that same key EXCLUSIVE as a *try*, so both refuse
 immediately while `serve` is running, and `restore --apply` additionally requires an
-empty target database.
+empty target database and the archive's `ORGANIZATION_ID`. `backup-inspect` needs no
+database and no secret: it verifies the archive against its manifest, compares its
+migrations with the image (`applied`, `missing`, `unknown`, `pending`) and exits 0 only
+when this image can restore it.
 
 ## Security model
 

@@ -115,6 +115,8 @@ services:
       PGPASSWORD_FILE: /run/secrets/pg_owner_password
       NODE_ENV: production
       DATA_DIR: /data
+      # `restore` runs here and refuses an archive of another organization.
+      ORGANIZATION_ID: ${ORGANIZATION_ID:-local-organization}
     secrets:
       - pg_owner_password
     # Without this the migration runs against a server that is not accepting

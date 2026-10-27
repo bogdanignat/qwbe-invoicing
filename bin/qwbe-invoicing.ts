@@ -4,9 +4,11 @@ import { Effect } from "effect"
 import { documentsPermissions } from "../cubes/invoicing/documents/index.ts"
 import { reconcileArtifacts } from "../kernel/documents/artifact-reconciliation.ts"
 import { createKernelArtifactService } from "../kernel/documents/artifact-runtime.ts"
-import { executeBackup, executeRestore, planRestore, restoreTrustWarning } from "../kernel/ops/postgres-backup.ts"
+import { executeBackup, executeRestore, inspectBackup, planRestore, restoreTrustWarning } from "../kernel/ops/postgres-backup.ts"
+import { ArchiveRejected } from "../kernel/ops/postgres-backup-paths.ts"
 import { assertDataDirectory } from "../kernel/ops/postgres-backup-destinations.ts"
-import { CliInputError, helpText, parseCommand, type Command } from "../kernel/ops/cli.ts"
+import { CliInputError, parseCommand, type Command } from "../kernel/ops/cli.ts"
+import { helpText } from "../kernel/ops/cli-help.ts"
 import { doctorReport } from "../kernel/ops/cli-doctor.ts"
 import { runtimeConfig } from "../kernel/config.ts"
 import { applicationReady, startServer } from "../kernel/http/http.ts"
@@ -49,7 +51,20 @@ try {
   process.exitCode = 2
 }
 
-if (command !== undefined) {
+// Before `runtimeConfig`: the archive alone is read, so no database setting or secret is required.
+if (command?.name === "backup-inspect") {
+  try {
+    const report = await inspectBackup(command.input)
+    print(report, command.json)
+    if (report.refusal !== null) {
+      console.error(`backup cannot be restored by this image: ${report.refusal}`)
+      process.exitCode = 2
+    }
+  } catch (error) {
+    console.error(failureMessage(cliRedactor(""), error))
+    process.exitCode = error instanceof ArchiveRejected ? 2 : 1
+  }
+} else if (command !== undefined) {
   // Declared outside the `try` so the final `catch` can use it: a configuration
   // failure happens before the secret is known, and then the pattern redactor
   // alone is what is available.
@@ -242,6 +257,7 @@ if (command !== undefined) {
       try {
         const report = await executeBackup({
           pool: runtime.pool, settings: config.pgSettings, dataDirectory: config.dataDirectory,
+          organizationId: config.organizationId,
         }, command.output)
         print(report, command.json)
         if (report.failed > 0) process.exitCode = 1
@@ -258,6 +274,7 @@ if (command !== undefined) {
         try {
           const context = {
             pool: runtime.pool, settings: config.pgSettings, dataDirectory: config.dataDirectory,
+            organizationId: config.organizationId,
           }
           // `database.sql` is executed by `psql` as the schema owner role (qwbe_owner), NOSUPERUSER, and
           // the manifest digests live inside the same archive as the file they

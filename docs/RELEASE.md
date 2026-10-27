@@ -359,6 +359,10 @@ docker compose -f compose.prod.yaml exec db psql -U postgres -d postgres \
   -c "CREATE DATABASE qwbe_invoicing_restored OWNER qwbe_owner TEMPLATE template0 LC_COLLATE 'C' LC_CTYPE 'C' ENCODING 'UTF8'"
 docker compose -f compose.prod.yaml run --rm --no-deps -e PGDATABASE=qwbe_invoicing_restored db-init
 docker volume create qwbe-invoicing-data-restored
+# Inspect the archive: no database, no secret; exit 0 only when this image can restore it.
+docker compose -f compose.prod.yaml run --rm --no-deps -e TMPDIR=/var/backups/staging \
+  -v invoicing-backup-staging:/var/backups/staging -v /opt/qwbe-invoicing/backups:/backup:ro migrate \
+  node bin/qwbe-invoicing.ts backup-inspect --input /backup/qwbe-2026-08-31.tar.gz --json
 # Dry-run against that target: verifies the whole archive, writes nothing. In `migrate`
 # (qwbe_owner), staging on the staging volume: `migrate` has only a small /tmp.
 docker compose -f compose.prod.yaml run --rm --no-deps -e PGDATABASE=qwbe_invoicing_restored \
