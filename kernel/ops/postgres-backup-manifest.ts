@@ -8,6 +8,7 @@ import {
   assertFormatVersion, isStringArray, manifestFormatVersion, organizationIdField, schemaKeys,
 } from "./postgres-backup-manifest-fields.ts"
 import { ArchiveRejected, dumpMember, manifestMember, safeMemberPath } from "./postgres-backup-paths.ts"
+import { assertRestrictedDump } from "./postgres-backup-restrict.ts"
 
 /**
  * The manifest: what the archive claims, in a shape that is checked rather than
@@ -108,7 +109,8 @@ const parseManifest = (text: string): BackupManifest => {
  *
  * Both directions matter. A missing file is an incomplete backup; a staged file
  * the manifest does not list is extra data smuggled past the whitelist into a
- * name the layout happens to allow, and it is refused rather than ignored.
+ * name the layout happens to allow, and it is refused rather than ignored. Last,
+ * `database.sql` has to sit inside psql's restricted mode (`postgres-backup-restrict.ts`).
  */
 export const verifyStaged = async (
   staging: string,
@@ -133,5 +135,7 @@ export const verifyStaged = async (
       throw new ArchiveRejected(`archive carries a file the manifest does not list: ${member.path}`)
     }
   }
+  // The staged copy is the file psql reads: it is the one held to the restricted mode.
+  await assertRestrictedDump(join(staging, dumpMember))
   return manifest
 }

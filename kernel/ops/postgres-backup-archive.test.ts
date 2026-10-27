@@ -9,6 +9,7 @@ import { gzipSync } from "node:zlib"
 import { inspectArchive, extractArchive } from "./postgres-backup-archive.ts"
 import { verifyStaged, sha256Stream, writeManifest } from "./postgres-backup-manifest.ts"
 import { ArchiveRejected, assertAllowedMember, safeMemberPath } from "./postgres-backup-paths.ts"
+import { restrictedDump } from "./postgres-backup-restrict.test-support.ts"
 import { assertWithinLimits } from "./postgres-backup-verify.ts"
 import { stageSource, validateSource } from "./postgres-backup-source.ts"
 import { createRedactor } from "./postgres-backup-dump.ts"
@@ -288,7 +289,7 @@ void test("a valid archive round-trips byte for byte through the writer and the 
     const digest = "b".repeat(64)
     await mkdir(join(source, "artifacts", "sha256", digest.slice(0, 2)), { recursive: true })
     const pdf = `artifacts/sha256/${digest.slice(0, 2)}/${digest}.pdf`
-    await writeFile(join(source, "database.sql"), "SELECT 1;\n".repeat(400))
+    await writeFile(join(source, "database.sql"), restrictedDump("SELECT 1;\n".repeat(400)))
     await writeFile(join(source, pdf), Buffer.from("%PDF-1.7 fixture"))
     const sized = []
     for (const path of ["database.sql", pdf]) {
@@ -373,7 +374,7 @@ void test("a directory input is held to the same guarantees as an archive", asyn
   try {
     const input = join(root, "input")
     mkdirSync(input, { recursive: true })
-    writeFileSync(join(input, "database.sql"), "SELECT 1;\n")
+    writeFileSync(join(input, "database.sql"), restrictedDump())
     writeFileSync(join(input, "manifest.json"), manifestMember([]))
     writeFileSync(join(root, "outside.txt"), "x")
     symlinkSync("/etc/passwd", join(input, "link"))

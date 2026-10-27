@@ -374,9 +374,11 @@ Artifacts are copied first and the SQL goes in last as one
 `psql --single-transaction` transaction, so the commit is the only point after which
 rows can reference PDFs. A failure before it leaves an empty database.
 
-`database.sql` is **executed** by `psql` as the schema owner role (`qwbe_owner`), backslash
-meta-commands included (`\!` runs a shell command in the `migrate` container), and the
-archive's checksums live inside the archive: they prove integrity, never authenticity.
+`database.sql` is **executed** by `psql` as the schema owner role (`qwbe_owner`), and the
+archive's checksums live inside the archive: they prove integrity, never authenticity. Its
+backslash meta-commands are not: a dump that pg_dump's `\restrict <key>` ... `\unrestrict <key>`
+does not wrap whole is refused (dry run, `--apply` and `backup-inspect`), so psql runs it in
+restricted mode and `\!` cannot start a shell in the `migrate` container.
 `restore --apply` therefore prints the trust boundary on stderr before it writes —
 `--json` consumers keep a clean stdout — and the rule is to restore only from a source
 trusted as much as the database itself. There is no signature and no key management.

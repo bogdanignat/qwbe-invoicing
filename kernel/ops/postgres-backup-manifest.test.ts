@@ -7,6 +7,7 @@ import test from "node:test"
 import { type BackupManifest, sha256Stream, verifyStaged, writeManifest } from "./postgres-backup-manifest.ts"
 import { ArchiveRejected } from "./postgres-backup-paths.ts"
 import { registryCheckSql } from "./postgres-backup-registry.ts"
+import { restrictedDump } from "./postgres-backup-restrict.test-support.ts"
 
 /** Manifest format v1, written and read back, and every field the parser now refuses. */
 
@@ -15,7 +16,7 @@ const staged = [{ path: "manifest.json", byteLength: 1 }, { path: "database.sql"
 const withStaging = async (use: (staging: string, manifest: BackupManifest) => Promise<void>): Promise<void> => {
   const staging = mkdtempSync(join(tmpdir(), "qwbe-manifest-"))
   try {
-    writeFileSync(join(staging, "database.sql"), "SELECT 1;\n")
+    writeFileSync(join(staging, "database.sql"), restrictedDump())
     await use(staging, {
       formatVersion: 1,
       organizationId: "org-test",

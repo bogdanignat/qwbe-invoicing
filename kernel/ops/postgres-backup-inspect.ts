@@ -10,7 +10,9 @@ import { type ArchiveLimits, defaultArchiveLimits } from "./postgres-backup-tar.
  * What an archive holds and whether this image can restore it, decided without a
  * database: the archive is staged into the caller's private directory, held to its
  * own manifest by `verifyStaged`, and its schema is compared with the migrations
- * this image ships. No SQL from the archive is read, let alone executed.
+ * this image ships. No SQL from the archive is executed; `database.sql` is only scanned
+ * for psql's restricted mode (`postgres-backup-restrict.ts`), so a dump restore would refuse
+ * is refused here too.
  *
  * The comparison is `historyFrom`, the same classifier `migrate` and `doctor` use:
  * - `applied`: the archive's keys this image knows, in the image's order;

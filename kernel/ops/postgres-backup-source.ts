@@ -3,7 +3,8 @@ import { lstat, mkdir, open, readdir, realpath } from "node:fs/promises"
 import { dirname, join } from "node:path"
 
 import { type ArchiveMember, extractArchive, inspectArchive } from "./postgres-backup-archive.ts"
-import { ArchiveRejected, assertAllowedMember, isArchivePath, safeMemberPath } from "./postgres-backup-paths.ts"
+import { ArchiveRejected, assertAllowedMember, dumpMember, isArchivePath, safeMemberPath } from "./postgres-backup-paths.ts"
+import { assertRestrictedDump, restrictScan } from "./postgres-backup-restrict.ts"
 import { type ArchiveLimits, defaultArchiveLimits } from "./postgres-backup-tar.ts"
 
 /**
@@ -124,16 +125,29 @@ const assertShape = (input: string): void => {
   throw new ArchiveRejected(`backup input must be a directory or .tar.gz: ${input}`)
 }
 
-/** Read-only, total: every member of the input, or a refusal. Never writes. */
+const withDump = (members: ReadonlyArray<ArchiveMember>): ReadonlyArray<ArchiveMember> => {
+  if (!members.some((member) => member.path === dumpMember)) throw new ArchiveRejected(`backup ${dumpMember} is missing`)
+  return members
+}
+
+/**
+ * Read-only, total: every member of the input, or a refusal. Never writes.
+ * `database.sql` is held to psql's restricted mode here (`postgres-backup-restrict.ts`),
+ * so the dry run refuses what `--apply` would; the apply checks the staged copy again.
+ */
 export const validateSource = async (
   input: string,
   limits: ArchiveLimits = defaultArchiveLimits,
 ): Promise<ReadonlyArray<ArchiveMember>> => {
   const stats = await lstat(input)
-  if (stats.isDirectory()) return inspectTree(input, "", limits)
+  if (stats.isDirectory()) {
+    const entries = withDump(await inspectTree(input, "", limits))
+    await assertRestrictedDump(safeMemberPath(input, dumpMember))
+    return entries
+  }
   if (!stats.isFile()) throw new ArchiveRejected(`backup input is not a regular file: ${input}`)
   assertShape(input)
-  return inspectArchive(input, limits)
+  return withDump(await inspectArchive(input, limits, { path: dumpMember, ...restrictScan() }))
 }
 
 /**

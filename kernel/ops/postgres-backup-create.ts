@@ -17,6 +17,7 @@ import {
 import { type BackupManifest, writeManifest } from "./postgres-backup-manifest.ts"
 import { isOrganizationId, manifestFormatVersion } from "./postgres-backup-manifest-fields.ts"
 import { dumpMember, isArchivePath, manifestMember } from "./postgres-backup-paths.ts"
+import { assertRestrictedDump } from "./postgres-backup-restrict.ts"
 import { copyTree, inspectTree } from "./postgres-backup-source.ts"
 import { type ArchiveLimits, defaultArchiveLimits } from "./postgres-backup-tar.ts"
 import { assertWithinLimits, manifestFiles, verifyArchive, verifyDirectory } from "./postgres-backup-verify.ts"
@@ -99,6 +100,9 @@ export const createBackup = async (
   await assertSinglePublicSchema(session.client)
   const schemaMigrations = await readSchemaMigrations(session.client)
   await dumpDatabase(session.settings, join(session.staging, dumpMember), dumpTimeoutMillis)
+  // The restore's own check, now: a dump it would refuse (an unquoted `\unrestrict` in a
+  // COMMENT or a function body) fails the backup instead of the restore, months later.
+  await assertRestrictedDump(join(session.staging, dumpMember))
   const artifacts = await inspectTree(session.dataDirectory, "artifacts", limits)
   await copyTree(session.dataDirectory, session.staging, artifacts)
   const paths = [dumpMember, ...artifacts.map((entry) => entry.path)]
