@@ -17,24 +17,22 @@
 # output that was asked for. Only then the archive gets its final name,
 # qwbe-invoicing-<UTC time>.tar.gz, with qwbe-invoicing-<UTC time>.meta next to it:
 # the image, its ID, the commit, ORGANIZATION_ID, the database and the data volume, no
-# secret. Retention then keeps the newest BACKUP_KEEP (default 14) and deletes only
-# regular files with exactly those names. Nothing else in BACKUP_DIR is touched.
+# secret. No script ever deletes an archive: removing old ones is the operator's job.
 #
 # BACKUP_DIR (absolute, in .env) is created by the operator, outside the checkout,
 # writable by the user running this and by the image's user (`node`, uid 1000); both
 # are checked before `app` stops. Copying the archives off this host is the server
 # administrator's job: they are only ever written here.
 #
-# deploy.sh sources this file for backup_dir_ready/backup_archive/prune_backups; it
+# deploy.sh sources this file for backup_dir_ready/backup_archive; it
 # holds the host lock itself. Exit: 0 backup made, 1 refused or failed.
 set -euo pipefail
 # shellcheck source=scripts/production/lib.sh
 source "$(dirname "${BASH_SOURCE[0]}")/lib.sh"
 
-ARCHIVE_PATTERN='^qwbe-invoicing-[0-9]{8}T[0-9]{6}Z\.tar\.gz$'
 APP_STOPPED=0
 # `.partial-<name>` while the archive is being made: the EXIT trap removes it, also
-# after INT/TERM. A SIGKILL leaves it, under a name retention never counts.
+# after INT/TERM. A SIGKILL leaves it, under a name that is not an archive.
 PARTIAL=""
 
 # Before anything stops: a real directory, writable here and by the image's user
@@ -84,18 +82,6 @@ backup_archive() {
   say "backup ok: $BACKUP_FILE ($(du -h "$BACKUP_FILE" | cut -f1))"
 }
 
-# The newest BACKUP_KEEP archives stay. Names are UTC times, so they sort by age.
-prune_backups() {
-  local file
-  local -a archives
-  mapfile -t archives < <(find "$BACKUP_DIR" -maxdepth 1 -type f -name 'qwbe-invoicing-*.tar.gz' -printf '%f\n' \
-    | grep -E "$ARCHIVE_PATTERN" | sort -r)
-  for file in "${archives[@]:$BACKUP_KEEP}"; do
-    rm -f -- "$BACKUP_DIR/$file" "$BACKUP_DIR/${file%.tar.gz}.meta"
-    say "retention: removed $file"
-  done
-}
-
 # Only an `app` this run stopped, and only once.
 start_stopped_app() {
   [[ "$APP_STOPPED" == 1 ]] || return 0
@@ -134,7 +120,6 @@ main() {
     stop_app backup.sh
   fi
   backup_archive "$IMAGE_TAG" || die "backup failed"
-  prune_backups
   start_stopped_app || exit 1
 }
 

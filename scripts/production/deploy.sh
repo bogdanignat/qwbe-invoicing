@@ -104,7 +104,6 @@ stop_and_backup() {
   stop_app "deploy.sh ($QWBE_IMAGE:$OLD_TAG, deploying $NEW_TAG)" || die "could not stop app"
   backup_archive "$OLD_TAG" || die "no backup, no deploy: $NEW_TAG is not started"
   DEPLOY_BACKUP="$BACKUP_FILE"
-  prune_backups
 }
 
 switch_to_new() {

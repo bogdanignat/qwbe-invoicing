@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Drill of scripts/production/ on an isolated stack, with data: install, the
-# fail-closed guards, backup and retention, a deploy whose backup fails, a deploy from
+# fail-closed guards, backup that deletes nothing, a deploy whose backup fails, a deploy from
 # the checkout, restore dry-run and apply with the switch, a deploy whose app does not
 # start (rollback) and one that also changes the schema (restore required, then done).
 #
@@ -50,11 +50,9 @@ refused "on 'not-main', not main" "$scripts/deploy.sh"
 git -C "$checkout" switch -q main
 pass "dirty checkout (tracked or untracked) and a branch other than main: deploy refuses"
 
-set_env BACKUP_KEEP 0
-refused 'BACKUP_KEEP .* integer >= 1' "$scripts/backup.sh"
 # shellcheck disable=SC2016  # a literal interpolation is the point
-set_env BACKUP_KEEP '$(id)'
-refused 'BACKUP_KEEP .* plain value' "$scripts/backup.sh"
+set_env QWBE_IMAGE '$(id)'
+refused 'QWBE_IMAGE .* plain value' "$scripts/backup.sh"
 cp "$work/env.good" "$checkout/.env"
 sed -i '/^BACKUP_DIR=/d' "$checkout/.env"
 refused 'BACKUP_DIR is not set' "$scripts/backup.sh"
@@ -68,7 +66,7 @@ set_env QWBE_IMAGE "$project"
 set_env BACKUP_DIR "$backups:/elsewhere"
 refused 'BACKUP_DIR in .* is not valid' "$scripts/backup.sh"
 cp "$work/env.good" "$checkout/.env"
-pass ".env: BACKUP_KEEP 0, an interpolation, a missing key, compose files without compose.prod.yaml, an invalid QWBE_IMAGE, BACKUP_DIR with ':': refused"
+pass ".env: an interpolation, a missing key, compose files without compose.prod.yaml, an invalid QWBE_IMAGE, BACKUP_DIR with ':': refused"
 
 docker tag "$(docker inspect -f '{{.Image}}' "$("${compose[@]}" ps -q db)")" "$project:mismatch"
 set_env IMAGE_TAG mismatch
@@ -90,19 +88,20 @@ refused 'needs a restore first' "$scripts/backup.sh"
 rm "$checkout/.local/production/recovery-required"
 pass "a pending recovery: deploy and backup refuse"
 
-# ---- Backup and retention -------------------------------------------------------------
+# ---- Backup: no archive is ever deleted ----------------------------------------
 ln -s /etc/hostname "$backups/qwbe-invoicing-20000101T000000Z.tar.gz"
 touch "$backups/qwbe-invoicing-notes.txt"
+before="$(archives | wc -l)"
 for _ in 1 2 3 4; do succeeds "$scripts/backup.sh"; sleep 1; done
-[[ "$(archives | wc -l)" == 3 ]] || fail "retention kept $(archives | wc -l) archives, BACKUP_KEEP=3"
-[[ -L "$backups/qwbe-invoicing-20000101T000000Z.tar.gz" && -f "$backups/qwbe-invoicing-notes.txt" ]] || fail "retention touched foreign files"
+[[ "$(archives | wc -l)" == $((before + 4)) ]] || fail "$(archives | wc -l) archives after 4 backups, $before before"
+[[ -L "$backups/qwbe-invoicing-20000101T000000Z.tar.gz" && -f "$backups/qwbe-invoicing-notes.txt" ]] || fail "a backup touched foreign files"
 for archive in $(archives); do [[ -f "${archive%.tar.gz}.meta" ]] || fail "no metadata for $archive"; done
 meta="$(archives | tail -n 1)" meta="${meta%.tar.gz}.meta"
 { grep -q '^image_tag=install$' "$meta" && grep -q '^organization_id=drill-org$' "$meta"; } || fail "metadata: $(cat "$meta")"
 ! grep -qiE 'token|password|secret' "$meta" || fail "metadata names a secret: $(cat "$meta")"
 [[ "$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$port/health/ready")" == 200 ]] || fail "app not back after backup"
 [[ ! -e "$stopped_marker" ]] || fail "app-stopped left after a backup that finished"
-pass "backup x4: archive + metadata, retention keeps 3 and only its own files, app back"
+pass "backup x4: archive + metadata, none deleted, foreign files untouched, app back"
 backup_interrupted_by_term
 backup_killed
 

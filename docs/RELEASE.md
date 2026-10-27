@@ -160,7 +160,7 @@ holds a secret.
 | Script | What it does |
 | --- | --- |
 | `deploy.sh` | Upgrade: pull, build, backup, start, roll back or ask for a restore (Upgrade, Rollback) |
-| `backup.sh` | One archive in `BACKUP_DIR`, with retention; run daily by the systemd timer (Backup) |
+| `backup.sh` | One archive in `BACKUP_DIR`, never deleting one; run daily by the systemd timer (Backup) |
 | `restore.sh <archive> [--apply]` | Dry-run, or restore into a new database + volume and switch (Restore) |
 
 Before a script stops `app` it writes `.local/production/app-stopped` (who stopped it,
@@ -202,8 +202,9 @@ scripts/production/deploy.sh
    `.local/production/`) and starts `migrate`, `app` and the rest; ready means
    healthy and `doctor --json` answering `ready: true`.
 6. On success, removes `${QWBE_IMAGE}:<commit>` images that are neither the current
-   one, the previous one, nor the image of a backup still kept in `BACKUP_DIR`:
-   image retention follows backup retention, so every kept backup stays restorable.
+   one, the previous one, nor the image of a backup in `BACKUP_DIR`:
+   an image is kept as long as a backup in `BACKUP_DIR` names it, so every backup
+   stays restorable.
 
 Failures are in Rollback, below. Every failure exits non-zero.
 
@@ -267,9 +268,9 @@ and starts `app` again, also when the backup fails; an `app` that was not runnin
 stopped. Success is the CLI's report (exit 0, `failed` 0, `copied` equal to `scanned`);
 only then the archive gets its final name, `BACKUP_DIR/qwbe-invoicing-<UTC time>.tar.gz`,
 with `qwbe-invoicing-<UTC time>.meta` next to it: image, image ID, commit,
-`ORGANIZATION_ID`, database and data volume, no secret. Retention keeps the newest
-`BACKUP_KEEP` (at least 1, default 14) and deletes only regular files with exactly
-those names.
+`ORGANIZATION_ID`, database and data volume, no secret. The backup deletes no
+archive: removing old archives, and copying them to another machine, is the
+administrator's job.
 
 `app` is down for the whole backup: the dump (the CLI bounds it at ten minutes), the
 copy, the compression and the verification, within the archive limits (4,096 members,
@@ -300,7 +301,7 @@ current command (up to the whole CLI backup), then removes the partial archive a
 starts `app` again; `TimeoutStopSec=15min` leaves room for that. Only if that is
 exceeded does SIGKILL end everything: `app` stays stopped and `app-stopped` makes the
 next run refuse (Production scripts, above). A `.partial-*` file left by such a run is
-not an archive; retention ignores it, remove it by hand.
+not an archive; remove it by hand.
 
 ## Restore
 
