@@ -181,8 +181,8 @@ and ANAF transport remain separate work.
 
 The issuer and invoicing baselines constrain the S/O tuples and reason fields with CHECKs on
 issuer configurations and on draft/issued/proforma/correction lines and tax
-breakdowns. There is no legacy decoder, backfill or automatic data deletion; a
-database from an older schema is recreated (README, "Schema during development").
+breakdowns. There is no legacy decoder or automatic data deletion; a database from an
+older schema is upgraded by new migrations and their backfills (README, "Schema and migrations").
 A real/local data reset is a separate operational action; running the tests does
 not reset the existing app.
 
@@ -198,5 +198,5 @@ not reset the existing app.
   its identity and current terms still need verification.
 - **T-1374 — local activation:** integrate and run the new version locally.
   The existing local app/database was not updated by this implementation.
-  The schema is a development baseline; any database recreation requires a separately
+  The schema moves forward only by migrations; any database recreation requires a separately
   confirmed operational action, never an implicit reset during deployment.

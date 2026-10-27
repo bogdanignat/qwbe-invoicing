@@ -77,8 +77,9 @@ export const doctorReport = async (config: RuntimeConfig, pool: Pool): Promise<D
   try {
     pending = (await planMigrations(client)).pending
     ledger = await ledgerReady(client)
-    // Drift means an applied migration was edited: the database has to be
-    // recreated, because no further migration will reconcile it.
+    // Drift means the schema is not the one its migration history explains (an
+    // object changed by hand, a ledger row removed): no further migration will
+    // reconcile it, so it is inspected or restored from a backup.
     drift = await schemaDriftOnClient(client)
     extra = await extraSchemas(client)
     extensions = await extraExtensions(client)

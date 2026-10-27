@@ -248,7 +248,7 @@ void test("a baseline the ledger does not record is refused without changing sta
     for (const command of [["migrate", "--json"], ["migrate", "--apply", "--json"]]) {
       const migrate = cli(fixture, command)
       assert.equal(migrate.status, 1, migrate.stderr)
-      assert.match(migrate.stderr, /invoice_artifacts.*proforma_artifacts.*recreate the database/s)
+      assert.match(migrate.stderr, /invoice_artifacts.*proforma_artifacts.*inspect the named objects, or restore a backup/s)
       const report = JSON.parse(migrate.stdout) as { readonly changed: number; readonly schemaDrift: ReadonlyArray<string> }
       assert.equal(report.changed, 0)
       assert.deepEqual(driftedTables(report.schemaDrift), ["invoice_artifacts", "proforma_artifacts"])
@@ -266,7 +266,7 @@ void test("an edited migration is reported as drift, refused by migrate and neve
     assert.equal(await databaseReady(pool), false)
     const migrate = cli(fixture, ["migrate", "--apply", "--json"])
     assert.equal(migrate.status, 1, migrate.stderr)
-    assert.match(migrate.stderr, /issuer_tax_configurations.*recreate the database/s)
+    assert.match(migrate.stderr, /issuer_tax_configurations.*inspect the named objects, or restore a backup/s)
     assert.deepEqual(driftedTables(reportOf(migrate.stdout).schemaDrift), ["issuer_tax_configurations"])
     const doctor = cli(fixture, ["doctor", "--json"])
     assert.equal(doctor.status, 1, doctor.stderr)
@@ -289,7 +289,7 @@ void test("history the contract does not recognise is refused before any migrati
     for (const command of [["migrate", "--json"], ["migrate", "--apply", "--json"]]) {
       const migrate = cli(fixture, command)
       assert.equal(migrate.status, 1, migrate.stderr)
-      assert.match(migrate.stderr, /recreate the database/)
+      assert.match(migrate.stderr, /inspect the named objects, or restore a backup/)
       const report = JSON.parse(migrate.stdout) as { readonly changed: number; readonly schemaDrift: ReadonlyArray<string> }
       assert.equal(report.changed, 0)
       assert.ok(report.schemaDrift.length > 0)

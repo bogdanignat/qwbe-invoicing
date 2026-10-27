@@ -73,8 +73,8 @@ a rewrite.
   These values are frozen into documents and retained in summaries, conversions and
   corrections; PDF and UI omit empty optional lines. Existing cached PDFs are not
   regenerated merely because a template version changes.
-  Databases created from an older schema are not backfilled; they are recreated
-  (see "Schema during development" below).
+  A database from an older schema is upgraded by the migrations it lacks
+  (see "Schema and migrations" below).
 - **Customers** (optional register): companies with a valid CUI/CIF, or natural persons with
   an optional CNP. A document can also be issued to a one-time buyer typed directly in the
   editor, so the register and draft persistence are conveniences, not prerequisites. A saved
@@ -786,24 +786,50 @@ and storno keeps working. Document/PDF metadata and browser
 sessions are owned by their own scopes and tables inside the one database, and
 `eFacturaStatus` is retained.
 
-**Schema during development:** one database holds every scope, so the ledger key is
-`(scope, name)`. Each cube owns one baseline migration holding the current definition
-of its tables, and they run in dependency order after the foundation — nine ledger
-entries in total: `foundation/000-foundation`, `customers/customers-001-baseline`,
+**Schema and migrations:** one database holds every scope, so the ledger key is
+`(scope, name)`. `migrate` applies only the migrations the ledger lacks, each in its own
+transaction together with its ledger row. The scopes run in a fixed order
+(`migrationScopes`, `kernel/storage/postgres-migration-plans.ts`) after the foundation —
+twelve ledger entries today: `foundation/000-foundation`, `customers/customers-001-baseline`,
 `catalog/catalog-001-baseline`, `issuer/issuer-001-baseline`,
 `invoicing/invoicing-001-baseline`, `payments/payments-001-baseline`,
-`documents/documents-001-baseline`, `company-lookup/company-lookup-001-baseline` and the host's own
-`kernel/000-browser-sessions`. Customers and issuer precede invoicing because it
-references them. A schema change edits the owning baseline, so a database created
-before it no longer matches: `migrate` refuses it before writing anything and `doctor`
-reports it, both naming the drifted objects and asking to recreate the database.
-Recreating is not an upgrade: it drops the local data, and the migrator never drops a
-database on its own. Prefer a new database — `CREATE DATABASE` with `TEMPLATE
+`documents/documents-001-baseline`, `company-lookup/company-lookup-001-baseline`,
+`connection/efactura-connection-001-baseline`, `submissions/efactura-submissions-001-baseline`,
+`received/efactura-received-001-baseline` and the host's own `kernel/000-browser-sessions`.
+Customers and issuer precede invoicing because it references them.
+
+The baselines and every migration after them are frozen once shipped:
+`kernel/storage/migrations.lock.json` holds the name and SHA-256 of each one, scope by
+scope and in order, and `pnpm verify` (`gate:migrations`) refuses a locked migration
+that was edited, removed, renamed or moved, a locked scope that is gone and a migration
+inserted before a locked one. A schema change is a new migration at the end of the
+owning cube's scope, `<cube>-002-<description>` (then `-003-`, …), never an edit of a
+shipped one. Record it with `pnpm migrations:lock`, which only appends to the lock, and
+commit the lock with it. A migration:
+
+- brings a new `NOT NULL` column with a default or with its backfill in the same
+  migration (add the column, `UPDATE` it from the existing rows, then `SET NOT NULL`);
+- works both on an empty database (a new install runs every migration) and on one with
+  data (an upgrade runs only the new ones);
+- never qualifies an object with `public.`: drift is computed by replaying the applied
+  history in a scratch schema;
+- needs no special privilege and has no external effect: it runs as `qwbe_owner`, and
+  the drift replay runs it again as `qwbe_app`;
+- depends only on its own scope and the scopes before it: a new install runs the scopes
+  in order, so an earlier scope cannot use an object a later one creates.
+
+Each statement of a migration may run for 15 minutes (`SET LOCAL statement_timeout`,
+the window `deploy.sh` gives `migrate` and `app`); the application keeps its 5 s and
+`lock_timeout` stays 3 s. A schema the ledger does not explain (an object changed by
+hand, a ledger row removed) is drift: `migrate` refuses it before writing anything and
+`doctor` reports it, both naming the drifted objects: inspect them, or restore a
+backup. Until the first release a development database can also be recreated. Recreating drops the local data, and the
+migrator never drops a database on its own. Prefer a new database — `CREATE DATABASE` with `TEMPLATE
 template0 LC_COLLATE 'C' LC_CTYPE 'C' ENCODING 'UTF8'`, point `PGDATABASE` at it and
 use a fresh `DATA_DIR` — otherwise stop the application and drop and recreate the
 database explicitly, keeping the secret files. Then run `migrate --json`,
-`migrate --apply --json`, a repeated dry-run and `doctor --json`. There is no backfill
-and no legacy-snapshot fallback.
+`migrate --apply --json`, a repeated dry-run and `doctor --json`. Data moves forward
+through the migrations' backfills, so the code keeps no fallback for older shapes.
 
 Money columns are `BIGINT` in bani (minor units): `123.45` RON is stored as `12345`,
 a storno total as a negative integer, an absent social capital as `NULL`. The API, the

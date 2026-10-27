@@ -1,0 +1,110 @@
+[
+  {
+    "scope": "foundation",
+    "migrations": [
+      {
+        "name": "000-foundation",
+        "sha256": "ead0eacc9f1674d0c91549341407bf71947b7f05d219de271fcce8612634be38"
+      }
+    ]
+  },
+  {
+    "scope": "customers",
+    "migrations": [
+      {
+        "name": "customers-001-baseline",
+        "sha256": "dbfa3c43503f33976a2efd9074f810081a35fca70f76337799b26ad089eaaf2e"
+      }
+    ]
+  },
+  {
+    "scope": "catalog",
+    "migrations": [
+      {
+        "name": "catalog-001-baseline",
+        "sha256": "8e0893d3f4377a30d9b21a88aff7831d524e2aa783ff55ce84bd1eacf4c58098"
+      }
+    ]
+  },
+  {
+    "scope": "issuer",
+    "migrations": [
+      {
+        "name": "issuer-001-baseline",
+        "sha256": "1afc05a1da2e9b7e93f848db03ba031a7908dd0e57429f19efb3939a5cc79647"
+      }
+    ]
+  },
+  {
+    "scope": "invoicing",
+    "migrations": [
+      {
+        "name": "invoicing-001-baseline",
+        "sha256": "a36c4b0db74bcda0bde9a0f891c4218fe441367131f8ac0257924591ba7a21ee"
+      }
+    ]
+  },
+  {
+    "scope": "payments",
+    "migrations": [
+      {
+        "name": "payments-001-baseline",
+        "sha256": "c9d655f1350e7a8900e84d018518b046dcb74a021176081284d3f9b37e4e6526"
+      }
+    ]
+  },
+  {
+    "scope": "documents",
+    "migrations": [
+      {
+        "name": "documents-001-baseline",
+        "sha256": "1ed8ceb90cc5bc1055fac88ff29bb89c1eb67455e868125f35fb0cfc54132961"
+      }
+    ]
+  },
+  {
+    "scope": "company-lookup",
+    "migrations": [
+      {
+        "name": "company-lookup-001-baseline",
+        "sha256": "7e44dbe69aeb7b845c6dbf34cebe88654038f65376c95a2d9853dd015a5ae7cc"
+      }
+    ]
+  },
+  {
+    "scope": "connection",
+    "migrations": [
+      {
+        "name": "efactura-connection-001-baseline",
+        "sha256": "9882cdd9fa694c97d1c27fa3b3b8d43f89bf900fa7763fc0f883cb24de5ab1f1"
+      }
+    ]
+  },
+  {
+    "scope": "submissions",
+    "migrations": [
+      {
+        "name": "efactura-submissions-001-baseline",
+        "sha256": "5a6b5d14a1fe341fc233481b3f08c841612c8e6513ee105ace1b09cf6ee187f1"
+      }
+    ]
+  },
+  {
+    "scope": "received",
+    "migrations": [
+      {
+        "name": "efactura-received-001-baseline",
+        "sha256": "693199962ad7888b0274e80237ecff1c4484062ccbbf043dbca12dad1033f438"
+      }
+    ]
+  },
+  {
+    "scope": "kernel",
+    "migrations": [
+      {
+        "name": "000-browser-sessions",
+        "sha256": "ed0d91f9aa100156c407150780c1ba68a1a9f90add1190af393f8094d54c93c5"
+      }
+    ]
+  }
+]
