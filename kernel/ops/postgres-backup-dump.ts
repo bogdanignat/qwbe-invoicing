@@ -124,20 +124,22 @@ const run = async (
   })
 }
 
-const majorOf = (version: string): number => Number(/(\d+)\.\d+/u.exec(version)?.[1] ?? "0")
-
 /**
- * The client major, read from the tools themselves rather than from the image's
+ * The client version, read from the tools themselves rather than from the image's
  * package pin. Alpine 3.24 also carries `postgresql17-client` and
  * `postgresql18-client`, so "a `pg_dump` is on PATH" is not the question: a 17
- * client against a 16 server produces a dump this step did not verify.
+ * client against a 16 server produces a dump this step did not verify. The minor
+ * is held to 16.10+, the first to write and honour `\restrict` (`postgres-backup-restrict.ts`).
  */
 export const dumpClientVersions = async (): Promise<{ readonly dump: string; readonly restore: string }> => {
   const options: RunOptions = { password: "", timeoutMillis: 10_000 }
   const dump = (await run("pg_dump", ["--version"], options)).trim()
   const restore = (await run("psql", ["--version"], options)).trim()
   for (const [tool, version] of [["pg_dump", dump], ["psql", restore]] as const) {
-    if (majorOf(version) !== 16) throw new ToolFailure(`${tool} must be major 16, found: ${version}`)
+    const [, major, minor] = /(\d+)\.(\d+)/u.exec(version) ?? []
+    if (major !== "16" || Number(minor) < 10) {
+      throw new ToolFailure(`${tool} must be 16.10 or newer within major 16 (\\restrict support), found: ${version}`)
+    }
   }
   return { dump, restore }
 }

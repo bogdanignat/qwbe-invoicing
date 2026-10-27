@@ -621,11 +621,13 @@ applied migrations recorded. A backup whose database references a PDF missing fr
 target. `restore --input <archive> --apply` writes the artifacts and executes
 `database.sql` through `psql` **as the schema owner role (`qwbe_owner`, NOSUPERUSER)**, so
 it runs in the `migrate` service, and only an archive you trust may be applied: the
-manifest digests prove integrity, never authenticity. A hostile archive gets more than the
-owner's rights on that one database: `psql --file` also runs the backslash meta-commands in
-`database.sql` (`\!`, `\copy ... PROGRAM`, `\o |`), so it runs shell commands inside the
-`migrate` container, as its user, with what is mounted there: the archive's directory
-(read-only), the target data volume, the backup staging and the owner's password.
+manifest digests prove integrity, never authenticity. A hostile archive still gets the
+owner's rights on that one database, but not a shell: `psql --file` would also run backslash
+meta-commands (`\!`, `\copy ... PROGRAM`, `\o |`), so `database.sql` is accepted only when
+pg_dump 16.10+'s `\restrict <key>` opens it (after blank and `--` lines only) and the one
+matching `\unrestrict <key>` is its last line. In between psql refuses every meta-command.
+Anything else is refused before the target is touched, by the dry run, by `--apply` and by
+`backup-inspect` alike.
 
 It requires an empty target database: create a fresh one `OWNER qwbe_owner` as `postgres`,
 run `db-init` on it (`run --rm --no-deps -e PGDATABASE=<new> db-init`) and restore into

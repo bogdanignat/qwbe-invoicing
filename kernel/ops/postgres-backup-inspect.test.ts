@@ -10,6 +10,7 @@ import { freshRuntime, testSettings } from "../storage/postgres-rig.test-support
 import { executeBackup, inspectBackup } from "./postgres-backup.ts"
 import { sha256Stream, writeManifest } from "./postgres-backup-manifest.ts"
 import { ArchiveRejected } from "./postgres-backup-paths.ts"
+import { restrictedDump } from "./postgres-backup-restrict.test-support.ts"
 import { defaultArchiveLimits } from "./postgres-backup-tar.ts"
 import { writeArchive } from "./postgres-backup-writer.ts"
 
@@ -38,7 +39,7 @@ const craftArchive = async (
 ): Promise<string> => {
   const source = join(root, `${name}-source`)
   mkdirSync(join(source, "artifacts", "sha256", "ab"), { recursive: true })
-  writeFileSync(join(source, "database.sql"), "SELECT 1;\n")
+  writeFileSync(join(source, "database.sql"), restrictedDump())
   writeFileSync(join(source, pdf), "%PDF-1.7 inspect fixture\n")
   await writeManifest(source, {
     formatVersion: 1,
