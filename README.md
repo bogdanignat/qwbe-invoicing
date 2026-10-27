@@ -597,7 +597,7 @@ PostgreSQL `qwbe_invoicing`, schema `public`
 ```
 
 In production `scripts/production/backup.sh` and `restore.sh` do what follows, with a
-daily systemd timer, retention and a switch to the restored pair
+daily systemd timer (it never deletes an archive) and a switch to the restored pair
 ([`docs/RELEASE.md`](./docs/RELEASE.md), "Production scripts"). Back up with the CLI, not
 by copying the cluster directory, and with the application stopped: `backup` and `restore` take the maintenance key EXCLUSIVE as a *try*, so both
 refuse immediately while `app` holds it SHARED.

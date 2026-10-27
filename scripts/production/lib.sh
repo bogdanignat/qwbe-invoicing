@@ -76,7 +76,7 @@ env_keep() {
 }
 
 # Sets the values the scripts read: QWBE_IMAGE, IMAGE_TAG, ORGANIZATION_ID,
-# PGDATABASE_ACTIVE, DATA_VOLUME_ACTIVE, BACKUP_DIR, BACKUP_KEEP.
+# PGDATABASE_ACTIVE, DATA_VOLUME_ACTIVE, BACKUP_DIR.
 # shellcheck disable=SC2034
 load_env() {
   [[ -f "$ENV_FILE" && ! -L "$ENV_FILE" ]] || die "no regular file at $ENV_FILE (copy .env.example first)"
@@ -94,9 +94,6 @@ load_env() {
   DATA_VOLUME_ACTIVE="$(env_require QWBE_DATA_VOLUME '^[A-Za-z0-9][A-Za-z0-9_.-]*$')"
   # No `:` or `,`: the directory is mounted with `-v "$BACKUP_DIR:/backup"`.
   BACKUP_DIR="$(env_require BACKUP_DIR '^/[^:,]*$')"
-  BACKUP_KEEP="$(env_get BACKUP_KEEP)"
-  BACKUP_KEEP="${BACKUP_KEEP:-14}"
-  [[ "$BACKUP_KEEP" =~ ^[1-9][0-9]*$ ]] || die "BACKUP_KEEP in $ENV_FILE must be an integer >= 1, not '$BACKUP_KEEP'"
 }
 
 # The files Compose would use: COMPOSE_FILE from `.env`, or compose.prod.yaml. Always
