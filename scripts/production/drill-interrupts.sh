@@ -17,6 +17,22 @@ stopped_marker="$checkout/.local/production/app-stopped"
 one_off_running() { [[ -n "$(docker ps -q --filter "label=com.docker.compose.project=$project" --filter label=com.docker.compose.oneoff=True)" ]]; }
 partials() { find "$backups" -maxdepth 1 -name '.partial-*' -printf '%f\n'; }
 
+# Ends a background command before the drill fails: TERM, then KILL after 30 s, then
+# wait. Otherwise it outlives the drill's cleanup, which removes the stack under it.
+# KILL reaches only the script's bash, not the `docker compose run`/`start` it began;
+# those the cleanup ends (`down -v --remove-orphans`).
+stop_background() {
+  local pid="$1" state
+  kill -TERM "$pid" 2>/dev/null || true
+  for _ in $(seq 1 150); do
+    state="$(ps -o stat= -p "$pid" 2>/dev/null || true)"
+    [[ -z "$state" || "$state" == Z* ]] && break # gone, or a zombie waiting for `wait`
+    sleep 0.2
+  done
+  [[ -z "$state" || "$state" == Z* ]] || kill -KILL "$pid" 2>/dev/null || true
+  wait "$pid" 2>/dev/null || true
+}
+
 # A production script in the background (stdin from $input), sent SIGNAL once
 # CONDITION holds; its exit status in $status, its output in $log.
 input=/dev/null
@@ -30,7 +46,7 @@ interrupt() {
   # Signalled as soon as CONDITION is seen, not on a second look: a restore's short
   # `db-init` one-off may be gone again before its CLI one-off starts.
   for _ in $(seq 1 600); do "$condition" && { reached=1; break; }; sleep 0.2; done
-  ((reached)) || fail "$* never reached the point to interrupt: $(tail -n 20 "$log")"
+  ((reached)) || { stop_background "$pid"; fail "$* never reached the point to interrupt: $(tail -n 20 "$log")"; }
   kill "-$signal" "$pid"
   status=0
   wait "$pid" || status=$?
