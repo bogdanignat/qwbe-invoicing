@@ -3,6 +3,7 @@ import { spawn } from "node:child_process"
 import type { PostgresSettings } from "../storage/postgres-pool.ts"
 import { redactSecrets } from "../storage/postgres-errors.ts"
 import { EFACTURA_RESTORE_SQL } from "./efactura-restore.ts"
+import { registryCheckSql } from "./postgres-backup-registry.ts"
 
 /**
  * `pg_dump` and `psql`, run as bounded child processes.
@@ -215,13 +216,15 @@ export const dumpDatabase = async (
 }
 
 /**
- * The dump, then the e-Factura transformation (`efactura-restore.ts`), in one
- * transaction: psql wraps every `--file` and `--command` of a
+ * The dump, then the e-Factura transformation (`efactura-restore.ts`), then the
+ * ledger held to the manifest's `schemaMigrations` (`postgres-backup-registry.ts`), in
+ * one transaction: psql wraps every `--file` and `--command` of a
  * `--single-transaction` run in the same BEGIN/COMMIT, in the order given.
  */
 export const restoreDatabase = async (
   settings: PostgresSettings,
   dump: string,
+  schemaMigrations: ReadonlyArray<string>,
   timeoutMillis: number,
 ): Promise<void> => {
   await run("psql", [
@@ -232,5 +235,6 @@ export const restoreDatabase = async (
     "--set=ON_ERROR_STOP=1",
     `--file=${dump}`,
     `--command=${EFACTURA_RESTORE_SQL}`,
+    `--command=${registryCheckSql(schemaMigrations)}`,
   ], { password: settings.password, timeoutMillis })
 }

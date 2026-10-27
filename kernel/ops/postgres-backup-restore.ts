@@ -9,6 +9,7 @@ import {
   assertSessionsEmpty,
   assertTargetMatches,
 } from "./postgres-backup-guards.ts"
+import { assertRestorable } from "./postgres-backup-inspect.ts"
 import { type BackupManifest, verifyStaged } from "./postgres-backup-manifest.ts"
 import { ArchiveRejected, dumpMember, isArtifactMember, manifestMember } from "./postgres-backup-paths.ts"
 import { copyTree, inspectTree, stageSource, validateSource } from "./postgres-backup-source.ts"
@@ -23,9 +24,14 @@ import type { BackupSession } from "./postgres-backup-create.ts"
  * 2. the guards are re-read on the connection that holds the exclusive lock, so a
  *    database that filled up since the dry run is refused here and not there;
  * 3. the input is staged into a private directory and checked against its own
- *    manifest by streaming digest;
+ *    manifest by streaming digest, then the manifest against this image and this
+ *    installation (`assertRestorable`: no unknown migration, no gap, the same
+ *    `ORGANIZATION_ID`) — the verdict `backup-inspect` prints;
  * 4. only then does anything reach the target, and the SQL goes in as one
- *    transaction.
+ *    transaction, which also holds the restored ledger to the manifest's
+ *    `schemaMigrations` before it commits (`postgres-backup-registry.ts`).
+ *
+ * The schema is restored as it was: nothing here migrates it forward.
  *
  * Nothing is ever deleted. A populated database or a non-empty artifact tree is a
  * refusal with an instruction, because dropping someone's objects to make room is
@@ -162,6 +168,7 @@ export const restoreBackup = async (
   await assertArtifactsAbsent(session.dataDirectory)
   const staged = await stageSource(input, session.staging, limits)
   const manifest = await verifyStaged(session.staging, staged)
+  assertRestorable(manifest, session.organizationId)
   assertCompatible(manifest, serverVersion)
   await assertEmptyDatabase(session.client)
   await assertArtifactsAbsent(session.dataDirectory)
@@ -188,7 +195,7 @@ export const restoreBackup = async (
       phase.dataCopied = true
       hooks.afterArtifact?.(artifact.path)
     }
-    await restoreDatabase(session.settings, join(session.staging, dumpMember), restoreTimeoutMillis)
+    await restoreDatabase(session.settings, join(session.staging, dumpMember), manifest.schemaMigrations, restoreTimeoutMillis)
     phase.databaseCommitted = true
     // Past this point the transaction is committed and no check can take it back;
     // a failure here is a report about a restored database, not a rollback.

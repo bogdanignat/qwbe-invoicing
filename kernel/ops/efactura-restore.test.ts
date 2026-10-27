@@ -43,7 +43,7 @@ const backupWithQueued = async (root: string, count = 1,
     }
     await prepare(source, queued)
     const archive = join(root, "backup.tar.gz")
-    const report = await executeBackup({ pool: source.pool, settings: source.settings, dataDirectory: source.dataDirectory }, archive)
+    const report = await executeBackup({ pool: source.pool, settings: source.settings, dataDirectory: source.dataDirectory, organizationId: ORG }, archive)
     assert.equal(report.failed, 0)
     return { queued, archive, settings: rig.settings }
   })
@@ -55,7 +55,7 @@ void test("a restored queued submission is unknown; reactivating e-Factura and r
     const { archive, queued, settings } = await backupWithQueued(root)
     const { invoiceId, id } = queued[0] ?? assert.fail("one queued submission")
     // `restore` reads no QWBE_PLUGINS at all: the transformation is part of the SQL it commits.
-    const restored = await executeRestore({ pool: target.pool, settings: target.settings, dataDirectory: target.dataDirectory }, archive)
+    const restored = await executeRestore({ pool: target.pool, settings: target.settings, dataDirectory: target.dataDirectory, organizationId: ORG }, archive)
     assert.equal(restored.failed, 0)
     const [row] = (await target.pool.query<{ readonly state: string; readonly errors: string }>(
       "SELECT state, errors FROM efactura_submissions WHERE id=$1", [id])).rows
@@ -102,7 +102,7 @@ void test("a transformation that fails leaves the target as it was: no table, no
         VALUES($1,'org-1','someone','2026-10-19T00:00:00.000Z','efactura_submission.restored_unknown','efactura_submission',$2)`,
       [`efactura-restore:${String(queued?.id)}`, queued?.id])
     })
-    await assert.rejects(executeRestore({ pool: target.pool, settings: target.settings, dataDirectory: target.dataDirectory }, archive),
+    await assert.rejects(executeRestore({ pool: target.pool, settings: target.settings, dataDirectory: target.dataDirectory, organizationId: ORG }, archive),
       /psql failed .*duplicate key value violates unique constraint "audit_events_pkey"/su)
     assert.equal(await count(target, "SELECT count(*) AS n FROM pg_tables WHERE schemaname='public'"), 0, "the dump rolled back with it")
     assert.deepEqual(readdirSync(target.dataDirectory), [])
@@ -123,7 +123,7 @@ void test("a restore makes validating and uploading unknown, and leaves processi
         await source.pool.query(`UPDATE efactura_submissions SET ${change} WHERE id=$1`, [rows[index]?.id])
       }
     })
-    assert.equal((await executeRestore({ pool: target.pool, settings: target.settings, dataDirectory: target.dataDirectory }, archive)).failed, 0)
+    assert.equal((await executeRestore({ pool: target.pool, settings: target.settings, dataDirectory: target.dataDirectory, organizationId: ORG }, archive)).failed, 0)
     const rows = (await target.pool.query<{ readonly id: string; readonly state: string; readonly archive_state: string;
       readonly upload_index: string | null }>("SELECT id, state, archive_state, upload_index FROM efactura_submissions")).rows
     assert.deepEqual(queued.map(({ id }) => rows.find((row) => row.id === id)).map((row) => [row?.state, row?.archive_state, row?.upload_index]), [

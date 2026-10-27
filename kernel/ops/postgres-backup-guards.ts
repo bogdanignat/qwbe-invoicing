@@ -1,6 +1,6 @@
 import type { PoolClient } from "pg"
 
-import { ledgerTable } from "../storage/postgres-migrations.ts"
+import { readHistory } from "../storage/postgres-schema-fingerprint.ts"
 
 /**
  * The conditions a backup or a restore is allowed to run under, all read from the
@@ -25,12 +25,14 @@ export const assertServerMajor16 = async (client: PoolClient): Promise<string> =
   return version
 }
 
-/** The applied migrations, in ledger order: the schema the dump describes. */
+/**
+ * Every ledger row as a `scope/name` key: the schema the dump describes. The keys this
+ * image knows come in its canonical order, the ones it does not after them, sorted.
+ */
 export const readSchemaMigrations = async (client: PoolClient): Promise<ReadonlyArray<string>> => {
-  const { rows } = await client.query<{ readonly name: string }>(
-    `SELECT name FROM ${ledgerTable} ORDER BY name`,
-  )
-  return rows.map((row) => row.name)
+  const history = await readHistory(client)
+  if (!history.present) throw new GuardRefusal("backup requires a migrated database: schema_migrations is missing")
+  return [...history.applied, ...history.unknown]
 }
 
 /** Informational: how many application backends the server currently sees. */

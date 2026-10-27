@@ -11,9 +11,11 @@ import {
   assertServerMajor16,
   assertSinglePublicSchema,
   assertTargetMatches,
+  GuardRefusal,
   readSchemaMigrations,
 } from "./postgres-backup-guards.ts"
 import { type BackupManifest, writeManifest } from "./postgres-backup-manifest.ts"
+import { isOrganizationId, manifestFormatVersion } from "./postgres-backup-manifest-fields.ts"
 import { dumpMember, isArchivePath, manifestMember } from "./postgres-backup-paths.ts"
 import { copyTree, inspectTree } from "./postgres-backup-source.ts"
 import { type ArchiveLimits, defaultArchiveLimits } from "./postgres-backup-tar.ts"
@@ -58,6 +60,8 @@ export interface BackupSession {
   readonly settings: PostgresSettings
   readonly dataDirectory: string
   readonly staging: string
+  /** `ORGANIZATION_ID` from the configuration: a backup records it, a restore must match it. */
+  readonly organizationId: string | undefined
 }
 
 const dumpTimeoutMillis = 10 * 60_000
@@ -84,6 +88,8 @@ export const createBackup = async (
   output: string,
   limits: ArchiveLimits = defaultArchiveLimits,
 ): Promise<BackupReport> => {
+  const { organizationId } = session
+  if (!isOrganizationId(organizationId)) throw new GuardRefusal("backup requires ORGANIZATION_ID: the archive records it")
   const archive = isArchivePath(output)
   await assertDataDirectory(session.dataDirectory)
   await assertOutputAvailable(output, archive)
@@ -102,6 +108,8 @@ export const createBackup = async (
     new Map(files.filter((file) => file.path !== dumpMember).map((file) => [file.path, file.sha256])),
   )
   const manifest: BackupManifest = {
+    formatVersion: manifestFormatVersion,
+    organizationId,
     createdAt: new Date().toISOString(),
     dataDirectory: session.dataDirectory,
     database: session.settings.database,

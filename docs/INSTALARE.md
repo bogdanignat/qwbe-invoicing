@@ -226,7 +226,8 @@ docker compose start app
 
 Arhiva conține baza și PDF-urile, nu și `.env`, fișierele secrete, `Caddyfile` sau
 conexiunea ANAF: pe acestea le salvezi separat, iar după o restaurare te reconectezi la ANAF.
-O restaurare cere același `ORGANIZATION_ID`.
+O restaurare cere același `ORGANIZATION_ID`. `node bin/qwbe-invoicing.ts backup-inspect --input <arhivă>`
+verifică arhiva fără bază de date și fără secrete și spune dacă imaginea instalată o poate restaura.
 
 **Restaurarea** se face doar într-o bază nouă, goală, și într-un volum de date nou; `restore`
 fără `--apply` doar verifică arhiva. Pașii: [Data, backup and restore](../README.md#data-backup-and-restore)

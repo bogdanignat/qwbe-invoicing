@@ -96,6 +96,8 @@ const written = (archive: RawArchive, root: string, name = "hostile.tar.gz"): st
 
 const manifestMember = (files: ReadonlyArray<{ path: string; sha256: string; byteLength: number }>): Buffer =>
   Buffer.from(`${JSON.stringify({
+    formatVersion: 1,
+    organizationId: "org-test",
     createdAt: "2026-10-01T00:00:00.000Z",
     dataDirectory: "/data",
     database: "invoicing",
@@ -103,7 +105,7 @@ const manifestMember = (files: ReadonlyArray<{ path: string; sha256: string; byt
     dumpVersion: "pg_dump (PostgreSQL) 16.15",
     dumpFormat: "plain",
     excludedTableData: ["public.browser_sessions"],
-    schemaMigrations: ["000-foundation"],
+    schemaMigrations: ["foundation/000-foundation"],
     files,
   }, null, 2)}\n`, "utf8")
 
@@ -297,6 +299,8 @@ void test("a valid archive round-trips byte for byte through the writer and the 
       })
     }
     await writeManifest(source, {
+      formatVersion: 1,
+      organizationId: "org-test",
       createdAt: "2026-10-01T00:00:00.000Z",
       dataDirectory: source,
       database: "invoicing",
@@ -304,7 +308,7 @@ void test("a valid archive round-trips byte for byte through the writer and the 
       dumpVersion: "pg_dump (PostgreSQL) 16.15",
       dumpFormat: "plain",
       excludedTableData: ["public.browser_sessions"],
-      schemaMigrations: ["000-foundation"],
+      schemaMigrations: ["foundation/000-foundation"],
       files: sized,
     })
     const archive = join(root, "backup.tar.gz")
@@ -354,7 +358,7 @@ void test("the manifest is checked in both directions", async () => {
       () => verifyStaged(staging, [{ path: "database.sql", byteLength: 10 }]),
       /manifest.json is missing/,
     )
-    writeFileSync(join(staging, "manifest.json"), "{\"files\":[]}")
+    writeFileSync(join(staging, "manifest.json"), "{\"formatVersion\":1,\"organizationId\":\"org-test\",\"files\":[]}")
     await rejects(
       () => verifyStaged(staging, [{ path: "manifest.json", byteLength: 1 }, { path: "database.sql", byteLength: 10 }]),
       /unsupported dump format/,

@@ -4,6 +4,9 @@ import { readFile, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 
 import type { ArchiveMember } from "./postgres-backup-archive.ts"
+import {
+  assertFormatVersion, isStringArray, manifestFormatVersion, organizationIdField, schemaKeys,
+} from "./postgres-backup-manifest-fields.ts"
 import { ArchiveRejected, dumpMember, manifestMember, safeMemberPath } from "./postgres-backup-paths.ts"
 
 /**
@@ -18,6 +21,9 @@ import { ArchiveRejected, dumpMember, manifestMember, safeMemberPath } from "./p
  * Checksums are computed by streaming, never by reading a file into memory: the
  * dump of a real database is the largest thing in the archive and the bound on it
  * is a byte bound, not a heap.
+ *
+ * Format v1: `formatVersion`, `organizationId` and the `scope/name` keys of
+ * `schemaMigrations` are defined, and checked, in `postgres-backup-manifest-fields.ts`.
  */
 
 export interface ManifestFile {
@@ -27,6 +33,8 @@ export interface ManifestFile {
 }
 
 export interface BackupManifest {
+  readonly formatVersion: typeof manifestFormatVersion
+  readonly organizationId: string
   readonly createdAt: string
   readonly dataDirectory: string
   readonly database: string
@@ -52,9 +60,6 @@ export const writeManifest = async (staging: string, manifest: BackupManifest): 
 
 const asText = (value: unknown): string => typeof value === "string" ? value : ""
 
-const isStringArray = (value: unknown): value is ReadonlyArray<string> =>
-  Array.isArray(value) && value.every((item) => typeof item === "string")
-
 /**
  * The manifest is parsed defensively because it is the one member whose content
  * steers the rest of the restore. A field of the wrong type here would otherwise
@@ -65,6 +70,8 @@ const parseManifest = (text: string): BackupManifest => {
   const value: unknown = JSON.parse(text)
   if (typeof value !== "object" || value === null) throw new ArchiveRejected("manifest is not an object")
   const candidate = value as Record<string, unknown>
+  assertFormatVersion(candidate["formatVersion"])
+  const organizationId = organizationIdField(candidate["organizationId"])
   const files = candidate["files"]
   if (!Array.isArray(files)) throw new ArchiveRejected("manifest has no file list")
   const parsed: Array<ManifestFile> = files.map((entry: unknown) => {
@@ -79,9 +86,11 @@ const parseManifest = (text: string): BackupManifest => {
   if (typeof candidate["serverVersion"] !== "string" || typeof candidate["dumpVersion"] !== "string") {
     throw new ArchiveRejected("manifest does not record the tool versions")
   }
-  if (!isStringArray(candidate["schemaMigrations"])) throw new ArchiveRejected("manifest does not record the schema")
+  const schemaMigrations = schemaKeys(candidate["schemaMigrations"])
   if (!isStringArray(candidate["excludedTableData"])) throw new ArchiveRejected("manifest does not record the exclusions")
   return {
+    formatVersion: manifestFormatVersion,
+    organizationId,
     createdAt: asText(candidate["createdAt"]),
     dataDirectory: asText(candidate["dataDirectory"]),
     database: asText(candidate["database"]),
@@ -89,7 +98,7 @@ const parseManifest = (text: string): BackupManifest => {
     dumpVersion: candidate["dumpVersion"],
     dumpFormat: "plain",
     excludedTableData: candidate["excludedTableData"],
-    schemaMigrations: candidate["schemaMigrations"],
+    schemaMigrations,
     files: parsed,
   }
 }

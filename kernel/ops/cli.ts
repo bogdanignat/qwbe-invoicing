@@ -12,6 +12,7 @@ export type Command =
   | { readonly name: "artifacts"; readonly apply: boolean; readonly confirmProduction: boolean; readonly json: boolean; readonly limit: number }
   | { readonly name: "backup"; readonly output: string; readonly json: boolean }
   | { readonly name: "restore"; readonly input: string; readonly apply: boolean; readonly confirmProduction: boolean; readonly json: boolean }
+  | { readonly name: "backup-inspect"; readonly input: string; readonly json: boolean }
 
 const boundedLimit = (value: string | undefined): number => {
   const limit = Number(value ?? "50")
@@ -83,6 +84,16 @@ const parseCommandUnchecked = (args: ReadonlyArray<string>): Command => {
       json: parsed.values.json,
     }
   }
+  if (name === "backup-inspect") {
+    const parsed = parseArgs({
+      args: rest,
+      options: { input: { type: "string" }, json: { type: "boolean", default: false } },
+      strict: true,
+    })
+    const input = parsed.values.input?.trim() ?? ""
+    if (input.length === 0) throw new CliInputError("backup-inspect requires --input <path> (.tar.gz or directory)")
+    return { name: "backup-inspect", input, json: parsed.values.json }
+  }
   if (name === "migrate") {
     const parsed = parseArgs({
       args: rest,
@@ -111,27 +122,3 @@ export const parseCommand = (args: ReadonlyArray<string>): Command => {
     throw new CliInputError(error instanceof Error ? error.message : "invalid command input")
   }
 }
-
-export const helpText = `QWBE Invoicing operational CLI
-
-Usage:
-  qwbe-invoicing serve
-  qwbe-invoicing doctor [--json]
-  qwbe-invoicing migrate [--apply] [--confirm-production] [--json]
-  qwbe-invoicing artifacts [--limit 50] [--apply] [--confirm-production] [--json]
-  qwbe-invoicing backup --output <path.tar.gz|dir> [--json]
-  qwbe-invoicing restore --input <path.tar.gz|dir> [--apply] [--confirm-production] [--json]
-
-migrate is a dry-run by default. --apply writes pending schema migrations.
-artifacts reports invoices and proformas without PDFs by default. --apply renders at most
---limit documents; failures are counted and successful items remain committed for a
-safe retry. Outside development, either --apply also requires --confirm-production.
-backup writes a pg_dump of the database plus the DATA_DIR artifacts to a .tar.gz archive or directory. It reads
-the database and writes only the archive, and repeating it produces the same contents; it takes the maintenance
-barrier EXCLUSIVE, so it refuses while serve is running.
-restore is a dry-run by default. --apply restores the artifacts into DATA_DIR and executes the archived
-database.sql through psql as the schema owner role (qwbe_owner), NOSUPERUSER, so only an archive you trust
-may be applied. It takes the same barrier EXCLUSIVE and needs an EMPTY target database: create a fresh one,
-point PGDATABASE at it and restore into that; nothing is ever dropped. Outside development it also requires --confirm-production.
-Exit codes: 0 success, 2 invalid input or guard refusal, 1 execution failure.
-`
