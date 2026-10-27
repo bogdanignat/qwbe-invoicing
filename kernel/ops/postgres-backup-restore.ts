@@ -40,8 +40,11 @@ import type { BackupSession } from "./postgres-backup-create.ts"
  * ## The trust boundary, stated plainly
  *
  * `database.sql` is **executed**, as the schema owner role (qwbe_owner), NOSUPERUSER:
- * every right on this database's schema, none on the server. Every check in this module is about the archive as a filesystem object — member names,
- * types, sizes, digests, manifest consistency, tool majors. None of them inspects
+ * every right on this database's schema, none on the server. Its psql meta-commands are
+ * not: the dump is refused unless pg_dump's `\restrict` ... `\unrestrict` wraps all of it
+ * (`postgres-backup-restrict.ts`), so psql runs no `\!`, `\copy ... PROGRAM` or `\o |cmd`.
+ * Every other check is about the archive as a filesystem object — member names,
+ * types, sizes, digests, manifest consistency, tool majors. None of them judges
  * the SQL, and none of them can: the digests live in the same archive as the file
  * they describe, so they prove the archive is internally consistent and *not* that
  * it came from anybody in particular. An archive an attacker can write is an

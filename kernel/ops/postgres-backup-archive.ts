@@ -161,11 +161,39 @@ export const digestArchive = async (
   return digests
 }
 
+/** A read-only observer of one member's bytes, fed on the gate's own pass. */
+export interface MemberScan {
+  readonly path: string
+  readonly feed: (chunk: Buffer) => void
+  readonly finish: () => void
+}
+
+const scanningSink = (scan: MemberScan): ArchiveSink => {
+  let inside = false
+  return {
+    begin: (member) => {
+      inside = member.path === scan.path
+      return Promise.resolve()
+    },
+    data: (chunk) => {
+      if (inside) scan.feed(chunk)
+      return Promise.resolve()
+    },
+    end: () => {
+      if (inside) scan.finish()
+      inside = false
+      return Promise.resolve()
+    },
+  }
+}
+
 /** Read-only. Returns the members a later extraction is allowed to write. */
 export const inspectArchive = async (
   file: string,
   limits: ArchiveLimits = defaultArchiveLimits,
-): Promise<ReadonlyArray<ArchiveMember>> => readArchive(file, countingSink, limits)
+  scan?: MemberScan,
+): Promise<ReadonlyArray<ArchiveMember>> =>
+  readArchive(file, scan === undefined ? countingSink : scanningSink(scan), limits)
 
 /**
  * Writes, and only ever after `inspectArchive` accepted the same file. It

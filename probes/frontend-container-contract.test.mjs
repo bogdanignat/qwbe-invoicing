@@ -27,6 +27,12 @@ const serviceBlock = (compose, name) => {
   return after.split(/^(?: {2}[a-z][a-z0-9-]*:$|[a-z]+:$)/mu)[0] ?? ""
 }
 
+/** The secrets one service mounts, block (`- name`) or flow (`[a, b]`) style alike. */
+const mountedSecrets = (block) => {
+  const match = /^ {4}secrets:(?: \[(.*)\]$|((?:\n {6}- .*)+))/mu.exec(block)
+  return (match?.[1] ?? match?.[2] ?? "").split(/,|\n/u).map((name) => name.replace(/^\s*(?:- )?/u, "").trim()).filter(Boolean)
+}
+
 /** The Dockerfile stage that starts at `AS <name>`, up to the next `FROM`. */
 const stage = (docker, name) => docker.split(new RegExp(`^FROM .* AS ${name}$`, "mu"))[1]?.split(/^FROM /mu)[0] ?? ""
 
@@ -125,19 +131,19 @@ void test("production: every service drops its capabilities, Caddy is pinned, th
 })
 
 void test("database roles: the superuser password reaches db and db-init only, migrate is qwbe_owner, app is qwbe_app", () => {
-  for (const name of ["compose.yaml", "compose.prod.yaml"]) {
+  for (const name of shippedCompose) {
     const compose = code(name)
-    const secrets = (service) => serviceBlock(compose, service).match(/- pg_\w+/gu)
+    const secrets = (service) => mountedSecrets(serviceBlock(compose, service)).filter((secret) => secret.startsWith("pg_"))
     assert.match(serviceBlock(compose, "db"), /POSTGRES_USER: postgres\n/u, name)
-    assert.deepEqual(secrets("db"), ["- pg_superuser_password"], `${name} db`)
-    assert.deepEqual(secrets("db-init"), ["- pg_superuser_password", "- pg_owner_password", "- pg_app_password"], `${name} db-init`)
+    assert.deepEqual(secrets("db"), ["pg_superuser_password"], `${name} db`)
+    assert.deepEqual(secrets("db-init"), ["pg_superuser_password", "pg_owner_password", "pg_app_password"], `${name} db-init`)
     assert.match(serviceBlock(compose, "db-init"), /depends_on:\n {6}db:\n {8}condition: service_healthy\n/u, name)
     const migrate = serviceBlock(compose, "migrate")
     assert.match(migrate, /PGUSER: qwbe_owner\n {6}PGPASSWORD_FILE: \/run\/secrets\/pg_owner_password\n/u, name)
     assert.match(migrate, /db-init:\n {8}condition: service_completed_successfully\n/u, `${name}: migrate waits for the roles`)
-    assert.deepEqual(secrets("migrate"), ["- pg_owner_password"], name)
+    assert.deepEqual(secrets("migrate"), ["pg_owner_password"], name)
     assert.match(serviceBlock(compose, "app"), /PGUSER: qwbe_app\n {6}PGPASSWORD_FILE: \/run\/secrets\/pg_app_password\n/u, name)
-    assert.deepEqual(secrets("app"), ["- pg_app_password"], name)
+    assert.deepEqual(secrets("app"), ["pg_app_password"], name)
   }
 })
 
@@ -157,7 +163,7 @@ void test("an existing proxy reaches app through the loopback overlay, never a p
 void test("preview is opt-in, loopback-only on app, and isolates storage and credentials", () => {
   const compose = source("compose.preview.yaml")
   const roster = services(compose)
-  assert.deepEqual(roster, ["db", "migrate", "app"])
+  assert.deepEqual(roster, ["db", "db-init", "migrate", "app"])
   for (const name of roster) {
     assert.match(serviceBlock(compose, name), /profiles: \[preview\]/u,
       `${name} must be opt-in: nothing in compose.preview.yaml may start without the preview profile`)
@@ -168,15 +174,16 @@ void test("preview is opt-in, loopback-only on app, and isolates storage and cre
   assert.match(app, /stop_grace_period: 15s/u)
   assert.match(app, /ports:\n {6}- "127\.0\.0\.1:\$\{PREVIEW_PORT:-3181\}:3000"/u)
   assert.match(app, /PUBLIC_ORIGIN: \$\{PREVIEW_ORIGIN:-http:\/\/invoicing-preview\.localhost:3181\}/u)
-  assert.match(app, /secrets: \[preview_api_token, preview_pg_password, preview_company_lookup_key\]/u)
+  assert.match(app, /secrets: \[preview_api_token, pg_app_password, preview_company_lookup_key\]/u)
   assert.equal((compose.match(/ports:/gu) ?? []).length, 1, "only app publishes, and only on loopback")
   const db = serviceBlock(compose, "db")
-  assert.match(db, /secrets: \[preview_pg_password\]/u)
-  assert.match(db, /POSTGRES_PASSWORD_FILE: \/run\/secrets\/preview_pg_password/u)
+  assert.match(db, /POSTGRES_PASSWORD_FILE: \/run\/secrets\/pg_superuser_password/u)
   assert.match(db, /preview-postgres:/u)
   assert.match(compose, /name: qwbe-invoicing-preview/u)
-  assert.match(compose, /PREVIEW_AUTH_TOKEN_PATH:\?/u)
-  assert.doesNotMatch(compose, /external:|name:.*invoicing-data|AUTH_TOKEN_PATH:-|network_mode: host|warden/u)
+  for (const secret of ["AUTH_TOKEN", "PG_SUPERUSER_PASSWORD", "PG_OWNER_PASSWORD", "PG_APP_PASSWORD", "COMPANY_LOOKUP_KEY"]) {
+    assert.match(compose, new RegExp(`\\$\\{PREVIEW_${secret}_PATH:\\?`, "u"), secret)
+  }
+  assert.doesNotMatch(compose, /external:|name:.*invoicing-data|AUTH_TOKEN_PATH:-|\$\{PG_|network_mode: host|warden/u, "the preview never reads the development passwords")
 })
 
 void test("the test rigs leave PUBLIC_ORIGIN to the fixtures and carry no Next build", () => {

@@ -1,5 +1,5 @@
 #!/bin/sh
-# The `db-init` service (compose.yaml, compose.prod.yaml): grants.sql on PGDATABASE as the
+# The `db-init` service (compose.yaml, compose.prod.yaml, compose.preview.yaml): grants.sql on PGDATABASE as the
 # `postgres` superuser, then the passwords of qwbe_owner and qwbe_app from their secrets,
 # in one transaction. It runs as root in the postgres image because only root can read the
 # operator's 0600 secret files there; the entrypoint's initdb scripts run as `postgres`.

@@ -540,9 +540,10 @@ void test("a check that fails after the commit says the database was restored", 
     try {
       const staged = await stageSource(archive, staging)
       const dump = join(staging, "database.sql")
-      writeFileSync(dump, `${readFileSync(dump, "utf8")}\nINSERT INTO public.browser_sessions `
-        + `(session_hash, credential_hash, csrf_token, created_at, expires_at) `
-        + `VALUES ('${"9".repeat(64)}', '${"8".repeat(64)}', '${"7".repeat(64)}', 1, 2);\n`)
+      // Inside the dump's `\restrict` frame: SQL after its `\unrestrict` is refused unread.
+      writeFileSync(dump, readFileSync(dump, "utf8").replace(/\n\\unrestrict /u, "\nINSERT INTO public.browser_sessions "
+        + "(session_hash, credential_hash, csrf_token, created_at, expires_at) "
+        + `VALUES ('${"9".repeat(64)}', '${"8".repeat(64)}', '${"7".repeat(64)}', 1, 2);\n\\unrestrict `))
       // The real manifest, re-signed for the edited dump: the ledger still matches it,
       // so the restore reaches its commit and the session check after it.
       const manifest = JSON.parse(readFileSync(join(staging, "manifest.json"), "utf8")) as BackupManifest
@@ -577,6 +578,7 @@ void test("a check that fails after the commit says the database was restored", 
 
 void test("the facade exports the trust warning the CLI has to print", () => {
   assert.match(restoreTrustWarning, /executes database\.sql as the schema owner role \(qwbe_owner\), NOSUPERUSER/u)
+  assert.match(restoreTrustWarning, /in psql's restricted mode: its SQL runs, its backslash meta-commands are refused/u)
   assert.match(restoreTrustWarning, /never for authenticity/u)
 })
 

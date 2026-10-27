@@ -5,9 +5,8 @@ import { documentsPermissions } from "../cubes/invoicing/documents/index.ts"
 import { reconcileArtifacts } from "../kernel/documents/artifact-reconciliation.ts"
 import { createKernelArtifactService } from "../kernel/documents/artifact-runtime.ts"
 import { executeBackup, executeRestore, inspectBackup, planRestore, restoreTrustWarning } from "../kernel/ops/postgres-backup.ts"
-import { ArchiveRejected } from "../kernel/ops/postgres-backup-paths.ts"
 import { assertDataDirectory } from "../kernel/ops/postgres-backup-destinations.ts"
-import { CliInputError, parseCommand, type Command } from "../kernel/ops/cli.ts"
+import { CliInputError, failureExitCode, parseCommand, type Command } from "../kernel/ops/cli.ts"
 import { helpText } from "../kernel/ops/cli-help.ts"
 import { doctorReport } from "../kernel/ops/cli-doctor.ts"
 import { runtimeConfig } from "../kernel/config.ts"
@@ -62,7 +61,7 @@ if (command?.name === "backup-inspect") {
     }
   } catch (error) {
     console.error(failureMessage(cliRedactor(""), error))
-    process.exitCode = error instanceof ArchiveRejected ? 2 : 1
+    process.exitCode = failureExitCode(error)
   }
 } else if (command !== undefined) {
   // Declared outside the `try` so the final `catch` can use it: a configuration
@@ -309,6 +308,6 @@ if (command?.name === "backup-inspect") {
     // Redacted, cause chain included: a `pg` error carries the connection
     // configuration, password included, and a wrapper hides it one level down.
     if (!(error instanceof ServeAborted)) console.error(failureMessage(redact, error))
-    process.exitCode = 1
+    process.exitCode = failureExitCode(error)
   }
 }
