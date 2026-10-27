@@ -520,9 +520,9 @@ Variables used only by the Compose files, in `.env`:
 | `AUTH_TOKEN_PATH` | host path of the token file mounted as the secret |
 | `APP_DOMAIN` | local development only: the Warden domain in `compose.yaml`, default `invoice.test` |
 | `DATA_VOLUME_NAME` | name of the data volume, default `qwbe-invoicing-data` |
-| `PG_SUPERUSER_PASSWORD_PATH` | host path of the `postgres` superuser's password file, mounted into `db` and `db-init` only (required with no fallback in `compose.prod.yaml`; `compose.yaml` defaults to `./.local/pg-superuser-password`) |
-| `PG_OWNER_PASSWORD_PATH` | host path of `qwbe_owner`'s password file, mounted into `db-init` and `migrate` (required in `compose.prod.yaml`; `compose.yaml` defaults to `./.local/pg-owner-password`) |
-| `PG_APP_PASSWORD_PATH` | host path of `qwbe_app`'s password file, mounted into `db-init` and `app` (required in `compose.prod.yaml`; `compose.yaml` defaults to `./.local/pg-app-password`) |
+| `PG_SUPERUSER_PASSWORD_PATH` | host path of the `postgres` superuser's password file, mounted into `db` and `db-init` only (required with no fallback in `compose.prod.yaml`; `compose.yaml` defaults to `./.local/pg-superuser-password`; the preview uses `PREVIEW_PG_SUPERUSER_PASSWORD_PATH`) |
+| `PG_OWNER_PASSWORD_PATH` | host path of `qwbe_owner`'s password file, mounted into `db-init` and `migrate` (required in `compose.prod.yaml`; `compose.yaml` defaults to `./.local/pg-owner-password`; the preview uses `PREVIEW_PG_OWNER_PASSWORD_PATH`) |
+| `PG_APP_PASSWORD_PATH` | host path of `qwbe_app`'s password file, mounted into `db-init` and `app` (required in `compose.prod.yaml`; `compose.yaml` defaults to `./.local/pg-app-password`; the preview uses `PREVIEW_PG_APP_PASSWORD_PATH`) |
 | `COMPANY_LOOKUP_KEY_PATH` | host path of the company-lookup master key file, mounted as a secret into the application (required with no fallback in `compose.prod.yaml`; `compose.yaml` defaults to `./.local/company-lookup-key`; the preview uses `PREVIEW_COMPANY_LOOKUP_KEY_PATH`) |
 | `PG_VOLUME_NAME` | name of the cluster volume, default `qwbe-invoicing-postgres` |
 | `BACKUP_STAGING_VOLUME_NAME` | name of the `backup`/`restore` staging volume, default `qwbe-invoicing-backup-staging` |

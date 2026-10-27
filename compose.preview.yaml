@@ -2,18 +2,25 @@
 # The shipped image, built from this checkout, on its own fixture stack, at
 # http://invoicing-preview.localhost:3181 (loopback only).
 #
-# Its own project name, its own PostgreSQL cluster, its own secret and its own
+# Its own project name, its own PostgreSQL cluster, its own secrets and its own
 # volumes: nothing here can reach the development stack's cluster or its data, and
-# nothing in the development stack can reach this one. The preview secret has no
+# nothing in the development stack can reach this one. The preview secrets have no
 # default on purpose — a fixture that boots with a guessable password is a fixture
 # that gets reused where it should not be.
 #
+# The three database roles of the shipped stacks (deploy/postgres/grants.sql): `postgres`,
+# the superuser, only for `db-init`; qwbe_owner, the schema owner, for `migrate`; qwbe_app,
+# DML only, for `app`. A preview cluster created with the old `qwbe_preview` superuser is
+# not converted: `docker compose -f compose.preview.yaml --profile preview down -v` first.
+#
 #   install -d -m 700 .local && umask 077
-#   openssl rand -hex 32 > .local/preview-api-token
-#   openssl rand -hex 32 > .local/preview-pg-password
-#   openssl rand -hex 32 > .local/preview-company-lookup-key
+#   for name in api-token pg-superuser-password pg-owner-password pg-app-password company-lookup-key; do
+#     openssl rand -hex 32 > ".local/preview-$name"
+#   done
 #   PREVIEW_AUTH_TOKEN_PATH=./.local/preview-api-token \
-#   PREVIEW_PG_PASSWORD_PATH=./.local/preview-pg-password \
+#   PREVIEW_PG_SUPERUSER_PASSWORD_PATH=./.local/preview-pg-superuser-password \
+#   PREVIEW_PG_OWNER_PASSWORD_PATH=./.local/preview-pg-owner-password \
+#   PREVIEW_PG_APP_PASSWORD_PATH=./.local/preview-pg-app-password \
 #   PREVIEW_COMPANY_LOOKUP_KEY_PATH=./.local/preview-company-lookup-key \
 #     docker compose -f compose.preview.yaml --profile preview up -d
 # To change the port, set PREVIEW_PORT and PREVIEW_ORIGIN together: the kernel pins
@@ -24,8 +31,6 @@ x-postgres-environment: &postgres-environment
   PGHOST: db
   PGPORT: "5432"
   PGDATABASE: qwbe_preview
-  PGUSER: qwbe_preview
-  PGPASSWORD_FILE: /run/secrets/preview_pg_password
 
 services:
   db:
@@ -33,22 +38,43 @@ services:
     image: postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
     environment:
       POSTGRES_DB: qwbe_preview
-      POSTGRES_USER: qwbe_preview
-      POSTGRES_PASSWORD_FILE: /run/secrets/preview_pg_password
+      # The cluster's superuser, for db-init only: never migrate or app.
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD_FILE: /run/secrets/pg_superuser_password
       # The same C collation as the shipped cluster: a preview that pages rows in a
       # different order than production is not a preview of production.
       POSTGRES_INITDB_ARGS: --locale=C --encoding=UTF8
       PGDATA: /var/lib/postgresql/data/pgdata
-    secrets: [preview_pg_password]
+    secrets: [pg_superuser_password]
     volumes:
       - preview-postgres:/var/lib/postgresql/data
     expose: ["5432"]
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U qwbe_preview -d qwbe_preview"]
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres -d qwbe_preview"]
       interval: 2s
       timeout: 3s
       retries: 30
       start_period: 5s
+    restart: "no"
+
+  # deploy/postgres/db-init.sh, as in compose.yaml: grants.sql and the two role passwords,
+  # as the superuser, before every `migrate`. Root, because only root reads the 0600
+  # secret files here.
+  db-init:
+    profiles: [preview]
+    image: postgres:16-alpine@sha256:721873c34ceb9f8d8fc265984940dc982404c105f19ad51be9fdc5970a6080ea
+    user: "0:0"
+    command: [sh, /qwbe-postgres/db-init.sh]
+    environment:
+      PGHOST: db
+      PGDATABASE: qwbe_preview
+    secrets: [pg_superuser_password, pg_owner_password, pg_app_password]
+    volumes:
+      - ./deploy/postgres:/qwbe-postgres:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    read_only: true
     restart: "no"
 
   migrate:
@@ -60,12 +86,16 @@ services:
     command: [node, bin/qwbe-invoicing.ts, migrate, --apply, --json]
     environment:
       <<: *postgres-environment
+      PGUSER: qwbe_owner
+      PGPASSWORD_FILE: /run/secrets/pg_owner_password
       NODE_ENV: development
       DATA_DIR: /data
-    secrets: [preview_pg_password]
+    secrets: [pg_owner_password]
     depends_on:
       db:
         condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
     volumes:
       - preview-data:/data
     read_only: true
@@ -80,6 +110,8 @@ services:
       dockerfile: Dockerfile
     environment:
       <<: *postgres-environment
+      PGUSER: qwbe_app
+      PGPASSWORD_FILE: /run/secrets/pg_app_password
       NODE_ENV: development
       HOST: 0.0.0.0
       PORT: 3000
@@ -93,7 +125,7 @@ services:
       # The origin the browser uses for the published port below.
       PUBLIC_ORIGIN: ${PREVIEW_ORIGIN:-http://invoicing-preview.localhost:3181}
       TMPDIR: /var/backups/staging
-    secrets: [preview_api_token, preview_pg_password, preview_company_lookup_key]
+    secrets: [preview_api_token, pg_app_password, preview_company_lookup_key]
     volumes:
       - preview-data:/data
       - preview-backup-staging:/var/backups/staging
@@ -115,8 +147,14 @@ services:
 secrets:
   preview_api_token:
     file: ${PREVIEW_AUTH_TOKEN_PATH:?Set a separate synthetic preview token file}
-  preview_pg_password:
-    file: ${PREVIEW_PG_PASSWORD_PATH:?Set a separate synthetic preview PostgreSQL password file}
+  # The shipped secret names, so deploy/postgres/db-init.sh reads them where it does in
+  # compose.yaml; the files are the preview's own.
+  pg_superuser_password:
+    file: ${PREVIEW_PG_SUPERUSER_PASSWORD_PATH:?Set a separate synthetic preview PostgreSQL superuser password file}
+  pg_owner_password:
+    file: ${PREVIEW_PG_OWNER_PASSWORD_PATH:?Set a separate synthetic preview qwbe_owner password file}
+  pg_app_password:
+    file: ${PREVIEW_PG_APP_PASSWORD_PATH:?Set a separate synthetic preview qwbe_app password file}
   preview_company_lookup_key:
     file: ${PREVIEW_COMPANY_LOOKUP_KEY_PATH:?Set a separate synthetic preview company lookup master key file}
 
